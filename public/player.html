@@ -10,7 +10,7 @@
             background-color: #0f172a;
             color: #f8fafc;
             margin: 0;
-            padding: 20px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -20,9 +20,10 @@
             width: 100%;
         }
         h1 {
-            font-size: 1.5rem;
-            margin-bottom: 15px;
+            font-size: 1.3rem;
+            margin-bottom: 12px;
             color: #f1f5f9;
+            line-height: 1.4;
         }
         .video-wrapper {
             background-color: #000;
@@ -37,11 +38,22 @@
             height: 100%;
             display: block;
         }
+        video::cue {
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            font-size: 4vw; /* Scales text fluidly relative to smaller display layouts */
+        }
         .controls-row {
             margin-top: 15px;
             display: flex;
+            flex-direction: column; /* Stack controls vertically on mobile platforms */
+            gap: 12px;
+        }
+        .control-group {
+            display: flex;
             justify-content: space-between;
             align-items: center;
+            width: 100%;
         }
         select {
             background-color: #1e293b;
@@ -51,10 +63,28 @@
             border-radius: 6px;
             outline: none;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            max-width: 60%;
         }
-        select:focus {
-            border-color: #3b82f6;
+        .meta-container {
+            margin-top: 20px;
+            background-color: #1e293b;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .meta-header-line {
+            font-size: 0.85rem;
+            color: #3b82f6;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 6px;
+            letter-spacing: 0.05em;
+        }
+        .plot-text {
+            font-size: 0.9rem;
+            color: #cbd5e1;
+            line-height: 1.5;
         }
         .error-msg {
             color: #f43f5e;
@@ -65,6 +95,16 @@
             text-align: center;
             margin-top: 20px;
         }
+
+        /* Scale adjustments for desktop */
+        @media(min-width: 640px) {
+            body { padding: 20px; }
+            h1 { font-size: 1.6rem; }
+            .controls-row { flex-direction: row; justify-content: space-between; align-items: center; }
+            .control-group { width: auto; gap: 15px; }
+            video::cue { font-size: 1.1rem; }
+            select { font-size: 0.9rem; max-width: none; }
+        }
     </style>
 </head>
 <body>
@@ -73,17 +113,22 @@
         <h1 id="movieTitle">Loading Movie...</h1>
 
         <div class="video-wrapper">
-            <video id="videoPlayer" controls crossorigin="anonymous"></video>
+            <video id="videoPlayer" controls crossorigin="anonymous" playsinline></video>
         </div>
 
         <div class="controls-row">
-            <div>
-                <a href="/" style="color: #3b82f6; text-decoration: none; font-size: 0.9rem;">← Back to Library</a>
+            <div class="control-group">
+                <a href="/" style="color: #3b82f6; text-decoration: none; font-size: 0.9rem; font-weight: 500;">← Back to Library</a>
             </div>
-            <div>
-                <label for="quality" style="margin-right: 8px; font-size: 0.9rem; color: #94a3b8;">Stream Profile:</label>
+            <div class="control-group">
+                <label for="quality" style="font-size: 0.9rem; color: #94a3b8;">Stream Profile:</label>
                 <select id="quality"></select>
             </div>
+        </div>
+
+        <div class="meta-container" id="metaContainer" style="display: none;">
+            <div class="meta-header-line" id="metaGenre">SUMMARY</div>
+            <div class="plot-text" id="moviePlot"></div>
         </div>
     </div>
 
@@ -92,62 +137,82 @@
             const urlParams = new URLSearchParams(window.location.search);
             const movieId = urlParams.get('id');
 
-            // 1. Safeguard Circuit Breaker
             if (!movieId) {
                 document.getElementById('movieTitle').innerText = "No Movie Selected";
                 const container = document.querySelector('.container');
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'error-msg';
-                errorDiv.innerText = "Error: Missing valid movie identifier context string. Please return to the dashboard.";
+                errorDiv.innerText = "Error: Missing valid movie identifier context string.";
                 container.appendChild(errorDiv);
                 return;
             }
 
-            // 2. Set Movie Title
             document.getElementById('movieTitle').innerText = decodeURIComponent(movieId).replace(/[-_]/g, ' ');
 
             const videoPlayer = document.getElementById('videoPlayer');
             const qualitySelect = document.getElementById('quality');
 
-            // 3. Populate Stream Selector Options
-            // 'direct' bypasses the transcoding engine rules entirely
             qualitySelect.options.add(new Option('🚀 Direct Source (No Transcode / MP4 Fallback)', 'direct'));
             qualitySelect.options.add(new Option('Transcode: 1080p Live', '1080p'));
             qualitySelect.options.add(new Option('Transcode: 720p Live', '720p'));
 
-            // Default to Direct Source for native playback optimization
             qualitySelect.value = 'direct';
 
-            // 4. Dynamic Stream Switching Pipeline
+            // Fetch library list data to populate metadata info card fields on active display
+            async function appendRichMetaData() {
+                try {
+                    const res = await fetch('/api/movies');
+                    const movies = await res.json();
+                    const activeMovie = movies.find(m => m.id === encodeURIComponent(movieId));
+                    
+                    if (activeMovie && activeMovie.plot) {
+                        document.getElementById('moviePlot').innerText = activeMovie.plot;
+                        if (activeMovie.genre) {
+                            document.getElementById('metaGenre').innerText = activeMovie.genre;
+                        }
+                        document.getElementById('metaContainer').style.display = 'block';
+                    }
+                } catch(e) {
+                    console.log("Meta frame load blocked:", e);
+                }
+            }
+            appendRichMetaData();
+
+            function loadSubtitles() {
+                const existingTracks = videoPlayer.querySelectorAll('track');
+                existingTracks.forEach(track => track.remove());
+
+                const track = document.createElement('track');
+                track.kind = 'subtitles';
+                track.label = 'English';
+                track.srclang = 'en';
+                track.src = `/api/subtitles/${encodeURIComponent(movieId)}`;
+                track.default = true;
+                
+                videoPlayer.appendChild(track);
+            }
+
             function changeQuality() {
                 const profile = qualitySelect.value;
                 const currentTime = videoPlayer.currentTime;
                 const isPaused = videoPlayer.paused;
 
-                let streamUrl = '';
+                let streamUrl = (profile === 'direct') 
+                    ? `/api/raw-file/${encodeURIComponent(movieId)}`
+                    : `/stream/${encodeURIComponent(movieId)}/${profile}.m3u8`;
 
-                if (profile === 'direct') {
-                    // Pulls the raw file directly via a clean download/stream endpoint 
-                    streamUrl = `/api/raw-file/${encodeURIComponent(movieId)}`;
-                } else {
-                    // Uses your adaptive transcoder endpoint
-                    streamUrl = `/stream/${encodeURIComponent(movieId)}/${profile}.m3u8`;
-                }
-
-                // Hot-swap the video stream layer
                 videoPlayer.src = streamUrl;
                 videoPlayer.load();
-                
-                // Re-seek to the user's current timeline delta block
+                loadSubtitles();
                 videoPlayer.currentTime = currentTime;
 
                 if (!isPaused) {
-                    videoPlayer.play().catch(err => console.log("Playback interrupted safely:", err));
+                    videoPlayer.play().catch(err => console.log("Playback blocked:", err));
                 }
             }
 
             qualitySelect.addEventListener('change', changeQuality);
-            changeQuality(); // Execute initial render pipeline
+            changeQuality();
         });
     </script>
 </body>
