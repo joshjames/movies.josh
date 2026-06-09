@@ -100,11 +100,15 @@
 
     <script>
         async function loadMovies() {
-            const res = await fetch('/api/movies');
-            const movies = await res.json();
-            const grid = document.getElementById('movie-grid');
-            
-            grid.innerHTML = movies.map(movie => `
+    try {
+        const res = await fetch('/api/movies');
+        const data = await res.json(); // Rename this from 'movies' to 'data'
+        
+        const grid = document.getElementById('movie-grid');
+        
+        // Safety check: Make sure we have our internal movies array
+        if (data && data.movies && data.movies.length > 0) {
+            grid.innerHTML = data.movies.map(movie => `
                 <a class="card" href="player.html?id=${movie.id}">
                     <div class="cover-wrapper">
                         <img src="${movie.cover}" onerror="this.src='https://via.placeholder.com/200x300?text=No+Cover'" alt="${movie.title}">
@@ -115,8 +119,14 @@
                     </div>
                 </a>
             `).join('');
+        } else {
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add movies!</div>`;
         }
-        loadMovies();
+    } catch (err) {
+        console.error("❌ Frontend failed to unpack cached pagination layer payloads:", err);
+    }
+}
+loadMovies();
     </script>
 
 

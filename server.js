@@ -359,7 +359,7 @@ app.get('/api/subtitles/:id', (req, res) => {
 });
 
 // =========================================================================
-// AUTONOMOUS BACKGROUND PIPELINE WORKER (DB-LESS COMPLETION WATCHER)
+// AUTONOMOUS BACKGROUND PIPELINE WORKER (ATOMIC COMPLETION WATCHER)
 // =========================================================================
 const LIFECYCLE_POLL_INTERVAL = 10000; // Poll every 10 seconds for completions
 let isProcessingPipeline = false;      // Concurrency lock to prevent overlapping runs
@@ -377,43 +377,55 @@ async function checkPipelineCompletions() {
         const completedTorrent = torrents.find(t => t.progress === 1);
 
         if (completedTorrent) {
-            isProcessingPipeline = true; // Lock the pool worker
+            isProcessingPipeline = true; // Lock the poll worker
             const torrentHash = completedTorrent.hash;
-            console.log(`\n🎉 Internal Pipeline Watcher detected completion: [${completedTorrent.name}]`);
+            console.log(`\n🎉 Internal Pipeline Watcher detected download completion: [${completedTorrent.name}]`);
+            console.log(`⚡ Launching async processing scripts...`);
 
-            // 1. Instantly strip the tag from qBittorrent so this block never triggers twice
-            try {
-                // We remove 'movie-streamer' and swap it to 'movie-streamer-processed' for auditing
-                await axios.post('http://qbittorrent:8080/api/v2/torrents/removeTags', `hashes=${torrentHash}&tags=movie-streamer`, {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                });
-                await axios.post('http://qbittorrent:8080/api/v2/torrents/addTags', `hashes=${torrentHash}&tags=movie-streamer-processed`, {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                });
-                console.log(`🏷️ Rotated workflow status tags for hash context: ${torrentHash}`);
-            } catch (tagErr) {
-                console.error(`⚠️ Failed updating torrent metadata state tracking flags:`, tagErr.message);
-            }
-
-            // 2. Fire the post-processing automation scripts directly from our own runtime environment
-            console.log(`⚡ Firing internal media optimization pipeline command chain...`);
+            // Core execution string targeting internal absolute app space
             const commandChain = `node /app/library-sanitizer.js && node /app/pre-transcode.js`;
 
-            exec(commandChain, (error, stdout, stderr) => {
-                const logPath = path.join(__dirname, 'automation.log');
+            exec(commandChain, async (error, stdout, stderr) => {
+                const logPath = path.join(__dirname, 'automation.log'); // Maps to /app/automation.log inside container
                 const timestamp = new Date().toISOString();
                 let logOutput = `\n=== AUTONOMOUS AUTOMATION RUN: ${timestamp} ===\n${stdout}`;
 
                 if (error) {
-                    console.error(`❌ Autonomous pipeline encountered an error:`, error.message);
+                    console.error(`❌ Autonomous pipeline encountered a processing error:`, error.message);
                     logOutput += `\n❌ ERROR: ${error.message}\nSTDERR: ${stderr}`;
-                } else {
-                    console.log(`✅ Autonomous media pipeline completed flawlessly.`);
+                    
+                    // CRITICAL EXCEPTION LAYER: 
+                    // If the script crashes, we do NOT rotate the tag. We unlock the worker.
+                    // This means the file will stay marked as 'movie-streamer', and on the next 
+                    // poll cycle it will safely attempt to re-run the pipeline automatically.
+                    isProcessingPipeline = false;
+                    fs.appendFileSync(logPath, logOutput);
+                    return;
                 }
 
-                fs.appendFileSync(logPath, logOutput);
+                // SUCCESS PATH: The scripts returned successfully!
+                console.log(`✅ Media normalization and transcode loops finished cleanly.`);
+                
+                // Now that the file is safely rendered on disk, rotate the status tags
+                try {
+                    console.log(`🏷️  Rotating qBittorrent workflow flags to processed for: ${completedTorrent.name}`);
+                    await axios.post('http://qbittorrent:8080/api/v2/torrents/removeTags', `hashes=${torrentHash}&tags=movie-streamer`, {
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    });
+                    await axios.post('http://qbittorrent:8080/api/v2/torrents/addTags', `hashes=${torrentHash}&tags=movie-streamer-processed`, {
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    });
+                } catch (tagErr) {
+                    console.error(`⚠️ Failed updating torrent metadata flags inside qBittorrent:`, tagErr.message);
+                }
+
+                // Force the RAM index table cache to refresh instantly to display the new movie
                 rebuildLibraryCache();
-                // 3. Unlock the worker loop so it can scan for the next completed movie in queue
+
+                // Append full output logs to disk file asset
+                fs.appendFileSync(logPath, logOutput);
+                
+                // Unlock the worker loop so it can scan for the next completed movie in queue
                 isProcessingPipeline = false; 
             });
         }
