@@ -110,19 +110,16 @@ async function sanitizeLibrary() {
             const itemStat = fs.lstatSync(itemPath);
 
             if (itemStat.isDirectory()) {
-                // Vaporize Sample directories completely
                 if (item.toLowerCase() === 'sample') {
                     console.log(`🗑️  Purging directory branch: /Sample`);
                     deleteFolderRecursive(itemPath);
                 }
             } else {
                 const ext = path.extname(item).toLowerCase();
-                // Check if the file name itself flags it as a preview snippet sample
                 if (item.toLowerCase().includes('sample') && ext !== '.srt') {
                     console.log(`🗑️  Deleting loose preview sample: ${item}`);
                     fs.unlinkSync(itemPath);
                 }
-                // Wipe advertisement links, torrent text logs, and scene notes (.txt, .nfo)
                 else if (!KEEP_EXTENSIONS.includes(ext)) {
                     console.log(`🗑️  Purging junk asset file: ${item}`);
                     fs.unlinkSync(itemPath);
@@ -131,17 +128,48 @@ async function sanitizeLibrary() {
         });
 
         // -----------------------------------------------------------------
-        // STEP 2: METADATA & COVER ART GENERATION
+        // STEP 2: IMMEDIATE LOCAL CLEAN & RENAME (PREPARE DISK STATE)
         // -----------------------------------------------------------------
         const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folder);
-        let finalFolderName = folder;
+        
+        // Structure our clean local directory pattern: "Movie.Title.Year"
+        const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
+        const localStandardFolderName = parsedYear ? `${dotNotationTitle}.${parsedYear}` : dotNotationTitle;
+        let activeFolderPath = currentFolderPath;
+
+        if (folder !== localStandardFolderName) {
+            const targetFolderPath = path.join(MOVIES_DIR, localStandardFolderName);
+            
+            if (!fs.existsSync(targetFolderPath)) {
+                fs.renameSync(currentFolderPath, targetFolderPath);
+                console.log(`🗂️  Folder Renamed Locally: [${folder}] ➡️  [${localStandardFolderName}]`);
+                // CRITICAL POINTER UPDATE: Update our tracking variable to point to the new disk home!
+                activeFolderPath = targetFolderPath; 
+            } else {
+                console.log(`⚠️  Destination [${localStandardFolderName}] already exists. Shifting target pointer.`);
+                activeFolderPath = targetFolderPath;
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // STEP 3: METADATA & COVER ART GENERATION (VIA CLEAN STRINGS)
+        // -----------------------------------------------------------------
+        const metadataPath = path.join(activeFolderPath, 'metadata.json');
+        const coverPath = path.join(activeFolderPath, 'cover.jpg');
+
+        // Skip scraping if metadata already exists from a prior pass
+        if (fs.existsSync(metadataPath)) {
+            console.log(`✨ Metadata index file already verified for target folder.`);
+            continue;
+        }
 
         try {
-            const queryUrl = `${API_URL}${encodeURIComponent(cleanTitle)}${parsedYear ? `&y=${parsedYear}` : ''}`;
-            const res = await axios.get(queryUrl);
+            // Use the pristine text representation without dots or brackets for OMDb API efficiency
+            const apiSearchQuery = cleanTitle.trim();
+            const queryUrl = `${API_URL}${encodeURIComponent(apiSearchQuery)}${parsedYear ? `&y=${parsedYear}` : ''}`;
             
-            const metadataPath = path.join(currentFolderPath, 'metadata.json');
-            const coverPath = path.join(currentFolderPath, 'cover.jpg');
+            console.log(`🔍 Dispatching OMDb lookup query: "${apiSearchQuery}" (${parsedYear || 'N/A'})`);
+            const res = await axios.get(queryUrl);
 
             if (res.data && res.data.Response === "True") {
                 const data = res.data;
@@ -163,15 +191,23 @@ async function sanitizeLibrary() {
                     await downloadCover(data.Poster, coverPath);
                 }
 
-                const sanitizedTitle = data.Title.replace(/[/\\?%*:|"<>\s]+/g, '.');
-                finalFolderName = `${sanitizedTitle}.${data.Year}`;
+                // OPTIONAL PARITY RE-ALIGNMENT: 
+                // If you want the folder name to match the official case-sensitive casing from OMDb API exactly
+                const apiStandardizedTitle = data.Title.replace(/[/\\?%*:|"<>\s]+/g, '.');
+                const apiFolderName = `${apiStandardizedTitle}.${data.Year}`;
+                const apiFolderPath = path.join(MOVIES_DIR, apiFolderName);
+
+                if (localStandardFolderName !== apiFolderName && !fs.existsSync(apiFolderPath)) {
+                    fs.renameSync(activeFolderPath, apiFolderPath);
+                    console.log(`🗂️  Refining folder alignment to OMDb Casing: [${localStandardFolderName}] ➡️  [${apiFolderName}]`);
+                }
+                
             } else {
                 console.log(`⚠️  OMDb lookup missed. Formatting local fallback descriptors.`);
-                const formattedTitle = cleanTitle.replace(/\s+/g, '.').replace(/\b\w/g, c => c.toUpperCase());
-                finalFolderName = parsedYear ? `${formattedTitle}.${parsedYear}` : formattedTitle;
-
+                const titleCapitalized = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
+                
                 const fallbackPayload = {
-                    title: cleanTitle.replace(/\b\w/g, c => c.toUpperCase()),
+                    title: titleCapitalized,
                     year: parsedYear || "Unknown",
                     plot: "Local video data mapping index.",
                     runtime: "N/A",
@@ -181,22 +217,8 @@ async function sanitizeLibrary() {
                 fs.writeFileSync(metadataPath, JSON.stringify(fallbackPayload, null, 4));
             }
 
-            // -----------------------------------------------------------------
-            // STEP 3: PHYSICAL FOLDER TIDY/RENAME
-            // -----------------------------------------------------------------
-            if (folder !== finalFolderName) {
-                const destinationFolderPath = path.join(MOVIES_DIR, finalFolderName);
-                
-                if (!fs.existsSync(destinationFolderPath)) {
-                    fs.renameSync(currentFolderPath, destinationFolderPath);
-                    console.log(`🗂️  Folder Renamed: [${folder}] ➡️  [${finalFolderName}]`);
-                } else {
-                    console.log(`⚠️  Destination [${finalFolderName}] already exists on storage array. Skipping rename.`);
-                }
-            }
-
         } catch (err) {
-            console.error(`❌ Sanitizer processing fault on [${folder}]:`, err.message);
+            console.error(`❌ Sanitizer processing fault on [${localStandardFolderName}]:`, err.message);
         }
     }
     console.log("\n🏁 Sanitization complete! Your library storage space is perfectly scrubbed.");

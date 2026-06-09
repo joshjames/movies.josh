@@ -359,83 +359,100 @@ app.get('/api/subtitles/:id', (req, res) => {
 });
 
 // =========================================================================
-// AUTONOMOUS BACKGROUND PIPELINE WORKER (ATOMIC COMPLETION WATCHER)
+// AUTONOMOUS BACKGROUND PIPELINE WORKER (SPAWN EXECUTION LOOP)
 // =========================================================================
-const LIFECYCLE_POLL_INTERVAL = 10000; // Poll every 10 seconds for completions
-let isProcessingPipeline = false;      // Concurrency lock to prevent overlapping runs
+const LIFECYCLE_POLL_INTERVAL = 10000; 
+let isProcessingPipeline = false;      
 
 async function checkPipelineCompletions() {
-    // If the pipeline is currently transcoding a heavy file, pause polling
     if (isProcessingPipeline) return;
 
     try {
-        // Query qBittorrent for active or finishing tasks matching our workflow tag
         const qbitRes = await axios.get('http://qbittorrent:8080/api/v2/torrents/info?tag=movie-streamer');
         const torrents = qbitRes.data;
-
-        // Find the first torrent that has fully completed downloading (progress === 1)
         const completedTorrent = torrents.find(t => t.progress === 1);
 
         if (completedTorrent) {
-            isProcessingPipeline = true; // Lock the poll worker
+            isProcessingPipeline = true; // Lock worker concurrency
             const torrentHash = completedTorrent.hash;
+            
             console.log(`\n🎉 Internal Pipeline Watcher detected download completion: [${completedTorrent.name}]`);
-            console.log(`⚡ Launching async processing scripts...`);
+            console.log(`⚡ Launching live-streamed processing pipeline...`);
 
-            // Core execution string targeting internal absolute app space
-            const commandChain = `node /app/library-sanitizer.js && node /app/pre-transcode.js`;
+            // --- START OF THE SPAWN INSERTION CHAIN ---
+            
+            // 1. Spawn the sanitizer script (No arguments needed, scans /app/movies globally)
+            const pipelineProcess = spawn('node', ['/app/library-sanitizer.js']);
+            
+            const logPath = path.join(__dirname, 'automation.log');
+            const logStream = fs.createWriteStream(logPath, { flags: 'a' });
 
-            exec(commandChain, async (error, stdout, stderr) => {
-                const logPath = path.join(__dirname, 'automation.log'); // Maps to /app/automation.log inside container
-                const timestamp = new Date().toISOString();
-                let logOutput = `\n=== AUTONOMOUS AUTOMATION RUN: ${timestamp} ===\n${stdout}`;
+            // Timestamp the top of this run inside the automation log file
+            logStream.write(`\n=== LIVE PIPELINE RUN: ${new Date().toISOString()} ===\n`);
 
-                if (error) {
-                    console.error(`❌ Autonomous pipeline encountered a processing error:`, error.message);
-                    logOutput += `\n❌ ERROR: ${error.message}\nSTDERR: ${stderr}`;
-                    
-                    // CRITICAL EXCEPTION LAYER: 
-                    // If the script crashes, we do NOT rotate the tag. We unlock the worker.
-                    // This means the file will stay marked as 'movie-streamer', and on the next 
-                    // poll cycle it will safely attempt to re-run the pipeline automatically.
+            // Stream sanitizer output live to disk so the memory buffer never blocks
+            pipelineProcess.stdout.on('data', (data) => logStream.write(data));
+            pipelineProcess.stderr.on('data', (data) => logStream.write(data));
+
+            // When the sanitizer completes, step into the transcoder layer
+            pipelineProcess.on('close', (code) => {
+                if (code !== 0) {
+                    console.error(`❌ Sanitizer layer exited with failure code: ${code}`);
                     isProcessingPipeline = false;
-                    fs.appendFileSync(logPath, logOutput);
+                    logStream.end();
                     return;
                 }
 
-                // SUCCESS PATH: The scripts returned successfully!
-                console.log(`✅ Media normalization and transcode loops finished cleanly.`);
-                
-                // Now that the file is safely rendered on disk, rotate the status tags
-                try {
-                    console.log(`🏷️  Rotating qBittorrent workflow flags to processed for: ${completedTorrent.name}`);
-                    await axios.post('http://qbittorrent:8080/api/v2/torrents/removeTags', `hashes=${torrentHash}&tags=movie-streamer`, {
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                    });
-                    await axios.post('http://qbittorrent:8080/api/v2/torrents/addTags', `hashes=${torrentHash}&tags=movie-streamer-processed`, {
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                    });
-                } catch (tagErr) {
-                    console.error(`⚠️ Failed updating torrent metadata flags inside qBittorrent:`, tagErr.message);
-                }
+                console.log(`🧹 Sanitizer pass complete. Proceeding to transcode optimizer engine...`);
 
-                // Force the RAM index table cache to refresh instantly to display the new movie
-                rebuildLibraryCache();
+                // 2. Spawn the heavy transcoder process sequentially
+                const transcodeProcess = spawn('node', ['/app/pre-transcode.js']);
 
-                // Append full output logs to disk file asset
-                fs.appendFileSync(logPath, logOutput);
-                
-                // Unlock the worker loop so it can scan for the next completed movie in queue
-                isProcessingPipeline = false; 
+                // Stream the massive FFmpeg progress log updates directly onto disk frame-by-frame
+                transcodeProcess.stdout.on('data', (data) => logStream.write(data));
+                transcodeProcess.stderr.on('data', (data) => logStream.write(data));
+
+                // Final closure block: Triggers when the full movie is completely transcoded
+                transcodeProcess.on('close', async (transcodeCode) => {
+                    logStream.end(); // Safely release and close the write stream file handle
+
+                    if (transcodeCode !== 0) {
+                        console.error(`❌ Transcoder layer exited with failure code: ${transcodeCode}`);
+                        isProcessingPipeline = false;
+                        return;
+                    }
+
+                    console.log(`✅ Media normalization and transcode loops finished cleanly.`);
+                    
+                    // Rotate the tracking tags inside qBittorrent now that work is safely written
+                    try {
+                        console.log(`🏷️  Rotating qBittorrent workflow flags to processed for: ${completedTorrent.name}`);
+                        await axios.post('http://qbittorrent:8080/api/v2/torrents/removeTags', `hashes=${torrentHash}&tags=movie-streamer`, {
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                        });
+                        await axios.post('http://qbittorrent:8080/api/v2/torrents/addTags', `hashes=${torrentHash}&tags=movie-streamer-processed`, {
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                        });
+                    } catch (tagErr) {
+                        console.error(`⚠️ Failed updating torrent metadata flags inside qBittorrent:`, tagErr.message);
+                    }
+
+                    // Reload the internal memory arrays to show the new movie card immediately
+                    rebuildLibraryCache();
+                    
+                    // Release the worker concurrency flag
+                    isProcessingPipeline = false; 
+                });
             });
+            
+            // --- END OF THE SPAWN INSERTION CHAIN ---
         }
     } catch (err) {
         console.error("⚠️ Background pipeline worker cycle execution error:", err.message);
-        isProcessingPipeline = false; // Ensure we don't permanently lock on network dropouts
+        isProcessingPipeline = false; 
     }
 }
 
-// Spin up the engine's lifecycle watcher interval loop
 setInterval(checkPipelineCompletions, LIFECYCLE_POLL_INTERVAL);
 
 app.listen(PORT, () => {
