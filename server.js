@@ -8,36 +8,58 @@ const PORT = 3000;
 const { exec } = require('child_process');
 const MOVIES_DIR = path.join(__dirname, 'movies');
 const axios = require('axios');
-const FormData = require('form-data'); // Ensure you have form-data installed (npm install form-data)
+const FormData = require('form-data');
 
 if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
 }
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
 
-// Scan directories safely
+// =========================================================================
+// SAFE & FILTERED LIBRARY INDEX SCANNER
+// =========================================================================
 app.get('/api/movies', (req, res) => {
     try {
+        if (!fs.existsSync(MOVIES_DIR)) return res.json([]);
+
         const folders = fs.readdirSync(MOVIES_DIR);
-        const movies = folders.map(folder => {
+        
+        // Step 1: Filter out items that are incomplete or currently processing
+        const cleanLibrary = folders.filter(folder => {
             const folderPath = path.join(MOVIES_DIR, folder);
             
-            if (folder.startsWith('.') || !fs.lstatSync(folderPath).isDirectory()) {
-                return null;
-            }
+            // Skip hidden directories/system files
+            if (folder.startsWith('.')) return false;
+            if (!fs.lstatSync(folderPath).isDirectory()) return false;
 
+            // Condition A: If the folder contains the transient transcode lock, hide it
+            if (fs.existsSync(path.join(folderPath, '.processing'))) return false;
+
+            // Condition B: Ensure the final web-optimized file actually exists before showing it
             const files = fs.readdirSync(folderPath);
-            const videoFile = files.find(f => f.endsWith('.mp4') || f.endsWith('.mkv') || f.endsWith('.m4v'));
-            if (!videoFile) return null;
+            const hasWebOptimizedAsset = files.some(f => f.endsWith('.web.mp4'));
+            
+            return hasWebOptimizedAsset;
+        });
 
-            // Load local metadata if present
+        // Step 2: Map over ONLY the safely verified folders to assemble the UI payload
+        const movies = cleanLibrary.map(folder => {
+            const folderPath = path.join(MOVIES_DIR, folder);
+            const files = fs.readdirSync(folderPath);
+
+            // Load local metadata parsed from your OMDb script layer
             const metaFile = path.join(folderPath, 'metadata.json');
-            let metaData = { title: folder.replace(/[-_]/g, ' '), year: '', plot: '', genre: '' };
+            let metaData = { title: folder.replace(/[-_.]/g, ' '), year: '', plot: '', genre: '' };
             
             if (fs.existsSync(metaFile)) {
-                metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+                try {
+                    metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+                } catch (e) {
+                    console.error(`Malformed metadata track inside: ${folder}`);
+                }
             }
 
             return {
@@ -48,28 +70,22 @@ app.get('/api/movies', (req, res) => {
                 genre: metaData.genre,
                 cover: `/movie-assets/${encodeURIComponent(folder)}/cover.jpg`
             };
-        }).filter(Boolean);
+        });
 
         res.json(movies);
     } catch (err) {
-        console.error("Directory read error:", err);
-        res.status(500).json({ error: "Failed to read library" });
+        console.error("❌ Directory read error:", err);
+        res.status(500).json({ error: "Failed to read library structures." });
     }
 });
-
 
 // =========================================================================
 // QB_TORRENT AUTOMATION TRIGGER ENDPOINT
 // =========================================================================
 app.post('/api/trigger-automation', (req, res) => {
-    // Respond immediately to qBittorrent with a 202 Accepted 
-    // This prevents the torrent client from hanging or timing out
     res.status(202).send('Automation trigger received. Processing pool in background.');
-
     console.log(`\n⚡ qBittorrent completion trigger received! Firing media pipeline...`);
 
-    // Run the sanitizer, then chain into the transcoder sequentially
-    // Using absolute paths relative to your Docker container structure
     const commandChain = `node /app/library-sanitizer.js && node /app/pre-transcode.js`;
 
     exec(commandChain, (error, stdout, stderr) => {
@@ -83,8 +99,6 @@ app.post('/api/trigger-automation', (req, res) => {
         } else {
             console.log(`✅ Automation pipeline completed flawlessly.`);
         }
-
-        // Append the results to an internal log file for easy auditing
         fs.appendFileSync(logPath, logOutput);
     });
 });
@@ -95,8 +109,6 @@ app.post('/api/trigger-automation', (req, res) => {
 app.get('/api/yts/browse', async (req, res) => {
     try {
         const { query, page, genre, min_rating } = req.query;
-        
-        // Target the updated, lightweight public REST base URL
         const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
         
         const response = await axios.get(ytsUrl, {
@@ -129,17 +141,16 @@ app.post('/api/yts/add', async (req, res) => {
     }
 
     try {
-        // Build standard multipart structure matching qBittorrent's WebAPI specifications
         const form = new FormData();
         form.append('urls', magnetUrl);
-        form.append('savepath', '/home/epic/movies'); // Forces default library directories auto-targets
+        form.append('savepath', '/home/epic/movies');
+        form.append('tags', 'movie-streamer'); 
 
-        // Shoot the payload straight over the internal Docker network layer
-        const qbitResponse = await axios.post('http://qbittorrent:8080/api/v2/torrents/add', form, {
+        await axios.post('http://qbittorrent:8080/api/v2/torrents/add', form, {
             headers: form.getHeaders()
         });
 
-        console.log(`📥 Dispatched magnet stream directly to qBittorrent container core.`);
+        console.log(`📥 Dispatched tagged magnet stream directly to qBittorrent.`);
         res.status(200).json({ message: "Successfully queued layout allocation pipeline records." });
     } catch (err) {
         console.error("❌ Failed forwarding payload across container interfaces:", err.message);
@@ -148,77 +159,55 @@ app.post('/api/yts/add', async (req, res) => {
 });
 
 // =========================================================================
-// HIGH-PERFORMANCE PROGRESSIVE HTTP RANGE STREAM ENGINE
+// PIPELINE STATUS MONITOR (FILTERED VIA INTEGRATED WORKFLOW TAGS)
 // =========================================================================
-app.get('/stream/:id/:resolution.m3u8', (req, res) => {
+app.get('/api/pipeline/status', async (req, res) => {
     try {
-        const movieId = decodeURIComponent(req.params.id);
-        
-        const folderPath = path.join(MOVIES_DIR, movieId);
-        if (!fs.existsSync(folderPath)) {
-            return res.status(404).send('Movie folder not found.');
-        }
+        let pipeline = [];
 
-        const files = fs.readdirSync(folderPath);
-        const videoFile = files.find(f => f.endsWith('.mp4') || f.endsWith('.mkv') || f.endsWith('.m4v'));
-
-        if (!videoFile) {
-            return res.status(404).send('Video asset missing.');
-        }
-
-        const fullVideoPath = path.join(folderPath, videoFile);
-        const stat = fs.statSync(fullVideoPath);
-        const fileSize = stat.size;
-        const range = req.headers.range;
-
-        // Base CORS and streaming headers required for native HTML5 players
-        const baseHeaders = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers': 'Range, Content-Type',
-            'Accept-Ranges': 'bytes',
-        };
-
-        // Handle preflight OPTIONS requests gracefully
-        if (req.method === 'OPTIONS') {
-            res.writeHead(204, baseHeaders);
-            return res.end();
-        }
-
-        if (range) {
-            const parts = range.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-            const chunksize = (end - start) + 1;
+        // 1. Fetch live downloads FILTERED by your tag
+        try {
+            const qbitRes = await axios.get('http://qbittorrent:8080/api/v2/torrents/info?tag=movie-streamer');
             
-            console.log(`📥 Byte Range Request: ${start}-${end} / ${fileSize}`);
+            qbitRes.data.forEach(torrent => {
+                let displayStatus = 'Downloading';
+                if (torrent.progress === 1) displayStatus = 'Finalizing...';
+                if (torrent.state.includes('paused') || torrent.state.includes('queued')) displayStatus = 'Queued';
 
-            const file = fs.createReadStream(fullVideoPath, { start, end });
-            const responseHeaders = {
-                ...baseHeaders,
-                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-                'Content-Length': chunksize,
-                'Content-Type': 'video/mp4',
-            };
-
-            res.writeHead(206, responseHeaders); // 206 Partial Content
-            file.pipe(res);
-        } else {
-            console.log(`🎬 Initial progressive stream delivery for: [${movieId}]`);
-            const responseHeaders = {
-                ...baseHeaders,
-                'Content-Length': fileSize,
-                'Content-Type': 'video/mp4',
-            };
-            res.writeHead(200, responseHeaders);
-            fs.createReadStream(fullVideoPath).pipe(res);
+                pipeline.push({
+                    title: torrent.name.replace(/[._-]/g, ' '),
+                    progress: (torrent.progress * 100).toFixed(1),
+                    status: displayStatus,
+                    eta: torrent.eta, 
+                    size: (torrent.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+                });
+            });
+        } catch (qbitErr) {
+            console.error("⚠️ Pipeline Monitor couldn't reach qBittorrent:", qbitErr.message);
         }
 
+        // 2. Scan physical directories for active transcode lockfiles
+        if (fs.existsSync(MOVIES_DIR)) {
+            const folders = fs.readdirSync(MOVIES_DIR);
+            folders.forEach(folder => {
+                const folderPath = path.join(MOVIES_DIR, folder);
+                if (fs.lstatSync(folderPath).isDirectory()) {
+                    if (fs.existsSync(path.join(folderPath, '.processing'))) {
+                        pipeline.push({
+                            title: folder.replace(/[._-]/g, ' '),
+                            progress: 'N/A',
+                            status: 'Pre-Transcoding (Optimizing)',
+                            eta: 'Calculating...',
+                            size: 'Processing Video Stream...'
+                        });
+                    }
+                }
+            });
+        }
+
+        res.json({ success: true, pipeline });
     } catch (err) {
-        console.error("💣 Stream engine failure:", err);
-        if (!res.headersSent) {
-            res.status(500).send('Internal streaming loop fault.');
-        }
+        res.status(500).json({ error: "Failed to assemble pipeline matrix state structures." });
     }
 });
 
@@ -236,7 +225,6 @@ app.get('/api/raw-file/:id', (req, res) => {
 
         const files = fs.readdirSync(folderPath);
         
-        // 1. Prioritize the freshly minted .web.mp4 files, fallback to normal mp4/mkv
         let videoFile = files.find(f => f.endsWith('.web.mp4'));
         if (!videoFile) {
             videoFile = files.find(f => f.endsWith('.mp4') || f.endsWith('.mkv') || f.endsWith('.m4v'));
@@ -251,7 +239,6 @@ app.get('/api/raw-file/:id', (req, res) => {
         const fileSize = stat.size;
         const range = req.headers.range;
 
-        // Essential CORS and baseline video payload streaming headers
         const headers = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
@@ -260,13 +247,11 @@ app.get('/api/raw-file/:id', (req, res) => {
             'Content-Type': 'video/mp4'
         };
 
-        // Handle preflight cross-origin options check
         if (req.method === 'OPTIONS') {
             res.writeHead(204, headers);
             return res.end();
         }
 
-        // 2. Handle standard HTML5 progressive chunking (Byte-Range Requests)
         if (range) {
             const parts = range.replace(/bytes=/, "").split("-");
             const start = parseInt(parts[0], 10);
@@ -284,12 +269,8 @@ app.get('/api/raw-file/:id', (req, res) => {
             });
             file.pipe(res);
         } else {
-            // Fallback for initial connection if browser asks for the whole bundle at once
             console.log(`🎬 Direct Stream Initialized: Full pipe delivery for ${videoFile}`);
-            res.writeHead(200, {
-                ...headers,
-                'Content-Length': fileSize,
-            });
+            res.writeHead(200, { ...headers, 'Content-Length': fileSize });
             fs.createReadStream(fullVideoPath).pipe(res);
         }
 
@@ -314,7 +295,6 @@ app.get('/api/subtitles/:id', (req, res) => {
         }
 
         const files = fs.readdirSync(folderPath);
-        // Find the first SRT file available (e.g., Michael.2026.1080p.srt or English.srt)
         const srtFile = files.find(f => f.endsWith('.srt'));
 
         if (!srtFile) {
@@ -324,11 +304,10 @@ app.get('/api/subtitles/:id', (req, res) => {
         const srtPath = path.join(folderPath, srtFile);
         let srtContent = fs.readFileSync(srtPath, 'utf-8');
 
-        // On-the-fly conversion: WebVTT just needs a header and decimals instead of commas
         let vttContent = "WEBVTT\n\n" + srtContent
             .replace(/\r\n/g, '\n')
             .replace(/\r/g, '\n')
-            .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2'); // Change SRT commas to VTT dots
+            .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
 
         res.setHeader('Content-Type', 'text/vtt');
         res.setHeader('Access-Control-Allow-Origin', '*');
