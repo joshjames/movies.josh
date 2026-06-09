@@ -3,7 +3,9 @@ const path = require('path');
 const axios = require('axios');
 
 // CONFIGURATION
-const MOVIES_DIR = path.resolve('/home/epic/movies');
+const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies';
+
+console.log(`🎬 Target directory initialized at state path: ${MOVIES_DIR}`);
 const API_URL = 'http://www.omdbapi.com/?apikey=84196d01&t=';
 
 // Whitelist of valid extensions we want to keep inside a movie directory

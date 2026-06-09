@@ -1,8 +1,20 @@
 const fs = require('fs');
 const path = require('path');
+
+// AUTOMATIC PATH RESOLUTION:
+// If running inside Docker, use /app/movies. If running on host machine, use /home/epic/movies
+
+
+
+
+
+
 const { execSync } = require('child_process');
 
-const MOVIES_DIR = path.resolve('/home/epic/movies'); 
+const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies';
+
+console.log(`🎬 Target directory initialized at state path: ${MOVIES_DIR}`);
+
 const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
 
 function getFilesRecursive(dir) {
