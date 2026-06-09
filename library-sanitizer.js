@@ -26,17 +26,21 @@ async function downloadCover(url, destPath) {
 function cleanReleaseName(folderName) {
     let title = folderName;
 
-    // 1. Strip trailing slashes if passed from directory strings manually
+    // 1. Strip trailing slashes
     title = title.replace(/\/+$/, '');
 
-    // 2. CRITICAL: Strip any brackets and everything inside them (e.g., [Y.BZ], [], [1080p])
+    // 2. Strip brackets and everything inside them: [Y.BZ], [1080p]
     title = title.replace(/\[.*?\]/g, '');
 
-    // 3. Strip common web domain advertisements at the front
+    // FIX: Strip literal parentheses but KEEP the text inside if it's NOT a year
+    // This removes the wrapper entirely so the year extractor below can hit it cleanly
+    title = title.replace(/\((.*?)\)/g, '$1');
+
+    // 3. Strip common web domain advertisements
     title = title.replace(/^www\.[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
     title = title.replace(/^[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
 
-    // 4. Erase common scene/torrent release junk words case-insensitively
+    // 4. Erase scene junk words
     const junkPatterns = [
         /[._-]v\d+/i, /[._-]v[eE]r\d+/i,
         /720p|1080p|2160p|4k/i,
@@ -46,16 +50,17 @@ function cleanReleaseName(folderName) {
     ];
     junkPatterns.forEach(pattern => title = title.replace(pattern, ''));
 
-    // 5. Extract title and year if present
-    const yearMatch = title.match(/(.*?)[._-](\d{4})/);
+    // 5. Extract title and year (Handles both "Title.2026" and "Title 2026")
+    const yearMatch = title.match(/(.*?)[._-\s](\d{4})/);
     let year = '';
     if (yearMatch) {
         title = yearMatch[1];
         year = yearMatch[2];
     }
 
-    // 6. Clean up punctuation, trailing dots, and double spacing
+    // 6. Clean up punctuation, convert dots/underscores to spaces, and remove double spaces
     title = title.replace(/[-_.]/g, ' ').replace(/\s+/g, ' ').trim();
+    
     return { title, year };
 }
 

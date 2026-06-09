@@ -18,37 +18,40 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
 
-// =========================================================================
-// SAFE & FILTERED LIBRARY INDEX SCANNER
-// =========================================================================
-app.get('/api/movies', (req, res) => {
-    try {
-        if (!fs.existsSync(MOVIES_DIR)) return res.json([]);
 
+// =========================================================================
+// HIGH-PERFORMANCE IN-MEMORY CACHE SYNC LAYER
+// =========================================================================
+let INSTANT_LIBRARY_CACHE = []; // Holds the fully mapped movie payloads in RAM
+
+function rebuildLibraryCache() {
+    try {
+        if (!fs.existsSync(MOVIES_DIR)) {
+            INSTANT_LIBRARY_CACHE = [];
+            return;
+        }
+
+        console.log("📂 [Cache Worker] Indexing disk storage arrays directly to RAM...");
         const folders = fs.readdirSync(MOVIES_DIR);
         
-        // Step 1: Filter out items that are incomplete or currently processing
+        // --- YOUR EXACT STEP 1: FILTER LOGIC ---
         const cleanLibrary = folders.filter(folder => {
             const folderPath = path.join(MOVIES_DIR, folder);
             
-            // Skip hidden directories/system files
             if (folder.startsWith('.')) return false;
             if (!fs.lstatSync(folderPath).isDirectory()) return false;
 
-            // Condition A: If the folder contains the transient transcode lock, hide it
+            // Condition A: Hidden block while transcoding
             if (fs.existsSync(path.join(folderPath, '.processing'))) return false;
 
-            // Condition B: Ensure the final web-optimized file actually exists before showing it
+            // Condition B: Verify optimized asset target exists
             const files = fs.readdirSync(folderPath);
-            const hasWebOptimizedAsset = files.some(f => f.endsWith('.web.mp4'));
-            
-            return hasWebOptimizedAsset;
+            return files.some(f => f.endsWith('.web.mp4'));
         });
 
-        // Step 2: Map over ONLY the safely verified folders to assemble the UI payload
-        const movies = cleanLibrary.map(folder => {
+        // --- YOUR EXACT STEP 2: METADATA EXTRACTION & MAPPING LOGIC ---
+        INSTANT_LIBRARY_CACHE = cleanLibrary.map(folder => {
             const folderPath = path.join(MOVIES_DIR, folder);
-            const files = fs.readdirSync(folderPath);
 
             // Load local metadata parsed from your OMDb script layer
             const metaFile = path.join(folderPath, 'metadata.json');
@@ -72,10 +75,46 @@ app.get('/api/movies', (req, res) => {
             };
         });
 
-        res.json(movies);
+        console.log(`⚡ [Cache Worker] Cache initialized. ${INSTANT_LIBRARY_CACHE.length} items optimized in memory layout blocks.`);
     } catch (err) {
-        console.error("❌ Directory read error:", err);
-        res.status(500).json({ error: "Failed to read library structures." });
+        console.error("❌ Failed building internal memory cache maps:", err);
+    }
+}
+
+// Fire the scan immediately on startup so the RAM array is instantly populated
+rebuildLibraryCache();
+
+
+
+/// =========================================================================
+// HIGH-PERFORMANCE PAGINATED MOVIE ENDPOINT
+// =========================================================================
+app.get('/api/movies', (req, res) => {
+    try {
+        // Fetch snapshot from our fast in-memory array layer
+        let cachedMovies = [...INSTANT_LIBRARY_CACHE];
+
+        // Process request-driven pagination configuration params
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 24; // Default to 24 movie cards per screen view
+        
+        const startIndex = (page - 1) * limit;
+        const endIndex = page * limit;
+
+        // Slice the array inside memory bounds instantly
+        const paginatedMovies = cachedMovies.slice(startIndex, endIndex);
+
+        // Return unified payload structure to frontend client components
+        res.json({
+            totalMovies: cachedMovies.length,
+            totalPages: Math.ceil(cachedMovies.length / limit),
+            currentPage: page,
+            movies: paginatedMovies
+        });
+
+    } catch (err) {
+        console.error("❌ Paginated library presentation routing fault:", err);
+        res.status(500).json({ error: "Failed to assemble structured movie matrix blocks." });
     }
 });
 
@@ -318,6 +357,74 @@ app.get('/api/subtitles/:id', (req, res) => {
         res.status(500).send('Error processing subtitle asset.');
     }
 });
+
+// =========================================================================
+// AUTONOMOUS BACKGROUND PIPELINE WORKER (DB-LESS COMPLETION WATCHER)
+// =========================================================================
+const LIFECYCLE_POLL_INTERVAL = 10000; // Poll every 10 seconds for completions
+let isProcessingPipeline = false;      // Concurrency lock to prevent overlapping runs
+
+async function checkPipelineCompletions() {
+    // If the pipeline is currently transcoding a heavy file, pause polling
+    if (isProcessingPipeline) return;
+
+    try {
+        // Query qBittorrent for active or finishing tasks matching our workflow tag
+        const qbitRes = await axios.get('http://qbittorrent:8080/api/v2/torrents/info?tag=movie-streamer');
+        const torrents = qbitRes.data;
+
+        // Find the first torrent that has fully completed downloading (progress === 1)
+        const completedTorrent = torrents.find(t => t.progress === 1);
+
+        if (completedTorrent) {
+            isProcessingPipeline = true; // Lock the pool worker
+            const torrentHash = completedTorrent.hash;
+            console.log(`\n🎉 Internal Pipeline Watcher detected completion: [${completedTorrent.name}]`);
+
+            // 1. Instantly strip the tag from qBittorrent so this block never triggers twice
+            try {
+                // We remove 'movie-streamer' and swap it to 'movie-streamer-processed' for auditing
+                await axios.post('http://qbittorrent:8080/api/v2/torrents/removeTags', `hashes=${torrentHash}&tags=movie-streamer`, {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+                await axios.post('http://qbittorrent:8080/api/v2/torrents/addTags', `hashes=${torrentHash}&tags=movie-streamer-processed`, {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+                console.log(`🏷️ Rotated workflow status tags for hash context: ${torrentHash}`);
+            } catch (tagErr) {
+                console.error(`⚠️ Failed updating torrent metadata state tracking flags:`, tagErr.message);
+            }
+
+            // 2. Fire the post-processing automation scripts directly from our own runtime environment
+            console.log(`⚡ Firing internal media optimization pipeline command chain...`);
+            const commandChain = `node /app/library-sanitizer.js && node /app/pre-transcode.js`;
+
+            exec(commandChain, (error, stdout, stderr) => {
+                const logPath = path.join(__dirname, 'automation.log');
+                const timestamp = new Date().toISOString();
+                let logOutput = `\n=== AUTONOMOUS AUTOMATION RUN: ${timestamp} ===\n${stdout}`;
+
+                if (error) {
+                    console.error(`❌ Autonomous pipeline encountered an error:`, error.message);
+                    logOutput += `\n❌ ERROR: ${error.message}\nSTDERR: ${stderr}`;
+                } else {
+                    console.log(`✅ Autonomous media pipeline completed flawlessly.`);
+                }
+
+                fs.appendFileSync(logPath, logOutput);
+                rebuildLibraryCache();
+                // 3. Unlock the worker loop so it can scan for the next completed movie in queue
+                isProcessingPipeline = false; 
+            });
+        }
+    } catch (err) {
+        console.error("⚠️ Background pipeline worker cycle execution error:", err.message);
+        isProcessingPipeline = false; // Ensure we don't permanently lock on network dropouts
+    }
+}
+
+// Spin up the engine's lifecycle watcher interval loop
+setInterval(checkPipelineCompletions, LIFECYCLE_POLL_INTERVAL);
 
 app.listen(PORT, () => {
     console.log(`\n==================================================`);
