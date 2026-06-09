@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Josh's Stream Server</title>
+    <style>
+        body { background: #141414; color: white; font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        h1 { text-align: center; color: #E50914; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 20px; }
+        .card { background: #222; border-radius: 8px; overflow: hidden; transition: transform 0.2s; cursor: pointer; text-decoration: none; color: white; display: block;}
+        .card:hover { transform: scale(1.05); }
+        .card img { width: 100%; height: 300px; object-fit: cover; }
+        .card .title { padding: 10px; text-align: center; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Movies</h1>
+    <div class="grid" id="movie-grid"></div>
+
+    <script>
+        async function loadMovies() {
+            const res = await fetch('/api/movies');
+            const movies = await res.json();
+            const grid = document.getElementById('movie-grid');
+            
+            grid.innerHTML = movies.map(movie => `
+                <a class="card" href="player.html?id=${movie.id}&has720=${movie.has720}&has1080=${movie.has1080}">
+                    <img src="${movie.cover}" onerror="this.src='https://via.placeholder.com/200x300?text=No+Cover'" alt="${movie.title}">
+                    <div class="title">${movie.title}</div>
+                </a>
+            `).join('');
+        }
+        loadMovies();
+    </script>
+</body>
+</html>

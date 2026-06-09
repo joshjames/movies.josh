@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Player</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 960px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #f1f5f9;
+        }
+        .video-wrapper {
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            aspect-ratio: 16 / 9;
+            width: 100%;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .controls-row {
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        select {
+            background-color: #1e293b;
+            color: #f8fafc;
+            border: 1px solid #475569;
+            padding: 8px 12px;
+            border-radius: 6px;
+            outline: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        select:focus {
+            border-color: #3b82f6;
+        }
+        .error-msg {
+            color: #f43f5e;
+            background-color: rgba(244, 63, 94, 0.1);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 id="movieTitle">Loading Movie...</h1>
+
+        <div class="video-wrapper">
+            <video id="videoPlayer" controls crossorigin="anonymous"></video>
+        </div>
+
+        <div class="controls-row">
+            <div>
+                <a href="/" style="color: #3b82f6; text-decoration: none; font-size: 0.9rem;">← Back to Library</a>
+            </div>
+            <div>
+                <label for="quality" style="margin-right: 8px; font-size: 0.9rem; color: #94a3b8;">Stream Profile:</label>
+                <select id="quality"></select>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const movieId = urlParams.get('id');
+
+            // 1. Safeguard Circuit Breaker
+            if (!movieId) {
+                document.getElementById('movieTitle').innerText = "No Movie Selected";
+                const container = document.querySelector('.container');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-msg';
+                errorDiv.innerText = "Error: Missing valid movie identifier context string. Please return to the dashboard.";
+                container.appendChild(errorDiv);
+                return;
+            }
+
+            // 2. Set Movie Title
+            document.getElementById('movieTitle').innerText = decodeURIComponent(movieId).replace(/[-_]/g, ' ');
+
+            const videoPlayer = document.getElementById('videoPlayer');
+            const qualitySelect = document.getElementById('quality');
+
+            // 3. Populate Stream Selector Options
+            // 'direct' bypasses the transcoding engine rules entirely
+            qualitySelect.options.add(new Option('🚀 Direct Source (No Transcode / MP4 Fallback)', 'direct'));
+            qualitySelect.options.add(new Option('Transcode: 1080p Live', '1080p'));
+            qualitySelect.options.add(new Option('Transcode: 720p Live', '720p'));
+
+            // Default to Direct Source for native playback optimization
+            qualitySelect.value = 'direct';
+
+            // 4. Dynamic Stream Switching Pipeline
+            function changeQuality() {
+                const profile = qualitySelect.value;
+                const currentTime = videoPlayer.currentTime;
+                const isPaused = videoPlayer.paused;
+
+                let streamUrl = '';
+
+                if (profile === 'direct') {
+                    // Pulls the raw file directly via a clean download/stream endpoint 
+                    streamUrl = `/api/raw-file/${encodeURIComponent(movieId)}`;
+                } else {
+                    // Uses your adaptive transcoder endpoint
+                    streamUrl = `/stream/${encodeURIComponent(movieId)}/${profile}.m3u8`;
+                }
+
+                // Hot-swap the video stream layer
+                videoPlayer.src = streamUrl;
+                videoPlayer.load();
+                
+                // Re-seek to the user's current timeline delta block
+                videoPlayer.currentTime = currentTime;
+
+                if (!isPaused) {
+                    videoPlayer.play().catch(err => console.log("Playback interrupted safely:", err));
+                }
+            }
+
+            qualitySelect.addEventListener('change', changeQuality);
+            changeQuality(); // Execute initial render pipeline
+        });
+    </script>
+</body>
+</html>
