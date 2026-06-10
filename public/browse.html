@@ -71,140 +71,121 @@
     <div class="toast" id="toastNotice"></div>
 
     <script>
-        let currentPage = 1;
-        let currentBrowsePage = 1;
-        let currentSearchQuery = '';
+        // Unified Pagination & Filter Tracking State
+let currentBrowsePage = 1;
 
-        async function fetchCatalog() {
-            const query = document.getElementById('searchIn').value;
-            const genre = document.getElementById('genreIn').value;
-            const rating = document.getElementById('ratingIn').value;
-            const grid = document.getElementById('catalog-grid');
-            
-            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying index structures...</div>';
-
-            try {
-                const res = await fetch(`/api/yts/browse?query=${encodeURIComponent(query)}&genre=${genre}&min_rating=${rating}&page=${currentPage}`);
-                const resData = await res.json();
-
-                if(resData.status !== 'ok' || !resData.data.movies) {
-                    grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matches found matching criteria targets.</div>';
-                    return;
-                }
-
-                grid.innerHTML = resData.data.movies.map(movie => {
-                    // Pick best profile copy option available (prefers 1080p, then 720p)
-                    const targetTorrent = movie.torrents.find(t => t.quality === '1080p') || movie.torrents[0];
-                    if (!targetTorrent) return '';
-
-
-                                        // Construct magnet string dynamically using a diverse mix of reliable global trackers
-                    const trackers = [
-                        'udp://tracker.opentrackr.org:1337/announce',
-                        'udp://tracker.torrent.eu.org:451/announce',
-                        'udp://open.stealth.si:80/announce',
-                        'https://tracker.zhuqiy.com:443/announce',
-                        'https://tracker.moeblog.cn:443/announce',
-                        'udp://tracker.dler.org:6969/announce',
-                        'udp://open.demonii.com:1337/announce'
-                    ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
-
-                    const baseMagnet = `magnet:?xt=urn:btih:${targetTorrent.hash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
-
-
-                    return `
-                        <div class="card">
-                            <div class="cover-frame">
-                                <img src="${movie.medium_cover_image}" alt="${movie.title}">
-                                <div class="rating-badge">⭐ ${movie.rating.toFixed(1)}</div>
-                            </div>
-                            <div class="card-info">
-                                <div>
-                                    <div class="title">${movie.title}</div>
-                                    <div class="meta">${movie.year} • ${movie.runtime} min</div>
-                                </div>
-                                <button class="add-btn" onclick="addMovie(this, '${btoa(baseMagnet)}')">Add to Library</button>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-
-            } catch (err) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing network catalog array requests.</div>';
-            }
-        }
-
-
-
-// Call this function whenever someone changes searches or clicks Next/Prev
 async function fetchCatalog(pageUpdate = 1, appendMode = false) {
     currentBrowsePage = pageUpdate;
+    
+    // Pull active values directly from the UI control layout elements
+    const query = document.getElementById('searchIn').value;
+    const genre = document.getElementById('genreIn').value;
+    const rating = document.getElementById('ratingIn').value;
     const grid = document.getElementById('catalog-grid');
     
+    if (!appendMode) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying index structures...</div>';
+    }
+
     try {
-        const response = await fetch(`/api/yts/browse?query=${encodeURIComponent(currentSearchQuery)}&page=${currentBrowsePage}`);
-        const data = await response.json();
-        
-        if (data && data.data && data.data.movies) {
-            const cardsHtml = data.data.movies.map(movie => {
-                // ... your existing card generation code template ...
-                return `<div class="movie-card">...</div>`;
-            }).join('');
-            
-            if (appendMode) {
-                grid.innerHTML += cardsHtml; // Append for infinite scroll style
-            } else {
-                grid.innerHTML = cardsHtml;  // Replace for structural pages
+        // Construct clean API route queries combining your filter nodes + the requested page state
+        const apiTarget = `/api/yts/browse?query=${encodeURIComponent(query)}&genre=${genre}&min_rating=${rating}&page=${currentBrowsePage}`;
+        const res = await fetch(apiTarget);
+        const resData = await res.json();
+
+        if (resData.status !== 'ok' || !resData.data.movies) {
+            if (!appendMode) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matches found matching criteria targets.</div>';
             }
-            
-            // Render your pagination action triggers at the bottom dynamically
-            renderPaginationControls(data.data.movie_count, data.data.limit);
+            return;
         }
+
+        // Generate clean HTML matrices using your existing card engine logic template
+        const cardsHtml = resData.data.movies.map(movie => {
+            const targetTorrent = movie.torrents.find(t => t.quality === '1080p') || movie.torrents[0];
+            if (!targetTorrent) return '';
+
+            const trackers = [
+                'udp://tracker.opentrackr.org:1337/announce',
+                'udp://tracker.torrent.eu.org:451/announce',
+                'udp://open.stealth.si:80/announce',
+                'https://tracker.zhuqiy.com:443/announce',
+                'https://tracker.moeblog.cn:443/announce',
+                'udp://tracker.dler.org:6969/announce',
+                'udp://open.demonii.com:1337/announce'
+            ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
+
+            const baseMagnet = `magnet:?xt=urn:btih:${targetTorrent.hash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
+
+            return `
+                <div class="card">
+                    <div class="cover-frame">
+                        <img src="${movie.medium_cover_image}" alt="${movie.title}">
+                        <div class="rating-badge">⭐ ${movie.rating.toFixed(1)}</div>
+                    </div>
+                    <div class="card-info">
+                        <div>
+                            <div class="title">${movie.title}</div>
+                            <div class="meta">${movie.year} • ${movie.runtime} min</div>
+                        </div>
+                        <button class="add-btn" onclick="addMovie(this, '${btoa(baseMagnet)}')">Add to Library</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (appendMode) {
+            grid.innerHTML += cardsHtml;
+        } else {
+            grid.innerHTML = cardsHtml;
+        }
+
+        // TODO: If you have a pagination bar engine block renderer, call it here:
+        // renderPaginationControls(resData.data.movie_count, resData.data.limit);
+
     } catch (err) {
-        console.error("Failed fetching catalog matrix states.");
+        console.error("Failed fetching catalog matrix states:", err);
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing network catalog array requests.</div>';
     }
 }
 
+async function addMovie(buttonObj, base64Magnet) {
+    const magnetUrl = atob(base64Magnet);
+    buttonObj.disabled = true;
+    buttonObj.style.background = '#475569';
+    buttonObj.innerText = 'Queuing...';
 
+    try {
+        const response = await fetch('/api/yts/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ magnetUrl })
+        });
 
-
-        async function addMovie(buttonObj, base64Magnet) {
-            const magnetUrl = atob(base64Magnet);
-            buttonObj.disabled = true;
-            buttonObj.style.background = '#475569';
-            buttonObj.innerText = 'Queuing...';
-
-            try {
-                const response = await fetch('/api/yts/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ magnetUrl })
-                });
-
-                if (response.ok) {
-                    showToast("🎬 Added to queue! Optimization scripts will process files in 5-10 minutes once downloaded.");
-                    buttonObj.innerText = '✓ Queued';
-                    buttonObj.style.background = '#059669';
-                } else {
-                    throw new Error();
-                }
-            } catch(e) {
-                showToast("❌ Pipeline communication block encountered.");
-                buttonObj.disabled = false;
-                buttonObj.style.background = '#10b981';
-                buttonObj.innerText = 'Add to Library';
-            }
+        if (response.ok) {
+            showToast("🎬 Added to queue! Optimization scripts will process files in 5-10 minutes once downloaded.");
+            buttonObj.innerText = '✓ Queued';
+            buttonObj.style.background = '#059669';
+        } else {
+            throw new Error();
         }
+    } catch(e) {
+        showToast("❌ Pipeline communication block encountered.");
+        buttonObj.disabled = false;
+        buttonObj.style.background = '#10b981';
+        buttonObj.innerText = 'Add to Library';
+    }
+}
 
-        function showToast(msg) {
-            const toast = document.getElementById('toastNotice');
-            toast.innerText = msg;
-            toast.style.display = 'block';
-            setTimeout(() => { toast.style.display = 'none'; }, 6000);
-        }
+function showToast(msg) {
+    const toast = document.getElementById('toastNotice');
+    toast.innerText = msg;
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 6000);
+}
 
-        // Auto initialization load run
-        fetchCatalog();
+// Global initialization call on DOM initialization boot
+fetchCatalog(1, false);
     </script>
 </body>
 </html>

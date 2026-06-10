@@ -75,7 +75,7 @@ function preTranscodeLibrary() {
         // Drop the zero-byte lock flag right before execution
         fs.writeFileSync(lockPath, ''); 
 
-        const ffmpegCmd = `ffmpeg -i "${inputPath}" -c:v libx264 -preset medium -crf 22 -c:a aac -ac 2 -b:a 192k -movflags +faststart -y "${outputPath}"`;
+        const ffmpegCmd = `ffmpeg -threads 6 -i "${inputPath}" -c:v libx264 -preset medium -crf 22 -c:a aac -ac 2 -b:a 192k -movflags +faststart -y "${outputPath}"`;
 
         try {
             console.log(`🎬 FFmpeg transcode processing active...`);
