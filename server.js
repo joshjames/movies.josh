@@ -5,7 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 const PORT = 3000;
-const { exec } = require('child_process');
 const MOVIES_DIR = path.join(__dirname, 'movies');
 const axios = require('axios');
 const FormData = require('form-data');
