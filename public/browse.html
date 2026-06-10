@@ -36,6 +36,45 @@
         @keyframes slideIn { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         @media(min-width: 640px) { h1 { font-size: 2rem; } .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; } }
+        /* Pagination Control Bar Styling */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 40px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: #1e293b;
+    border-radius: 12px;
+    border: 1px solid #334155;
+}
+.page-btn {
+    background: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #475569;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+.page-btn:hover:not(:disabled) {
+    background: #2563eb;
+    border-color: #3b82f6;
+}
+.page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: #334155;
+}
+.page-indicator {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    font-weight: 500;
+    min-width: 100px;
+    text-align: center;
+}
     </style>
 </head>
 <body>
@@ -66,12 +105,14 @@
         </div>
 
         <div class="grid" id="catalog-grid"></div>
+        
+        <div id="pagination-wrapper"></div>
     </div>
 
     <div class="toast" id="toastNotice"></div>
 
     <script>
-        // Unified Pagination & Filter Tracking State
+  // Unified Pagination & Filter Tracking State
 let currentBrowsePage = 1;
 
 async function fetchCatalog(pageUpdate = 1, appendMode = false) {
@@ -82,20 +123,23 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
     const genre = document.getElementById('genreIn').value;
     const rating = document.getElementById('ratingIn').value;
     const grid = document.getElementById('catalog-grid');
+    const paginationWrapper = document.getElementById('pagination-wrapper');
     
     if (!appendMode) {
         grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying index structures...</div>';
+        paginationWrapper.innerHTML = ''; // Wipe navigation while loading
     }
 
     try {
-        // Construct clean API route queries combining your filter nodes + the requested page state
+        // Construct clean API route queries combining filter nodes + requested page state
         const apiTarget = `/api/yts/browse?query=${encodeURIComponent(query)}&genre=${genre}&min_rating=${rating}&page=${currentBrowsePage}`;
         const res = await fetch(apiTarget);
         const resData = await res.json();
 
-        if (resData.status !== 'ok' || !resData.data.movies) {
+        if (resData.status !== 'ok' || !resData.data.movies || resData.data.movies.length === 0) {
             if (!appendMode) {
                 grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matches found matching criteria targets.</div>';
+                paginationWrapper.innerHTML = '';
             }
             return;
         }
@@ -138,15 +182,43 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
             grid.innerHTML += cardsHtml;
         } else {
             grid.innerHTML = cardsHtml;
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // Snap screen up to the top matrix row on clean page turns
         }
 
-        // TODO: If you have a pagination bar engine block renderer, call it here:
-        // renderPaginationControls(resData.data.movie_count, resData.data.limit);
+        // FIRE DYNAMIC NAVIGATION CONTROLLER
+        renderPaginationControls(resData.data.movie_count, resData.data.limit);
 
     } catch (err) {
         console.error("Failed fetching catalog matrix states:", err);
         grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing network catalog array requests.</div>';
     }
+}
+
+function renderPaginationControls(totalMovies, pageLimit) {
+    const paginationWrapper = document.getElementById('pagination-wrapper');
+    if (!totalMovies || !pageLimit) return;
+
+    const totalPages = Math.ceil(totalMovies / pageLimit);
+    
+    // If all results fit entirely on one page, don't display unnecessary controls
+    if (totalPages <= 1) {
+        paginationWrapper.innerHTML = '';
+        return;
+    }
+
+    paginationWrapper.innerHTML = `
+        <div class="pagination-container">
+            <button class="page-btn" id="prevPageBtn" ${currentBrowsePage === 1 ? 'disabled' : ''} onclick="fetchCatalog(${currentBrowsePage - 1}, false)">
+                ◀ Previous
+            </button>
+            <div class="page-indicator">
+                Page ${currentBrowsePage} / ${totalPages}
+            </div>
+            <button class="page-btn" id="nextPageBtn" ${currentBrowsePage === totalPages ? 'disabled' : ''} onclick="fetchCatalog(${currentBrowsePage + 1}, false)">
+                Next ▶
+            </button>
+        </div>
+    `;
 }
 
 async function addMovie(buttonObj, base64Magnet) {
