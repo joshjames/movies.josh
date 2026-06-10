@@ -9,6 +9,7 @@ const { exec } = require('child_process');
 const MOVIES_DIR = path.join(__dirname, 'movies');
 const axios = require('axios');
 const FormData = require('form-data');
+const { exec, spawn } = require('child_process');
 
 if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
