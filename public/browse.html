@@ -159,7 +159,13 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
                 'udp://open.demonii.com:1337/announce'
             ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
 
-            const baseMagnet = `magnet:?xt=urn:btih:${targetTorrent.hash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
+
+            // Force the API hash to upper-case Hexadecimal formatting strings explicitly
+            const cleanHash = targetTorrent.hash.toUpperCase().trim();
+            const baseMagnet = `magnet:?xt=urn:btih:${cleanHash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
+
+
+
 
             return `
                 <div class="card">

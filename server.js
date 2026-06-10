@@ -182,7 +182,7 @@ app.post('/api/yts/add', async (req, res) => {
     try {
         const form = new FormData();
         form.append('urls', magnetUrl);
-        form.append('savepath', '/home/epic/movies');
+        form.append('savepath', '/downloads');
         form.append('tags', 'movie-streamer'); 
 
         await axios.post('http://qbittorrent:8080/api/v2/torrents/add', form, {
