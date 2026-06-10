@@ -15,6 +15,7 @@ Autonomous Lifecycle Execution: A completion webhook intercepts post-download li
 Web-Native Streaming Engine: Serves video assets over high-performance HTTP Byte-Range requests for responsive scrubbing, playback timeline accuracy, and on-the-fly .srt to WebVTT subtitle conversion.
 
 ## 🏗️ System Architecture
+```
 [ Web Browser UI ] 
         │ (YTS Proxy Search / Click to Add)
         ▼
@@ -27,8 +28,10 @@ Web-Native Streaming Engine: Serves video assets over high-performance HTTP Byte
         └──► Runs Command Chain:
               ├──► library-sanitizer.js (Cleans folder garbage)
               └──► pre-transcode.js (Drops .processing lock & runs FFmpeg loop)
+```
 ## 📂 Project Repository Tree
 Plaintext
+```
 .
 ├── movies/                       # Mounted media volumes container layer
 │   └── [Movie-Folder-Name]/
@@ -44,6 +47,7 @@ Plaintext
 ├── library-sanitizer.js          # File structure normalization automation script
 ├── pre-transcode.js              # Recursive sequential FFmpeg x264/AAC transcode worker
 └── package.json                  # Node dependencies configuration manifest
+```
 # 🛠️ Installation & Setup
 1. Environmental Prerequisites
 Ensure your microservices run inside the same user-defined bridge network space inside your Docker deployment stack.
