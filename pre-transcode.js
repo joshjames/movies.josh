@@ -6,9 +6,6 @@ const path = require('path');
 
 
 
-
-
-
 const { execSync } = require('child_process');
 
 const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies';
@@ -47,6 +44,30 @@ function getFilesRecursive(dir) {
     return results;
 }
 
+
+function inspectMediaStreams(filePath) {
+    try {
+        // Query ffprobe to pull container details wrapped cleanly in a JSON profile
+        const command = `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of json "${filePath}"`;
+        const audioCommand = `ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of json "${filePath}"`;
+        
+        const videoOutput = JSON.parse(execSync(command).toString());
+        const audioOutput = JSON.parse(execSync(audioCommand).toString());
+        
+        const videoCodec = videoOutput.streams?.[0]?.codec_name || '';
+        const audioCodec = audioOutput.streams?.[0]?.codec_name || '';
+        
+        return {
+            videoCodec: videoCodec.toLowerCase(), // e.g., 'h264', 'hevc'
+            audioCodec: audioCodec.toLowerCase(), // e.g., 'aac', 'mp3', 'ac3'
+            isWebNative: (videoCodec === 'h264' || videoCodec === 'hevc') && audioCodec === 'aac'
+        };
+    } catch (err) {
+        console.error(`⚠️  ffprobe analysis failed on asset footprint: ${err.message}`);
+        return { videoCodec: 'unknown', audioCodec: 'unknown', isWebNative: false };
+    }
+}
+
 function preTranscodeLibrary() {
     console.log(`🌀 Starting Smart Library Optimization Run at: ${MOVIES_DIR}`);
 
@@ -57,42 +78,77 @@ function preTranscodeLibrary() {
 
     const allVideos = getFilesRecursive(MOVIES_DIR);
     let transcodeCount = 0;
+    let fastPassCount = 0;
 
     for (const inputPath of allVideos) {
-        if (path.basename(inputPath).toLowerCase().includes('sample')) {
-            continue;
-        }
+        // Skip preview snippets or samples
+        if (path.basename(inputPath).toLowerCase().includes('sample')) continue;
+        
+        // Skip files that are already successfully optimized outputs from a prior run
+        if (inputPath.toLowerCase().endsWith('.web.mp4')) continue;
 
         const parsedPath = path.parse(inputPath);
         const outputPath = path.join(parsedPath.dir, `${parsedPath.name}.web.mp4`);
-
-        // FIX: Use parsedPath.dir since currentMovieFolder doesn't exist
         const lockPath = path.join(parsedPath.dir, '.processing');
 
-        console.log(`\n🎬 New Target Found: ...${inputPath.replace(MOVIES_DIR, '')}`);
-        console.log(`⏳ Encoding to web-native progressive format...`);
+        console.log(`\n🎬 Evaluating Target: ...${inputPath.replace(MOVIES_DIR, '')}`);
 
+        // -----------------------------------------------------------------
+        // STEP 1: SMART CODEC INSPECTION (THE FAST PASS)
+        // -----------------------------------------------------------------
+        const media = inspectMediaStreams(inputPath);
+        console.log(`📊 Codecs: Video [${media.videoCodec}] | Audio [${media.audioCodec}]`);
+
+        if (media.isWebNative) {
+            console.log(`✨ Web-native format confirmed. Bypassing transcoding matrix...`);
+            
+            if (!fs.existsSync(outputPath)) {
+                if (parsedPath.ext.toLowerCase() === '.mp4') {
+                    // If it's already an mp4 container, just rename it directly inline
+                    fs.renameSync(inputPath, outputPath);
+                } else {
+                    // If it's an MKV/M4V, rename it to change container type, then nuke the old file
+                    fs.renameSync(inputPath, outputPath);
+                    console.log(`🗑️  Cleaning up legacy source wrapper container.`);
+                }
+                console.log(`🗂️  File fast-linked directly: ${path.basename(outputPath)}`);
+                fastPassCount++;
+            } else {
+                console.log(`⚠️  Target standard destination already exists. Skipping.`);
+            }
+            continue; // CRITICAL: Stop loop cycle here! Move instantly to the next movie.
+        }
+
+        // -----------------------------------------------------------------
+        // STEP 2: FALLBACK TO HEAVY TRANSCODING (IF CODES DON'T MATCH)
+        // -----------------------------------------------------------------
+        console.log(`⏳ Heavy/Legacy container format discovered. Initializing FFmpeg...`);
+        
         // Drop the zero-byte lock flag right before execution
         fs.writeFileSync(lockPath, ''); 
 
         const ffmpegCmd = `ffmpeg -threads 6 -i "${inputPath}" -c:v libx264 -preset medium -crf 22 -c:a aac -ac 2 -b:a 192k -movflags +faststart -y "${outputPath}"`;
 
         try {
-            console.log(`🎬 FFmpeg transcode processing active...`);
+            console.log(`🎬 FFmpeg transcode processing active (Capped at 6 threads)...`);
             execSync(ffmpegCmd, { stdio: 'inherit' });
             console.log(`✅ Completed: ${outputPath}`);
+            
+            // Delete the old source file since we generated a fresh transcoded clone next to it
+            if (fs.existsSync(inputPath) && inputPath !== outputPath) {
+                fs.unlinkSync(inputPath);
+            }
             transcodeCount++;
         } catch (err) {
             console.error(`❌ Failed processing [${parsedPath.base}]:`, err.message);
         } finally {
-            // Clean up the indicator lock file regardless of success or crash
             if (fs.existsSync(lockPath)) {
                 fs.unlinkSync(lockPath);
             }
         }
-    } // <-- Added missing loop closing bracket
+    }
 
-    console.log(`\n🏁 Done! Optimized ${transcodeCount} new media files.`);
+    console.log(`\n🏁 Done! Fast-passed: ${fastPassCount} movies | Transcoded: ${transcodeCount} movies.`);
 }
 
 preTranscodeLibrary();
