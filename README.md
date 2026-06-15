@@ -23,8 +23,8 @@ Web-Native Streaming Engine: Serves video assets over high-performance HTTP Byte
         │
         ├──► [ qBittorrent Container:8080 ] (Dispatches Tagged Magnet Stream)
         │              │
-        │              ▼ (Download Finalizes & Hits Completion Hook)
-        │
+        │              ▼ (Download Finalizes)
+        │--> polls status and on complete initiates post processing chain.
         └──► Runs Command Chain:
               ├──► library-sanitizer.js (Cleans folder garbage)
               └──► pre-transcode.js (Drops .processing lock & runs FFmpeg loop)
@@ -43,6 +43,7 @@ Plaintext
 ├── public/                       # Frontend assets directory
 │   ├── index.html                # Media gallery dashboard
 │   └── browse.html               # YTS API catalog crawler component
+|   |__ player.html               # html5 media player interface.
 ├── server.js                     # Core Express engine router and streaming controller
 ├── library-sanitizer.js          # File structure normalization automation script
 ├── pre-transcode.js              # Recursive sequential FFmpeg x264/AAC transcode worker
@@ -70,7 +71,7 @@ Define your Docker subnet address matrix configurations:
 
 Plaintext
 172.16.0.0/12, 127.0.0.1
-4. Hooking Up The Automation Trigger
+4. Hooking Up The Automation Trigger   !!## Depricated - node service now initriates post processing automatically.
 To trigger the post-processing optimization loop automatically when a download hits 100%, add this run command into your qBittorrent client configuration options under "Run external program on torrent completion":
 ```
 Bash
