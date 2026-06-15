@@ -5,6 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stream Server</title>
     <style>
+
+        /* Layout Alignment Wrapper Engine */
+.main-header {
+    width: 100%;
+    background: #0f172a;
+    padding: 12px 10px;
+    box-sizing: border-box;
+}
+
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between; /* Pushes Logo to Left, Button to Right cleanly */
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 16px;
+}
+
+/* Precise Sizing Control for the Arched Vector SVG Asset */
+.logo-wrapper {
+    width: 160px; /* Perfectly compact on mobile/default layouts */
+    display: flex;
+    align-items: center;
+}
+
+.logo-wrapper svg {
+    width: 100%;
+    height: auto;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.logo-wrapper svg:hover {
+    transform: scale(1.05);
+}
+
+/* Styled Compact Header Action Controls */
+.browse-nav-btn {
+    background: #2563eb;
+    color: white;
+    text-decoration: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    display: inline-block;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    transition: background 0.2s ease;
+    white-space: nowrap;
+}
+
+.browse-nav-btn:hover {
+    background: #1d4ed8;
+}
+
+/* Tablet/Desktop expansion sizing overrides */
+@media(min-width: 640px) {
+    body { padding: 20px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
+    .main-header { padding: 20px 0; }
+    .logo-wrapper { width: 220px; } /* Scales up beautifully to look crisp on widescreen displays */
+    .browse-nav-btn { padding: 12px 24px; font-size: 0.95rem; }
+}
+
+
         body { 
             background: #0f172a; 
             color: #f8fafc; 
@@ -82,53 +149,39 @@
     </style>
 </head>
 <body>
-<div class="logo-wrapper">
-    <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
-            
-            <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
-                <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
-            </filter>
-        </defs>
-        
-        <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-              font-size="52" 
-              font-weight="900" 
-              letter-spacing="4" 
-              fill="#e50914" 
-              filter="url(#cinematicGlow)">
-            <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
-                JOSHFLIX
-            </textPath>
-        </text>
-    </svg>
-</div>
 
-<style>
-    /* Responsive sizing envelope wrapper for your navbar integration */
-    .logo-wrapper {
-        width: 100%;
-        max-width: 240px; /* Limits scale to fit cleanly inside your existing flex navigation row */
-        display: inline-block;
-        vertical-align: center;
-        align-self: center;
+    <header class="main-header">
+    <div class="header-content">
+        <div class="logo-wrapper">
+            <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
+                    <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
+                        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
+                    </filter>
+                </defs>
+                <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+                      font-size="52" 
+                      font-weight="900" 
+                      letter-spacing="4" 
+                      fill="#e50914" 
+                      filter="url(#cinematicGlow)">
+                    <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
+                        JOSHFLIX
+                    </textPath>
+                </text>
+            </svg>
+        </div>
 
-    }
-    
-    /* Optional hovering animation effect to make the UI feel premium */
-    .logo-wrapper svg {
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        cursor: pointer;
-    }
-    .logo-wrapper svg:hover {
-        transform: scale(1.04);
-    }
-</style>
+        <div class="nav-actions">
+            <a href="/browse.html" class="browse-nav-btn">
+                🔍 Browse Catalog
+            </a>
+        </div>
+    </div>
+</header>
 
-
-    <!-- <h1>Library Movies</h1> -->
     <div class="grid" id="movie-grid"></div>
 
     <div style="text-align: center; margin-bottom: 20px;">
