@@ -410,8 +410,14 @@ async function processTVShowFolder(folderName) {
             const seasonRes = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&Season=${s}`);
             
             if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
+                // Track which episode numbers the API successfully found
+                const apiMatchedNumbers = new Set();
+
                 for (const ep of seasonRes.data.Episodes) {
                     const epNum = parseInt(ep.Episode, 10);
+                    if (isNaN(epNum)) continue;
+                    
+                    apiMatchedNumbers.add(epNum);
                     const lookupKey = `${s}-${epNum}`;
                     const isAvailable = !!physicalFileMap[lookupKey];
 
@@ -425,10 +431,37 @@ async function processTVShowFolder(folderName) {
                         localRelativePath: isAvailable ? physicalFileMap[lookupKey] : null
                     });
                 }
+
+                // =========================================================================
+                // CRITICAL FALLBACK LAYER: Reconcile missing local physical files
+                // =========================================================================
+                Object.keys(physicalFileMap).forEach(key => {
+                    const [discSeason, discEpisode] = key.split('-').map(Number);
+                    
+                    // If we have it on disk for this season, but OMDb completely left it out of the API response
+                    if (discSeason === s && !apiMatchedNumbers.has(discEpisode)) {
+                        console.log(`   🔧 API Omission Detected: Injecting local fallback track entry [S${s}E${discEpisode}]`);
+                        fullSeriesStructure.seasons[s].episodes.push({
+                            episodeNumber: discEpisode,
+                            title: `Episode ${discEpisode} (Unlisted Source)`,
+                            released: 'Unknown',
+                            plot: 'Local disk file asset tracking fallback.',
+                            imdbRating: 'N/A',
+                            available: true,
+                            localRelativePath: physicalFileMap[key]
+                        });
+                    }
+                });
+
+                // Keep everything in clean numerical numerical sorting order
+                fullSeriesStructure.seasons[s].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+
             } else {
+                console.log(`   ⚠️ No official online records for Season ${s}. Generating standard skeleton matrix.`);
                 generateSkeletonSeason(s, fullSeriesStructure, physicalFileMap);
             }
         } catch (err) {
+            console.log(`   ⚠️ Network bottleneck parsing Season ${s}. Reverting to local disk discovery.`);
             generateSkeletonSeason(s, fullSeriesStructure, physicalFileMap);
         }
     }
