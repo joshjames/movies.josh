@@ -209,24 +209,46 @@ app.post('/api/trigger-automation', (req, res) => {
 });
 
 // =========================================================================
-// YTS BROWSE PROXY ENDPOINT
+// FIXED YTS BROWSE PROXY ENDPOINT
 // =========================================================================
 app.get('/api/yts/browse', async (req, res) => {
     try {
-        const { query, page, genre, min_rating } = req.query;
+        // Collect the incoming variables sent from the frontend template
+        const { query_term, page, genre, minimum_rating, sort_by } = req.query;
         const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
         
-        const response = await axios.get(ytsUrl, {
-            params: {
-                query_term: query || '0',
-                page: page || 1,
-                genre: genre || 'All',
-                minimum_rating: min_rating || 0,
-                sort_by: 'date_added',
-                order_by: 'desc',
-                limit: 24
-            }
-        });
+        // Build an explicit clean object containing only valid API arguments
+        const apiParams = {
+            page: page || 1,
+            limit: 24,
+            order_by: 'desc'
+        };
+
+        // Rule 1: Only append query_term if the string is populated and not '0'
+        if (query_term && query_term.trim() !== '' && query_term !== '0') {
+            apiParams.query_term = query_term.trim();
+        }
+
+        // Rule 2: Pass genre ONLY if it's explicitly chosen and not generic 'All'
+        if (genre && genre.toLowerCase() !== 'all') {
+            apiParams.genre = genre.toLowerCase();
+        }
+
+        // Rule 3: Pass rating constraints cleanly if higher than baseline zero
+        if (minimum_rating && minimum_rating !== '0') {
+            apiParams.minimum_rating = minimum_rating;
+        }
+
+        // Rule 4: Map your dynamic frontend sort option directly down to the payload
+        if (sort_by) {
+            apiParams.sort_by = sort_by;
+        } else {
+            apiParams.sort_by = 'date_added'; // Safe fallback baseline
+        }
+
+        console.log(`📡 Relaying sanitized query params to YTS:`, apiParams);
+
+        const response = await axios.get(ytsUrl, { params: apiParams });
 
         res.json(response.data);
     } catch (err) {
@@ -234,7 +256,6 @@ app.get('/api/yts/browse', async (req, res) => {
         res.status(500).json({ error: "Failed to fetch media data source indices." });
     }
 });
-
 // =========================================================================
 // QB_TORRENT INTERNAL INGESTION TARGET
 // =========================================================================
