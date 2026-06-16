@@ -79,13 +79,16 @@
                     <option value="8">⭐ 8.0+ IMDb</option>
                 </select>
                 <select id="sortIn">
-                    <option value="latest">Sort: Latest Added</option>
-                    <option value="seeds">Sort: Most Seeds</option>
-                    <option value="year">Sort: Release Year</option>
-                    <option value="rating">Sort: IMDb Score</option>
-                </select>
+                <option value="date_added">Sort: Latest Added</option> 
+                <option value="seeds">Sort: Most Seeds</option>
+                <option value="year">Sort: Release Year</option>
+                <option value="rating">Sort: IMDb Score</option>
+            </select>
                 <button onclick="triggerNewSearch()">Search</button>
             </div>
+
+
+            
 
             <div class="manual-input-box">
                 <input type="text" id="manualMagnetIn" placeholder="Paste external custom magnet link layout directly here (e.g., magnet:?xt=...)">
@@ -119,10 +122,10 @@ document.getElementById('searchIn').addEventListener('keydown', (e) => {
 async function fetchCatalog(pageUpdate = 1, appendMode = false) {
     currentBrowsePage = pageUpdate;
     
-    const query = document.getElementById('searchIn').value;
+    const query = document.getElementById('searchIn').value.trim();
     const genre = document.getElementById('genreIn').value;
     const rating = document.getElementById('ratingIn').value;
-    const sortBy = document.getElementById('sortIn').value; // Unified sorting variable
+    const sortBy = document.getElementById('sortIn').value;
     
     const grid = document.getElementById('catalog-grid');
     const paginationWrapper = document.getElementById('pagination-wrapper');
@@ -133,8 +136,22 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
     }
 
     try {
-        // Appends your sorting dropdown configuration seamlessly into the proxy route call
-        const apiTarget = `/api/yts/browse?query=${encodeURIComponent(query)}&genre=${genre}&min_rating=${rating}&sort_by=${sortBy}&page=${currentBrowsePage}`;
+        // --- FIX: Map parameters cleanly to exact upstream API requirements ---
+        let apiTarget = `/api/yts/browse?page=${currentBrowsePage}`;
+        
+        if (query) {
+            apiTarget += `&query_term=${encodeURIComponent(query)}`; // Fixed from 'query' to 'query_term'
+        }
+        if (genre && genre !== 'All') {
+            apiTarget += `&genre=${genre}`;
+        }
+        if (rating && rating !== '0') {
+            apiTarget += `&minimum_rating=${rating}`; // Fixed from 'min_rating' to 'minimum_rating'
+        }
+        if (sortBy) {
+            apiTarget += `&sort_by=${sortBy}`;
+        }
+
         const res = await fetch(apiTarget);
         const resData = await res.json();
 
