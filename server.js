@@ -179,51 +179,18 @@ app.get('/api/series/:showFolder', (req, res) => {
         const showFolder = decodeURIComponent(req.params.showFolder);
         const showPath = path.join(MOVIES_DIR, 'series', showFolder);
 
-        if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
-            return res.status(404).json({ error: "Show location missing from disk arrays." });
-        }
-
-        // Unpack baseline show structural identity records
         const metaFile = path.join(showPath, 'metadata.json');
-        let metaData = { title: showFolder.replace(/[-_.]/g, ' '), year: 'Unknown', plot: '', genre: '' };
-        if (fs.existsSync(metaFile)) {
-            try { metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8')); } catch (e) {}
+        const seriesFile = path.join(showPath, 'series.json');
+
+        if (!fs.existsSync(metaFile) || !fs.existsSync(seriesFile)) {
+            return res.status(404).json({ error: "Serialized map targets are currently missing for this show cluster destination." });
         }
 
-        let structure = {};
+        // Fast sequential direct file-reads
+        const metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+        const seriesData = JSON.parse(fs.readFileSync(seriesFile, 'utf-8'));
 
-        // Track and map existing Season.* or Season - * directories
-        const showContents = fs.readdirSync(showPath);
-        showContents.forEach(item => {
-            const itemPath = path.join(showPath, item);
-            if (!fs.lstatSync(itemPath).isDirectory()) return;
-
-            // Extract numeric season indicator values out of text paths (e.g., "Season.8" or "Season - 2")
-            const match = item.match(/Season\s*[-.]*\s*(\d+)/i);
-            if (!match) return;
-            const seasonNum = parseInt(match[1], 10).toString();
-
-            if (!structure[seasonNum]) structure[seasonNum] = [];
-
-            // Read the media files inside this specific season folder
-            const videoExtensions = ['.mp4', '.mkv', '.avi', '.m4v', '.ts'];
-            const files = fs.readdirSync(itemPath);
-
-            // Filter out junk/subtitles, sort files naturally, and build sequential playlist structures
-            const trackFiles = files
-                .filter(f => videoExtensions.includes(path.extname(f).toLowerCase()))
-                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-
-            trackFiles.forEach((file, index) => {
-                structure[seasonNum].push({
-                    num: index + 1,
-                    title: file.replace(/[-_.]/g, ' ').replace(/\b(s\d+e\d+|ep\d+).*$/i, '').trim() || `Episode ${index + 1}`,
-                    file: file,
-                    relPath: `series/${showFolder}/${item}/${file}` // Relative targeting locator for streaming endpoints
-                });
-            });
-        });
-
+        // Respond with a clean, fully unified payload object
         res.json({
             id: `series/${showFolder}`,
             title: metaData.title,
@@ -231,14 +198,16 @@ app.get('/api/series/:showFolder', (req, res) => {
             plot: metaData.plot,
             genre: metaData.genre,
             poster: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
-            seasons: structure
+            seasons: seriesData.seasons,
+            totalSeasons: seriesData.totalSeasons
         });
 
     } catch (err) {
-        console.error("❌ Series structure traversal fault:", err);
-        res.status(500).json({ error: "Could not compile internal season structural matrices." });
+        console.error("❌ Unified Series router failure:", err);
+        res.status(500).json({ error: "Failed assembling compiled local series data arrays." });
     }
 });
+
 /// =========================================================================
 // HIGH-PERFORMANCE PAGINATED MOVIE ENDPOINT
 // =========================================================================

@@ -7,17 +7,19 @@ require('dotenv').config();
 
 // CONFIGURATION
 const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies';
+const SERIES_DIR = path.join(MOVIES_DIR, 'series');
 
-console.log(`🎬 Target directory initialized at state path: ${MOVIES_DIR}`);
+console.log(`\n==================================================`);
+console.log(`🚀 Target directory initialized at state path: ${MOVIES_DIR}`);
+console.log(`==================================================\n`);
+
 const API_URL = 'http://www.omdbapi.com/?apikey=84196d01&t=';
 
 // --- OPEN_SUBTITLES CONFIGURATION LAYER FROM RUNTIME ENVIRONMENT ---
 const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY;
-const OPENSUBTITLES_USERNAME = process.env.OPENSUBTITLES_USERNAME;
-const OPENSUBTITLES_PASSWORD = process.env.OPENSUBTITLES_PASSWORD;
 
-// Whitelist of valid extensions we want to keep inside a movie directory
-const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.json', '.jpg', '.jpeg', '.png'];
+// Whitelist of valid extensions we want to keep inside directories
+const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.json', '.jpg', '.jpeg', '.png', '.ts'];
 
 async function downloadCover(url, destPath) {
     try {
@@ -29,13 +31,9 @@ async function downloadCover(url, destPath) {
             writer.on('error', reject);
         });
     } catch (err) {
-        console.error(`⚠️  Cover download skipped: ${err.message}`);
-    }git
+        console.error(`   ⚠️ Cover download skipped: ${err.message}`);
+    }
 }
-
-// --- STREAMLINED DEV-MODE SUBTITLE RETRIEVAL ENGINE ---
-//const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY;
-// --- HARDENED DEV-MODE SUBTITLE RETRIEVAL ENGINE WITH RETRY LOGIC ---
 
 /**
  * Executes a network call with an exponential backoff safety net for 5xx/429 errors.
@@ -60,16 +58,13 @@ async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, official
     const targetSrtPath = path.join(targetDirectory, 'English.srt');
 
     if (fs.existsSync(targetSrtPath)) {
-        console.log(`   ℹ️ Subtitles already verified locally.`);
         return;
     }
 
     if (!OPENSUBTITLES_API_KEY) {
-        console.log(`   ⚠️ Skipping subtitles: OPENSUBTITLES_API_KEY missing from environment.`);
         return;
     }
 
-    // Base pacing delay between folders to respect the global API gateway threshold
     await new Promise(resolve => setTimeout(resolve, 1200));
 
     try {
@@ -93,7 +88,6 @@ async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, official
         const fileId = subData[0].attributes.files[0].file_id;
         const downloadRoute = 'https://api.opensubtitles.com/api/v1/download';
 
-        // Step 2: Fetch the secure download URL with safety wrappers
         const downloadRes = await axios.post(downloadRoute, { file_id: fileId }, {
             headers: {
                 'Api-Key': OPENSUBTITLES_API_KEY,
@@ -103,41 +97,22 @@ async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, official
         });
 
         const srtDownloadUrl = downloadRes.data.link;
-
-        // Step 3: Stream content to file storage
         const srtFileBuffer = await axios.get(srtDownloadUrl, { responseType: 'arraybuffer' });
         fs.writeFileSync(targetSrtPath, srtFileBuffer.data);
 
         console.log(`   🎯 Clean subtitle track successfully written to: English.srt`);
 
     } catch (err) {
-        if (err.response) {
-            console.error(`   ❌ Subtitle pipeline skipped folder [Status ${err.response.status}]: Server busy.`);
-        } else {
-            console.error(`   ❌ Subtitle pipeline skipped folder [Error]: ${err.message}`);
-        }
-        // Catching the error here safely allows the outer 'for' loop in sanitizeLibrary() 
-        // to cleanly slide into the next movie asset instead of aborting the process execution entirely!
+        console.error(`   ❌ Subtitle pipeline skipped folder: ${err.message}`);
     }
 }
 
 function cleanReleaseName(folderName) {
-    let title = folderName;
+    let title = folderName.replace(/\/+$/, '').replace(/\[.*?\]/g, '').replace(/\((.*?)\)/g, '$1');
 
-    // 1. Strip trailing slashes
-    title = title.replace(/\/+$/, '');
-
-    // 2. Strip brackets and everything inside them: [Y.BZ], [1080p]
-    title = title.replace(/\[.*?\]/g, '');
-
-    // FIX: Strip literal parentheses but KEEP the text inside if it's NOT a year
-    title = title.replace(/\((.*?)\)/g, '$1');
-
-    // 3. Strip common web domain advertisements
     title = title.replace(/^www\.[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
     title = title.replace(/^[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
 
-    // 4. Erase scene junk words
     const junkPatterns = [
         /[._-]v\d+/i, /[._-]v[eE]r\d+/i,
         /720p|1080p|2160p|4k/i,
@@ -147,7 +122,6 @@ function cleanReleaseName(folderName) {
     ];
     junkPatterns.forEach(pattern => title = title.replace(pattern, ''));
 
-    // 5. Extract title and year (Handles both "Title.2026" and "Title 2026")
     const yearMatch = title.match(/(.*?)[._-\s](\d{4})/);
     let year = '';
     if (yearMatch) {
@@ -155,10 +129,20 @@ function cleanReleaseName(folderName) {
         year = yearMatch[2];
     }
 
-    // 6. Clean up punctuation, convert dots/underscores to spaces, and remove double spaces
     title = title.replace(/[-_.]/g, ' ').replace(/\s+/g, ' ').trim();
-    
     return { title, year };
+}
+
+// Regex to extract season and episode numbers from video filenames
+function parseEpFromFilename(filename) {
+    const match = filename.match(/s\s*(\d+)\s*e\s*(\d+)/i);
+    if (match) {
+        return {
+            season: parseInt(match[1], 10),
+            episode: parseInt(match[2], 10)
+        };
+    }
+    return null;
 }
 
 function deleteFolderRecursive(directoryPath) {
@@ -175,6 +159,28 @@ function deleteFolderRecursive(directoryPath) {
     }
 }
 
+// Helper to map files manually if OMDb API data is missing or incomplete for a season
+function generateSkeletonSeason(seasonNum, structure, physicalFileMap) {
+    Object.keys(physicalFileMap).forEach(key => {
+        const [s, e] = key.split('-').map(Number);
+        if (s === seasonNum) {
+            structure.seasons[seasonNum].episodes.push({
+                episodeNumber: e,
+                title: `Episode ${e}`,
+                released: 'Unknown',
+                plot: 'No internet overview map file processed.',
+                imdbRating: 'N/A',
+                available: true,
+                localRelativePath: physicalFileMap[key]
+            });
+        }
+    });
+    structure.seasons[seasonNum].episodes.sort((a,b) => a.episodeNumber - b.episodeNumber);
+}
+
+// =========================================================================
+// MAIN ORCHESTRATION PIPELINE RUNNER
+// =========================================================================
 async function sanitizeLibrary() {
     console.log("🧹 Starting Resilient Multi-Tier Library Sanitizer...\n");
     
@@ -191,30 +197,27 @@ async function sanitizeLibrary() {
     for (const folder of rootItems) {
         let currentFolderPath = path.join(MOVIES_DIR, folder);
         
-        // CRITICAL ARCHITECTURAL FILTER: Hard ignore dotfiles, raw assets, and the entire series tier!
         if (folder.startsWith('.') || !fs.lstatSync(currentFolderPath).isDirectory()) continue;
         if (['sample', 'series'].includes(folder.toLowerCase())) continue; 
 
         console.log(`\n🎬 [MOVIE PASS] Processing: "${folder}"`);
-        await processMediaFolder(MOVIES_DIR, folder, 'movie');
+        await processMovieFolder(folder);
     }
 
     // =========================================================================
-    // PASS 2: SANITIZE SERIES (NESTED INNER DIRECTORY)
+    // PASS 2: SANITIZE SERIES (TV RECURSIVE DISK LAYER ENGINE)
     // =========================================================================
-    const seriesRootDir = path.join(MOVIES_DIR, 'series');
-    
-    if (fs.existsSync(seriesRootDir)) {
-        const seriesItems = fs.readdirSync(seriesRootDir);
+    if (fs.existsSync(SERIES_DIR)) {
+        const seriesItems = fs.readdirSync(SERIES_DIR);
 
         for (const showFolder of seriesItems) {
-            let currentShowPath = path.join(seriesRootDir, showFolder);
+            let currentShowPath = path.join(SERIES_DIR, showFolder);
             
             if (showFolder.startsWith('.') || !fs.lstatSync(currentShowPath).isDirectory()) continue;
             if (showFolder.toLowerCase() === 'sample') continue;
 
             console.log(`\n📺 [SERIES PASS] Processing: "${showFolder}"`);
-            await processMediaFolder(seriesRootDir, showFolder, 'series');
+            await processTVShowFolder(showFolder);
         }
     }
 
@@ -222,12 +225,12 @@ async function sanitizeLibrary() {
 }
 
 /**
- * Shared Processing Worker to enforce data structural cleaning rules across paths
+ * Worker A: Process Flat Movie Directories
  */
-async function processMediaFolder(parentDir, folderName, contentType) {
-    let currentFolderPath = path.join(parentDir, folderName);
+async function processMovieFolder(folderName) {
+    let currentFolderPath = path.join(MOVIES_DIR, folderName);
 
-    // 1. PURGE SAMPLES AND JUNK FILES
+    // 1. Purge Samples and junk extensions
     const innerContents = fs.readdirSync(currentFolderPath);
     innerContents.forEach(item => {
         const itemPath = path.join(currentFolderPath, item);
@@ -242,15 +245,14 @@ async function processMediaFolder(parentDir, folderName, contentType) {
         }
     });
 
-    // 2. NAME STANDARDIZATION & DISK REALIGNMENT
+    // 2. Realignment down to standard naming schemes
     const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folderName);
     const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
     const localStandardFolderName = parsedYear ? `${dotNotationTitle}.${parsedYear}` : dotNotationTitle;
     let activeFolderPath = currentFolderPath;
 
     if (folderName !== localStandardFolderName) {
-        const targetFolderPath = path.join(parentDir, localStandardFolderName);
-        
+        const targetFolderPath = path.join(MOVIES_DIR, localStandardFolderName);
         if (!fs.existsSync(targetFolderPath)) {
             fs.renameSync(currentFolderPath, targetFolderPath);
             console.log(`   🗂️  Folder Aligned: [${folderName}] ➡️ [${localStandardFolderName}]`);
@@ -260,20 +262,16 @@ async function processMediaFolder(parentDir, folderName, contentType) {
         }
     }
 
-    // 3. METADATA ENGINE SPECIFICATION
+    // 3. Gather Metadata Blocks
     const metadataPath = path.join(activeFolderPath, 'metadata.json');
     const coverPath = path.join(activeFolderPath, 'cover.jpg');
-    let metadataAlreadyExists = fs.existsSync(metadataPath);
 
     try {
-        const apiSearchQuery = cleanTitle.trim();
-        const queryUrl = `${API_URL}${encodeURIComponent(apiSearchQuery)}${parsedYear ? `&y=${parsedYear}` : ''}`;
-        
         let officialTitle = cleanTitle;
         let officialYear = parsedYear || "Unknown";
 
-        if (!metadataAlreadyExists) {
-            console.log(`   🔍 Querying OMDb Metadata: "${apiSearchQuery}"...`);
+        if (!fs.existsSync(metadataPath)) {
+            const queryUrl = `${API_URL}${encodeURIComponent(cleanTitle.trim())}${parsedYear ? `&y=${parsedYear}` : ''}`;
             const res = await axios.get(queryUrl);
 
             if (res.data && res.data.Response === "True") {
@@ -288,49 +286,156 @@ async function processMediaFolder(parentDir, folderName, contentType) {
                     runtime: data.Runtime,
                     genre: data.Genre,
                     rating: data.imdbRating,
-                    contentType: contentType // 🎯 Hard baked based completely on disk branch location
+                    contentType: 'movie'
                 };
-
                 fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
-                console.log(`   📝 Metadata Written: ${data.Title} (${contentType})`);
+                console.log(`   📝 Metadata Written: ${data.Title} (movie)`);
 
                 if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
                     await downloadCover(data.Poster, coverPath);
                 }
             } else {
-                console.log(`   ⚠️ OMDb Miss. Writing dynamic fallback structure local index frame.`);
-                const titleCapitalized = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
-                const fallbackPayload = {
-                    title: titleCapitalized,
-                    year: parsedYear || "Unknown",
-                    plot: "Local video tracking node.",
-                    runtime: "N/A",
-                    genre: "Media Track",
-                    rating: "N/A",
-                    contentType: contentType
-                };
-                fs.writeFileSync(metadataPath, JSON.stringify(fallbackPayload, null, 4));
+                console.log(`   ⚠️ OMDb Miss. Creating manual skeleton fallback tracking frames.`);
+                const fallback = { title: cleanTitle, year: officialYear, plot: "Local track description context.", runtime: "N/A", genre: "Media Track", rating: "N/A", contentType: 'movie' };
+                fs.writeFileSync(metadataPath, JSON.stringify(fallback, null, 4));
             }
         } else {
-            // SELF-HEALING FALLBACK: If json exists but lacks contentType property, patch it safely
+            // Read self-healing property check
             try {
-                let existingMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-                if (!existingMeta.contentType || existingMeta.contentType !== contentType) {
-                    existingMeta.contentType = contentType;
-                    fs.writeFileSync(metadataPath, JSON.stringify(existingMeta, null, 4));
-                    console.log(`   🔧 Injected missing data structure properties [contentType: ${contentType}]`);
-                }
-                officialTitle = existingMeta.title || officialTitle;
-                officialYear = existingMeta.year || officialYear;
+                let m = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                if (!m.contentType) { m.contentType = 'movie'; fs.writeFileSync(metadataPath, JSON.stringify(m, null, 4)); }
+                officialTitle = m.title || officialTitle; officialYear = m.year || officialYear;
             } catch(e) {}
         }
 
-        // 4. SUBTITLE DISPATCH
         await autoFetchSubtitlesPureJS(activeFolderPath, officialTitle, officialYear);
-
     } catch (err) {
-        console.error(`   ❌ Failed parsing asset details block:`, err.message);
+        console.error(`   ❌ Movie metadata tracking error:`, err.message);
     }
+}
+
+/**
+ * Worker B: Process Deep Nested TV Show Structures
+ */
+async function processTVShowFolder(folderName) {
+    let currentShowPath = path.join(SERIES_DIR, folderName);
+    
+    // 1. Structural Folder Realignment (e.g. "Rick.and.Morty")
+    const { title: cleanTitle } = cleanReleaseName(folderName);
+    const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
+    
+    let activeShowPath = currentShowPath;
+    if (folderName !== dotNotationTitle) {
+        const targetShowPath = path.join(SERIES_DIR, dotNotationTitle);
+        if (!fs.existsSync(targetShowPath)) {
+            fs.renameSync(currentShowPath, targetShowPath);
+            console.log(`   🗂️  Show Root Aligned: [${folderName}] ➡️ [${dotNotationTitle}]`);
+            activeShowPath = targetShowPath;
+        } else {
+            activeShowPath = targetShowPath;
+        }
+    }
+
+    const metadataPath = path.join(activeShowPath, 'metadata.json');
+    const coverPath = path.join(activeShowPath, 'cover.jpg');
+
+    // 2. Resolve High Level Series Profiles 
+    let mainMeta = { title: cleanTitle, year: '', plot: '', genre: '', contentType: 'series' };
+    let totalSeasons = 1;
+
+    try {
+        if (!fs.existsSync(metadataPath)) {
+            const showRes = await axios.get(`${API_URL}${encodeURIComponent(cleanTitle)}&type=series`);
+            if (showRes.data && showRes.data.Response === "True") {
+                mainMeta.title = showRes.data.Title;
+                mainMeta.year = showRes.data.Year;
+                mainMeta.plot = showRes.data.Plot;
+                mainMeta.genre = showRes.data.Genre;
+                mainMeta.contentType = 'series';
+                totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
+
+                fs.writeFileSync(metadataPath, JSON.stringify(mainMeta, null, 4));
+                console.log(`   📝 High Level TV Metadata Written: ${mainMeta.title}`);
+
+                if (!fs.existsSync(coverPath) && showRes.data.Poster && showRes.data.Poster !== "N/A") {
+                    await downloadCover(showRes.data.Poster, coverPath);
+                }
+            } else {
+                console.log(`   ⚠️ OMDb High Level Miss for Series. Writing fallback profile framework wrapper.`);
+                fs.writeFileSync(metadataPath, JSON.stringify(mainMeta, null, 4));
+            }
+        } else {
+            const existingMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+            mainMeta = { ...mainMeta, ...existingMeta };
+            
+            // Re-fetch total seasons bounds count context from API dynamically to verify completeness
+            const countCheck = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&type=series`);
+            totalSeasons = parseInt(countCheck.data.totalSeasons, 10) || 1;
+        }
+    } catch (err) {
+        console.error(`   ❌ Failed querying high level show parameters:`, err.message);
+    }
+
+    // 3. Recursively Scan Sub-directories to Map Existing Files
+    const diskItems = fs.readdirSync(activeShowPath);
+    let physicalFileMap = {}; 
+
+    diskItems.forEach(item => {
+        const itemPath = path.join(activeShowPath, item);
+        if (!fs.lstatSync(itemPath).isDirectory()) return;
+
+        const files = fs.readdirSync(itemPath);
+        files.forEach(file => {
+            if (!KEEP_EXTENSIONS.includes(path.extname(file).toLowerCase())) {
+                fs.unlinkSync(path.join(itemPath, file)); // Enforce keeping directories completely clean of tracking junk
+                return;
+            }
+            
+            const parseResults = parseEpFromFilename(file);
+            if (parseResults) {
+                const lookupKey = `${parseResults.season}-${parseResults.episode}`;
+                // Keep paths completely consistent with express route static resolutions
+                physicalFileMap[lookupKey] = `series/${dotNotationTitle}/${item}/${file}`;
+            }
+        });
+    });
+
+    // 4. Construct Complete Nested Season/Episode Matrix Blueprint Manifest
+    let fullSeriesStructure = { totalSeasons: totalSeasons.toString(), seasons: {} };
+
+    for (let s = 1; s <= totalSeasons; s++) {
+        fullSeriesStructure.seasons[s] = { seasonNumber: s.toString(), episodes: [] };
+
+        try {
+            const seasonRes = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&Season=${s}`);
+            
+            if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
+                for (const ep of seasonRes.data.Episodes) {
+                    const epNum = parseInt(ep.Episode, 10);
+                    const lookupKey = `${s}-${epNum}`;
+                    const isAvailable = !!physicalFileMap[lookupKey];
+
+                    fullSeriesStructure.seasons[s].episodes.push({
+                        episodeNumber: epNum,
+                        title: ep.Title || `Episode ${epNum}`,
+                        released: ep.Released || 'Unknown',
+                        plot: `Official Season ${s} episodic content description framework.`,
+                        imdbRating: ep.imdbRating || 'N/A',
+                        available: isAvailable,
+                        localRelativePath: isAvailable ? physicalFileMap[lookupKey] : null
+                    });
+                }
+            } else {
+                generateSkeletonSeason(s, fullSeriesStructure, physicalFileMap);
+            }
+        } catch (err) {
+            generateSkeletonSeason(s, fullSeriesStructure, physicalFileMap);
+        }
+    }
+
+    // Write final unified layout track configuration directly onto disk arrays
+    fs.writeFileSync(path.join(activeShowPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 4));
+    console.log(`   💾 Unified deep matrix profile successfully saved down: series.json`);
 }
 
 sanitizeLibrary();

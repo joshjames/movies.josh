@@ -103,22 +103,48 @@
             }
         }
 
-        function loadSeasonEpisodes(seasonNum) {
-            const container = document.getElementById('episode-list');
-            const episodes = serverShowData.seasons[seasonNum] || [];
+     function loadSeasonEpisodes(seasonNum) {
+    const container = document.getElementById('episode-list');
+    
+    // Unpack from your new deeply nested schema array layer
+    const targetSeason = serverShowData.seasons[seasonNum];
+    const episodes = targetSeason ? targetSeason.episodes : [];
 
-            container.innerHTML = episodes.map(ep => `
-                <div class="episode-row">
+    if (episodes.length === 0) {
+        container.innerHTML = `<div style="color:#64748b;text-align:center;padding:40px;">No tracks registered online or locally for this season selection.</div>`;
+        return;
+    }
+
+    container.innerHTML = episodes.map(ep => {
+        if (ep.available) {
+            // Functional Row with Outbound Link Routing Direct to Stream Video Target Playback Engines
+            return `
+                <div class="episode-row" style="border-left: 4px solid #22c55e;">
                     <div class="ep-info">
-                        <span class="ep-title">Episode ${ep.num} - ${ep.title}</span>
-                        <span class="ep-meta">${ep.file}</span>
+                        <span class="ep-title">${ep.episodeNumber}. ${ep.title}</span>
+                        <span class="ep-meta">Released: ${ep.released} • Rating: ⭐ ${ep.imdbRating}</span>
                     </div>
-                    <a class="play-btn" href="player.html?id=${encodeURIComponent(showId)}&season=${seasonNum}&episode=${ep.num}">
+                    <a class="play-btn" href="player.html?id=${encodeURIComponent(serverShowData.id)}&season=${seasonNum}&episode=${ep.episodeNumber}">
                         Play
                     </a>
                 </div>
-            `).join('');
+            `;
+        } else {
+            // Grayed-out Row matching unacquired index trackers
+            return `
+                <div class="episode-row" style="opacity: 0.4; background: #0b0f19; border-left: 4px solid #475569;">
+                    <div class="ep-info">
+                        <span class="ep-title" style="color: #94a3b8;">${ep.episodeNumber}. ${ep.title} (Missing)</span>
+                        <span class="ep-meta">Aired: ${ep.released} | Online Meta Data Sync Available</span>
+                    </div>
+                    <button class="play-btn" style="background:#334155; cursor:not-allowed;" disabled>
+                        Unacquired
+                    </button>
+                </div>
+            `;
         }
+    }).join('');
+}
 
         window.onload = initPage;
     </script>
