@@ -2,11 +2,19 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
+// Automatically read .env file from the project root directory
+require('dotenv').config();
+
 // CONFIGURATION
 const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies';
 
 console.log(`🎬 Target directory initialized at state path: ${MOVIES_DIR}`);
 const API_URL = 'http://www.omdbapi.com/?apikey=84196d01&t=';
+
+// --- OPEN_SUBTITLES CONFIGURATION LAYER FROM RUNTIME ENVIRONMENT ---
+const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY;
+const OPENSUBTITLES_USERNAME = process.env.OPENSUBTITLES_USERNAME;
+const OPENSUBTITLES_PASSWORD = process.env.OPENSUBTITLES_PASSWORD;
 
 // Whitelist of valid extensions we want to keep inside a movie directory
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.json', '.jpg', '.jpeg', '.png'];
@@ -25,6 +33,94 @@ async function downloadCover(url, destPath) {
     }
 }
 
+// --- STREAMLINED DEV-MODE SUBTITLE RETRIEVAL ENGINE ---
+//const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY;
+// --- HARDENED DEV-MODE SUBTITLE RETRIEVAL ENGINE WITH RETRY LOGIC ---
+
+/**
+ * Executes a network call with an exponential backoff safety net for 5xx/429 errors.
+ */
+async function fetchWithRetry(url, options, retries = 3, delay = 1500) {
+    try {
+        return await axios.get(url, options);
+    } catch (err) {
+        const is5xx = err.response && err.response.status >= 500;
+        const is429 = err.response && err.response.status === 429;
+        
+        if ((is5xx || is429) && retries > 0) {
+            console.log(`   ⚠️ API pressure encountered (${err.response.status}). Retrying in ${delay}ms... (${retries} attempts left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return fetchWithRetry(url, options, retries - 1, delay * 2);
+        }
+        throw err;
+    }
+}
+
+async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, officialYear) {
+    const targetSrtPath = path.join(targetDirectory, 'English.srt');
+
+    if (fs.existsSync(targetSrtPath)) {
+        console.log(`   ℹ️ Subtitles already verified locally.`);
+        return;
+    }
+
+    if (!OPENSUBTITLES_API_KEY) {
+        console.log(`   ⚠️ Skipping subtitles: OPENSUBTITLES_API_KEY missing from environment.`);
+        return;
+    }
+
+    // Base pacing delay between folders to respect the global API gateway threshold
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    try {
+        console.log(`   🔍 Querying catalog for: "${officialTitle}" (${officialYear})...`);
+        const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(officialTitle)}&year=${officialYear}&languages=en`;
+        
+        const response = await fetchWithRetry(searchUrl, {
+            headers: {
+                'Api-Key': OPENSUBTITLES_API_KEY,
+                'User-Agent': 'Joshflix v1.0',
+                'Accept': 'application/json'
+            }
+        });
+
+        const subData = response.data.data;
+        if (!subData || subData.length === 0) {
+            console.log(`   ⚠️ No subtitle records matched on OpenSubtitles index.`);
+            return;
+        }
+
+        const fileId = subData[0].attributes.files[0].file_id;
+        const downloadRoute = 'https://api.opensubtitles.com/api/v1/download';
+
+        // Step 2: Fetch the secure download URL with safety wrappers
+        const downloadRes = await axios.post(downloadRoute, { file_id: fileId }, {
+            headers: {
+                'Api-Key': OPENSUBTITLES_API_KEY,
+                'User-Agent': 'Joshflix v1.0',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const srtDownloadUrl = downloadRes.data.link;
+
+        // Step 3: Stream content to file storage
+        const srtFileBuffer = await axios.get(srtDownloadUrl, { responseType: 'arraybuffer' });
+        fs.writeFileSync(targetSrtPath, srtFileBuffer.data);
+
+        console.log(`   🎯 Clean subtitle track successfully written to: English.srt`);
+
+    } catch (err) {
+        if (err.response) {
+            console.error(`   ❌ Subtitle pipeline skipped folder [Status ${err.response.status}]: Server busy.`);
+        } else {
+            console.error(`   ❌ Subtitle pipeline skipped folder [Error]: ${err.message}`);
+        }
+        // Catching the error here safely allows the outer 'for' loop in sanitizeLibrary() 
+        // to cleanly slide into the next movie asset instead of aborting the process execution entirely!
+    }
+}
+
 function cleanReleaseName(folderName) {
     let title = folderName;
 
@@ -35,7 +131,6 @@ function cleanReleaseName(folderName) {
     title = title.replace(/\[.*?\]/g, '');
 
     // FIX: Strip literal parentheses but KEEP the text inside if it's NOT a year
-    // This removes the wrapper entirely so the year extractor below can hit it cleanly
     title = title.replace(/\((.*?)\)/g, '$1');
 
     // 3. Strip common web domain advertisements
@@ -66,7 +161,6 @@ function cleanReleaseName(folderName) {
     return { title, year };
 }
 
-// Helper tool to vaporize an entire directory branch (like Sample folders) safely
 function deleteFolderRecursive(directoryPath) {
     if (fs.existsSync(directoryPath)) {
         fs.readdirSync(directoryPath).forEach((file) => {
@@ -74,10 +168,10 @@ function deleteFolderRecursive(directoryPath) {
             if (fs.lstatSync(curPath).isDirectory()) {
                 deleteFolderRecursive(curPath);
             } else {
-                fs.unlinkSync(curPath); // Delete file
+                fs.unlinkSync(curPath); 
             }
         });
-        fs.rmdirSync(directoryPath); // Delete directory
+        fs.rmdirSync(directoryPath); 
     }
 }
 
@@ -132,7 +226,6 @@ async function sanitizeLibrary() {
         // -----------------------------------------------------------------
         const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folder);
         
-        // Structure our clean local directory pattern: "Movie.Title.Year"
         const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
         const localStandardFolderName = parsedYear ? `${dotNotationTitle}.${parsedYear}` : dotNotationTitle;
         let activeFolderPath = currentFolderPath;
@@ -143,7 +236,6 @@ async function sanitizeLibrary() {
             if (!fs.existsSync(targetFolderPath)) {
                 fs.renameSync(currentFolderPath, targetFolderPath);
                 console.log(`🗂️  Folder Renamed Locally: [${folder}] ➡️  [${localStandardFolderName}]`);
-                // CRITICAL POINTER UPDATE: Update our tracking variable to point to the new disk home!
                 activeFolderPath = targetFolderPath; 
             } else {
                 console.log(`⚠️  Destination [${localStandardFolderName}] already exists. Shifting target pointer.`);
@@ -152,73 +244,88 @@ async function sanitizeLibrary() {
         }
 
         // -----------------------------------------------------------------
-        // STEP 3: METADATA & COVER ART GENERATION (VIA CLEAN STRINGS)
+        // STEP 3: METADATA, COVER ART, & SUBTITLE GENERATION
         // -----------------------------------------------------------------
         const metadataPath = path.join(activeFolderPath, 'metadata.json');
         const coverPath = path.join(activeFolderPath, 'cover.jpg');
 
-        // Skip scraping if metadata already exists from a prior pass
-        if (fs.existsSync(metadataPath)) {
-            console.log(`✨ Metadata index file already verified for target folder.`);
-            continue;
-        }
+        // Check if metadata already exists to avoid redundant lookups
+        let metadataAlreadyExists = fs.existsSync(metadataPath);
 
         try {
-            // Use the pristine text representation without dots or brackets for OMDb API efficiency
             const apiSearchQuery = cleanTitle.trim();
             const queryUrl = `${API_URL}${encodeURIComponent(apiSearchQuery)}${parsedYear ? `&y=${parsedYear}` : ''}`;
             
-            console.log(`🔍 Dispatching OMDb lookup query: "${apiSearchQuery}" (${parsedYear || 'N/A'})`);
-            const res = await axios.get(queryUrl);
+            let officialTitle = cleanTitle;
+            let officialYear = parsedYear || "Unknown";
 
-            if (res.data && res.data.Response === "True") {
-                const data = res.data;
-                
-                const metaPayload = {
-                    title: data.Title,
-                    year: data.Year,
-                    plot: data.Plot,
-                    runtime: data.Runtime,
-                    genre: data.Genre,
-                    rating: data.imdbRating
-                };
+            if (!metadataAlreadyExists) {
+                console.log(`🔍 Dispatching OMDb lookup query: "${apiSearchQuery}" (${parsedYear || 'N/A'})`);
+                const res = await axios.get(queryUrl);
 
-                fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
-                console.log(`📝 Metadata generated: ${data.Title} (${data.Year})`);
+                if (res.data && res.data.Response === "True") {
+                    const data = res.data;
+                    officialTitle = data.Title;
+                    officialYear = data.Year;
+                    
+                    const metaPayload = {
+                        title: data.Title,
+                        year: data.Year,
+                        plot: data.Plot,
+                        runtime: data.Runtime,
+                        genre: data.Genre,
+                        rating: data.imdbRating
+                    };
 
-                if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
-                    console.log(`📥 Downloading cover image...`);
-                    await downloadCover(data.Poster, coverPath);
+                    fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
+                    console.log(`📝 Metadata generated: ${data.Title} (${data.Year})`);
+
+                    if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
+                        console.log(`📥 Downloading cover image...`);
+                        await downloadCover(data.Poster, coverPath);
+                    }
+
+                    // Handle OMDb capitalization sync and folder refinement
+                    const apiStandardizedTitle = data.Title.replace(/[/\\?%*:|"<>\s]+/g, '.');
+                    const apiFolderName = `${apiStandardizedTitle}.${data.Year}`;
+                    const apiFolderPath = path.join(MOVIES_DIR, apiFolderName);
+
+                    if (localStandardFolderName !== apiFolderName && !fs.existsSync(apiFolderPath)) {
+                        fs.renameSync(activeFolderPath, apiFolderPath);
+                        console.log(`🗂️  Refining folder alignment to OMDb Casing: [${localStandardFolderName}] ➡️  [${apiFolderName}]`);
+                        activeFolderPath = apiFolderPath;
+                    }
+                    
+                } else {
+                    console.log(`⚠️  OMDb lookup missed. Formatting local fallback descriptors.`);
+                    const titleCapitalized = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
+                    
+                    const fallbackPayload = {
+                        title: titleCapitalized,
+                        year: parsedYear || "Unknown",
+                        plot: "Local video data mapping index.",
+                        runtime: "N/A",
+                        genre: "Media Asset",
+                        rating: "N/A"
+                    };
+                    fs.writeFileSync(metadataPath, JSON.stringify(fallbackPayload, null, 4));
                 }
-
-                // OPTIONAL PARITY RE-ALIGNMENT: 
-                // If you want the folder name to match the official case-sensitive casing from OMDb API exactly
-                const apiStandardizedTitle = data.Title.replace(/[/\\?%*:|"<>\s]+/g, '.');
-                const apiFolderName = `${apiStandardizedTitle}.${data.Year}`;
-                const apiFolderPath = path.join(MOVIES_DIR, apiFolderName);
-
-                if (localStandardFolderName !== apiFolderName && !fs.existsSync(apiFolderPath)) {
-                    fs.renameSync(activeFolderPath, apiFolderPath);
-                    console.log(`🗂️  Refining folder alignment to OMDb Casing: [${localStandardFolderName}] ➡️  [${apiFolderName}]`);
-                }
-                
             } else {
-                console.log(`⚠️  OMDb lookup missed. Formatting local fallback descriptors.`);
-                const titleCapitalized = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
-                
-                const fallbackPayload = {
-                    title: titleCapitalized,
-                    year: parsedYear || "Unknown",
-                    plot: "Local video data mapping index.",
-                    runtime: "N/A",
-                    genre: "Media Asset",
-                    rating: "N/A"
-                };
-                fs.writeFileSync(metadataPath, JSON.stringify(fallbackPayload, null, 4));
+                // If metadata exists, extract the verified names to keep subtitle queries pristine
+                console.log(`✨ Metadata index file already verified for target folder.`);
+                try {
+                    const existingMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                    officialTitle = existingMeta.title || officialTitle;
+                    officialYear = existingMeta.year || officialYear;
+                } catch(e) {}
             }
 
+            // --- RUN SUBTITLE PROCESSING PIPELINE ---
+            // Triggers seamlessly inside Step 3 for clean folder structure management
+            await autoFetchSubtitlesPureJS(activeFolderPath, officialTitle, officialYear);
+
         } catch (err) {
-            console.error(`❌ Sanitizer processing fault on [${localStandardFolderName}]:`, err.message);
+            console.error(`❌ Sanitizer processing fault on folder execution:`, err.message);
         }
     }
     console.log("\n🏁 Sanitization complete! Your library storage space is perfectly scrubbed.");
