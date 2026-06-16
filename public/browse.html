@@ -12,11 +12,19 @@
         .nav-link { color: #3b82f6; text-decoration: none; font-weight: 500; font-size: 0.9rem; }
         
         /* Filter Controls */
-        .search-bar { background: #1e293b; padding: 16px; border-radius: 12px; display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; border: 1px solid #334155; }
+        .search-bar { background: #1e293b; padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; border: 1px solid #334155; }
+        .controls-row { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; }
+        
         input, select, button { background: #0f172a; color: white; border: 1px solid #475569; padding: 10px 14px; border-radius: 6px; font-size: 0.9rem; outline: none; }
         input { flex-grow: 1; min-width: 200px; }
         button { background: #2563eb; border: none; cursor: pointer; font-weight: bold; min-width: 100px; }
         button:hover { background: #1d4ed8; }
+
+        /* Item 7 Manual Link Wrapper Section */
+        .manual-input-box { display: flex; gap: 12px; width: 100%; border-top: 1px solid #334155; padding-top: 14px; margin-top: 2px; }
+        .manual-input-box input { background: #090d16; border-color: #334155; }
+        .manual-btn { background: #10b981; }
+        .manual-btn:hover { background: #059669; }
 
         /* Results Matrix Grid Layout */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
@@ -36,45 +44,13 @@
         @keyframes slideIn { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         @media(min-width: 640px) { h1 { font-size: 2rem; } .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; } }
+        
         /* Pagination Control Bar Styling */
-.pagination-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 12px;
-    margin-top: 40px;
-    margin-bottom: 24px;
-    padding: 16px;
-    background: #1e293b;
-    border-radius: 12px;
-    border: 1px solid #334155;
-}
-.page-btn {
-    background: #0f172a;
-    color: #f8fafc;
-    border: 1px solid #475569;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: all 0.2s ease;
-}
-.page-btn:hover:not(:disabled) {
-    background: #2563eb;
-    border-color: #3b82f6;
-}
-.page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    border-color: #334155;
-}
-.page-indicator {
-    font-size: 0.9rem;
-    color: #94a3b8;
-    font-weight: 500;
-    min-width: 100px;
-    text-align: center;
-}
+        .pagination-container { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 40px; margin-bottom: 24px; padding: 16px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; }
+        .page-btn { background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease; }
+        .page-btn:hover:not(:disabled) { background: #2563eb; border-color: #3b82f6; }
+        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; border-color: #334155; }
+        .page-indicator { font-size: 0.9rem; color: #94a3b8; font-weight: 500; min-width: 100px; text-align: center; }
     </style>
 </head>
 <body>
@@ -86,22 +62,35 @@
         </div>
 
         <div class="search-bar">
-            <input type="text" id="searchIn" placeholder="Search title, actor, or genre...">
-            <select id="genreIn">
-                <option value="All">All Genres</option>
-                <option value="action">Action</option>
-                <option value="comedy">Comedy</option>
-                <option value="drama">Drama</option>
-                <option value="horror">Horror</option>
-                <option value="sci-fi">Sci-Fi</option>
-                <option value="thriller">Thriller</option>
-            </select>
-            <select id="ratingIn">
-                <option value="0">Any Rating</option>
-                <option value="7">⭐ 7.0+ IMDb</option>
-                <option value="8">⭐ 8.0+ IMDb</option>
-            </select>
-            <button onclick="fetchCatalog()">Search</button>
+            <div class="controls-row">
+                <input type="text" id="searchIn" placeholder="Search title, actor, or genre...">
+                <select id="genreIn">
+                    <option value="All">All Genres</option>
+                    <option value="action">Action</option>
+                    <option value="comedy">Comedy</option>
+                    <option value="drama">Drama</option>
+                    <option value="horror">Horror</option>
+                    <option value="sci-fi">Sci-Fi</option>
+                    <option value="thriller">Thriller</option>
+                </select>
+                <select id="ratingIn">
+                    <option value="0">Any Rating</option>
+                    <option value="7">⭐ 7.0+ IMDb</option>
+                    <option value="8">⭐ 8.0+ IMDb</option>
+                </select>
+                <select id="sortIn">
+                    <option value="latest">Sort: Latest Added</option>
+                    <option value="seeds">Sort: Most Seeds</option>
+                    <option value="year">Sort: Release Year</option>
+                    <option value="rating">Sort: IMDb Score</option>
+                </select>
+                <button onclick="triggerNewSearch()">Search</button>
+            </div>
+
+            <div class="manual-input-box">
+                <input type="text" id="manualMagnetIn" placeholder="Paste external custom magnet link layout directly here (e.g., magnet:?xt=...)">
+                <button class="manual-btn" onclick="addManualMagnet(this)">Ingest Link</button>
+            </div>
         </div>
 
         <div class="grid" id="catalog-grid"></div>
@@ -112,27 +101,40 @@
     <div class="toast" id="toastNotice"></div>
 
     <script>
-  // Unified Pagination & Filter Tracking State
 let currentBrowsePage = 1;
+
+// Helper to ensure any input modification safely forces validation back to page 1 bounds
+function triggerNewSearch() {
+    fetchCatalog(1, false);
+}
+
+// Attach listeners so clicking options or pressing enter immediately fires the search update
+document.getElementById('genreIn').addEventListener('change', triggerNewSearch);
+document.getElementById('ratingIn').addEventListener('change', triggerNewSearch);
+document.getElementById('sortIn').addEventListener('change', triggerNewSearch);
+document.getElementById('searchIn').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') triggerNewSearch();
+});
 
 async function fetchCatalog(pageUpdate = 1, appendMode = false) {
     currentBrowsePage = pageUpdate;
     
-    // Pull active values directly from the UI control layout elements
     const query = document.getElementById('searchIn').value;
     const genre = document.getElementById('genreIn').value;
     const rating = document.getElementById('ratingIn').value;
+    const sortBy = document.getElementById('sortIn').value; // Unified sorting variable
+    
     const grid = document.getElementById('catalog-grid');
     const paginationWrapper = document.getElementById('pagination-wrapper');
     
     if (!appendMode) {
         grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying index structures...</div>';
-        paginationWrapper.innerHTML = ''; // Wipe navigation while loading
+        paginationWrapper.innerHTML = ''; 
     }
 
     try {
-        // Construct clean API route queries combining filter nodes + requested page state
-        const apiTarget = `/api/yts/browse?query=${encodeURIComponent(query)}&genre=${genre}&min_rating=${rating}&page=${currentBrowsePage}`;
+        // Appends your sorting dropdown configuration seamlessly into the proxy route call
+        const apiTarget = `/api/yts/browse?query=${encodeURIComponent(query)}&genre=${genre}&min_rating=${rating}&sort_by=${sortBy}&page=${currentBrowsePage}`;
         const res = await fetch(apiTarget);
         const resData = await res.json();
 
@@ -144,7 +146,6 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
             return;
         }
 
-        // Generate clean HTML matrices using your existing card engine logic template
         const cardsHtml = resData.data.movies.map(movie => {
             const targetTorrent = movie.torrents.find(t => t.quality === '1080p') || movie.torrents[0];
             if (!targetTorrent) return '';
@@ -159,13 +160,8 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
                 'udp://open.demonii.com:1337/announce'
             ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
 
-
-            // Force the API hash to upper-case Hexadecimal formatting strings explicitly
             const cleanHash = targetTorrent.hash.toUpperCase().trim();
             const baseMagnet = `magnet:?xt=urn:btih:${cleanHash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
-
-
-
 
             return `
                 <div class="card">
@@ -188,10 +184,9 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
             grid.innerHTML += cardsHtml;
         } else {
             grid.innerHTML = cardsHtml;
-            window.scrollTo({ top: 0, behavior: 'smooth' }); // Snap screen up to the top matrix row on clean page turns
+            window.scrollTo({ top: 0, behavior: 'smooth' }); 
         }
 
-        // FIRE DYNAMIC NAVIGATION CONTROLLER
         renderPaginationControls(resData.data.movie_count, resData.data.limit);
 
     } catch (err) {
@@ -206,7 +201,6 @@ function renderPaginationControls(totalMovies, pageLimit) {
 
     const totalPages = Math.ceil(totalMovies / pageLimit);
     
-    // If all results fit entirely on one page, don't display unnecessary controls
     if (totalPages <= 1) {
         paginationWrapper.innerHTML = '';
         return;
@@ -227,32 +221,67 @@ function renderPaginationControls(totalMovies, pageLimit) {
     `;
 }
 
+// Shared central function to post the data payload directly down to your express server route
+async function executeIngestPost(rawMagnetLink, successCallback, failureCallback) {
+    try {
+        const response = await fetch('/api/yts/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ magnetUrl: rawMagnetLink })
+        });
+        if (response.ok) successCallback(); else throw new Error();
+    } catch(e) {
+        failureCallback();
+    }
+}
+
 async function addMovie(buttonObj, base64Magnet) {
     const magnetUrl = atob(base64Magnet);
     buttonObj.disabled = true;
     buttonObj.style.background = '#475569';
     buttonObj.innerText = 'Queuing...';
 
-    try {
-        const response = await fetch('/api/yts/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ magnetUrl })
-        });
-
-        if (response.ok) {
-            showToast("🎬 Added to queue! Optimization scripts will process files in 5-10 minutes once downloaded.");
+    executeIngestPost(magnetUrl, 
+        () => {
+            showToast("🎬 Added to queue! Ingestion processing will resume once download finishes.");
             buttonObj.innerText = '✓ Queued';
             buttonObj.style.background = '#059669';
-        } else {
-            throw new Error();
+        },
+        () => {
+            showToast("❌ Pipeline communication block encountered.");
+            buttonObj.disabled = false;
+            buttonObj.style.background = '#10b981';
+            buttonObj.innerText = 'Add to Library';
         }
-    } catch(e) {
-        showToast("❌ Pipeline communication block encountered.");
-        buttonObj.disabled = false;
-        buttonObj.style.background = '#10b981';
-        buttonObj.innerText = 'Add to Library';
+    );
+}
+
+// Item 7: Custom Manual Link Verification Handler
+function addManualMagnet(buttonObj) {
+    const inputEl = document.getElementById('manualMagnetIn');
+    const rawMagnet = inputEl.value.trim();
+
+    if (!rawMagnet || !rawMagnet.toLowerCase().startsWith('magnet:?xt=')) {
+        showToast("⚠️ Invalid link format. Missing magnet header structure.");
+        return;
     }
+
+    buttonObj.disabled = true;
+    buttonObj.innerText = 'Processing...';
+
+    executeIngestPost(rawMagnet,
+        () => {
+            showToast("🚀 Custom external stream queued directly inside downstream client!");
+            inputEl.value = ''; // Reset input field on successful entry
+            buttonObj.disabled = false;
+            buttonObj.innerText = 'Ingest Link';
+        },
+        () => {
+            showToast("❌ External link rejection met at backend routing interface.");
+            buttonObj.disabled = false;
+            buttonObj.innerText = 'Ingest Link';
+        }
+    );
 }
 
 function showToast(msg) {
@@ -262,7 +291,6 @@ function showToast(msg) {
     setTimeout(() => { toast.style.display = 'none'; }, 6000);
 }
 
-// Global initialization call on DOM initialization boot
 fetchCatalog(1, false);
     </script>
 </body>
