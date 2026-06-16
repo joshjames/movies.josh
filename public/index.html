@@ -184,6 +184,8 @@
 
     <div class="grid" id="movie-grid"></div>
 
+    <div id="pagination-container" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin: 30px auto; max-width: 600px;"></div>
+
     <div style="text-align: center; margin-bottom: 20px;">
     <a href="/browse.html" style="background: #2563eb; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
         🔍 Browse & Add New Movies
@@ -198,44 +200,98 @@
 </div>
 
     <script>
-        async function loadMovies() {
-    try {
-        const res = await fetch('/api/movies');
-        const data = await res.json(); 
-        
-        const grid = document.getElementById('movie-grid');
-        
-        if (data && data.movies && data.movies.length > 0) {
-            grid.innerHTML = data.movies.map(media => {
-                // Determine destination rules dynamically based on baked contentType metadata fields
-                const targetEndpoint = (media.contentType === 'series') ? 'series.html' : 'player.html';
-                
-                // Add a visual type tag text so you can tell them apart on your unified grid easily
-                const badgeHtml = (media.contentType === 'series') 
-                    ? `<span style="position: absolute; bottom: 8px; right: 8px; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">TV Show</span>`
-                    : '';
+        let currentCatalogPage = 1;
 
-                return `
-                    <a class="card" href="${targetEndpoint}?id=${media.id}">
-                        <div class="cover-wrapper" style="position: relative;">
-                            <img src="${media.cover}" onerror="this.src='https://via.placeholder.com/200x300?text=No+Cover'" alt="${media.title}">
-                            ${badgeHtml}
-                        </div>
-                        <div class="card-content">
-                            <div class="title">${media.title}</div>
-                            <div class="meta-line">${media.year ? media.year : ''}</div>
-                        </div>
-                    </a>
-                `;
-            }).join('');
-        } else {
-            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add content!</div>`;
+        async function loadMovies(page = 1) {
+            currentCatalogPage = page;
+            try {
+                // Pass the requested page tracking index directly to your paginated API route
+                const res = await fetch(`/api/movies?page=${page}`);
+                const data = await res.json(); 
+                
+                const grid = document.getElementById('movie-grid');
+                
+                if (data && data.movies && data.movies.length > 0) {
+                    grid.innerHTML = data.movies.map(media => {
+                        const targetEndpoint = (media.contentType === 'series') ? 'series.html' : 'player.html';
+                        
+                        const badgeHtml = (media.contentType === 'series') 
+                            ? `<span style="position: absolute; bottom: 8px; right: 8px; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">TV Show</span>`
+                            : '';
+
+                        return `
+                            <a class="card" href="${targetEndpoint}?id=${media.id}">
+                                <div class="cover-wrapper" style="position: relative;">
+                                    <img src="${media.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
+                                    ${badgeHtml}
+                                </div>
+                                <div class="card-content">
+                                    <div class="title">${media.title}</div>
+                                    <div class="meta-line">${media.year ? media.year : ''}</div>
+                                </div>
+                            </a>
+                        `;
+                    }).join('');
+
+                    // Render out the page control selectors
+                    renderPaginationControls(data.totalPages, data.currentPage);
+                } else {
+                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add content!</div>`;
+                    document.getElementById('pagination-container').innerHTML = '';
+                }
+            } catch (err) {
+                console.error("❌ Frontend failed to unpack cached dashboard assets:", err);
+            }
         }
-    } catch (err) {
-        console.error("❌ Frontend failed to unpack cached dashboard assets:", err);
-    }
-}
-loadMovies();
+
+        /**
+         * Renders standard responsive pagination button strips
+         */
+        function renderPaginationControls(totalPages, currentPage) {
+            const container = document.getElementById('pagination-container');
+            
+            // If the entire library fits cleanly on a single page view, hide the navigation row
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+
+            // Previous Page Button
+            html += `
+                <button ${currentPage === 1 ? 'disabled' : ''} 
+                        onclick="loadMovies(${currentPage - 1})" 
+                        style="background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: ${currentPage === 1 ? 'not-allowed' : 'pointer'}; opacity: ${currentPage === 1 ? '0.4' : '1'}; transition: background 0.2s;">
+                    &larr; Prev
+                </button>
+            `;
+
+            // Explicit Numerical Page Buttons
+            for (let i = 1; i <= totalPages; i++) {
+                const isActive = (i === currentPage);
+                html += `
+                    <button onclick="loadMovies(${i})" 
+                            style="background: ${isActive ? '#2563eb' : '#1e293b'}; color: white; border: 1px solid ${isActive ? '#2563eb' : '#334155'}; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s;">
+                        ${i}
+                    </button>
+                `;
+            }
+
+            // Next Page Button
+            html += `
+                <button ${currentPage === totalPages ? 'disabled' : ''} 
+                        onclick="loadMovies(${currentPage + 1})" 
+                        style="background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: ${currentPage === totalPages ? 'not-allowed' : 'pointer'}; opacity: ${currentPage === totalPages ? '0.4' : '1'}; transition: background 0.2s;">
+                    Next &rarr;
+                </button>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Run primary call on startup mount
+        loadMovies(1);
     </script>
 
 

@@ -400,19 +400,40 @@ async function processTVShowFolder(folderName) {
         });
     });
 
-    // 4. Construct Complete Nested Season/Episode Matrix Blueprint Manifest
-    let fullSeriesStructure = { totalSeasons: totalSeasons.toString(), seasons: {} };
+  // =========================================================================
+    // 4. DETERMINE TRUE SEASON BOUNDS & CONSTRUCT UNIFIED SCHEMA
+    // =========================================================================
+    
+    // Find the highest season number physically present on disk
+    let maxPhysicalSeason = 1;
+    Object.keys(physicalFileMap).forEach(key => {
+        const [s] = key.split('-').map(Number);
+        if (s > maxPhysicalSeason) maxPhysicalSeason = s;
+    });
 
-    for (let s = 1; s <= totalSeasons; s++) {
-        fullSeriesStructure.seasons[s] = { seasonNumber: s.toString(), episodes: [] };
+    // Use whichever is higher: OMDb's totalSeasons count or your actual disk directories
+    const finalSeasonBounds = Math.max(totalSeasons, maxPhysicalSeason);
+    
+    let fullSeriesStructure = {
+        totalSeasons: finalSeasonBounds.toString(),
+        seasons: {}
+    };
+
+    for (let s = 1; s <= finalSeasonBounds; s++) {
+        fullSeriesStructure.seasons[s] = {
+            seasonNumber: s.toString(),
+            episodes: []
+        };
+
+        // Create a tracking set for this specific pass
+        const apiMatchedNumbers = new Set();
 
         try {
+            console.log(`   📡 Fetching metadata manifest for Season ${s}...`);
             const seasonRes = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&Season=${s}`);
             
+            // If the API knows about this season and has episode records, ingest them
             if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
-                // Track which episode numbers the API successfully found
-                const apiMatchedNumbers = new Set();
-
                 for (const ep of seasonRes.data.Episodes) {
                     const epNum = parseInt(ep.Episode, 10);
                     if (isNaN(epNum)) continue;
@@ -431,44 +452,39 @@ async function processTVShowFolder(folderName) {
                         localRelativePath: isAvailable ? physicalFileMap[lookupKey] : null
                     });
                 }
-
-                // =========================================================================
-                // CRITICAL FALLBACK LAYER: Reconcile missing local physical files
-                // =========================================================================
-                Object.keys(physicalFileMap).forEach(key => {
-                    const [discSeason, discEpisode] = key.split('-').map(Number);
-                    
-                    // If we have it on disk for this season, but OMDb completely left it out of the API response
-                    if (discSeason === s && !apiMatchedNumbers.has(discEpisode)) {
-                        console.log(`   🔧 API Omission Detected: Injecting local fallback track entry [S${s}E${discEpisode}]`);
-                        fullSeriesStructure.seasons[s].episodes.push({
-                            episodeNumber: discEpisode,
-                            title: `Episode ${discEpisode} (Unlisted Source)`,
-                            released: 'Unknown',
-                            plot: 'Local disk file asset tracking fallback.',
-                            imdbRating: 'N/A',
-                            available: true,
-                            localRelativePath: physicalFileMap[key]
-                        });
-                    }
-                });
-
-                // Keep everything in clean numerical numerical sorting order
-                fullSeriesStructure.seasons[s].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
-
-            } else {
-                console.log(`   ⚠️ No official online records for Season ${s}. Generating standard skeleton matrix.`);
-                generateSkeletonSeason(s, fullSeriesStructure, physicalFileMap);
             }
         } catch (err) {
-            console.log(`   ⚠️ Network bottleneck parsing Season ${s}. Reverting to local disk discovery.`);
-            generateSkeletonSeason(s, fullSeriesStructure, physicalFileMap);
+            console.log(`   ⚠️ Network bottleneck or unlisted index for Season ${s}. Relying entirely on disk inventory.`);
         }
+
+        // =========================================================================
+        // UNCONDITIONAL DISK RECONCILIATION LAYER (Runs for every season)
+        // =========================================================================
+        Object.keys(physicalFileMap).forEach(key => {
+            const [discSeason, discEpisode] = key.split('-').map(Number);
+            
+            // If it's on your drive for this season, but was missing/omitted from the API response
+            if (discSeason === s && !apiMatchedNumbers.has(discEpisode)) {
+                console.log(`   🔧 Injecting local physical track asset: [S${s}E${discEpisode}]`);
+                fullSeriesStructure.seasons[s].episodes.push({
+                    episodeNumber: discEpisode,
+                    title: `Episode ${discEpisode} (Local Source)`,
+                    released: 'Unknown',
+                    plot: 'Local disk file asset tracking fallback.',
+                    imdbRating: 'N/A',
+                    available: true,
+                    localRelativePath: physicalFileMap[key]
+                });
+            }
+        });
+
+        // Ensure everything is perfectly sorted numerically before saving
+        fullSeriesStructure.seasons[s].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
     }
 
-    // Write final unified layout track configuration directly onto disk arrays
+    // Write final layout configuration track cleanly to disk storage
     fs.writeFileSync(path.join(activeShowPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 4));
-    console.log(`   💾 Unified deep matrix profile successfully saved down: series.json`);
+    console.log(`   💾 Complete structural configuration profile updated: series.json`);
 }
 
 sanitizeLibrary();
