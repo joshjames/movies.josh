@@ -104,6 +104,24 @@ const stage = document.getElementById('stage');
 const params = new URLSearchParams(window.location.search);
 const movieId = params.get('id');
 
+// --- Restored Subtitle Ingestion Function ---
+function loadSubtitles() {
+    // Clear out any old track tags to prevent overlapping text layers
+    const existingTracks = videoEl.querySelectorAll('track');
+    existingTracks.forEach(track => track.remove());
+
+    // Dynamically append your English subtitle endpoint track
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = 'English';
+    track.srclang = 'en';
+    // Encodes the string correctly for your backend proxy API routing parameters
+    track.src = `/api/subtitles/${encodeURIComponent(movieId)}`;
+    track.default = true; // Tells the browser to display them automatically on load
+    
+    videoEl.appendChild(track);
+}
+
 async function initializePremiumStream() {
     if (!movieId) {
         alert("No media identifier provided.");
@@ -112,49 +130,48 @@ async function initializePremiumStream() {
     }
 
     // Step 1: Detect Connection Footprint via Browser Metrics
-    let speedMbps = 10; // High default fallback
+    let speedMbps = 10; 
     
     if (navigator.connection && navigator.connection.downlink) {
         speedMbps = navigator.connection.downlink;
     } else {
-        // Fallback Probe: Test download duration of a tiny asset file if api isn't supported
         const startTime = Date.now();
         try {
             await fetch('/favicon.ico', { cache: 'no-store' });
             const durationSec = (Date.now() - startTime) / 1000;
-            if (durationSec > 0) speedMbps = (0.05 / durationSec) * 8; // Approx calculation
+            if (durationSec > 0) speedMbps = (0.05 / durationSec) * 8;
         } catch(e) {}
     }
 
-    // Step 2: Query our backend API for the target movie metadata profile
+    // Step 2: Query backend API for the target movie metadata profile
     try {
         const response = await fetch(`/api/movies/${movieId}`);
         const movie = await response.json();
         
-        let targetStreamUrl = movie.file1080p; // Default baseline route
+        let targetStreamUrl = '';
         
-        // Step 3: Stream Selection Matrix (Fixed Scope Code Block)
+        // Step 3: Stream Selection Matrix (with /movie-assets/ fallback routing logic applied)
         if (speedMbps < 2.5 && movie.file480p) {
-            // Cellular/Low Bandwidth Constraint Profile (< 2.5 Mbps)
             targetStreamUrl = movie.file480p.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
             qualityTag.style.background = "#eab308";
         } else if (speedMbps < 6.0 && movie.file720p) {
-            // Mobile HD Profile (2.5 Mbps - 6.0 Mbps)
             targetStreamUrl = movie.file720p.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "HD 720P (BALANCED)";
             qualityTag.style.background = "#3b82f6";
         } else {
-            // Unrestricted Premium Tier Pipeline (> 6.0 Mbps)
             const fallbackFile = movie.file1080p || movie.fileSource || '';
             targetStreamUrl = fallbackFile.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "FHD 1080P (SOURCE)";
             qualityTag.style.background = "#e50914";
         }
 
-        // Mount the stream path cleanly and fire up playback bounds
+        // Mount the stream path cleanly 
         videoEl.src = targetStreamUrl;
         
+        // Fire the subtitle initialization injection pass
+        loadSubtitles();
+
         // Attempt immediate playback block confirmation
         videoEl.play().catch(err => {
             console.log("🔒 Interaction security lock met. Awaiting manual trigger user frame tap.");
@@ -179,7 +196,7 @@ function resetControlVisibility() {
             backBtn.classList.add('hide-controls');
             qualityTag.classList.add('hide-controls');
             stage.style.cursor = 'none';
-        }, 3000); // Hide interfaces after 3 seconds of perfect stillness
+        }, 3000); 
     }
 }
 
@@ -190,7 +207,7 @@ videoEl.addEventListener('pause', resetControlVisibility);
 // Keyboard Intercept Controls: Spacebar toggles Play/Pause state seamlessly
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
-        e.preventDefault(); // Stop standard browser page down scrolling actions
+        e.preventDefault(); 
         if (videoEl.paused) videoEl.play(); else videoEl.pause();
     }
 });
