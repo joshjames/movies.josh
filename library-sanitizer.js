@@ -30,7 +30,7 @@ async function downloadCover(url, destPath) {
         });
     } catch (err) {
         console.error(`⚠️  Cover download skipped: ${err.message}`);
-    }
+    }git
 }
 
 // --- STREAMLINED DEV-MODE SUBTITLE RETRIEVAL ENGINE ---
