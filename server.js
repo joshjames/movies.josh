@@ -84,7 +84,73 @@ function rebuildLibraryCache() {
 // Fire the scan immediately on startup so the RAM array is instantly populated
 rebuildLibraryCache();
 
+// INDIVIDUAL MOVIE STREAM PROFILE ROUTER
+app.get('/api/movies/:id', (req, res) => {
+    const movieId = req.params.id;
+    
+    // Construct the absolute path to this specific movie's metadata folder
+    const movieFolder = path.join(MOVIES_DIR, movieId);
+    const infoFilePath = path.join(movieFolder, 'movie_info.json');
 
+    // Fallback Verification: Ensure the requested directory is physically present
+    if (!fs.existsSync(movieFolder)) {
+        return res.status(404).json({ status: 'error', message: 'Movie cluster destination missing.' });
+    }
+
+    // Baseline fallback payload matching your stream-switcher properties
+    let streamPayload = {
+        id: movieId,
+        title: movieId.replace(/\./g, ' '), // Quick string regex replacement for human readable title fallback
+        file1080p: null,
+        file720p: null,
+        file480p: null
+    };
+
+    // If you maintain isolated movie_info.json descriptors per-folder, unpack it
+    if (fs.existsSync(infoFilePath)) {
+        try {
+            const rawData = fs.readFileSync(infoFilePath, 'utf8');
+            const meta = JSON.parse(rawData);
+            streamPayload.title = meta.title || streamPayload.title;
+        } catch (e) {
+            console.error(`⚠️ Failed to parse metadata file for ${movieId}`);
+        }
+    }
+
+    // Dynamic Filesystem Probe: Map available profile outputs to payload properties
+    // Looks for local files matching your pre-transcode script definitions
+    const expectedOutputs = {
+        '1080p': `${movieId}.web.mp4`,      // Your master progressive output asset
+        '720p': `${movieId}.720p.mp4`,      // Item 1 downscaled profile
+        '480p': `${movieId}.480p.mp4`       // Item 1 cellular profile
+    };
+
+    // Build functional streaming asset paths accessible over HTTP
+    if (fs.existsSync(path.join(movieFolder, expectedOutputs['1080p']))) {
+        streamPayload.file1080p = `/movies/${movieId}/${expectedOutputs['1080p']}`;
+    } else {
+        // Fallback: If your preprocessing rename wasn't run yet, probe for standard .mp4 containers
+        const files = fs.readdirSync(movieFolder);
+        const sourceMp4 = files.find(f => f.endsWith('.mp4') && !f.includes('720p') && !f.includes('480p'));
+        if (sourceMp4) streamPayload.file1080p = `/movies/${movieId}/${sourceMp4}`;
+    }
+
+    if (fs.existsSync(path.join(movieFolder, expectedOutputs['720p']))) {
+        streamPayload.file720p = `/movies/${movieId}/${expectedOutputs['720p']}`;
+    }
+
+    if (fs.existsSync(path.join(movieFolder, expectedOutputs['480p']))) {
+        streamPayload.file480p = `/movies/${movieId}/${expectedOutputs['480p']}`;
+    }
+
+    // Safety: If no specific targeted mp4 was matched, just serve up the base source file
+    if (!streamPayload.file1080p) {
+        streamPayload.file1080p = `/movies/${movieId}`;
+    }
+
+    // Ship the fully compiled structural map back to player.html
+    res.json(streamPayload);
+});
 
 /// =========================================================================
 // HIGH-PERFORMANCE PAGINATED MOVIE ENDPOINT

@@ -136,17 +136,17 @@ async function initializePremiumStream() {
         // Step 3: Stream Selection Matrix
         if (speedMbps < 2.5 && movie.file480p) {
             // Cellular/Low Bandwidth Constraint Profile (< 2.5 Mbps)
-            targetStreamUrl = movie.file480p;
+            targetStreamUrl = movie.file480p.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
             qualityTag.style.background = "#eab308"; // Warning Yellow
         } else if (speedMbps < 6.0 && movie.file720p) {
             // Mobile HD Profile (2.5 Mbps - 6.0 Mbps)
-            targetStreamUrl = movie.file720p;
+            targetStreamUrl = movie.file720p.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "HD 720P (BALANCED)";
             qualityTag.style.background = "#3b82f6"; // Blue
         } else {
             // Unrestricted Premium Tier Pipeline (> 6.0 Mbps)
-            targetStreamUrl = movie.file1080p || movie.fileSource;
+            targetStreamUrl = baseFile.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "FHD 1080P (SOURCE)";
             qualityTag.style.background = "#e50914"; // Joshflix Red
         }
