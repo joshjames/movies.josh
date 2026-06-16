@@ -34,48 +34,69 @@ function rebuildLibraryCache() {
         console.log("📂 [Cache Worker] Indexing disk storage arrays directly to RAM...");
         const folders = fs.readdirSync(MOVIES_DIR);
         
-        // --- YOUR EXACT STEP 1: FILTER LOGIC ---
-        const cleanLibrary = folders.filter(folder => {
-            const folderPath = path.join(MOVIES_DIR, folder);
-            
-            if (folder.startsWith('.')) return false;
-            if (!fs.lstatSync(folderPath).isDirectory()) return false;
+        let temporaryCache = [];
 
-            // Condition A: Hidden block while transcoding
+        // --- SUB-PASS A: MOVIE ROOT DISK FILES ---
+        const cleanMovies = folders.filter(folder => {
+            const folderPath = path.join(MOVIES_DIR, folder);
+            if (folder.startsWith('.') || !fs.lstatSync(folderPath).isDirectory()) return false;
+            if (['sample', 'series'].includes(folder.toLowerCase())) return false; // Skip the TV branch here
             if (fs.existsSync(path.join(folderPath, '.processing'))) return false;
 
-            // Condition B: Verify optimized asset target exists
             const files = fs.readdirSync(folderPath);
             return files.some(f => f.endsWith('.web.mp4'));
         });
 
-        // --- YOUR EXACT STEP 2: METADATA EXTRACTION & MAPPING LOGIC ---
-        INSTANT_LIBRARY_CACHE = cleanLibrary.map(folder => {
+        cleanMovies.forEach(folder => {
             const folderPath = path.join(MOVIES_DIR, folder);
-
-            // Load local metadata parsed from your OMDb script layer
             const metaFile = path.join(folderPath, 'metadata.json');
-            let metaData = { title: folder.replace(/[-_.]/g, ' '), year: '', plot: '', genre: '' };
+            let metaData = { title: folder.replace(/[-_.]/g, ' '), year: '', plot: '', genre: '', contentType: 'movie' };
             
             if (fs.existsSync(metaFile)) {
-                try {
-                    metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
-                } catch (e) {
-                    console.error(`Malformed metadata track inside: ${folder}`);
-                }
+                try { metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8')); } catch (e) {}
             }
 
-            return {
+            temporaryCache.push({
                 id: encodeURIComponent(folder),
                 title: metaData.title,
                 year: metaData.year,
                 plot: metaData.plot,
                 genre: metaData.genre,
+                contentType: 'movie',
                 cover: `/movie-assets/${encodeURIComponent(folder)}/cover.jpg`
-            };
+            });
         });
 
-        console.log(`⚡ [Cache Worker] Cache initialized. ${INSTANT_LIBRARY_CACHE.length} items optimized in memory layout blocks.`);
+        // --- SUB-PASS B: NESTED TV SHOWS BRANCH ---
+        const seriesRootDir = path.join(MOVIES_DIR, 'series');
+        if (fs.existsSync(seriesRootDir)) {
+            const showFolders = fs.readdirSync(seriesRootDir);
+            
+            showFolders.forEach(showFolder => {
+                const showPath = path.join(seriesRootDir, showFolder);
+                if (showFolder.startsWith('.') || !fs.lstatSync(showPath).isDirectory()) return;
+
+                const metaFile = path.join(showPath, 'metadata.json');
+                let metaData = { title: showFolder.replace(/[-_.]/g, ' '), year: '', plot: '', genre: '', contentType: 'series' };
+
+                if (fs.existsSync(metaFile)) {
+                    try { metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8')); } catch (e) {}
+                }
+
+                temporaryCache.push({
+                    id: encodeURIComponent(`series/${showFolder}`), // Keeps resource paths descriptive and unique
+                    title: metaData.title,
+                    year: metaData.year,
+                    plot: metaData.plot,
+                    genre: metaData.genre,
+                    contentType: 'series',
+                    cover: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`
+                });
+            });
+        }
+
+        INSTANT_LIBRARY_CACHE = temporaryCache;
+        console.log(`⚡ [Cache Worker] Cache initialized. ${INSTANT_LIBRARY_CACHE.length} active multi-tier assets mapped.`);
     } catch (err) {
         console.error("❌ Failed building internal memory cache maps:", err);
     }
@@ -152,6 +173,72 @@ app.get('/api/movies/:id', (req, res) => {
     res.json(streamPayload);
 });
 
+
+app.get('/api/series/:showFolder', (req, res) => {
+    try {
+        const showFolder = decodeURIComponent(req.params.showFolder);
+        const showPath = path.join(MOVIES_DIR, 'series', showFolder);
+
+        if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
+            return res.status(404).json({ error: "Show location missing from disk arrays." });
+        }
+
+        // Unpack baseline show structural identity records
+        const metaFile = path.join(showPath, 'metadata.json');
+        let metaData = { title: showFolder.replace(/[-_.]/g, ' '), year: 'Unknown', plot: '', genre: '' };
+        if (fs.existsSync(metaFile)) {
+            try { metaData = JSON.parse(fs.readFileSync(metaFile, 'utf-8')); } catch (e) {}
+        }
+
+        let structure = {};
+
+        // Track and map existing Season.* or Season - * directories
+        const showContents = fs.readdirSync(showPath);
+        showContents.forEach(item => {
+            const itemPath = path.join(showPath, item);
+            if (!fs.lstatSync(itemPath).isDirectory()) return;
+
+            // Extract numeric season indicator values out of text paths (e.g., "Season.8" or "Season - 2")
+            const match = item.match(/Season\s*[-.]*\s*(\d+)/i);
+            if (!match) return;
+            const seasonNum = parseInt(match[1], 10).toString();
+
+            if (!structure[seasonNum]) structure[seasonNum] = [];
+
+            // Read the media files inside this specific season folder
+            const videoExtensions = ['.mp4', '.mkv', '.avi', '.m4v', '.ts'];
+            const files = fs.readdirSync(itemPath);
+
+            // Filter out junk/subtitles, sort files naturally, and build sequential playlist structures
+            const trackFiles = files
+                .filter(f => videoExtensions.includes(path.extname(f).toLowerCase()))
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+            trackFiles.forEach((file, index) => {
+                structure[seasonNum].push({
+                    num: index + 1,
+                    title: file.replace(/[-_.]/g, ' ').replace(/\b(s\d+e\d+|ep\d+).*$/i, '').trim() || `Episode ${index + 1}`,
+                    file: file,
+                    relPath: `series/${showFolder}/${item}/${file}` // Relative targeting locator for streaming endpoints
+                });
+            });
+        });
+
+        res.json({
+            id: `series/${showFolder}`,
+            title: metaData.title,
+            year: metaData.year,
+            plot: metaData.plot,
+            genre: metaData.genre,
+            poster: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
+            seasons: structure
+        });
+
+    } catch (err) {
+        console.error("❌ Series structure traversal fault:", err);
+        res.status(500).json({ error: "Could not compile internal season structural matrices." });
+    }
+});
 /// =========================================================================
 // HIGH-PERFORMANCE PAGINATED MOVIE ENDPOINT
 // =========================================================================

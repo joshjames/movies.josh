@@ -201,28 +201,38 @@
         async function loadMovies() {
     try {
         const res = await fetch('/api/movies');
-        const data = await res.json(); // Rename this from 'movies' to 'data'
+        const data = await res.json(); 
         
         const grid = document.getElementById('movie-grid');
         
-        // Safety check: Make sure we have our internal movies array
         if (data && data.movies && data.movies.length > 0) {
-            grid.innerHTML = data.movies.map(movie => `
-                <a class="card" href="player.html?id=${movie.id}">
-                    <div class="cover-wrapper">
-                        <img src="${movie.cover}" onerror="this.src='https://via.placeholder.com/200x300?text=No+Cover'" alt="${movie.title}">
-                    </div>
-                    <div class="card-content">
-                        <div class="title">${movie.title}</div>
-                        <div class="meta-line">${movie.year ? movie.year : ''}</div>
-                    </div>
-                </a>
-            `).join('');
+            grid.innerHTML = data.movies.map(media => {
+                // Determine destination rules dynamically based on baked contentType metadata fields
+                const targetEndpoint = (media.contentType === 'series') ? 'series.html' : 'player.html';
+                
+                // Add a visual type tag text so you can tell them apart on your unified grid easily
+                const badgeHtml = (media.contentType === 'series') 
+                    ? `<span style="position: absolute; bottom: 8px; right: 8px; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">TV Show</span>`
+                    : '';
+
+                return `
+                    <a class="card" href="${targetEndpoint}?id=${media.id}">
+                        <div class="cover-wrapper" style="position: relative;">
+                            <img src="${media.cover}" onerror="this.src='https://via.placeholder.com/200x300?text=No+Cover'" alt="${media.title}">
+                            ${badgeHtml}
+                        </div>
+                        <div class="card-content">
+                            <div class="title">${media.title}</div>
+                            <div class="meta-line">${media.year ? media.year : ''}</div>
+                        </div>
+                    </a>
+                `;
+            }).join('');
         } else {
-            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add movies!</div>`;
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add content!</div>`;
         }
     } catch (err) {
-        console.error("❌ Frontend failed to unpack cached pagination layer payloads:", err);
+        console.error("❌ Frontend failed to unpack cached dashboard assets:", err);
     }
 }
 loadMovies();

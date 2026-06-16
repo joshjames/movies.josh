@@ -95,17 +95,21 @@
     </div>
 
     <script>
+        const seasonParam = params.get('season');
+        const episodeParam = params.get('episode');
+        let currentTvPlaylist = [];
+        let currentTrackIndex = -1;
         const videoEl = document.getElementById('cinemaVideo');
-const qualityTag = document.getElementById('qualityTag');
-const backBtn = document.getElementById('backBtn');
-const stage = document.getElementById('stage');
+        const qualityTag = document.getElementById('qualityTag');
+        const backBtn = document.getElementById('backBtn');
+        const stage = document.getElementById('stage');
 
-// Extract query parameters (e.g., player.html?id=123)
-const params = new URLSearchParams(window.location.search);
-const movieId = params.get('id');
+        // Extract query parameters (e.g., player.html?id=123)
+        const params = new URLSearchParams(window.location.search);
+        const movieId = params.get('id');
 
 // --- Restored Subtitle Ingestion Function ---
-function loadSubtitles() {
+    function loadSubtitles() {
     // Clear out any old track tags to prevent overlapping text layers
     const existingTracks = videoEl.querySelectorAll('track');
     existingTracks.forEach(track => track.remove());
@@ -129,59 +133,91 @@ async function initializePremiumStream() {
         return;
     }
 
-    // Step 1: Detect Connection Footprint via Browser Metrics
-    let speedMbps = 10; 
-    
-    if (navigator.connection && navigator.connection.downlink) {
-        speedMbps = navigator.connection.downlink;
-    } else {
-        const startTime = Date.now();
+    // --- CASE A: SYSTEM PROCESSING TELEVISION ASSET TRACK ---
+    if (seasonParam && episodeParam) {
         try {
-            await fetch('/favicon.ico', { cache: 'no-store' });
-            const durationSec = (Date.now() - startTime) / 1000;
-            if (durationSec > 0) speedMbps = (0.05 / durationSec) * 8;
-        } catch(e) {}
+            const cleanFolder = movieId.replace('series/', '');
+            const response = await fetch(`/api/series/${encodeURIComponent(cleanFolder)}`);
+            const showData = await response.json();
+            
+            // Unpack the full playlist array for this specific active season selection
+            currentTvPlaylist = showData.seasons[seasonParam] || [];
+            currentTrackIndex = currentTvPlaylist.findIndex(ep => ep.num == parseInt(episodeParam, 10));
+
+            if (currentTrackIndex !== -1) {
+                playEpisodeIndex(currentTrackIndex);
+            } else {
+                alert("Target episode track index bounds out of file system alignment.");
+            }
+        } catch (err) {
+            console.error("TV context initialization fault:", err);
+        }
+        return;
     }
 
-    // Step 2: Query backend API for the target movie metadata profile
+    // --- CASE B: STANDARD MOVIE INGESTION PASS (YOUR EXISTING LOGIC) ---
+    let speedMbps = 10;
+    if (navigator.connection && navigator.connection.downlink) speedMbps = navigator.connection.downlink;
+
     try {
         const response = await fetch(`/api/movies/${movieId}`);
         const movie = await response.json();
-        
         let targetStreamUrl = '';
         
-        // Step 3: Stream Selection Matrix (with /movie-assets/ fallback routing logic applied)
         if (speedMbps < 2.5 && movie.file480p) {
             targetStreamUrl = movie.file480p.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
-            qualityTag.style.background = "#eab308";
         } else if (speedMbps < 6.0 && movie.file720p) {
             targetStreamUrl = movie.file720p.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "HD 720P (BALANCED)";
-            qualityTag.style.background = "#3b82f6";
         } else {
             const fallbackFile = movie.file1080p || movie.fileSource || '';
             targetStreamUrl = fallbackFile.replace('/movies/', '/movie-assets/');
             qualityTag.innerText = "FHD 1080P (SOURCE)";
-            qualityTag.style.background = "#e50914";
         }
 
-        // Mount the stream path cleanly 
         videoEl.src = targetStreamUrl;
-        
-        // Fire the subtitle initialization injection pass
         loadSubtitles();
-
-        // Attempt immediate playback block confirmation
-        videoEl.play().catch(err => {
-            console.log("🔒 Interaction security lock met. Awaiting manual trigger user frame tap.");
-        });
-
+        videoEl.play().catch(() => {});
     } catch (err) {
-        console.error("Pipeline failure fetching media stream layout targets:", err);
         qualityTag.innerText = "STREAM CORRUPTED";
     }
 }
+
+/**
+ * TV Playback Worker Logic Engine
+ */
+function playEpisodeIndex(index) {
+    if (index < 0 || index >= currentTvPlaylist.length) return;
+    
+    const episode = currentTvPlaylist[index];
+    currentTrackIndex = index;
+
+    // Build immediate file link straight via static server layer mapping configurations
+    videoEl.src = `/movie-assets/${episode.relPath}`;
+    qualityTag.innerText = `TV: S${seasonParam}E${episode.num}`;
+    qualityTag.style.background = "#6366f1"; // Purple accent indicating TV show status
+
+    // Safely update browser address history metrics so refreshing keeps your place
+    const newUrl = `player.html?id=${encodeURIComponent(movieId)}&season=${seasonParam}&episode=${episode.num}`;
+    window.history.replaceState({ path: newUrl }, '', newUrl);
+
+    videoEl.play().catch(() => {});
+}
+
+// --- AUTOMATIC CONTINUOUS SEQUENCE AUTOPLAY TRIGGER TRIGGER ---
+videoEl.addEventListener('ended', () => {
+    if (currentTvPlaylist.length > 0 && currentTrackIndex !== -1) {
+        const nextIndex = currentTrackIndex + 1;
+        if (nextIndex < currentTvPlaylist.length) {
+            console.log("🎬 Active track sequence completed. Advancing to sequential playlist entry...");
+            playEpisodeIndex(nextIndex);
+        } else {
+            qualityTag.innerText = "SEASON ENDED";
+            qualityTag.style.background = "#22c55e"; // Green confirmation tag
+        }
+    }
+});
 
 // Custom UI Polish: Auto-hide Mouse Cursor and Navigation interface when video is playing
 let mouseMoveTimeout;

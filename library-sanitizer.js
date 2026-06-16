@@ -176,159 +176,161 @@ function deleteFolderRecursive(directoryPath) {
 }
 
 async function sanitizeLibrary() {
-    console.log("🧹 Starting Complete Library Media Sanitizer & Data Scraper...\n");
+    console.log("🧹 Starting Resilient Multi-Tier Library Sanitizer...\n");
     
     if (!fs.existsSync(MOVIES_DIR)) {
         console.error(`❌ Error: Main directory [${MOVIES_DIR}] not found.`);
         return;
     }
 
-    const folders = fs.readdirSync(MOVIES_DIR);
+    // =========================================================================
+    // PASS 1: SANITIZE MOVIES (MAIN ROOT DIRECTORY)
+    // =========================================================================
+    const rootItems = fs.readdirSync(MOVIES_DIR);
 
-    for (const folder of folders) {
+    for (const folder of rootItems) {
         let currentFolderPath = path.join(MOVIES_DIR, folder);
+        
+        // CRITICAL ARCHITECTURAL FILTER: Hard ignore dotfiles, raw assets, and the entire series tier!
         if (folder.startsWith('.') || !fs.lstatSync(currentFolderPath).isDirectory()) continue;
-        if (folder.toLowerCase() === 'sample') continue;
+        if (['sample', 'series'].includes(folder.toLowerCase())) continue; 
 
-        console.log(`\n==================================================`);
-        console.log(`📁 Processing: "${folder}"`);
-        console.log(`==================================================`);
+        console.log(`\n🎬 [MOVIE PASS] Processing: "${folder}"`);
+        await processMediaFolder(MOVIES_DIR, folder, 'movie');
+    }
 
-        // -----------------------------------------------------------------
-        // STEP 1: PURGE SAMPLES AND JUNK FILES
-        // -----------------------------------------------------------------
-        const innerContents = fs.readdirSync(currentFolderPath);
-        
-        innerContents.forEach(item => {
-            const itemPath = path.join(currentFolderPath, item);
-            const itemStat = fs.lstatSync(itemPath);
+    // =========================================================================
+    // PASS 2: SANITIZE SERIES (NESTED INNER DIRECTORY)
+    // =========================================================================
+    const seriesRootDir = path.join(MOVIES_DIR, 'series');
+    
+    if (fs.existsSync(seriesRootDir)) {
+        const seriesItems = fs.readdirSync(seriesRootDir);
 
-            if (itemStat.isDirectory()) {
-                if (item.toLowerCase() === 'sample') {
-                    console.log(`🗑️  Purging directory branch: /Sample`);
-                    deleteFolderRecursive(itemPath);
-                }
-            } else {
-                const ext = path.extname(item).toLowerCase();
-                if (item.toLowerCase().includes('sample') && ext !== '.srt') {
-                    console.log(`🗑️  Deleting loose preview sample: ${item}`);
-                    fs.unlinkSync(itemPath);
-                }
-                else if (!KEEP_EXTENSIONS.includes(ext)) {
-                    console.log(`🗑️  Purging junk asset file: ${item}`);
-                    fs.unlinkSync(itemPath);
-                }
-            }
-        });
-
-        // -----------------------------------------------------------------
-        // STEP 2: IMMEDIATE LOCAL CLEAN & RENAME (PREPARE DISK STATE)
-        // -----------------------------------------------------------------
-        const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folder);
-        
-        const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
-        const localStandardFolderName = parsedYear ? `${dotNotationTitle}.${parsedYear}` : dotNotationTitle;
-        let activeFolderPath = currentFolderPath;
-
-        if (folder !== localStandardFolderName) {
-            const targetFolderPath = path.join(MOVIES_DIR, localStandardFolderName);
+        for (const showFolder of seriesItems) {
+            let currentShowPath = path.join(seriesRootDir, showFolder);
             
-            if (!fs.existsSync(targetFolderPath)) {
-                fs.renameSync(currentFolderPath, targetFolderPath);
-                console.log(`🗂️  Folder Renamed Locally: [${folder}] ➡️  [${localStandardFolderName}]`);
-                activeFolderPath = targetFolderPath; 
-            } else {
-                console.log(`⚠️  Destination [${localStandardFolderName}] already exists. Shifting target pointer.`);
-                activeFolderPath = targetFolderPath;
-            }
-        }
+            if (showFolder.startsWith('.') || !fs.lstatSync(currentShowPath).isDirectory()) continue;
+            if (showFolder.toLowerCase() === 'sample') continue;
 
-        // -----------------------------------------------------------------
-        // STEP 3: METADATA, COVER ART, & SUBTITLE GENERATION
-        // -----------------------------------------------------------------
-        const metadataPath = path.join(activeFolderPath, 'metadata.json');
-        const coverPath = path.join(activeFolderPath, 'cover.jpg');
-
-        // Check if metadata already exists to avoid redundant lookups
-        let metadataAlreadyExists = fs.existsSync(metadataPath);
-
-        try {
-            const apiSearchQuery = cleanTitle.trim();
-            const queryUrl = `${API_URL}${encodeURIComponent(apiSearchQuery)}${parsedYear ? `&y=${parsedYear}` : ''}`;
-            
-            let officialTitle = cleanTitle;
-            let officialYear = parsedYear || "Unknown";
-
-            if (!metadataAlreadyExists) {
-                console.log(`🔍 Dispatching OMDb lookup query: "${apiSearchQuery}" (${parsedYear || 'N/A'})`);
-                const res = await axios.get(queryUrl);
-
-                if (res.data && res.data.Response === "True") {
-                    const data = res.data;
-                    officialTitle = data.Title;
-                    officialYear = data.Year;
-                    
-                    const metaPayload = {
-                        title: data.Title,
-                        year: data.Year,
-                        plot: data.Plot,
-                        runtime: data.Runtime,
-                        genre: data.Genre,
-                        rating: data.imdbRating
-                    };
-
-                    fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
-                    console.log(`📝 Metadata generated: ${data.Title} (${data.Year})`);
-
-                    if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
-                        console.log(`📥 Downloading cover image...`);
-                        await downloadCover(data.Poster, coverPath);
-                    }
-
-                    // Handle OMDb capitalization sync and folder refinement
-                    const apiStandardizedTitle = data.Title.replace(/[/\\?%*:|"<>\s]+/g, '.');
-                    const apiFolderName = `${apiStandardizedTitle}.${data.Year}`;
-                    const apiFolderPath = path.join(MOVIES_DIR, apiFolderName);
-
-                    if (localStandardFolderName !== apiFolderName && !fs.existsSync(apiFolderPath)) {
-                        fs.renameSync(activeFolderPath, apiFolderPath);
-                        console.log(`🗂️  Refining folder alignment to OMDb Casing: [${localStandardFolderName}] ➡️  [${apiFolderName}]`);
-                        activeFolderPath = apiFolderPath;
-                    }
-                    
-                } else {
-                    console.log(`⚠️  OMDb lookup missed. Formatting local fallback descriptors.`);
-                    const titleCapitalized = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
-                    
-                    const fallbackPayload = {
-                        title: titleCapitalized,
-                        year: parsedYear || "Unknown",
-                        plot: "Local video data mapping index.",
-                        runtime: "N/A",
-                        genre: "Media Asset",
-                        rating: "N/A"
-                    };
-                    fs.writeFileSync(metadataPath, JSON.stringify(fallbackPayload, null, 4));
-                }
-            } else {
-                // If metadata exists, extract the verified names to keep subtitle queries pristine
-                console.log(`✨ Metadata index file already verified for target folder.`);
-                try {
-                    const existingMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-                    officialTitle = existingMeta.title || officialTitle;
-                    officialYear = existingMeta.year || officialYear;
-                } catch(e) {}
-            }
-
-            // --- RUN SUBTITLE PROCESSING PIPELINE ---
-            // Triggers seamlessly inside Step 3 for clean folder structure management
-            await autoFetchSubtitlesPureJS(activeFolderPath, officialTitle, officialYear);
-
-        } catch (err) {
-            console.error(`❌ Sanitizer processing fault on folder execution:`, err.message);
+            console.log(`\n📺 [SERIES PASS] Processing: "${showFolder}"`);
+            await processMediaFolder(seriesRootDir, showFolder, 'series');
         }
     }
-    console.log("\n🏁 Sanitization complete! Your library storage space is perfectly scrubbed.");
+
+    console.log("\n🏁 Sanitization processing execution cycles finalized successfully.");
+}
+
+/**
+ * Shared Processing Worker to enforce data structural cleaning rules across paths
+ */
+async function processMediaFolder(parentDir, folderName, contentType) {
+    let currentFolderPath = path.join(parentDir, folderName);
+
+    // 1. PURGE SAMPLES AND JUNK FILES
+    const innerContents = fs.readdirSync(currentFolderPath);
+    innerContents.forEach(item => {
+        const itemPath = path.join(currentFolderPath, item);
+        const itemStat = fs.lstatSync(itemPath);
+
+        if (itemStat.isDirectory()) {
+            if (item.toLowerCase() === 'sample') deleteFolderRecursive(itemPath);
+        } else {
+            const ext = path.extname(item).toLowerCase();
+            if (item.toLowerCase().includes('sample') && ext !== '.srt') fs.unlinkSync(itemPath);
+            else if (!KEEP_EXTENSIONS.includes(ext)) fs.unlinkSync(itemPath);
+        }
+    });
+
+    // 2. NAME STANDARDIZATION & DISK REALIGNMENT
+    const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folderName);
+    const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
+    const localStandardFolderName = parsedYear ? `${dotNotationTitle}.${parsedYear}` : dotNotationTitle;
+    let activeFolderPath = currentFolderPath;
+
+    if (folderName !== localStandardFolderName) {
+        const targetFolderPath = path.join(parentDir, localStandardFolderName);
+        
+        if (!fs.existsSync(targetFolderPath)) {
+            fs.renameSync(currentFolderPath, targetFolderPath);
+            console.log(`   🗂️  Folder Aligned: [${folderName}] ➡️ [${localStandardFolderName}]`);
+            activeFolderPath = targetFolderPath; 
+        } else {
+            activeFolderPath = targetFolderPath;
+        }
+    }
+
+    // 3. METADATA ENGINE SPECIFICATION
+    const metadataPath = path.join(activeFolderPath, 'metadata.json');
+    const coverPath = path.join(activeFolderPath, 'cover.jpg');
+    let metadataAlreadyExists = fs.existsSync(metadataPath);
+
+    try {
+        const apiSearchQuery = cleanTitle.trim();
+        const queryUrl = `${API_URL}${encodeURIComponent(apiSearchQuery)}${parsedYear ? `&y=${parsedYear}` : ''}`;
+        
+        let officialTitle = cleanTitle;
+        let officialYear = parsedYear || "Unknown";
+
+        if (!metadataAlreadyExists) {
+            console.log(`   🔍 Querying OMDb Metadata: "${apiSearchQuery}"...`);
+            const res = await axios.get(queryUrl);
+
+            if (res.data && res.data.Response === "True") {
+                const data = res.data;
+                officialTitle = data.Title;
+                officialYear = data.Year;
+                
+                const metaPayload = {
+                    title: data.Title,
+                    year: data.Year,
+                    plot: data.Plot,
+                    runtime: data.Runtime,
+                    genre: data.Genre,
+                    rating: data.imdbRating,
+                    contentType: contentType // 🎯 Hard baked based completely on disk branch location
+                };
+
+                fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
+                console.log(`   📝 Metadata Written: ${data.Title} (${contentType})`);
+
+                if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
+                    await downloadCover(data.Poster, coverPath);
+                }
+            } else {
+                console.log(`   ⚠️ OMDb Miss. Writing dynamic fallback structure local index frame.`);
+                const titleCapitalized = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
+                const fallbackPayload = {
+                    title: titleCapitalized,
+                    year: parsedYear || "Unknown",
+                    plot: "Local video tracking node.",
+                    runtime: "N/A",
+                    genre: "Media Track",
+                    rating: "N/A",
+                    contentType: contentType
+                };
+                fs.writeFileSync(metadataPath, JSON.stringify(fallbackPayload, null, 4));
+            }
+        } else {
+            // SELF-HEALING FALLBACK: If json exists but lacks contentType property, patch it safely
+            try {
+                let existingMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                if (!existingMeta.contentType || existingMeta.contentType !== contentType) {
+                    existingMeta.contentType = contentType;
+                    fs.writeFileSync(metadataPath, JSON.stringify(existingMeta, null, 4));
+                    console.log(`   🔧 Injected missing data structure properties [contentType: ${contentType}]`);
+                }
+                officialTitle = existingMeta.title || officialTitle;
+                officialYear = existingMeta.year || officialYear;
+            } catch(e) {}
+        }
+
+        // 4. SUBTITLE DISPATCH
+        await autoFetchSubtitlesPureJS(activeFolderPath, officialTitle, officialYear);
+
+    } catch (err) {
+        console.error(`   ❌ Failed parsing asset details block:`, err.message);
+    }
 }
 
 sanitizeLibrary();
