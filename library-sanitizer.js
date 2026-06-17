@@ -74,48 +74,47 @@ async function fetchWithRetry(url, options, retries = 3, delay = 1500) {
     }
 }
 
-async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, officialYear) {
+/**
+ * Invokes the system Subliminal CLI engine directly using your precise local configuration mapping.
+ */
+async function autoFetchSubtitlesSubliminal(targetDirectory) {
     const targetSrtPath = path.join(targetDirectory, 'English.srt');
-    if (fs.existsSync(targetSrtPath)) return;
-    if (!OPENSUBTITLES_API_KEY) return;
 
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    // Skip processing if a localized subtitle track asset already exists
+    if (fs.existsSync(targetSrtPath)) {
+        return;
+    }
 
     try {
-        console.log(`   🔍 Querying catalog for: "${officialTitle}" (${officialYear})...`);
-        const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(officialTitle)}&year=${officialYear}&languages=en`;
-        
-        const response = await fetchWithRetry(searchUrl, {
-            headers: {
-                'Api-Key': OPENSUBTITLES_API_KEY,
-                'User-Agent': 'Joshflix v1.0',
-                'Accept': 'application/json'
-            }
-        });
+        console.log(`   📡 Invoking Subliminal sync sweep on target folder...`);
 
-        const subData = response.data.data;
-        if (!subData || subData.length === 0) {
-            console.log(`   ⚠️ No subtitle records matched on OpenSubtitles index.`);
-            return;
+        // Force subliminal to name the download precisely "English.srt" using the '-s' flag 
+        // pointing explicitly to your custom configuration file profile.
+        const configPath = fs.existsSync('/app/movies') 
+            ? '/root/.config/subliminal/subliminal.toml' 
+            : '/home/epic/.config/subliminal/subliminal.toml';
+
+        const cmd = `subliminal --config "${configPath}" download -l en -s "${targetDirectory}"`;
+        
+        // Execute sync loop via shell engine
+        execSync(cmd, { stdio: 'pipe' });
+        
+        // Subliminal saves files using the directory video title name if multiple exist, 
+        // or directly to .srt if single flags pass. Let's make sure it matches your exact app scheme:
+        const files = fs.readdirSync(targetDirectory);
+        const downloadedSrt = files.find(f => f.endsWith('.en.srt') || (f.endsWith('.srt') && f !== 'English.srt'));
+        
+        if (downloadedSrt) {
+            fs.renameSync(path.join(targetDirectory, downloadedSrt), targetSrtPath);
+            console.log(`   🎯 Subliminal tracked asset written clean ➡️ English.srt`);
+        } else if (fs.existsSync(targetSrtPath)) {
+            console.log(`   🎯 Subliminal tracked asset written clean natively.`);
+        } else {
+            console.log(`   ⚠️ Subliminal completed pass, but no high-scoring subtitle match was found.`);
         }
 
-        const fileId = subData[0].attributes.files[0].file_id;
-        const downloadRoute = 'https://api.opensubtitles.com/api/v1/download';
-
-        const downloadRes = await axios.post(downloadRoute, { file_id: fileId }, {
-            headers: {
-                'Api-Key': OPENSUBTITLES_API_KEY,
-                'User-Agent': 'Joshflix v1.0',
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const srtDownloadUrl = downloadRes.data.link;
-        const srtFileBuffer = await axios.get(srtDownloadUrl, { responseType: 'arraybuffer' });
-        fs.writeFileSync(targetSrtPath, srtFileBuffer.data);
-        console.log(`   🎯 Clean subtitle track successfully written to: English.srt`);
     } catch (err) {
-        console.error(`   ❌ Subtitle pipeline skipped folder: ${err.message}`);
+        console.error(`   ❌ Subliminal processing pipeline skipped: ${err.message}`);
     }
 }
 
@@ -312,7 +311,11 @@ async function processMovieFolder(folderName) {
             } catch(e) {}
         }
 
-        await autoFetchSubtitlesPureJS(activeFolderPath, officialTitle, officialYear);
+       // Change this line:
+            // await autoFetchSubtitlesPureJS(activeFolderPath, officialTitle, officialYear);
+
+            // To this:
+        await autoFetchSubtitlesSubliminal(activeFolderPath);
     } catch (err) {
         console.error(`   ❌ Movie metadata tracking error:`, err.message);
     }
