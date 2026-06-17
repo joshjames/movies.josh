@@ -57,6 +57,36 @@ app.post('/api/admin/sanitizer/run', async (req, res) => {
     }
 });
 
+app.post('/api/admin/upload-poster', async (req, res) => {
+    try {
+        const { folder, name, image } = req.body;
+        if (!folder || !image) {
+            return res.status(400).json({ success: false, error: 'Missing parameters.' });
+        }
+
+        // Clean up data URL base64 prefix if present
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Target the absolute directory mapping for the specific show
+        const targetDir = path.join('/app/movies', 'series', folder);
+        
+        if (!fs.existsSync(targetDir)) {
+            return res.status(404).json({ success: false, error: 'Target directory not found.' });
+        }
+
+        // Save cleanly as poster.jpg
+        const finalPath = path.join(targetDir, 'poster.jpg');
+        fs.writeFileSync(finalPath, buffer);
+
+        logger.log(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
+        res.json({ success: true, message: 'Poster written to disk.' });
+    } catch (err) {
+        logger.log(`Asset upload exception: ${err.message}`, 'error');
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
 }

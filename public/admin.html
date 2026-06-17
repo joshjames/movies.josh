@@ -8,18 +8,24 @@
         body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
         .container { max-width: 1200px; margin: 0 auto; }
         h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; }
-        .show-row { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+        
+        /* Show Row Grid Layout split for poster + form fields */
+        .show-row { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin-bottom: 16px; display: flex; gap: 20px; }
+        .poster-aside { flex: 0 0 140px; display: flex; flex-direction: column; gap: 8px; }
+        .main-form-content { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+        
         .row-header { font-weight: bold; font-size: 1.1rem; color: #38bdf8; display: flex; justify-content: space-between; }
         .meta-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
         .form-group { display: flex; flex-direction: column; gap: 4px; }
         .form-group.full-width { grid-column: 1 / -1; }
         label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
         input, textarea { background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; font-family: inherit; }
+        
         button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; align-self: flex-end; }
         button:hover { background: #1d4ed8; }
         .badge { background: #e50914; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
         
-        /* Integrated Stream Monitor Styles */
+        /* Streaming Monitor Console Window */
         .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.85rem; padding: 14px; border-radius: 6px; height: 300px; overflow-y: auto; margin-bottom: 24px; color: #38bdf8; white-space: pre-wrap; }
         .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; }
         .log-error { color: #f87171; }
@@ -27,6 +33,12 @@
         .controls { margin-top: 16px; margin-bottom: 16px; display: flex; gap: 12px; }
         .btn-trigger { background: #10b981; color: white; }
         .btn-trigger:hover { background: #059669; }
+
+        /* Drag and Drop Admin Zones */
+        .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #0f172a; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .admin-drop-zone.dragover { border-color: #38bdf8; background: #1e293b; }
+        .admin-drop-zone img { width: 100%; height: 100%; object-fit: cover; }
+        .drop-zone-text { position: absolute; text-align: center; color: #64748b; font-size: 0.75rem; padding: 8px; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -40,10 +52,12 @@
         <h3>🖥️ Live Application Stream Monitor</h3>
         <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
 
+        <h2>📺 Localized Show Catalogs</h2>
         <div id="shows-list">Loading localized show catalogs...</div>
     </div>
 
     <script>
+        // --- 1. LIVE LOG MONITOR STREAM (SSE WITH KEEPALIVE) ---
         function connectToLogStream() {
             const consoleTerminal = document.getElementById('terminal-stream');
             consoleTerminal.innerHTML = '';
@@ -68,6 +82,7 @@
             };
         }
 
+        // --- 2. BACKGROUND PROCESS INVOKER ---
         async function triggerSanitizer() {
             try {
                 const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
@@ -80,6 +95,7 @@
             }
         }
 
+        // --- 3. SHOW DATA INJECTOR & RENDERER ---
         async function loadShows() {
             try {
                 const res = await fetch('/api/admin/series-metadata');
@@ -91,42 +107,118 @@
                     return;
                 }
 
-                container.innerHTML = data.shows.map(show => `
+                container.innerHTML = data.shows.map(show => {
+                    // Fallback to cache-busted path if asset exists or broken image logic takes over
+                    const posterPath = `/series-assets/${show.folder}/poster.jpg?t=${new Date().getTime()}`;
+                    
+                    return `
                     <div class="show-row" id="row-${show.folder}">
-                        <div class="row-header">
-                            <span>Folder: /series/${show.folder}</span>
-                            ${!show.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
+                        <div class="poster-aside">
+                            <label>Show Artwork</label>
+                            <div class="admin-drop-zone" 
+                                 id="dropzone-${show.folder}" 
+                                 ondragover="handleDragOver(event, '${show.folder}')" 
+                                 ondragleave="handleDragLeave(event, '${show.folder}')" 
+                                 ondrop="handleDrop(event, '${show.folder}')">
+                                <img src="${posterPath}" id="img-${show.folder}" onerror="handleImgError('${show.folder}')" />
+                                <div class="drop-zone-text" id="text-${show.folder}" style="display:none;">
+                                    📥<br>Drag & Drop poster image
+                                </div>
+                            </div>
                         </div>
-                        <div class="meta-form">
-                            <div class="form-group">
-                                <label>Display Title</label>
-                                <input type="text" id="title-${show.folder}" value="${show.metadata.title || ''}">
+
+                        <div class="main-form-content">
+                            <div class="row-header">
+                                <span>Folder: /series/${show.folder}</span>
+                                ${!show.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
                             </div>
-                            <div class="form-group">
-                                <label>Release Year(s)</label>
-                                <input type="text" id="year-${show.folder}" value="${show.metadata.year || ''}">
+                            <div class="meta-form">
+                                <div class="form-group">
+                                    <label>Display Title</label>
+                                    <input type="text" id="title-${show.folder}" value="${show.metadata.title || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Release Year(s)</label>
+                                    <input type="text" id="year-${show.folder}" value="${show.metadata.year || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Genre tags</label>
+                                    <input type="text" id="genre-${show.folder}" value="${show.metadata.genre || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Manual OMDb/IMDb ID Lookup Link Override</label>
+                                    <input type="text" id="imdbId-${show.folder}" placeholder="e.g., tt0123456" value="${show.metadata.imdbId || ''}">
+                                </div>
+                                <div class="form-group full-width">
+                                    <label>Plot Synopsis Outline</label>
+                                    <textarea id="plot-${show.folder}" rows="2">${show.metadata.plot || ''}</textarea>
+                                </div>
+                                <button onclick="saveOverride('${show.folder}')">Save Changes</button>
                             </div>
-                            <div class="form-group">
-                                <label>Genre tags</label>
-                                <input type="text" id="genre-${show.folder}" value="${show.metadata.genre || ''}">
-                            </div>
-                            <div class="form-group">
-                                <label>Manual OMDb/IMDb ID Lookup Link Override</label>
-                                <input type="text" id="imdbId-${show.folder}" placeholder="e.g., tt0123456" value="${show.metadata.imdbId || ''}">
-                            </div>
-                            <div class="form-group full-width">
-                                <label>Plot Synopsis Outline</label>
-                                <textarea id="plot-${show.folder}" rows="2">${show.metadata.plot || ''}</textarea>
-                            </div>
-                            <button onclick="saveOverride('${show.folder}')">Save Changes</button>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
             } catch (err) {
                 console.error("Admin dashboard extraction crash:", err);
             }
         }
 
+        // --- 4. DRAG & DROP BINARY DATA STRIPPING LOGIC ---
+        function handleImgError(folder) {
+            document.getElementById(`img-${folder}`).style.display = 'none';
+            document.getElementById(`text-${folder}`).style.display = 'block';
+        }
+
+        function handleDragOver(e, folder) {
+            e.preventDefault();
+            document.getElementById(`dropzone-${folder}`).classList.add('dragover');
+        }
+
+        function handleDragLeave(e, folder) {
+            e.preventDefault();
+            document.getElementById(`dropzone-${folder}`).classList.remove('dragover');
+        }
+
+        function handleDrop(e, folder) {
+            e.preventDefault();
+            document.getElementById(`dropzone-${folder}`).classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onloadend = async function() {
+                        const base64Data = reader.result;
+                        await executePosterUpload(folder, base64Data);
+                    };
+                }
+            }
+        }
+
+        async function executePosterUpload(folder, base64Data) {
+            try {
+                const response = await fetch('/api/admin/upload-poster', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, image: base64Data })
+                });
+                const resData = await response.json();
+                if (resData.success) {
+                    const img = document.getElementById(`img-${folder}`);
+                    img.src = `/series-assets/${folder}/poster.jpg?t=${new Date().getTime()}`;
+                    img.style.display = 'block';
+                    document.getElementById(`text-${folder}`).style.display = 'none';
+                } else {
+                    alert("Upload error: " + resData.error);
+                }
+            } catch (err) {
+                alert("Network communication error during artwork stream.");
+            }
+        }
+
+        // --- 5. TEXT METADATA SYNC LOOP ---
         async function saveOverride(folder) {
             const payload = {
                 folder,
@@ -154,7 +246,7 @@
             }
         }
 
-        // Run initializations concurrently inside structural window scope
+        // Boot system listeners
         connectToLogStream();
         loadShows();
     </script>
