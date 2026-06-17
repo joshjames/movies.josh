@@ -5,22 +5,45 @@ const axios = require('axios');
 // Automatically read .env file from the project root directory
 require('dotenv').config();
 
-// CONFIGURATION
+// =========================================================================
+// CONFIGURATION & PATH ROUTING
+// =========================================================================
 const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies';
 const SERIES_DIR = path.join(MOVIES_DIR, 'series');
+const MANIFEST_PATH = path.join(MOVIES_DIR, '.joshflix-manifest.json'); // FIXED: Defined tracking target globally
 
 console.log(`\n==================================================`);
 console.log(`🚀 Target directory initialized at state path: ${MOVIES_DIR}`);
 console.log(`==================================================\n`);
 
 const API_URL = 'http://www.omdbapi.com/?apikey=84196d01&t=';
-
-// --- OPEN_SUBTITLES CONFIGURATION LAYER FROM RUNTIME ENVIRONMENT ---
 const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY;
 
 // Whitelist of valid extensions we want to keep inside directories
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.json', '.jpg', '.jpeg', '.png', '.ts'];
 
+// =========================================================================
+// STATE MANAGEMENT & MANIFEST ENGINE
+// =========================================================================
+function loadManifest() {
+    if (fs.existsSync(MANIFEST_PATH)) {
+        try {
+            return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
+        } catch (e) {
+            console.log("⚠️ Manifest tracking file corrupted. Initializing fresh index state.");
+        }
+    }
+    return { lastRun: null, folders: {} };
+}
+
+function saveManifest(manifest) {
+    manifest.lastRun = new Date().toISOString();
+    fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 4));
+}
+
+// =========================================================================
+// CORE UTILITY METHODS
+// =========================================================================
 async function downloadCover(url, destPath) {
     try {
         const response = await axios({ method: 'GET', url, responseType: 'stream' });
@@ -35,9 +58,6 @@ async function downloadCover(url, destPath) {
     }
 }
 
-/**
- * Executes a network call with an exponential backoff safety net for 5xx/429 errors.
- */
 async function fetchWithRetry(url, options, retries = 3, delay = 1500) {
     try {
         return await axios.get(url, options);
@@ -56,14 +76,8 @@ async function fetchWithRetry(url, options, retries = 3, delay = 1500) {
 
 async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, officialYear) {
     const targetSrtPath = path.join(targetDirectory, 'English.srt');
-
-    if (fs.existsSync(targetSrtPath)) {
-        return;
-    }
-
-    if (!OPENSUBTITLES_API_KEY) {
-        return;
-    }
+    if (fs.existsSync(targetSrtPath)) return;
+    if (!OPENSUBTITLES_API_KEY) return;
 
     await new Promise(resolve => setTimeout(resolve, 1200));
 
@@ -99,9 +113,7 @@ async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, official
         const srtDownloadUrl = downloadRes.data.link;
         const srtFileBuffer = await axios.get(srtDownloadUrl, { responseType: 'arraybuffer' });
         fs.writeFileSync(targetSrtPath, srtFileBuffer.data);
-
         console.log(`   🎯 Clean subtitle track successfully written to: English.srt`);
-
     } catch (err) {
         console.error(`   ❌ Subtitle pipeline skipped folder: ${err.message}`);
     }
@@ -109,7 +121,6 @@ async function autoFetchSubtitlesPureJS(targetDirectory, officialTitle, official
 
 function cleanReleaseName(folderName) {
     let title = folderName.replace(/\/+$/, '').replace(/\[.*?\]/g, '').replace(/\((.*?)\)/g, '$1');
-
     title = title.replace(/^www\.[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
     title = title.replace(/^[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
 
@@ -128,19 +139,14 @@ function cleanReleaseName(folderName) {
         title = yearMatch[1];
         year = yearMatch[2];
     }
-
     title = title.replace(/[-_.]/g, ' ').replace(/\s+/g, ' ').trim();
     return { title, year };
 }
 
-// Regex to extract season and episode numbers from video filenames
 function parseEpFromFilename(filename) {
     const match = filename.match(/s\s*(\d+)\s*e\s*(\d+)/i);
     if (match) {
-        return {
-            season: parseInt(match[1], 10),
-            episode: parseInt(match[2], 10)
-        };
+        return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
     }
     return null;
 }
@@ -149,79 +155,82 @@ function deleteFolderRecursive(directoryPath) {
     if (fs.existsSync(directoryPath)) {
         fs.readdirSync(directoryPath).forEach((file) => {
             const curPath = path.join(directoryPath, file);
-            if (fs.lstatSync(curPath).isDirectory()) {
-                deleteFolderRecursive(curPath);
-            } else {
-                fs.unlinkSync(curPath); 
-            }
+            if (fs.lstatSync(curPath).isDirectory()) deleteFolderRecursive(curPath);
+            else fs.unlinkSync(curPath);
         });
-        fs.rmdirSync(directoryPath); 
+        fs.rmdirSync(directoryPath);
     }
 }
 
-// Helper to map files manually if OMDb API data is missing or incomplete for a season
-function generateSkeletonSeason(seasonNum, structure, physicalFileMap) {
-    Object.keys(physicalFileMap).forEach(key => {
-        const [s, e] = key.split('-').map(Number);
-        if (s === seasonNum) {
-            structure.seasons[seasonNum].episodes.push({
-                episodeNumber: e,
-                title: `Episode ${e}`,
-                released: 'Unknown',
-                plot: 'No internet overview map file processed.',
-                imdbRating: 'N/A',
-                available: true,
-                localRelativePath: physicalFileMap[key]
-            });
-        }
-    });
-    structure.seasons[seasonNum].episodes.sort((a,b) => a.episodeNumber - b.episodeNumber);
-}
-
 // =========================================================================
-// MAIN ORCHESTRATION PIPELINE RUNNER
+// HIGH-LEVEL DELTA TUNED ORCHESTRATION PIPELINE
 // =========================================================================
 async function sanitizeLibrary() {
-    console.log("🧹 Starting Resilient Multi-Tier Library Sanitizer...\n");
+    console.log("🧹 Starting High-Performance Delta Sanitizer...\n");
     
     if (!fs.existsSync(MOVIES_DIR)) {
         console.error(`❌ Error: Main directory [${MOVIES_DIR}] not found.`);
         return;
     }
 
-    // =========================================================================
-    // PASS 1: SANITIZE MOVIES (MAIN ROOT DIRECTORY)
-    // =========================================================================
-    const rootItems = fs.readdirSync(MOVIES_DIR);
+    const stateManifest = loadManifest();
+    const currentRunFolders = {}; 
+    
+    let processedCount = 0;
+    let skippedCount = 0;
 
+    // --- PASS 1: MOVIES ---
+    const rootItems = fs.readdirSync(MOVIES_DIR);
     for (const folder of rootItems) {
         let currentFolderPath = path.join(MOVIES_DIR, folder);
-        
         if (folder.startsWith('.') || !fs.lstatSync(currentFolderPath).isDirectory()) continue;
         if (['sample', 'series'].includes(folder.toLowerCase())) continue; 
 
-        console.log(`\n🎬 [MOVIE PASS] Processing: "${folder}"`);
+        const stats = fs.statSync(currentFolderPath);
+        const folderKey = `movie:${folder}`;
+        currentRunFolders[folderKey] = stats.mtimeMs;
+
+        if (stateManifest.folders[folderKey] === stats.mtimeMs && fs.existsSync(path.join(currentFolderPath, 'metadata.json'))) {
+            skippedCount++;
+            continue; 
+        }
+
+        console.log(`\n🎬 [MOVIE DELTA DETECTED] Processing: "${folder}"`);
         await processMovieFolder(folder);
+        processedCount++;
     }
 
-    // =========================================================================
-    // PASS 2: SANITIZE SERIES (TV RECURSIVE DISK LAYER ENGINE)
-    // =========================================================================
+    // --- PASS 2: SERIES ---
     if (fs.existsSync(SERIES_DIR)) {
         const seriesItems = fs.readdirSync(SERIES_DIR);
-
         for (const showFolder of seriesItems) {
             let currentShowPath = path.join(SERIES_DIR, showFolder);
-            
             if (showFolder.startsWith('.') || !fs.lstatSync(currentShowPath).isDirectory()) continue;
             if (showFolder.toLowerCase() === 'sample') continue;
 
-            console.log(`\n📺 [SERIES PASS] Processing: "${showFolder}"`);
+            const stats = fs.statSync(currentShowPath);
+            const folderKey = `series:${showFolder}`;
+            currentRunFolders[folderKey] = stats.mtimeMs;
+
+            if (stateManifest.folders[folderKey] === stats.mtimeMs && fs.existsSync(path.join(currentShowPath, 'series.json'))) {
+                skippedCount++;
+                continue;
+            }
+
+            console.log(`\n📺 [SERIES DELTA DETECTED] Processing: "${showFolder}"`);
             await processTVShowFolder(showFolder);
+            processedCount++;
         }
     }
 
-    console.log("\n🏁 Sanitization processing execution cycles finalized successfully.");
+    stateManifest.folders = currentRunFolders;
+    saveManifest(stateManifest);
+
+    console.log(`\n==================================================`);
+    console.log(`🏁 SANITIZER PROCESSING CYCLE FINALIZED`);
+    console.log(`⚡ Skipped (No local modifications): ${skippedCount}`);
+    console.log(`🔧 Processed (Forced Sync Maps):     ${processedCount}`);
+    console.log(`==================================================\n`);
 }
 
 /**
@@ -230,12 +239,10 @@ async function sanitizeLibrary() {
 async function processMovieFolder(folderName) {
     let currentFolderPath = path.join(MOVIES_DIR, folderName);
 
-    // 1. Purge Samples and junk extensions
     const innerContents = fs.readdirSync(currentFolderPath);
     innerContents.forEach(item => {
         const itemPath = path.join(currentFolderPath, item);
         const itemStat = fs.lstatSync(itemPath);
-
         if (itemStat.isDirectory()) {
             if (item.toLowerCase() === 'sample') deleteFolderRecursive(itemPath);
         } else {
@@ -245,7 +252,6 @@ async function processMovieFolder(folderName) {
         }
     });
 
-    // 2. Realignment down to standard naming schemes
     const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folderName);
     const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
     const localStandardFolderName = parsedYear ? `${dotNotationTitle}.${parsedYear}` : dotNotationTitle;
@@ -262,7 +268,6 @@ async function processMovieFolder(folderName) {
         }
     }
 
-    // 3. Gather Metadata Blocks
     const metadataPath = path.join(activeFolderPath, 'metadata.json');
     const coverPath = path.join(activeFolderPath, 'cover.jpg');
 
@@ -289,18 +294,17 @@ async function processMovieFolder(folderName) {
                     contentType: 'movie'
                 };
                 fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
-                console.log(`   📝 Metadata Written: ${data.Title} (movie)`);
+                console.log(`   📝 Metadata Written: ${data.Title}`);
 
                 if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
                     await downloadCover(data.Poster, coverPath);
                 }
             } else {
-                console.log(`   ⚠️ OMDb Miss. Creating manual skeleton fallback tracking frames.`);
+                console.log(`   ⚠️ OMDb Miss. Creating manual skeleton fallback frames.`);
                 const fallback = { title: cleanTitle, year: officialYear, plot: "Local track description context.", runtime: "N/A", genre: "Media Track", rating: "N/A", contentType: 'movie' };
                 fs.writeFileSync(metadataPath, JSON.stringify(fallback, null, 4));
             }
         } else {
-            // Read self-healing property check
             try {
                 let m = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
                 if (!m.contentType) { m.contentType = 'movie'; fs.writeFileSync(metadataPath, JSON.stringify(m, null, 4)); }
@@ -319,8 +323,6 @@ async function processMovieFolder(folderName) {
  */
 async function processTVShowFolder(folderName) {
     let currentShowPath = path.join(SERIES_DIR, folderName);
-    
-    // 1. Structural Folder Realignment (e.g. "Rick.and.Morty")
     const { title: cleanTitle } = cleanReleaseName(folderName);
     const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
     
@@ -339,7 +341,6 @@ async function processTVShowFolder(folderName) {
     const metadataPath = path.join(activeShowPath, 'metadata.json');
     const coverPath = path.join(activeShowPath, 'cover.jpg');
 
-    // 2. Resolve High Level Series Profiles 
     let mainMeta = { title: cleanTitle, year: '', plot: '', genre: '', contentType: 'series', imdbId: '' };
     let totalSeasons = 1;
 
@@ -349,7 +350,6 @@ async function processTVShowFolder(folderName) {
             mainMeta = { ...mainMeta, ...existingMeta };
         }
 
-        // CHOOSE OPTIMAL QUERY TARGET BASED ON DASHBOARD SPECIFIED CODES
         let queryUrl = `${API_URL}${encodeURIComponent(mainMeta.title)}&type=series`;
         if (mainMeta.imdbId) {
             queryUrl = `http://www.omdbapi.com/?apikey=84196d01&i=${mainMeta.imdbId}`;
@@ -371,63 +371,58 @@ async function processTVShowFolder(folderName) {
         console.error("High level query sequence failure: ", err.message);
     }
 
-    // 3. Recursively Scan Sub-directories to Map Existing Files
+    // --- RECONCILE AND HARVEST DISK FILES (HYBRID ROOT AND DEEP SUBFOLDER CAPABLE) ---
     const diskItems = fs.readdirSync(activeShowPath);
     let physicalFileMap = {}; 
 
     diskItems.forEach(item => {
         const itemPath = path.join(activeShowPath, item);
-        if (!fs.lstatSync(itemPath).isDirectory()) return;
+        const isDir = fs.lstatSync(itemPath).isDirectory();
 
-        const files = fs.readdirSync(itemPath);
-        files.forEach(file => {
-            if (!KEEP_EXTENSIONS.includes(path.extname(file).toLowerCase())) {
-                fs.unlinkSync(path.join(itemPath, file)); // Enforce keeping directories completely clean of tracking junk
-                return;
-            }
-            
-            const parseResults = parseEpFromFilename(file);
+        if (isDir) {
+            // Process standard subfolder configurations (e.g., Season.1/)
+            const files = fs.readdirSync(itemPath);
+            files.forEach(file => {
+                if (!KEEP_EXTENSIONS.includes(path.extname(file).toLowerCase())) {
+                    fs.unlinkSync(path.join(itemPath, file));
+                    return;
+                }
+                const parseResults = parseEpFromFilename(file);
+                if (parseResults) {
+                    const lookupKey = `${parseResults.season}-${parseResults.episode}`;
+                    physicalFileMap[lookupKey] = `series/${dotNotationTitle}/${item}/${file}`;
+                }
+            });
+        } else {
+            // FIXED: Structural support for flat root show files (e.g., Pluribus.S01/Pluribus.S01E01.mp4)
+            if (!KEEP_EXTENSIONS.includes(path.extname(item).toLowerCase())) return;
+            const parseResults = parseEpFromFilename(item);
             if (parseResults) {
                 const lookupKey = `${parseResults.season}-${parseResults.episode}`;
-                // Keep paths completely consistent with express route static resolutions
-                physicalFileMap[lookupKey] = `series/${dotNotationTitle}/${item}/${file}`;
+                
+                // Keep it cleanly matched even if assets sit at the top directory level
+                physicalFileMap[lookupKey] = `series/${dotNotationTitle}/${item}`;
             }
-        });
+        }
     });
 
-  // =========================================================================
-    // 4. DETERMINE TRUE SEASON BOUNDS & CONSTRUCT UNIFIED SCHEMA
-    // =========================================================================
-    
-    // Find the highest season number physically present on disk
     let maxPhysicalSeason = 1;
     Object.keys(physicalFileMap).forEach(key => {
         const [s] = key.split('-').map(Number);
         if (s > maxPhysicalSeason) maxPhysicalSeason = s;
     });
 
-    // Use whichever is higher: OMDb's totalSeasons count or your actual disk directories
     const finalSeasonBounds = Math.max(totalSeasons, maxPhysicalSeason);
-    
-    let fullSeriesStructure = {
-        totalSeasons: finalSeasonBounds.toString(),
-        seasons: {}
-    };
+    let fullSeriesStructure = { totalSeasons: finalSeasonBounds.toString(), seasons: {} };
 
     for (let s = 1; s <= finalSeasonBounds; s++) {
-        fullSeriesStructure.seasons[s] = {
-            seasonNumber: s.toString(),
-            episodes: []
-        };
-
-        // Create a tracking set for this specific pass
+        fullSeriesStructure.seasons[s] = { seasonNumber: s.toString(), episodes: [] };
         const apiMatchedNumbers = new Set();
 
         try {
             console.log(`   📡 Fetching metadata manifest for Season ${s}...`);
             const seasonRes = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&Season=${s}`);
             
-            // If the API knows about this season and has episode records, ingest them
             if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
                 for (const ep of seasonRes.data.Episodes) {
                     const epNum = parseInt(ep.Episode, 10);
@@ -452,13 +447,8 @@ async function processTVShowFolder(folderName) {
             console.log(`   ⚠️ Network bottleneck or unlisted index for Season ${s}. Relying entirely on disk inventory.`);
         }
 
-        // =========================================================================
-        // UNCONDITIONAL DISK RECONCILIATION LAYER (Runs for every season)
-        // =========================================================================
         Object.keys(physicalFileMap).forEach(key => {
             const [discSeason, discEpisode] = key.split('-').map(Number);
-            
-            // If it's on your drive for this season, but was missing/omitted from the API response
             if (discSeason === s && !apiMatchedNumbers.has(discEpisode)) {
                 console.log(`   🔧 Injecting local physical track asset: [S${s}E${discEpisode}]`);
                 fullSeriesStructure.seasons[s].episodes.push({
@@ -473,11 +463,9 @@ async function processTVShowFolder(folderName) {
             }
         });
 
-        // Ensure everything is perfectly sorted numerically before saving
         fullSeriesStructure.seasons[s].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
     }
 
-    // Write final layout configuration track cleanly to disk storage
     fs.writeFileSync(path.join(activeShowPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 4));
     console.log(`   💾 Complete structural configuration profile updated: series.json`);
 }
