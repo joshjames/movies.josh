@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joshflix Admin Control Unit</title>
+    <style>
+        body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; }
+        .show-row { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .row-header { font-weight: bold; font-size: 1.1rem; color: #38bdf8; display: flex; justify-content: space-between; }
+        .meta-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group.full-width { grid-column: 1 / -1; }
+        label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
+        input, textarea { background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; font-family: inherit; }
+        button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; align-self: flex-end; }
+        button:hover { background: #1d4ed8; }
+        .badge { background: #e50914; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ Joshflix Library Override Desk</h1>
+        <div id="shows-list">Loading localized show catalogs...</div>
+    </div>
+
+    <script>
+        async function loadShows() {
+            try {
+                const res = await fetch('/api/admin/series-metadata');
+                const data = await res.json();
+                const container = document.getElementById('shows-list');
+
+                if (data.shows.length === 0) {
+                    container.innerHTML = "<p>No active television series structures discovered on internal storage volumes.</p>";
+                    return;
+                }
+
+                container.innerHTML = data.shows.map(show => `
+                    <div class="show-row" id="row-${show.folder}">
+                        <div class="row-header">
+                            <span>Folder: /series/${show.folder}</span>
+                            ${!show.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
+                        </div>
+                        <div class="meta-form">
+                            <div class="form-group">
+                                <label>Display Title</label>
+                                <input type="text" id="title-${show.folder}" value="${show.metadata.title || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Release Year(s)</label>
+                                <input type="text" id="year-${show.folder}" value="${show.metadata.year || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Genre tags</label>
+                                <input type="text" id="genre-${show.folder}" value="${show.metadata.genre || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Manual OMDb/IMDb ID Lookup Link Override</label>
+                                <input type="text" id="imdbId-${show.folder}" placeholder="e.g., tt0123456" value="${show.metadata.imdbId || ''}">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Plot Synopsis Outline</label>
+                                <textarea id="plot-${show.folder}" rows="2">${show.metadata.plot || ''}</textarea>
+                            </div>
+                            <button onclick="saveOverride('${show.folder}')">Save Changes</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error("Admin dashboard extraction crash:", err);
+            }
+        }
+
+        async function saveOverride(folder) {
+            const payload = {
+                folder,
+                title: document.getElementById(`title-${folder}`).value,
+                year: document.getElementById(`year-${folder}`).value,
+                genre: document.getElementById(`genre-${folder}`).value,
+                imdbId: document.getElementById(`imdbId-${folder}`).value,
+                plot: document.getElementById(`plot-${folder}`).value
+            };
+
+            try {
+                const res = await fetch('/api/admin/override-metadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert("✅ System parameters synchronized down to local configuration frames successfully.");
+                    loadShows();
+                } else {
+                    alert("❌ Override failure: " + result.error);
+                }
+            } catch (err) {
+                alert("❌ Critical transport loop disruption.");
+            }
+        }
+
+        loadShows();
+    </script>
+</body>
+</html>

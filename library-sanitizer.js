@@ -340,40 +340,35 @@ async function processTVShowFolder(folderName) {
     const coverPath = path.join(activeShowPath, 'cover.jpg');
 
     // 2. Resolve High Level Series Profiles 
-    let mainMeta = { title: cleanTitle, year: '', plot: '', genre: '', contentType: 'series' };
+    let mainMeta = { title: cleanTitle, year: '', plot: '', genre: '', contentType: 'series', imdbId: '' };
     let totalSeasons = 1;
 
     try {
-        if (!fs.existsSync(metadataPath)) {
-            const showRes = await axios.get(`${API_URL}${encodeURIComponent(cleanTitle)}&type=series`);
-            if (showRes.data && showRes.data.Response === "True") {
-                mainMeta.title = showRes.data.Title;
-                mainMeta.year = showRes.data.Year;
-                mainMeta.plot = showRes.data.Plot;
-                mainMeta.genre = showRes.data.Genre;
-                mainMeta.contentType = 'series';
-                totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
-
-                fs.writeFileSync(metadataPath, JSON.stringify(mainMeta, null, 4));
-                console.log(`   📝 High Level TV Metadata Written: ${mainMeta.title}`);
-
-                if (!fs.existsSync(coverPath) && showRes.data.Poster && showRes.data.Poster !== "N/A") {
-                    await downloadCover(showRes.data.Poster, coverPath);
-                }
-            } else {
-                console.log(`   ⚠️ OMDb High Level Miss for Series. Writing fallback profile framework wrapper.`);
-                fs.writeFileSync(metadataPath, JSON.stringify(mainMeta, null, 4));
-            }
-        } else {
+        if (fs.existsSync(metadataPath)) {
             const existingMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
             mainMeta = { ...mainMeta, ...existingMeta };
-            
-            // Re-fetch total seasons bounds count context from API dynamically to verify completeness
-            const countCheck = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&type=series`);
-            totalSeasons = parseInt(countCheck.data.totalSeasons, 10) || 1;
         }
-    } catch (err) {
-        console.error(`   ❌ Failed querying high level show parameters:`, err.message);
+
+        // CHOOSE OPTIMAL QUERY TARGET BASED ON DASHBOARD SPECIFIED CODES
+        let queryUrl = `${API_URL}${encodeURIComponent(mainMeta.title)}&type=series`;
+        if (mainMeta.imdbId) {
+            queryUrl = `http://www.omdbapi.com/?apikey=84196d01&i=${mainMeta.imdbId}`;
+        }
+
+        const showRes = await axios.get(queryUrl);
+        if (showRes.data && showRes.data.Response === "True") {
+            mainMeta.title = showRes.data.Title;
+            mainMeta.year = showRes.data.Year;
+            mainMeta.plot = showRes.data.Plot;
+            mainMeta.genre = showRes.data.Genre;
+            mainMeta.contentType = 'series';
+            totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
+
+            fs.writeFileSync(metadataPath, JSON.stringify(mainMeta, null, 4));
+            console.log(`   📝 High Level TV Metadata Synchronized: ${mainMeta.title}`);
+        }
+    } catch(err) {
+        console.error("High level query sequence failure: ", err.message);
     }
 
     // 3. Recursively Scan Sub-directories to Map Existing Files

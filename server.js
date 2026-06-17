@@ -173,6 +173,60 @@ app.get('/api/movies/:id', (req, res) => {
     res.json(streamPayload);
 });
 
+// GET: Fetch raw metadata states for manual curation workspace
+app.get('/api/admin/series-metadata', (req, res) => {
+    try {
+        const seriesDir = path.join(MOVIES_DIR, 'series');
+        if (!fs.existsSync(seriesDir)) return res.json({ success: true, shows: [] });
+
+        const shows = fs.readdirSync(seriesDir).map(folder => {
+            const showPath = path.join(seriesDir, folder);
+            if (!fs.lstatSync(showPath).isDirectory()) return null;
+
+            const metaPath = path.join(showPath, 'metadata.json');
+            let meta = { title: folder, year: '', plot: '', genre: '', contentType: 'series' };
+            
+            if (fs.existsSync(metaPath)) {
+                meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            }
+
+            return { folder, metadata: meta };
+        }).filter(Boolean);
+
+        res.json({ success: true, shows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: Force manual override mapping adjustments
+app.post('/api/admin/override-metadata', (req, res) => {
+    try {
+        const { folder, title, year, plot, genre, imdbId } = req.body;
+        const targetPath = path.join(MOVIES_DIR, 'series', folder);
+
+        if (!fs.existsSync(targetPath)) {
+            return res.status(404).json({ success: false, error: "Target directory configuration missing." });
+        }
+
+        const metadataPath = path.join(targetPath, 'metadata.json');
+        const updatedMeta = {
+            title: title || folder,
+            year: year || '',
+            plot: plot || '',
+            genre: genre || '',
+            contentType: 'series',
+            imdbId: imdbId || ''
+        };
+
+        fs.writeFileSync(metadataPath, JSON.stringify(updatedMeta, null, 4));
+        console.log(`🔧 [ADMIN OVERRIDE] Saved metadata manually for: ${folder}`);
+        
+        res.json({ success: true, message: "Metadata overrides saved successfully." });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 app.get('/api/series/:showFolder', (req, res) => {
     try {
