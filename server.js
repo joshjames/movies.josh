@@ -17,22 +17,29 @@ app.get('/api/admin/logs/stream', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    // Instruct Cloudflare not to buffer the stream chunks
+    res.setHeader('X-Accel-Buffering', 'no'); 
     res.flushHeaders();
 
-    // First, dump existing history to the screen immediately on join
+    // 1. Flush historical data arrays right away
     logger.getHistory().forEach(line => {
         res.write(`data: ${line}\n\n`);
     });
 
-    // Listen for new updates coming down the internal pipeline
+    // 2. Listen for active logging calls
     const logListener = (line) => {
         res.write(`data: ${line}\n\n`);
     };
-
     logger.logStream.on('line', logListener);
 
-    // Handle abrupt browser disconnects cleanly
+    // 3. FIXED: Keep-Alive Heartbeat Interval Loop to block Cloudflare 524 timeouts
+    const keepAliveInterval = setInterval(() => {
+        res.write(': keepalive\n\n'); 
+    }, 30000); // Pulse every 30 seconds
+
+    // Clean up connections on browser tab close
     req.on('close', () => {
+        clearInterval(keepAliveInterval);
         logger.logStream.off('line', logListener);
     });
 });
