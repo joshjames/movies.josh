@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const logger = require('./logger');
 
 // Automatically read .env file from the project root directory
 require('dotenv').config();
@@ -12,9 +13,9 @@ const MOVIES_DIR = fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/mo
 const SERIES_DIR = path.join(MOVIES_DIR, 'series');
 const MANIFEST_PATH = path.join(MOVIES_DIR, '.joshflix-manifest.json'); // FIXED: Defined tracking target globally
 
-console.log(`\n==================================================`);
-console.log(`🚀 Target directory initialized at state path: ${MOVIES_DIR}`);
-console.log(`==================================================\n`);
+logger.log(`\n==================================================`);
+logger.log(`🚀 Target directory initialized at state path: ${MOVIES_DIR}`);
+logger.log(`==================================================\n`);
 
 const API_URL = 'http://www.omdbapi.com/?apikey=84196d01&t=';
 const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY;
@@ -30,7 +31,7 @@ function loadManifest() {
         try {
             return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
         } catch (e) {
-            console.log("⚠️ Manifest tracking file corrupted. Initializing fresh index state.");
+            logger.log("⚠️ Manifest tracking file corrupted. Initializing fresh index state.");
         }
     }
     return { lastRun: null, folders: {} };
@@ -66,7 +67,7 @@ async function fetchWithRetry(url, options, retries = 3, delay = 1500) {
         const is429 = err.response && err.response.status === 429;
         
         if ((is5xx || is429) && retries > 0) {
-            console.log(`   ⚠️ API pressure encountered (${err.response.status}). Retrying in ${delay}ms... (${retries} attempts left)`);
+            logger.log(`   ⚠️ API pressure encountered (${err.response.status}). Retrying in ${delay}ms... (${retries} attempts left)`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return fetchWithRetry(url, options, retries - 1, delay * 2);
         }
@@ -86,7 +87,7 @@ async function autoFetchSubtitlesSubliminal(targetDirectory) {
     }
 
     try {
-        console.log(`   📡 Invoking Subliminal sync sweep on target folder...`);
+        logger.log(`   📡 Invoking Subliminal sync sweep on target folder...`);
 
         // Force subliminal to name the download precisely "English.srt" using the '-s' flag 
         // pointing explicitly to your custom configuration file profile.
@@ -106,11 +107,11 @@ async function autoFetchSubtitlesSubliminal(targetDirectory) {
         
         if (downloadedSrt) {
             fs.renameSync(path.join(targetDirectory, downloadedSrt), targetSrtPath);
-            console.log(`   🎯 Subliminal tracked asset written clean ➡️ English.srt`);
+            logger.log(`   🎯 Subliminal tracked asset written clean ➡️ English.srt`);
         } else if (fs.existsSync(targetSrtPath)) {
-            console.log(`   🎯 Subliminal tracked asset written clean natively.`);
+            logger.log(`   🎯 Subliminal tracked asset written clean natively.`);
         } else {
-            console.log(`   ⚠️ Subliminal completed pass, but no high-scoring subtitle match was found.`);
+            logger.log(`   ⚠️ Subliminal completed pass, but no high-scoring subtitle match was found.`);
         }
 
     } catch (err) {
@@ -165,7 +166,7 @@ function deleteFolderRecursive(directoryPath) {
 // HIGH-LEVEL DELTA TUNED ORCHESTRATION PIPELINE
 // =========================================================================
 async function sanitizeLibrary() {
-    console.log("🧹 Starting High-Performance Delta Sanitizer...\n");
+    logger.log("🧹 Starting High-Performance Delta Sanitizer...\n");
     
     if (!fs.existsSync(MOVIES_DIR)) {
         console.error(`❌ Error: Main directory [${MOVIES_DIR}] not found.`);
@@ -194,7 +195,7 @@ async function sanitizeLibrary() {
             continue; 
         }
 
-        console.log(`\n🎬 [MOVIE DELTA DETECTED] Processing: "${folder}"`);
+        logger.log(`\n🎬 [MOVIE DELTA DETECTED] Processing: "${folder}"`);
         await processMovieFolder(folder);
         processedCount++;
     }
@@ -216,7 +217,7 @@ async function sanitizeLibrary() {
                 continue;
             }
 
-            console.log(`\n📺 [SERIES DELTA DETECTED] Processing: "${showFolder}"`);
+            logger.log(`\n📺 [SERIES DELTA DETECTED] Processing: "${showFolder}"`);
             await processTVShowFolder(showFolder);
             processedCount++;
         }
@@ -225,11 +226,11 @@ async function sanitizeLibrary() {
     stateManifest.folders = currentRunFolders;
     saveManifest(stateManifest);
 
-    console.log(`\n==================================================`);
-    console.log(`🏁 SANITIZER PROCESSING CYCLE FINALIZED`);
-    console.log(`⚡ Skipped (No local modifications): ${skippedCount}`);
-    console.log(`🔧 Processed (Forced Sync Maps):     ${processedCount}`);
-    console.log(`==================================================\n`);
+    logger.log(`\n==================================================`);
+    logger.log(`🏁 SANITIZER PROCESSING CYCLE FINALIZED`);
+    logger.log(`⚡ Skipped (No local modifications): ${skippedCount}`);
+    logger.log(`🔧 Processed (Forced Sync Maps):     ${processedCount}`);
+    logger.log(`==================================================\n`);
 }
 
 /**
@@ -260,7 +261,7 @@ async function processMovieFolder(folderName) {
         const targetFolderPath = path.join(MOVIES_DIR, localStandardFolderName);
         if (!fs.existsSync(targetFolderPath)) {
             fs.renameSync(currentFolderPath, targetFolderPath);
-            console.log(`   🗂️  Folder Aligned: [${folderName}] ➡️ [${localStandardFolderName}]`);
+            logger.log(`   🗂️  Folder Aligned: [${folderName}] ➡️ [${localStandardFolderName}]`);
             activeFolderPath = targetFolderPath; 
         } else {
             activeFolderPath = targetFolderPath;
@@ -293,13 +294,13 @@ async function processMovieFolder(folderName) {
                     contentType: 'movie'
                 };
                 fs.writeFileSync(metadataPath, JSON.stringify(metaPayload, null, 4));
-                console.log(`   📝 Metadata Written: ${data.Title}`);
+                logger.log(`   📝 Metadata Written: ${data.Title}`);
 
                 if (!fs.existsSync(coverPath) && data.Poster && data.Poster !== "N/A") {
                     await downloadCover(data.Poster, coverPath);
                 }
             } else {
-                console.log(`   ⚠️ OMDb Miss. Creating manual skeleton fallback frames.`);
+                logger.log(`   ⚠️ OMDb Miss. Creating manual skeleton fallback frames.`);
                 const fallback = { title: cleanTitle, year: officialYear, plot: "Local track description context.", runtime: "N/A", genre: "Media Track", rating: "N/A", contentType: 'movie' };
                 fs.writeFileSync(metadataPath, JSON.stringify(fallback, null, 4));
             }
@@ -334,7 +335,7 @@ async function processTVShowFolder(folderName) {
         const targetShowPath = path.join(SERIES_DIR, dotNotationTitle);
         if (!fs.existsSync(targetShowPath)) {
             fs.renameSync(currentShowPath, targetShowPath);
-            console.log(`   🗂️  Show Root Aligned: [${folderName}] ➡️ [${dotNotationTitle}]`);
+            logger.log(`   🗂️  Show Root Aligned: [${folderName}] ➡️ [${dotNotationTitle}]`);
             activeShowPath = targetShowPath;
         } else {
             activeShowPath = targetShowPath;
@@ -368,7 +369,7 @@ async function processTVShowFolder(folderName) {
             totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
 
             fs.writeFileSync(metadataPath, JSON.stringify(mainMeta, null, 4));
-            console.log(`   📝 High Level TV Metadata Synchronized: ${mainMeta.title}`);
+            logger.log(`   📝 High Level TV Metadata Synchronized: ${mainMeta.title}`);
         }
     } catch(err) {
         console.error("High level query sequence failure: ", err.message);
@@ -423,7 +424,7 @@ async function processTVShowFolder(folderName) {
         const apiMatchedNumbers = new Set();
 
         try {
-            console.log(`   📡 Fetching metadata manifest for Season ${s}...`);
+            logger.log(`   📡 Fetching metadata manifest for Season ${s}...`);
             const seasonRes = await axios.get(`${API_URL}${encodeURIComponent(mainMeta.title)}&Season=${s}`);
             
             if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
@@ -447,13 +448,13 @@ async function processTVShowFolder(folderName) {
                 }
             }
         } catch (err) {
-            console.log(`   ⚠️ Network bottleneck or unlisted index for Season ${s}. Relying entirely on disk inventory.`);
+            logger.log(`   ⚠️ Network bottleneck or unlisted index for Season ${s}. Relying entirely on disk inventory.`);
         }
 
         Object.keys(physicalFileMap).forEach(key => {
             const [discSeason, discEpisode] = key.split('-').map(Number);
             if (discSeason === s && !apiMatchedNumbers.has(discEpisode)) {
-                console.log(`   🔧 Injecting local physical track asset: [S${s}E${discEpisode}]`);
+                logger.log(`   🔧 Injecting local physical track asset: [S${s}E${discEpisode}]`);
                 fullSeriesStructure.seasons[s].episodes.push({
                     episodeNumber: discEpisode,
                     title: `Episode ${discEpisode} (Local Source)`,
@@ -470,7 +471,7 @@ async function processTVShowFolder(folderName) {
     }
 
     fs.writeFileSync(path.join(activeShowPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 4));
-    console.log(`   💾 Complete structural configuration profile updated: series.json`);
+    logger.log(`   💾 Complete structural configuration profile updated: series.json`);
 }
 
 sanitizeLibrary();

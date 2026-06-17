@@ -10,13 +10,56 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { exec, spawn } = require('child_process');
 
+const logger = require('./logger');
+
+// GET: Stream Live Real-Time Logs straight to Admin UI via SSE
+app.get('/api/admin/logs/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // First, dump existing history to the screen immediately on join
+    logger.getHistory().forEach(line => {
+        res.write(`data: ${line}\n\n`);
+    });
+
+    // Listen for new updates coming down the internal pipeline
+    const logListener = (line) => {
+        res.write(`data: ${line}\n\n`);
+    };
+
+    logger.logStream.on('line', logListener);
+
+    // Handle abrupt browser disconnects cleanly
+    req.on('close', () => {
+        logger.logStream.off('line', logListener);
+    });
+});
+
+// POST: Let the admin trigger the sanitizer manually from the web UI
+app.post('/api/admin/sanitizer/run', async (req, res) => {
+    res.json({ success: true, message: "Sanitizer execution sequence triggered." });
+    
+    // Run asynchronously in the background so it doesn't block the HTTP request
+    try {
+        const { sanitizeLibrary } = require('./library-sanitizer');
+        await sanitizeLibrary();
+    } catch (err) {
+        logger.log(`Critical background processing fault: ${err.message}`, 'error');
+    }
+});
+
 if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
 }
 
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
+
+
 
 
 // =========================================================================
