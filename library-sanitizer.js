@@ -474,4 +474,7 @@ async function processTVShowFolder(folderName) {
     logger.log(`   💾 Complete structural configuration profile updated: series.json`);
 }
 
-sanitizeLibrary();
+//sanitizeLibrary();
+module.exports = {
+    sanitizeLibrary
+};

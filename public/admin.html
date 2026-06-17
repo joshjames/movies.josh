@@ -18,73 +18,68 @@
         button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; align-self: flex-end; }
         button:hover { background: #1d4ed8; }
         .badge { background: #e50914; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+        
+        /* Integrated Stream Monitor Styles */
+        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.85rem; padding: 14px; border-radius: 6px; height: 300px; overflow-y: auto; margin-bottom: 24px; color: #38bdf8; white-space: pre-wrap; }
+        .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; }
+        .log-error { color: #f87171; }
+        .log-warn { color: #fbbf24; }
+        .controls { margin-top: 16px; margin-bottom: 16px; display: flex; gap: 12px; }
+        .btn-trigger { background: #10b981; color: white; }
+        .btn-trigger:hover { background: #059669; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🛠️ Joshflix Library Override Desk</h1>
+        
+        <div class="controls">
+            <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
+        </div>
+
+        <h3>🖥️ Live Application Stream Monitor</h3>
+        <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
+
         <div id="shows-list">Loading localized show catalogs...</div>
     </div>
 
-    <style>
-    .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.85rem; padding: 14px; border-radius: 6px; height: 300px; overflow-y: auto; margin-bottom: 24px; color: #38bdf8; white-space: pre-wrap; }
-    .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; }
-    .log-error { color: #f87171; }
-    .log-warn { color: #fbbf24; }
-    .controls { margin-bottom: 16px; display: flex; gap: 12px; }
-    .btn-trigger { background: #10b981; color: white; }
-    .btn-trigger:hover { background: #059669; }
-</style>
-
-<div class="controls">
-    <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
-</div>
-
-<h3>🖥️ Live Application Stream Monitor</h3>
-<div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
-
-<script>
-    function connectToLogStream() {
-        const consoleTerminal = document.getElementById('terminal-stream');
-        consoleTerminal.innerHTML = '';
-
-        const eventSource = new EventSource('/api/admin/logs/stream');
-
-        eventSource.onmessage = function(event) {
-            const line = event.data;
-            const lineEl = document.createElement('div');
-            lineEl.className = 'log-line';
-            
-            if (line.includes('[ERROR]')) lineEl.className += ' log-error';
-            if (line.includes('[WARN]')) lineEl.className += ' log-warn';
-            
-            lineEl.textContent = line;
-            consoleTerminal.appendChild(lineEl);
-
-            // Keep scroll pinned to bottom automatically as log lines drop in
-            consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
-        };
-
-        eventSource.onerror = function() {
-            consoleTerminal.innerHTML += `<div class="log-error">[SYSTEM] Connection lost. Re-establishing secure transport socket...</div>`;
-        };
-    }
-
-    async function triggerSanitizer() {
-        try {
-            const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
-            const data = await res.json();
-            if(data.success) alert("🚀 Sanitizer execution engine launched in background context.");
-        } catch(e) {
-            alert("Transport pipeline failed invocation.");
-        }
-    }
-
-    // Call this along with your previous loadShows initialization routines
-    connectToLogStream();
-</script>
-
     <script>
+        function connectToLogStream() {
+            const consoleTerminal = document.getElementById('terminal-stream');
+            consoleTerminal.innerHTML = '';
+
+            const eventSource = new EventSource('/api/admin/logs/stream');
+
+            eventSource.onmessage = function(event) {
+                const line = event.data;
+                const lineEl = document.createElement('div');
+                lineEl.className = 'log-line';
+                
+                if (line.includes('[ERROR]')) lineEl.className += ' log-error';
+                if (line.includes('[WARN]')) lineEl.className += ' log-warn';
+                
+                lineEl.textContent = line;
+                consoleTerminal.appendChild(lineEl);
+                consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
+            };
+
+            eventSource.onerror = function() {
+                consoleTerminal.innerHTML = `<div class="log-error">[SYSTEM] Connection lost. Re-establishing secure transport socket...</div>`;
+            };
+        }
+
+        async function triggerSanitizer() {
+            try {
+                const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
+                const data = await res.json();
+                if(data.success) {
+                    console.log("Sanitizer execution signal acknowledged successfully.");
+                }
+            } catch(e) {
+                console.error("Transport pipeline failed invocation:", e);
+            }
+        }
+
         async function loadShows() {
             try {
                 const res = await fetch('/api/admin/series-metadata');
@@ -150,7 +145,6 @@
                 });
                 const result = await res.json();
                 if (result.success) {
-                    alert("✅ System parameters synchronized down to local configuration frames successfully.");
                     loadShows();
                 } else {
                     alert("❌ Override failure: " + result.error);
@@ -160,6 +154,8 @@
             }
         }
 
+        // Run initializations concurrently inside structural window scope
+        connectToLogStream();
         loadShows();
     </script>
 </body>

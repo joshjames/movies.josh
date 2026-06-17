@@ -41,8 +41,8 @@ app.get('/api/admin/logs/stream', (req, res) => {
 app.post('/api/admin/sanitizer/run', async (req, res) => {
     res.json({ success: true, message: "Sanitizer execution sequence triggered." });
     
-    // Run asynchronously in the background so it doesn't block the HTTP request
     try {
+        // Explicitly destructure the exported function out of the module object
         const { sanitizeLibrary } = require('./library-sanitizer');
         await sanitizeLibrary();
     } catch (err) {
