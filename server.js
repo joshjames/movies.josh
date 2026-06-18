@@ -9,6 +9,7 @@ const MOVIES_DIR = path.join(__dirname, 'movies');
 const axios = require('axios');
 const FormData = require('form-data');
 const { exec, spawn } = require('child_process');
+const fsPromises = fs.promises;
 
 const logger = require('./logger');
 
@@ -17,6 +18,7 @@ if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
 }
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '20mb' }));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
