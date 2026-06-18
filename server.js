@@ -38,6 +38,7 @@ app.get('/api/admin/logs/stream', (req, res) => {
     logger.getHistory().forEach(line => {
         res.write(`data: ${line}\n\n`);
     });
+    logger.log('📡 [SSE] Admin log stream initialized. Listening for live updates...', 'info');
 
     // 2. Listen for active logging calls
     const logListener = (line) => {
@@ -112,7 +113,7 @@ app.get('/api/eztv/browse', async (req, res) => {
         // Call the raw EZTV endpoint (limit maxes out at 100)
         const upstreamUrl = `https://eztv.wf/api/get-torrents?limit=100&page=${page}`;
         const response = await axios.get(upstreamUrl, { timeout: 8000 });
-
+        logger.log(`📡 [EZTV] Fetched page ${page} from upstream index. Total torrents: ${response.data.torrents ? response.data.torrents.length : 0}`, 'info');
         if (!response.data || !response.data.torrents) {
             return res.json({ success: true, torrents: [] });
         }
