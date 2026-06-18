@@ -103,6 +103,61 @@ app.post('/api/admin/upload-poster', async (req, res) => {
     }
 });
 
+app.get('/api/eztv/browse', async (req, res) => {
+    try {
+        const page = req.query.page || 1;
+        const queryTerm = req.query.query ? req.query.query.toLowerCase().trim() : '';
+        const packsOnly = req.query.packsOnly === 'true';
+
+        // Call the raw EZTV endpoint (limit maxes out at 100)
+        const upstreamUrl = `https://eztv.wf/api/get-torrents?limit=100&page=${page}`;
+        const response = await axios.get(upstreamUrl, { timeout: 8000 });
+
+        if (!response.data || !response.data.torrents) {
+            return res.json({ success: true, torrents: [] });
+        }
+
+        let torrents = response.data.torrents;
+
+        // 1. Filter out by search query term if provided
+        if (queryTerm) {
+            torrents = torrents.filter(t => t.title.toLowerCase().includes(queryTerm));
+        }
+
+        // 2. Filter out single episodes if "Packs Only" mode is flagged
+        if (packsOnly) {
+            const packRegex = /(season\s*pack|complete|s\d{2}\s*complete|seasons?\s*\d+\s*-\s*\d+|t[-_.]?pack|\[pack\])/i;
+            torrents = torrents.filter(t => packRegex.test(t.title));
+        }
+
+        // 3. Normalize the payload structures to fit your UI cards easily
+        const normalizedResults = torrents.map(t => {
+            // Reconstruct the magnet if it isn't completely structured or fallback cleanly
+            const baseMagnet = t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title)}`;
+            
+            // Format bytes to a human readable gigabyte string
+            const sizeInGB = t.size_bytes ? (t.size_bytes / (1024 ** 3)).toFixed(2) + ' GB' : 'N/A';
+
+            return {
+                title: t.title,
+                hash: t.hash,
+                size: sizeInGB,
+                seeds: t.seeds || 0,
+                peers: t.peers || 0,
+                magnet: baseMagnet,
+                // EZTV doesn't always serve covers inline, grab their native fallback asset format
+                cover: t.large_screenshot || t.small_screenshot || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">TV Pack</text></svg>'
+            };
+        });
+
+        res.json({ success: true, torrents: normalizedResults });
+
+    } catch (err) {
+        logger.log(`EZTV catalog processing fault: ${err.message}`, 'error');
+        res.status(500).json({ success: false, error: 'Failed accessing upstream index maps.' });
+    }
+});
+
 // =========================================================================
 // HIGH-PERFORMANCE IN-MEMORY CACHE SYNC LAYER
 // =========================================================================
