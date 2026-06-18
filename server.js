@@ -12,6 +12,17 @@ const { exec, spawn } = require('child_process');
 
 const logger = require('./logger');
 
+
+if (!fs.existsSync(MOVIES_DIR)) {
+    fs.mkdirSync(MOVIES_DIR, { recursive: true });
+}
+
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/movie-assets', express.static(MOVIES_DIR));
+
+
 // GET: Stream Live Real-Time Logs straight to Admin UI via SSE
 app.get('/api/admin/logs/stream', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -71,13 +82,16 @@ app.post('/api/admin/upload-poster', async (req, res) => {
         // Target the absolute directory mapping for the specific show
         const targetDir = path.join('/app/movies', 'series', folder);
         
-        if (!fs.existsSync(targetDir)) {
+        try {
+            // Non-blocking asynchronous directory verification
+            await fsPromises.access(targetDir);
+        } catch {
             return res.status(404).json({ success: false, error: 'Target directory not found.' });
         }
 
-        // Save cleanly as poster.jpg
-        const finalPath = path.join(targetDir, 'poster.jpg');
-        fs.writeFileSync(finalPath, buffer);
+        // Save cleanly as poster.jpg using non-blocking async writes
+        const finalPath = path.join(targetDir, 'cover.jpg');
+        await fsPromises.writeFile(finalPath, buffer);
 
         logger.log(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
         res.json({ success: true, message: 'Poster written to disk.' });
@@ -86,18 +100,6 @@ app.post('/api/admin/upload-poster', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
-
-if (!fs.existsSync(MOVIES_DIR)) {
-    fs.mkdirSync(MOVIES_DIR, { recursive: true });
-}
-
-
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/movie-assets', express.static(MOVIES_DIR));
-
-
-
 
 // =========================================================================
 // HIGH-PERFORMANCE IN-MEMORY CACHE SYNC LAYER
