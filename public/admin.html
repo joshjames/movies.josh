@@ -109,7 +109,8 @@
 
                 container.innerHTML = data.shows.map(show => {
                     // Fallback to cache-busted path if asset exists or broken image logic takes over
-                    const posterPath = `/series-assets/${show.folder}/cover.jpg?t=${new Date().getTime()}`;
+                    //const posterPath = `/series-assets/${show.folder}/cover.jpg?t=${new Date().getTime()}`;
+                    const posterPath = `/movie-assets/series/${show.folder}/cover.jpg?t=${new Date().getTime()}`;
                     
                     return `
                     <div class="show-row" id="row-${show.folder}">
@@ -207,7 +208,8 @@
                 const resData = await response.json();
                 if (resData.success) {
                     const img = document.getElementById(`img-${folder}`);
-                    img.src = `/series-assets/${folder}/cover.jpg?t=${new Date().getTime()}`;
+                    //img.src = `/series-assets/${folder}/cover.jpg?t=${new Date().getTime()}`;
+                    img.src = `/movie-assets/series/${folder}/cover.jpg?t=${new Date().getTime()}`;
                     img.style.display = 'block';
                     document.getElementById(`text-${folder}`).style.display = 'none';
                 } else {
