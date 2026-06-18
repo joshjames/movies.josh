@@ -106,56 +106,81 @@ app.post('/api/admin/upload-poster', async (req, res) => {
 
 app.get('/api/eztv/browse', async (req, res) => {
     try {
-        const page = req.query.page || 1;
-        const queryTerm = req.query.query ? req.query.query.toLowerCase().trim() : '';
+        const queryTerm = req.query.query ? req.query.query.trim() : '';
         const packsOnly = req.query.packsOnly === 'true';
+        let targetImdbId = '';
+        let omdbMeta = null;
 
-        // Call the raw EZTV endpoint (limit maxes out at 100)
-        const upstreamUrl = `https://eztv.wf/api/get-torrents?limit=100&page=${page}`;
-        const response = await axios.get(upstreamUrl, { timeout: 8000 });
-        logger.log(`📡 [EZTV] Fetched page ${page} from upstream index. Total torrents: ${response.data.torrents ? response.data.torrents.length : 0}`, 'info');
-        if (!response.data || !response.data.torrents) {
+        if (!queryTerm) {
             return res.json({ success: true, torrents: [] });
         }
 
-        let torrents = response.data.torrents;
-
-        // 1. Filter out by search query term if provided
-        if (queryTerm) {
-            torrents = torrents.filter(t => t.title.toLowerCase().includes(queryTerm));
+        // Step 1: Query OMDb to translate text titles into static IMDB IDs
+        const omdbUrl = `http://www.omdbapi.com/?apikey=84196d01&s=${encodeURIComponent(queryTerm)}&type=series`;
+        const omdbRes = await axios.get(omdbUrl);
+        
+        if (omdbRes.data && omdbRes.data.Search && omdbRes.data.Search.length > 0) {
+            const match = omdbRes.data.Search[0];
+            targetImdbId = match.imdbID.replace('tt', ''); // Strip prefix
+            
+            // Fetch detailed poster meta
+            const detailRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&i=${match.imdbID}`);
+            omdbMeta = detailRes.data;
+        } else {
+            // Fallback: If OMDb has no hits, try numeric parsing or fallback
+            targetImdbId = queryTerm.startsWith('tt') ? queryTerm.replace('tt', '') : '';
         }
 
-        // 2. Filter out single episodes if "Packs Only" mode is flagged
+        if (!targetImdbId) {
+            return res.json({ success: true, torrents: [] });
+        }
+
+        // Step 2: Multi-page deep scan loop to pull all available trackers from EZTV
+        let allTorrents = [];
+        let currentPage = 1;
+        let keepScanning = true;
+
+        while (keepScanning && currentPage <= 5) { // Protect from infinite loop walls
+            const eztvUrl = `https://eztv.wf/api/get-torrents?imdb_id=${targetImdbId}&limit=100&page=${currentPage}`;
+            const eztvRes = await axios.get(eztvUrl, { timeout: 5000 });
+
+            if (eztvRes.data && eztvRes.data.torrents && eztvRes.data.torrents.length > 0) {
+                allTorrents = allTorrents.concat(eztvRes.data.torrents);
+                // If we got fewer records than the page limit, we've hit the bottom of the lake
+                if (eztvRes.data.torrents.length < 100) {
+                    keepScanning = false;
+                } else {
+                    currentPage++;
+                }
+            } else {
+                keepScanning = false;
+            }
+        }
+
+        // Step 3: Run Filters
         if (packsOnly) {
             const packRegex = /(season\s*pack|complete|s\d{2}\s*complete|seasons?\s*\d+\s*-\s*\d+|t[-_.]?pack|\[pack\])/i;
-            torrents = torrents.filter(t => packRegex.test(t.title));
+            allTorrents = allTorrents.filter(t => packRegex.test(t.title));
         }
 
-        // 3. Normalize the payload structures to fit your UI cards easily
-        const normalizedResults = torrents.map(t => {
-            // Reconstruct the magnet if it isn't completely structured or fallback cleanly
-            const baseMagnet = t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title)}`;
-            
-            // Format bytes to a human readable gigabyte string
-            const sizeInGB = t.size_bytes ? (t.size_bytes / (1024 ** 3)).toFixed(2) + ' GB' : 'N/A';
-
+        // Step 4: Map normalized payloads using high-quality OMDb cover imagery assets
+        const results = allTorrents.map(t => {
+            const sizeInGB = t.size_bytes ? (parseFloat(t.size_bytes) / (1024 ** 3)).toFixed(2) + ' GB' : 'N/A';
             return {
                 title: t.title,
-                hash: t.hash,
                 size: sizeInGB,
-                seeds: t.seeds || 0,
-                peers: t.peers || 0,
-                magnet: baseMagnet,
-                // EZTV doesn't always serve covers inline, grab their native fallback asset format
-                cover: t.large_screenshot || t.small_screenshot || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">TV Pack</text></svg>'
+                seeds: parseInt(t.seeds, 10) || 0,
+                peers: parseInt(t.peers, 10) || 0,
+                magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title)}`,
+                cover: (omdbMeta && omdbMeta.Poster && omdbMeta.Poster !== "N/A") ? omdbMeta.Poster : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>'
             };
         });
 
-        res.json({ success: true, torrents: normalizedResults });
+        res.json({ success: true, torrents: results });
 
     } catch (err) {
-        logger.log(`EZTV catalog processing fault: ${err.message}`, 'error');
-        res.status(500).json({ success: false, error: 'Failed accessing upstream index maps.' });
+        logger.log(`OMDb/EZTV Pipeline crash: ${err.message}`, 'error');
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -530,6 +555,33 @@ app.post('/api/yts/add', async (req, res) => {
         res.status(200).json({ message: "Successfully queued layout allocation pipeline records." });
     } catch (err) {
         console.error("❌ Failed forwarding payload across container interfaces:", err.message);
+        res.status(500).json({ error: "Could not communicate assignment payloads down to qBittorrent." });
+    }
+});
+
+app.post('/api/downloader/add', async (req, res) => {
+    const { magnetUrl, category } = req.body; // 'movie' or 'series'
+
+    if (!magnetUrl) {
+        return res.status(400).json({ error: "Missing targets inside structural body frames." });
+    }
+
+    try {
+        const form = new FormData();
+        form.append('urls', magnetUrl);
+        // Dynamically append the sub-folder path based on the type!
+        const targetPath = category === 'series' ? '/downloads/series' : '/downloads';
+        form.append('savepath', targetPath);
+        form.append('tags', 'movie-streamer'); 
+
+        await axios.post('http://qbittorrent:8080/api/v2/torrents/add', form, {
+            headers: form.getHeaders()
+        });
+
+        logger.log(`📥 Dispatched [${category || 'movie'}] magnet directly to qBittorrent.`);
+        res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
+    } catch (err) {
+        console.error("❌ qBittorrent forward block:", err.message);
         res.status(500).json({ error: "Could not communicate assignment payloads down to qBittorrent." });
     }
 });
