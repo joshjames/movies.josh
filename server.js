@@ -16,7 +16,7 @@ const logger = require('./logger');
 if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
 }
-
+app.use(express.urlencoded({ extended: true }));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
