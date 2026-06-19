@@ -1,8 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
-const path = require('path');
-const logger = require('./logger');
 
 const USER_BASE_DIR = path.join(__dirname, 'metadata', 'users');
 const ROSTER_FILE = path.join(USER_BASE_DIR, 'roster.json');
