@@ -5,73 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stream Server</title>
     <style>
-
-        /* Layout Alignment Wrapper Engine */
-.main-header {
-    width: 100%;
-    background: #0f172a;
-    padding: 12px 10px;
-    box-sizing: border-box;
-}
-
-.header-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between; /* Pushes Logo to Left, Button to Right cleanly */
-    align-items: center;
-    gap: 16px;
-    border-bottom: 1px solid #1e293b;
-    padding-bottom: 16px;
-}
-
-/* Precise Sizing Control for the Arched Vector SVG Asset */
-.logo-wrapper {
-    width: 160px; /* Perfectly compact on mobile/default layouts */
-    display: flex;
-    align-items: center;
-}
-
-.logo-wrapper svg {
-    width: 100%;
-    height: auto;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-}
-
-.logo-wrapper svg:hover {
-    transform: scale(1.05);
-}
-
-/* Styled Compact Header Action Controls */
-.browse-nav-btn {
-    background: #2563eb;
-    color: white;
-    text-decoration: none;
-    padding: 10px 16px;
-    border-radius: 8px;
-    font-weight: bold;
-    font-size: 0.85rem;
-    display: inline-block;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-    transition: background 0.2s ease;
-    white-space: nowrap;
-}
-
-.browse-nav-btn:hover {
-    background: #1d4ed8;
-}
-
-/* Tablet/Desktop expansion sizing overrides */
-@media(min-width: 640px) {
-    body { padding: 20px; }
-    .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
-    .main-header { padding: 20px 0; }
-    .logo-wrapper { width: 220px; } /* Scales up beautifully to look crisp on widescreen displays */
-    .browse-nav-btn { padding: 12px 24px; font-size: 0.95rem; }
-}
-
-
+        * { box-sizing: border-box; }
+        
         body { 
             background: #0f172a; 
             color: #f8fafc; 
@@ -79,21 +14,103 @@
             margin: 0; 
             padding: 10px; 
         }
-        h1 { 
-            text-align: center; 
-            color: #f1f5f9; 
-            font-size: 1.8rem;
-            margin: 20px 0;
+
+        /* Layout Alignment Wrapper Engine */
+        .main-header {
+            width: 100%;
+            background: #0f172a;
+            padding: 12px 10px;
         }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 16px;
+        }
+
+        /* Precise Sizing Control for the Arched Vector SVG Asset */
+        .logo-wrapper {
+            width: 160px; 
+            display: flex;
+            align-items: center;
+        }
+
+        .logo-wrapper svg {
+            width: 100%;
+            height: auto;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .logo-wrapper svg:hover {
+            transform: scale(1.05);
+        }
+
+        /* Center Section: Session Meta Information Module */
+        .profile-controls {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .welcome-msg {
+            color: #94a3b8; 
+            font-size: 0.85rem; 
+            font-weight: 500;
+        }
+
+        .logout-btn {
+            background: rgba(229, 9, 20, 0.1); 
+            border: 1px solid rgba(229, 9, 20, 0.3); 
+            color: #f87171; 
+            text-decoration: none; 
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            font-size: 0.8rem; 
+            font-weight: 600; 
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .logout-btn:hover {
+            background: rgba(229, 9, 20, 0.2);
+            border-color: rgba(229, 9, 20, 0.5);
+        }
+
+        /* Right Section: Navigation Controls */
+        .browse-nav-btn {
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            display: inline-block;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: background 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .browse-nav-btn:hover {
+            background: #1d4ed8;
+        }
+
+        /* Main Content Media Grid Layout */
         .grid { 
             display: grid; 
-            /* Responsive layout: fluid scaling columns based on device boundaries */
             grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
             gap: 16px; 
             padding: 10px; 
             max-width: 1200px;
-            margin: 0 auto;
+            margin: 20px auto;
         }
+
         .card { 
             background: #1e293b; 
             border-radius: 12px; 
@@ -106,28 +123,33 @@
             flex-direction: column;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         }
+
         .card:hover { 
             transform: translateY(-4px); 
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
         }
+
         .cover-wrapper {
             position: relative;
             width: 100%;
             aspect-ratio: 2 / 3;
             background: #020617;
         }
+
         .card img { 
             width: 100%; 
             height: 100%; 
             object-fit: cover; 
             display: block;
         }
+
         .card-content {
             padding: 12px;
             display: flex;
             flex-direction: column;
             flex-grow: 1;
         }
+
         .card .title { 
             font-size: 0.95rem;
             font-weight: bold; 
@@ -135,6 +157,7 @@
             color: #f1f5f9;
             margin-bottom: 4px;
         }
+
         .card .meta-line {
             font-size: 0.8rem;
             color: #94a3b8;
@@ -144,115 +167,100 @@
         @media(min-width: 640px) {
             body { padding: 20px; }
             .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
-            h1 { font-size: 2.5rem; }
+            .main-header { padding: 20px 0; }
+            .logo-wrapper { width: 220px; } 
+            .welcome-msg { font-size: 0.9rem; }
+            .browse-nav-btn { padding: 12px 24px; font-size: 0.95rem; }
         }
     </style>
 </head>
 <body>
 
     <header class="main-header">
-    <div class="header-content">
-        <div class="logo-wrapper">
-            <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
-                    <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
-                        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
-                    </filter>
-                </defs>
-                <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                      font-size="52" 
-                      font-weight="900" 
-                      letter-spacing="4" 
-                      fill="#e50914" 
-                      filter="url(#cinematicGlow)">
-                    <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
-                        JOSHFLIX
-                    </textPath>
-                </text>
-            </svg>
+        <div class="header-content">
+            <div class="logo-wrapper" onclick="window.location.reload();">
+                <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
+                        <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
+                            <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
+                        </filter>
+                    </defs>
+                    <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+                          font-size="52" 
+                          font-weight="900" 
+                          letter-spacing="4" 
+                          fill="#e50914" 
+                          filter="url(#cinematicGlow)">
+                        <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
+                            JOSHFLIX
+                        </textPath>
+                    </text>
+                </svg>
+            </div>
+
+            <div class="profile-controls">
+                <span id="welcome-user" class="welcome-msg">Cinema Active</span>
+                <a href="/api/auth/logout" class="logout-btn">Switch Profile ⎋</a>
+            </div>
+
+            <div class="nav-actions">
+                <a href="/browse.html" class="browse-nav-btn">🔍 Browse Catalog</a>
+            </div>
         </div>
-
-        <div class="nav-header" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; background: #0f172a; border-bottom: 1px solid #1e293b;">
-    <div class="logo" style="font-size: 1.5rem; font-weight: bold; color: #e50914;">Joshflix</div>
-    
-    <div class="profile-controls" style="display: flex; align-items: center; gap: 16px;">
-        <span id="welcome-user" style="color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Cinema Active</span>
-        <a href="/api/auth/logout" class="logout-btn" style="background: rgba(229, 9, 20, 0.1); border: 1px solid rgba(229, 9, 20, 0.4); color: #f87171; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; transition: all 0.2s;">
-            Switch Profile ⎋
-        </a>
-    </div>
-</div>
-
-<script>
-    // Optional client-side polish: Fetch active metadata profile configuration details on page load
-    async function hydrateUserProfileHeader() {
-        try {
-            const res = await fetch('/api/auth/me');
-            const data = await res.json();
-            if (data.loggedIn) {
-                // Capitalize first character of username dynamically
-                const formattedName = data.username.charAt(0).toUpperCase() + data.username.slice(1);
-                document.getElementById('welcome-user').innerText = `🍿 Operator: ${formattedName}`;
-            }
-        } catch (e) {
-            console.error("Profile name tracking sync lost.");
-        }
-    }
-    
-    // Execute profile verification when page context completes rendering
-    document.addEventListener('DOMContentLoaded', hydrateUserProfileHeader);
-</script>
-
-        <div class="nav-actions">
-            <a href="/browse.html" class="browse-nav-btn">
-                🔍 Browse Catalog
-            </a>
-        </div>
-    </div>
-</header>
+    </header>
 
     <div class="grid" id="movie-grid"></div>
 
     <div id="pagination-container" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin: 30px auto; max-width: 600px;"></div>
 
     <div style="text-align: center; margin-bottom: 20px;">
-    <a href="/browse.html" style="background: #2563eb; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-        🔍 Browse & Add New Movies
-    </a>
-</div>
-<div id="pipeline-monitor" style="max-width: 1200px; margin: 40px auto 20px auto; background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; display: none;">
-    <h3 style="margin-top: 0; color: #3b82f6; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
-        ⚙️ System Ingestion & Processing Pipeline
-    </h3>
-    <div id="pipeline-rows" style="display: flex; flex-direction: column; gap: 12px;">
-        </div>
-</div>
+        <a href="/browse.html" style="background: #2563eb; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+            🔍 Browse & Add New Movies
+        </a>
+    </div>
+
+    <div id="pipeline-monitor" style="max-width: 1200px; margin: 40px auto 20px auto; background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; display: none;">
+        <h3 style="margin-top: 0; color: #3b82f6; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+            ⚙️ System Ingestion & Processing Pipeline
+        </h3>
+        <div id="pipeline-rows" style="display: flex; flex-direction: column; gap: 12px;"></div>
+    </div>
 
     <script>
         let currentCatalogPage = 1;
 
+        async function hydrateUserProfileHeader() {
+            try {
+                const res = await fetch('/api/auth/me');
+                const data = await res.json();
+                if (data.loggedIn) {
+                    const formattedName = data.username.charAt(0).toUpperCase() + data.username.slice(1);
+                    document.getElementById('welcome-user').innerText = `🍿 Operator: ${formattedName}`;
+                }
+            } catch (e) {
+                console.error("Profile name tracking sync lost.");
+            }
+        }
+
         async function loadMovies(page = 1) {
             currentCatalogPage = page;
             try {
-                // Pass the requested page tracking index directly to your paginated API route
                 const res = await fetch(`/api/movies?page=${page}`);
                 const data = await res.json(); 
-                
                 const grid = document.getElementById('movie-grid');
                 
                 if (data && data.movies && data.movies.length > 0) {
                     grid.innerHTML = data.movies.map(media => {
                         const targetEndpoint = (media.contentType === 'series') ? 'series.html' : 'player.html';
-                        
                         const badgeHtml = (media.contentType === 'series') 
                             ? `<span style="position: absolute; bottom: 8px; right: 8px; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">TV Show</span>`
                             : '';
 
                         return `
                             <a class="card" href="${targetEndpoint}?id=${media.id}">
-                                <div class="cover-wrapper" style="position: relative;">
+                                <div class="cover-wrapper">
                                     <img src="${media.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
                                     ${badgeHtml}
                                 </div>
@@ -264,7 +272,6 @@
                         `;
                     }).join('');
 
-                    // Render out the page control selectors
                     renderPaginationControls(data.totalPages, data.currentPage);
                 } else {
                     grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add content!</div>`;
@@ -275,21 +282,14 @@
             }
         }
 
-        /**
-         * Renders standard responsive pagination button strips
-         */
         function renderPaginationControls(totalPages, currentPage) {
             const container = document.getElementById('pagination-container');
-            
-            // If the entire library fits cleanly on a single page view, hide the navigation row
             if (totalPages <= 1) {
                 container.innerHTML = '';
                 return;
             }
 
             let html = '';
-
-            // Previous Page Button
             html += `
                 <button ${currentPage === 1 ? 'disabled' : ''} 
                         onclick="loadMovies(${currentPage - 1})" 
@@ -298,7 +298,6 @@
                 </button>
             `;
 
-            // Explicit Numerical Page Buttons
             for (let i = 1; i <= totalPages; i++) {
                 const isActive = (i === currentPage);
                 html += `
@@ -309,7 +308,6 @@
                 `;
             }
 
-            // Next Page Button
             html += `
                 <button ${currentPage === totalPages ? 'disabled' : ''} 
                         onclick="loadMovies(${currentPage + 1})" 
@@ -317,65 +315,55 @@
                     Next &rarr;
                 </button>
             `;
-
             container.innerHTML = html;
         }
 
-        // Run primary call on startup mount
-        loadMovies(1);
-    </script>
+        async function updatePipelineStatus() {
+            const monitorBox = document.getElementById('pipeline-monitor');
+            const rowsContainer = document.getElementById('pipeline-rows');
 
+            try {
+                const res = await fetch('/api/pipeline/status');
+                const data = await res.json();
 
+                if (data.success && data.pipeline.length > 0) {
+                    monitorBox.style.display = 'block';
+                    rowsContainer.innerHTML = data.pipeline.map(item => {
+                        let statusColor = '#f59e0b';
+                        if (item.status.includes('Transcoding')) statusColor = '#a855f7';
+                        if (item.status.includes('Queued')) statusColor = '#64748b';
 
-<script>
-    async function updatePipelineStatus() {
-        const monitorBox = document.getElementById('pipeline-monitor');
-        const rowsContainer = document.getElementById('pipeline-rows');
-
-        try {
-            const res = await fetch('/api/pipeline/status');
-            const data = await res.json();
-
-            if (data.success && data.pipeline.length > 0) {
-                monitorBox.style.display = 'block'; // Make widget visible if tasks exist
-                
-                rowsContainer.innerHTML = data.pipeline.map(item => {
-                    let statusColor = '#f59e0b'; // Default downloading yellow
-                    if (item.status.includes('Transcoding')) statusColor = '#a855f7'; // Processing Purple
-                    if (item.status.includes('Queued')) statusColor = '#64748b'; // Idle Gray
-
-                    return `
-                        <div style="background: #0f172a; padding: 12px 16px; border-radius: 8px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; border-left: 4px solid ${statusColor};">
-                            <div style="flex-grow: 1; min-width: 250px;">
-                                <strong style="font-size: 0.95rem; color: #f8fafc;">${item.title}</strong>
-                                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Size: ${item.size}</div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 20px;">
-                                <span style="background: ${statusColor}20; color: ${statusColor}; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">
-                                    ${item.status}
-                                </span>
-                                <div style="text-align: right; min-width: 80px;">
-                                    <strong style="color: #38bdf8; font-size: 1rem;">${item.progress}%</strong>
+                        return `
+                            <div style="background: #0f172a; padding: 12px 16px; border-radius: 8px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; border-left: 4px solid ${statusColor};">
+                                <div style="flex-grow: 1; min-width: 250px;">
+                                    <strong style="font-size: 0.95rem; color: #f8fafc;">${item.title}</strong>
+                                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Size: ${item.size}</div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 20px;">
+                                    <span style="background: ${statusColor}20; color: ${statusColor}; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">
+                                        ${item.status}
+                                    </span>
+                                    <div style="text-align: right; min-width: 80px;">
+                                        <strong style="color: #38bdf8; font-size: 1rem;">${item.progress}%</strong>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    `;
-                }).join('');
-            } else {
-                monitorBox.style.display = 'none'; // Keep hidden if pipeline is completely idle
+                        `;
+                    }).join('');
+                } else {
+                    monitorBox.style.display = 'none';
+                }
+            } catch (err) {
+                console.error("Failed querying system sync states.");
             }
-        } catch (err) {
-            console.error("Failed querying system sync states.");
         }
-    }
 
-    // Run poll query loop every 5 seconds to manage live screen states
-    setInterval(updatePipelineStatus, 5000);
-    updatePipelineStatus();
-</script>
-
-
-
+        document.addEventListener('DOMContentLoaded', () => {
+            hydrateUserProfileHeader();
+            loadMovies(1);
+            setInterval(updatePipelineStatus, 5000);
+            updatePipelineStatus();
+        });
+    </script>
 </body>
 </html>
-
