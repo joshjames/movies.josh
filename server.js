@@ -1,3 +1,129 @@
+/*
+API DOCUMENTATION
+=================
+
+Authentication and Profiles
+---------------------------
+POST /api/auth/register
+  - Registers a new user with username and password.
+  - Sets the user_profile cookie on success for immediate login.
+  - Returns JSON: { success: true } or { success: false, error }
+
+POST /api/auth/login
+  - Authenticates credentials and updates login history.
+  - Sets the user_profile cookie for session state.
+  - Returns JSON: { success: true } or { success: false, error }
+
+GET /api/auth/me
+  - Returns the current authenticated profile state.
+  - Uses the user_profile cookie.
+  - Returns JSON: { loggedIn: true, username, config }
+
+GET /api/auth/logout
+  - Clears the user_profile cookie.
+  - Redirects the browser to /login.html.
+
+Admin and Maintenance
+---------------------
+GET /api/admin/logs/stream
+  - Streams live server logs to the admin UI using Server-Sent Events.
+  - Keeps the connection alive with heartbeat comments.
+
+POST /api/admin/sanitizer/run
+  - Triggers the library sanitizer workflow from the web UI.
+  - Responds immediately with success while sanitization runs asynchronously.
+
+POST /api/admin/upload-poster
+  - Uploads a base64-encoded poster image for a series folder.
+  - Writes the image to /app/movies/series/:folder/cover.jpg.
+  - Request body: { folder, name, image }
+
+GET /api/admin/series-metadata
+  - Returns raw series metadata for each show folder under movies/series.
+  - Useful for manual curation workflows.
+
+POST /api/admin/override-metadata
+  - Saves manually overridden metadata for a series folder.
+  - Request body: { folder, title, year, plot, genre, imdbId }
+
+Playback and Profile State
+--------------------------
+POST /api/profile/playback/sync
+  - Saves playback progress for a media item.
+  - Request body: { mediaId, position }
+  - Includes anti-reset logic to ignore unsafe zero resets.
+
+GET /api/profile/playback/state
+  - Returns the saved playback position for a mediaId.
+  - Query param: mediaId
+
+Library and Content Discovery
+-----------------------------
+GET /api/movies
+  - Returns paginated movie/series library entries from an in-memory cache.
+  - Query params: page, limit
+  - Response: { totalMovies, totalPages, currentPage, movies }
+
+GET /api/movies/:id
+  - Returns stream metadata and accessible file paths for a single movie folder.
+  - Path param: id
+  - Looks for 1080p/720p/480p assets and fallback MP4 files.
+
+GET /api/series/:showFolder
+  - Returns a unified series payload for a specific show folder.
+  - Path param: showFolder
+  - Includes metadata, poster path, seasons, and totalSeasons.
+
+GET /api/eztv/browse
+  - Searches EZTV torrents by query term and optional pack-only filter.
+  - Query params: query, packsOnly
+  - Uses OMDb to resolve title metadata and poster imagery.
+
+GET /api/yts/browse
+  - Proxies YTS movie browse requests through a fixed API endpoint.
+  - Query params: query_term, page, genre, minimum_rating, sort_by
+
+POST /api/yts/add
+  - Adds a magnet link to qBittorrent with a fixed save path and tag.
+  - Request body: { magnetUrl }
+
+POST /api/downloader/add
+  - Adds a magnet link to qBittorrent with a save path by category.
+  - Request body: { magnetUrl, category }
+
+Pipeline and Automation
+-----------------------
+POST /api/trigger-automation
+  - Triggers the post-download automation pipeline in the background.
+  - Executes library-sanitizer.js and pre-transcode.js.
+
+GET /api/pipeline/status
+  - Returns current pipeline state for tagged qBittorrent torrents and active processing folders.
+  - Includes download progress and transcode status.
+
+Streaming and Assets
+--------------------
+GET /api/raw-file/:id
+  - Streams a video file directly from a movie folder with Range support.
+  - Path param: id
+
+GET /api/subtitles/:id
+  - Converts an SRT subtitle file to WebVTT on-demand.
+  - Path param: id
+
+Static Asset Delivery
+---------------------
+- Static UI files are served from /public via express.static.
+- Movie assets are served from /movie-assets mapped to the movies directory.
+
+Auth Middleware
+---------------
+- All routes are protected by requireAuth except:
+  - /login.html
+  - /api/auth/login
+  - /api/auth/register
+*/
+
 console.log("!!! SERVER IS CURRENTLY INITIALIZING !!!");
 
 const express = require('express');
@@ -480,40 +606,78 @@ app.get('/api/movies/:id', (req, res) => {
     res.json(streamPayload);
 });
 
-// GET: Fetch raw metadata states for manual curation workspace
-app.get('/api/admin/series-metadata', (req, res) => {
+// 🛡️ Admin Verification Middleware Layer
+function requireAdmin(req, res, next) {
+    const activeUser = req.cookies.user_profile;
+    if (activeUser && activeUser.toLowerCase().trim() === 'josh') {
+        return next();
+    }
+    // Block API endpoints or kick standard pages out
+    if (req.path.startsWith('/api/')) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator clearance required." });
+    }
+    res.redirect('/login.html');
+}
+
+// Bind admin walls to the structural assets and endpoints
+app.use('/admin.html', requireAdmin);
+app.use('/api/admin/*', requireAdmin);
+
+
+// GET: Unified library metadata collection array loop (Movies + Series)
+app.get('/api/admin/library-metadata', (req, res) => {
     try {
+        const results = { movies: [], shows: [] };
+
+        // 1. Process Movie Assets
+        if (fs.existsSync(MOVIES_DIR)) {
+            fs.readdirSync(MOVIES_DIR).forEach(folder => {
+                const itemPath = path.join(MOVIES_DIR, folder);
+                if (folder === 'series' || !fs.lstatSync(itemPath).isDirectory()) return;
+
+                const metaPath = path.join(itemPath, 'metadata.json');
+                let meta = { title: folder, year: '', plot: '', genre: '', contentType: 'movie' };
+                if (fs.existsSync(metaPath)) {
+                    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+                }
+                results.movies.push({ folder, metadata: meta });
+            });
+        }
+
+        // 2. Process Series Assets
         const seriesDir = path.join(MOVIES_DIR, 'series');
-        if (!fs.existsSync(seriesDir)) return res.json({ success: true, shows: [] });
+        if (fs.existsSync(seriesDir)) {
+            fs.readdirSync(seriesDir).forEach(folder => {
+                const itemPath = path.join(seriesDir, folder);
+                if (!fs.lstatSync(itemPath).isDirectory()) return;
 
-        const shows = fs.readdirSync(seriesDir).map(folder => {
-            const showPath = path.join(seriesDir, folder);
-            if (!fs.lstatSync(showPath).isDirectory()) return null;
+                const metaPath = path.join(itemPath, 'metadata.json');
+                let meta = { title: folder, year: '', plot: '', genre: '', contentType: 'series' };
+                if (fs.existsSync(metaPath)) {
+                    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+                }
+                results.shows.push({ folder, metadata: meta });
+            });
+        }
 
-            const metaPath = path.join(showPath, 'metadata.json');
-            let meta = { title: folder, year: '', plot: '', genre: '', contentType: 'series' };
-            
-            if (fs.existsSync(metaPath)) {
-                meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            }
-
-            return { folder, metadata: meta };
-        }).filter(Boolean);
-
-        res.json({ success: true, shows });
+        res.json({ success: true, library: results });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// POST: Force manual override mapping adjustments
+
+// POST: Flexible Dynamic Override Target Layer
 app.post('/api/admin/override-metadata', (req, res) => {
     try {
-        const { folder, title, year, plot, genre, imdbId } = req.body;
-        const targetPath = path.join(MOVIES_DIR, 'series', folder);
+        const { folder, title, year, plot, genre, imdbId, contentType } = req.body;
+        
+        // Pinpoint matching host path based on content routing tags
+        const baseRoute = (contentType === 'series') ? path.join(MOVIES_DIR, 'series') : MOVIES_DIR;
+        const targetPath = path.join(baseRoute, folder);
 
         if (!fs.existsSync(targetPath)) {
-            return res.status(404).json({ success: false, error: "Target directory configuration missing." });
+            return res.status(404).json({ success: false, error: `Directory target not found: ${folder}` });
         }
 
         const metadataPath = path.join(targetPath, 'metadata.json');
@@ -522,14 +686,63 @@ app.post('/api/admin/override-metadata', (req, res) => {
             year: year || '',
             plot: plot || '',
             genre: genre || '',
-            contentType: 'series',
+            contentType: contentType || 'movie',
             imdbId: imdbId || ''
         };
 
         fs.writeFileSync(metadataPath, JSON.stringify(updatedMeta, null, 4));
-        console.log(`🔧 [ADMIN OVERRIDE] Saved metadata manually for: ${folder}`);
+        console.log(`🔧 [ADMIN OVERRIDE] Saved metadata manually for ${contentType}: ${folder}`);
         
         res.json({ success: true, message: "Metadata overrides saved successfully." });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+
+// POST: Adaptive upload-poster layer targeting subfolders contextually
+app.post('/api/admin/upload-poster', (req, res) => {
+    try {
+        const { folder, image, contentType } = req.body;
+        if (!folder || !image) return res.status(400).json({ success: false, error: "Missing assets." });
+
+        const baseRoute = (contentType === 'series') ? path.join(MOVIES_DIR, 'series') : MOVIES_DIR;
+        const destinationFolder = path.join(baseRoute, folder);
+
+        if (!fs.existsSync(destinationFolder)) {
+            return res.status(404).json({ success: false, error: "Target directory missing." });
+        }
+
+        // Strip incoming base64 payload header strings safely
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        fs.writeFileSync(path.join(destinationFolder, 'cover.jpg'), buffer);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+
+// GET: Expose list of configured local runtime user profile folders
+app.get('/api/admin/users', (req, res) => {
+    try {
+        const userMetaDir = path.join(__dirname, 'metadata', 'users');
+        if (!fs.existsSync(userMetaDir)) return res.json({ success: true, users: [] });
+
+        const profiles = fs.readdirSync(userMetaDir).map(folder => {
+            const userPath = path.join(userMetaDir, folder);
+            if (!fs.lstatSync(userPath).isDirectory()) return null;
+
+            // Gather structural footprints safely if files exist on disk
+            const hasHistory = fs.existsSync(path.join(userPath, 'history.json'));
+            const hasPlayback = fs.existsSync(path.join(userPath, 'playback.json'));
+            
+            return { username: folder, hasHistory, hasPlayback };
+        }).filter(Boolean);
+
+        res.json({ success: true, users: profiles });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }

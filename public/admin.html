@@ -6,39 +6,62 @@
     <title>Joshflix Admin Control Unit</title>
     <style>
         body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-top: 0; }
         
-        /* Show Row Grid Layout split for poster + form fields */
-        .show-row { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin-bottom: 16px; display: flex; gap: 20px; }
+        /* Grid Layout split split for log stream vs content data */
+        .admin-layout-wrapper { display: grid; grid-template-columns: 1fr 400px; gap: 30px; align-items: start; }
+        @media(max-width: 1100px) { .admin-layout-wrapper { grid-template-columns: 1fr; } }
+
+        /* Component Panels */
+        .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+        .panel h2, .panel h3 { margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: fill; padding-bottom: 8px; }
+
+        /* Tab toggles for catalog separation */
+        .tab-bar { display: flex; gap: fill; gap: 8px; border-bottom: 2px solid #334155; margin-bottom: 20px; }
+        .tab-btn { background: none; border: none; color: #94a3b8; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 6px 6px 0 0; font-size: fill; font-size: 0.95rem; }
+        .tab-btn.active { background: #334155; color: white; border-bottom: 3px solid #2563eb; }
+
+        /* Media Curation Row Layouts */
+        .show-row { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 18px; margin-bottom: 16px; display: flex; gap: 20px; }
         .poster-aside { flex: 0 0 140px; display: flex; flex-direction: column; gap: 8px; }
         .main-form-content { flex: 1; display: flex; flex-direction: column; gap: 12px; }
         
-        .row-header { font-weight: bold; font-size: 1.1rem; color: #38bdf8; display: flex; justify-content: space-between; }
+        .row-header { font-weight: bold; font-size: 1.1rem; color: #38bdf8; display: flex; justify-content: space-between; align-items: center; }
         .meta-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
         .form-group { display: flex; flex-direction: column; gap: 4px; }
         .form-group.full-width { grid-column: 1 / -1; }
         label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
-        input, textarea { background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; font-family: inherit; }
+        input, textarea { background: #020617; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; font-family: inherit; }
         
-        button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; align-self: flex-end; }
+        button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
-        .badge { background: #e50914; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
-        
-        /* Streaming Monitor Console Window */
-        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.85rem; padding: 14px; border-radius: 6px; height: 300px; overflow-y: auto; margin-bottom: 24px; color: #38bdf8; white-space: pre-wrap; }
-        .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; }
+        .btn-save { align-self: flex-end; width: fit-content; background: #10b981; }
+        .btn-save:hover { background: #059669; }
+
+        .badge { background: #e50914; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
+        .badge.type-badge { background: #6366f1; }
+
+        /* Console Terminal Custom Styles */
+        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; height: 450px; overflow-y: auto; color: #38bdf8; white-space: pre-wrap; }
+        .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; line-height: 1.4; }
         .log-error { color: #f87171; }
         .log-warn { color: #fbbf24; }
-        .controls { margin-top: 16px; margin-bottom: 16px; display: flex; gap: 12px; }
-        .btn-trigger { background: #10b981; color: white; }
+        
+        .controls { display: flex; gap: 12px; margin-bottom: 20px; }
+        .btn-trigger { background: #10b981; }
         .btn-trigger:hover { background: #059669; }
 
-        /* Drag and Drop Admin Zones */
-        .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #0f172a; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .admin-drop-zone.dragover { border-color: #38bdf8; background: #1e293b; }
+        /* Drag and Drop poster targets */
+        .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #020617; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .admin-drop-zone.dragover { border-color: #38bdf8; background: #0f172a; }
         .admin-drop-zone img { width: 100%; height: 100%; object-fit: cover; }
         .drop-zone-text { position: absolute; text-align: center; color: #64748b; font-size: 0.75rem; padding: 8px; pointer-events: none; }
+
+        /* Users Panel Table list */
+        .user-row { display: flex; justify-content: space-between; align-items: center; background: #020617; padding: 10px 14px; border-radius: 6px; margin-bottom: fill; margin-bottom: 8px; border-left: 3px solid #3b82f6; }
+        .user-name { font-weight: bold; color: #f1f5f9; }
+        .user-meta-flags { font-size: 0.75rem; color: #64748b; }
     </style>
 </head>
 <body>
@@ -47,21 +70,40 @@
         
         <div class="controls">
             <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
+            <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
 
-        <h3>🖥️ Live Application Stream Monitor</h3>
-        <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
+        <div class="admin-layout-wrapper">
+            <div class="panel">
+                <div class="tab-bar">
+                    <button class="tab-btn active" id="tab-movies" onclick="switchTab('movies')">Movies</button>
+                    <button class="tab-btn" id="tab-shows" onclick="switchTab('series')">TV Shows</button>
+                </div>
+                <div id="catalog-list">Loading localized digital storage lists...</div>
+            </div>
 
-        <h2>📺 Localized Show Catalogs</h2>
-        <div id="shows-list">Loading localized show catalogs...</div>
+            <div>
+                <div class="panel">
+                    <h3>👥 Authorized System Profiles</h3>
+                    <div id="users-list">Querying user indexes...</div>
+                </div>
+
+                <div class="panel">
+                    <h3>🖥️ Live Application Stream Monitor</h3>
+                    <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
-        // --- 1. LIVE LOG MONITOR STREAM (SSE WITH KEEPALIVE) ---
+        let currentTabMode = 'movies';
+        let fullLibraryCache = { movies: [], shows: [] };
+
+        // --- 1. LIVE LOG MONITOR STREAM ---
         function connectToLogStream() {
             const consoleTerminal = document.getElementById('terminal-stream');
             consoleTerminal.innerHTML = '';
-
             const eventSource = new EventSource('/api/admin/logs/stream');
 
             eventSource.onmessage = function(event) {
@@ -82,89 +124,105 @@
             };
         }
 
-        // --- 2. BACKGROUND PROCESS INVOKER ---
+        // --- 2. BACKGROUND INVOCATIONS ---
         async function triggerSanitizer() {
             try {
                 const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
                 const data = await res.json();
-                if(data.success) {
-                    console.log("Sanitizer execution signal acknowledged successfully.");
-                }
+                if(data.success) alert("Library sanitization process has been kicked off in background.");
             } catch(e) {
                 console.error("Transport pipeline failed invocation:", e);
             }
         }
 
-        // --- 3. SHOW DATA INJECTOR & RENDERER ---
-        async function loadShows() {
+        // --- 3. DYNAMIC CONTENT RENDERING PIPELINES ---
+        async function fetchLibraryData() {
             try {
-                const res = await fetch('/api/admin/series-metadata');
+                const res = await fetch('/api/admin/library-metadata');
                 const data = await res.json();
-                const container = document.getElementById('shows-list');
-
-                if (data.shows.length === 0) {
-                    container.innerHTML = "<p>No active television series structures discovered on internal storage volumes.</p>";
-                    return;
+                if (data.success) {
+                    fullLibraryCache = data.library;
+                    renderActiveTab();
                 }
-
-                container.innerHTML = data.shows.map(show => {
-                    // Fallback to cache-busted path if asset exists or broken image logic takes over
-                    //const posterPath = `/series-assets/${show.folder}/cover.jpg?t=${new Date().getTime()}`;
-                    const posterPath = `/movie-assets/series/${show.folder}/cover.jpg?t=${new Date().getTime()}`;
-                    
-                    return `
-                    <div class="show-row" id="row-${show.folder}">
-                        <div class="poster-aside">
-                            <label>Show Artwork</label>
-                            <div class="admin-drop-zone" 
-                                 id="dropzone-${show.folder}" 
-                                 ondragover="handleDragOver(event, '${show.folder}')" 
-                                 ondragleave="handleDragLeave(event, '${show.folder}')" 
-                                 ondrop="handleDrop(event, '${show.folder}')">
-                                <img src="${posterPath}" id="img-${show.folder}" onerror="handleImgError('${show.folder}')" />
-                                <div class="drop-zone-text" id="text-${show.folder}" style="display:none;">
-                                    📥<br>Drag & Drop poster image
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="main-form-content">
-                            <div class="row-header">
-                                <span>Folder: /series/${show.folder}</span>
-                                ${!show.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
-                            </div>
-                            <div class="meta-form">
-                                <div class="form-group">
-                                    <label>Display Title</label>
-                                    <input type="text" id="title-${show.folder}" value="${show.metadata.title || ''}">
-                                </div>
-                                <div class="form-group">
-                                    <label>Release Year(s)</label>
-                                    <input type="text" id="year-${show.folder}" value="${show.metadata.year || ''}">
-                                </div>
-                                <div class="form-group">
-                                    <label>Genre tags</label>
-                                    <input type="text" id="genre-${show.folder}" value="${show.metadata.genre || ''}">
-                                </div>
-                                <div class="form-group">
-                                    <label>Manual OMDb/IMDb ID Lookup Link Override</label>
-                                    <input type="text" id="imdbId-${show.folder}" placeholder="e.g., tt0123456" value="${show.metadata.imdbId || ''}">
-                                </div>
-                                <div class="form-group full-width">
-                                    <label>Plot Synopsis Outline</label>
-                                    <textarea id="plot-${show.folder}" rows="2">${show.metadata.plot || ''}</textarea>
-                                </div>
-                                <button onclick="saveOverride('${show.folder}')">Save Changes</button>
-                            </div>
-                        </div>
-                    </div>
-                `}).join('');
             } catch (err) {
-                console.error("Admin dashboard extraction crash:", err);
+                console.error("Error pooling server library array elements:", err);
             }
         }
 
-        // --- 4. DRAG & DROP BINARY DATA STRIPPING LOGIC ---
+        function switchTab(mode) {
+            currentTabMode = mode;
+            document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
+            document.getElementById('tab-shows').classList.toggle('active', mode === 'series');
+            renderActiveTab();
+        }
+
+        function renderActiveTab() {
+            const container = document.getElementById('catalog-list');
+            const collection = currentTabMode === 'movies' ? fullLibraryCache.movies : fullLibraryCache.shows;
+
+            if (!collection || collection.length === 0) {
+                container.innerHTML = `<p>No active folders found for context category type: "${currentTabMode}"</p>`;
+                return;
+            }
+
+            container.innerHTML = collection.map(item => {
+                // Point asset resolution mappings contextually to matching route subfolders
+                const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
+                const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
+                
+                return `
+                <div class="show-row" id="row-${item.folder}">
+                    <div class="poster-aside">
+                        <label>Cover Artwork</label>
+                        <div class="admin-drop-zone" 
+                             id="dropzone-${item.folder}" 
+                             ondragover="handleDragOver(event, '${item.folder}')" 
+                             ondragleave="handleDragLeave(event, '${item.folder}')" 
+                             ondrop="handleDrop(event, '${item.folder}', '${currentTabMode}')">
+                            <img src="${posterSrc}" id="img-${item.folder}" onerror="handleImgError('${item.folder}')" />
+                            <div class="drop-zone-text" id="text-${item.folder}" style="display:none;">
+                                📥<br>Drag & Drop image file
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="main-form-content">
+                        <div class="row-header">
+                            <span>Path: /movies/${urlPath}</span>
+                            <div style="display:flex; gap:6px;">
+                                <span class="badge type-badge">${currentTabMode}</span>
+                                ${!item.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="meta-form">
+                            <div class="form-group">
+                                <label>Display Title</label>
+                                <input type="text" id="title-${item.folder}" value="${item.metadata.title || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Release Year</label>
+                                <input type="text" id="year-${item.folder}" value="${item.metadata.year || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Genre tags</label>
+                                <input type="text" id="genre-${item.folder}" value="${item.metadata.genre || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>IMDb Override ID Link</label>
+                                <input type="text" id="imdbId-${item.folder}" placeholder="e.g., tt0123456" value="${item.metadata.imdbId || ''}">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Plot Synopsis Outline</label>
+                                <textarea id="plot-${item.folder}" rows="2">${item.metadata.plot || ''}</textarea>
+                            </div>
+                            <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        // --- 4. DRAG & DROP POSTER INTERCEPTS ---
         function handleImgError(folder) {
             document.getElementById(`img-${folder}`).style.display = 'none';
             document.getElementById(`text-${folder}`).style.display = 'block';
@@ -180,7 +238,7 @@
             document.getElementById(`dropzone-${folder}`).classList.remove('dragover');
         }
 
-        function handleDrop(e, folder) {
+        function handleDrop(e, folder, type) {
             e.preventDefault();
             document.getElementById(`dropzone-${folder}`).classList.remove('dragover');
             
@@ -191,25 +249,24 @@
                     const reader = new FileReader();
                     reader.readAsDataURL(file);
                     reader.onloadend = async function() {
-                        const base64Data = reader.result;
-                        await executePosterUpload(folder, base64Data);
+                        await executePosterUpload(folder, reader.result, type);
                     };
                 }
             }
         }
 
-        async function executePosterUpload(folder, base64Data) {
+        async function executePosterUpload(folder, base64Data, type) {
             try {
                 const response = await fetch('/api/admin/upload-poster', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder, image: base64Data })
+                    body: JSON.stringify({ folder, image: base64Data, contentType: type })
                 });
                 const resData = await response.json();
                 if (resData.success) {
                     const img = document.getElementById(`img-${folder}`);
-                    //img.src = `/series-assets/${folder}/cover.jpg?t=${new Date().getTime()}`;
-                    img.src = `/movie-assets/series/${folder}/cover.jpg?t=${new Date().getTime()}`;
+                    const urlPath = type === 'series' ? `series/${folder}` : folder;
+                    img.src = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
                     img.style.display = 'block';
                     document.getElementById(`text-${folder}`).style.display = 'none';
                 } else {
@@ -220,15 +277,16 @@
             }
         }
 
-        // --- 5. TEXT METADATA SYNC LOOP ---
-        async function saveOverride(folder) {
+        // --- 5. TEXT METADATA SAVE INTERCEPTS ---
+        async function saveOverride(folder, type) {
             const payload = {
                 folder,
+                contentType: type,
                 title: document.getElementById(`title-${folder}`).value,
                 year: document.getElementById(`year-${folder}`).value,
                 genre: document.getElementById(`genre-${folder}`).value,
                 imdbId: document.getElementById(`imdbId-${folder}`).value,
-                plot: document.getElementById(`plot-${folder}`).value
+                plot: document.getElementById('plot-' + folder).value
             };
 
             try {
@@ -239,7 +297,7 @@
                 });
                 const result = await res.json();
                 if (result.success) {
-                    loadShows();
+                    fetchLibraryData();
                 } else {
                     alert("❌ Override failure: " + result.error);
                 }
@@ -248,9 +306,36 @@
             }
         }
 
-        // Boot system listeners
+        // --- 6. USER PROFILE RENDER COMPONENT ---
+        async function fetchUserProfileIndexes() {
+            try {
+                const res = await fetch('/api/admin/users');
+                const data = await res.json();
+                const container = document.getElementById('users-list');
+
+                if (data.success && data.users.length > 0) {
+                    container.innerHTML = data.users.map(u => `
+                        <div class="user-row">
+                            <span class="user-name">👤 ${u.username.charAt(0).toUpperCase() + u.username.slice(1)}</span>
+                            <div class="user-meta-flags">
+                                ${u.hasHistory ? '📜 History' : ''} 
+                                ${u.hasPlayback ? '⏳ Progress' : ''}
+                                ${!u.hasHistory && !u.hasPlayback ? 'Empty Profile' : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `<p style="color: #64748b; font-size: 0.85rem; text-align: center;">No local records discovered.</p>`;
+                }
+            } catch (e) {
+                console.error("Failed querying user lists.");
+            }
+        }
+
+        // Initialization mount routines
         connectToLogStream();
-        loadShows();
+        fetchLibraryData();
+        fetchUserProfileIndexes();
     </script>
 </body>
 </html>
