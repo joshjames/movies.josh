@@ -11,6 +11,9 @@ const FormData = require('form-data');
 const { exec, spawn } = require('child_process');
 const fsPromises = fs.promises;
 
+const cookieParser = require('cookie-parser');
+const ProfileManager = require('./profile-manager');
+
 const logger = require('./logger');
 
 
@@ -19,10 +22,64 @@ if (!fs.existsSync(MOVIES_DIR)) {
 }
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '20mb' }));
-
-app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
+
+
+app.use(cookieParser());
+
+// POST: Process user enrollment pipelines
+app.post('/api/auth/register', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Fields cannot be blank." });
+    }
+
+    try {
+        const result = await ProfileManager.registerUser(username, password);
+        if (result.success) {
+            // Log them in immediately by assigning their user cookie context
+            res.cookie('user_profile', username.toLowerCase().trim(), { maxAge: 31536000000, path: '/' });
+            return res.json({ success: true });
+        }
+        res.status(400).json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: Validate credentials and establish session context
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body;
+    
+    try {
+        const auth = await ProfileManager.authenticateUser(username, password);
+        if (auth.success) {
+            const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            const cleanName = username.toLowerCase().trim();
+            
+            // Log network history footprints asynchronously
+            await ProfileManager.updateLoginHistory(cleanName, clientIp);
+
+            // Plant tracking session cookies (lasts 1 Year)
+            res.cookie('user_profile', cleanName, { maxAge: 31536000000, path: '/' });
+            return res.json({ success: true });
+        }
+        res.status(401).json(auth);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: Profile details loop used by frontends
+app.get('/api/auth/me', async (req, res) => {
+    const activeUser = req.cookies.user_profile;
+    if (!activeUser) return res.status(401).json({ loggedIn: false });
+
+    const config = await ProfileManager.readData(activeUser, 'config', {});
+    res.json({ loggedIn: true, username: activeUser, config });
+});
+
 
 
 // GET: Stream Live Real-Time Logs straight to Admin UI via SSE
@@ -100,6 +157,44 @@ app.post('/api/admin/upload-poster', async (req, res) => {
         res.json({ success: true, message: 'Poster written to disk.' });
     } catch (err) {
         logger.log(`Asset upload exception: ${err.message}`, 'error');
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+
+// Middleware helper to pull active user identity context
+function getActiveUser(req) {
+    return req.cookies.user_profile || 'guest';
+}
+
+// POST: Heartbeat endpoint triggered by player window updates
+app.post('/api/profile/playback/sync', async (req, res) => {
+    try {
+        const username = getActiveUser(req);
+        const { mediaId, position } = req.body;
+
+        if (!mediaId || position === undefined) {
+            return res.status(400).json({ success: false, error: 'Missing sync states' });
+        }
+
+        await ProfileManager.savePlaybackPosition(username, mediaId, position);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: Fetch individual media position tracking states
+app.get('/api/profile/playback/state', async (req, res) => {
+    try {
+        const username = getActiveUser(req);
+        const { mediaId } = req.query;
+
+        const playback = await ProfileManager.getPlaybackState(username);
+        const state = playback[mediaId] || { position: 0 };
+
+        res.json({ success: true, position: state.position });
+    } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });

@@ -169,7 +169,7 @@ async function sanitizeLibrary() {
     logger.log("🧹 Starting High-Performance Delta Sanitizer...\n");
     
     if (!fs.existsSync(MOVIES_DIR)) {
-        console.error(`❌ Error: Main directory [${MOVIES_DIR}] not found.`);
+        logger.log(`❌ Error: Main directory [${MOVIES_DIR}] not found.`);
         return;
     }
 

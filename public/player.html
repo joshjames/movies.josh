@@ -115,19 +115,19 @@
 <body>
 
     <div class="player-container" id="stage">
-    <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
-    <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
-    
-    <div class="quality-badge" id="qualityTag">DETECTING...</div>
-    <video id="cinemaVideo" controls autoplay playsinline></video>
-</div>
+        <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
+        <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
+        
+        <div class="quality-badge" id="qualityTag">DETECTING...</div>
+        <video id="cinemaVideo" controls autoplay playsinline></video>
+    </div>
 
     <script>
         // 1. Declare URL Params FIRST so they are available to everything below
         const params = new URLSearchParams(window.location.search);
         const movieId = params.get('id');
-        const seasonParam = params.get('season');
-        const episodeParam = params.get('episode');
+        let seasonParam = params.get('season');
+        let episodeParam = params.get('episode');
 
         // 2. Initialize UI Element References and State Trackers
         let currentTvPlaylist = [];
@@ -138,6 +138,14 @@
         const nextBtn = document.getElementById('nextBtn');
         const stage = document.getElementById('stage');
 
+        // RESUME ENGINE CORE STATES
+        let currentMediaId = movieId; // Fallback to raw ID for movies
+        let lastSavedTime = 0;
+        const SYNC_INTERVAL_MS = 5000; 
+        const activeUserProfile = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('user_profile='))
+            ?.split('=')[1] || 'guest';
         // Update the Back Button dynamically if viewing a TV show to return to the Show details page
         if (movieId && seasonParam) {
             backBtn.href = `series.html?id=${encodeURIComponent(movieId)}`;
@@ -159,166 +167,222 @@
             videoEl.appendChild(track);
         }
 
-        async function initializePremiumStream() {
-    if (!movieId) {
-        alert("No media identifier provided.");
-        window.location.href = "/";
-        return;
-    }
-
-    if (seasonParam && episodeParam) {
-        try {
-            const cleanFolder = movieId.replace('series/', '');
-            const response = await fetch(`/api/series/${encodeURIComponent(cleanFolder)}`);
-            const showData = await response.json();
-            
-            const targetSeason = showData.seasons ? showData.seasons[seasonParam] : null;
-            currentTvPlaylist = targetSeason ? targetSeason.episodes : [];
-            currentTrackIndex = currentTvPlaylist.findIndex(ep => ep.episodeNumber == parseInt(episodeParam, 10));
-
-            if (currentTrackIndex !== -1) {
-                playEpisodeIndex(currentTrackIndex);
-            } else {
-                alert("Target episode track index bounds out of file system alignment.");
+        // --- Playback Sync Loop Functions ---
+        async function applyResumeMarker() {
+            try {
+                const res = await fetch(`/api/profile/playback/state?mediaId=${encodeURIComponent(currentMediaId)}`, {
+                    headers: { 'x-user-profile': activeUserProfile }
+                });
+                const data = await res.json();
+                
+                if (data.success && data.position > 5) {
+                    // Only apply if user didn't complete the track down to the final 30 seconds
+                    if (videoEl.duration && data.position < videoEl.duration - 30) {
+                        videoEl.currentTime = data.position;
+                        console.log(`▶️ Playback restored to location timestamp: ${data.position}s`);
+                    } else if (!videoEl.duration) {
+                        // Fallback constraint case check if metadata speed lagged behind slightly
+                        videoEl.currentTime = data.position;
+                    }
+                }
+            } catch (e) {
+                console.error("Playback tracking check sync dropped:", e);
             }
-        } catch (err) {
-            console.error("TV context initialization fault:", err);
-        }
-        return;
-    }
-
-    // Standard Movie Fallback Pass (Hide next button entirely for standard standalone films)
-    nextBtn.style.display = 'none';
-    setupMoviePlayback();
-}
-
-async function setupMoviePlayback() {
-    let speedMbps = 10;
-    if (navigator.connection && navigator.connection.downlink) speedMbps = navigator.connection.downlink;
-
-    try {
-        const response = await fetch(`/api/movies/${movieId}`);
-        const movie = await response.json();
-        let targetStreamUrl = '';
-        
-        if (speedMbps < 2.5 && movie.file480p) {
-            targetStreamUrl = movie.file480p.replace('/movies/', '/movie-assets/');
-            qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
-        } else if (speedMbps < 6.0 && movie.file720p) {
-            targetStreamUrl = movie.file720p.replace('/movies/', '/movie-assets/');
-            qualityTag.innerText = "HD 720P (BALANCED)";
-        } else {
-            const fallbackFile = movie.file1080p || movie.fileSource || '';
-            targetStreamUrl = fallbackFile.replace('/movies/', '/movie-assets/');
-            qualityTag.innerText = "FHD 1080P (SOURCE)";
         }
 
-        videoEl.src = targetStreamUrl;
-        loadSubtitles();
-        videoEl.play().catch(() => {});
-    } catch (err) {
-        qualityTag.innerText = "STREAM CORRUPTED";
-    }
-}
+        // Send a continuous heartbeat tick down to the file server pipeline
+        videoEl.addEventListener('timeupdate', () => {
+            const currentTime = videoEl.currentTime;
+            const now = Date.now();
 
-/**
- * Finds the index of the next available episode file in the sequence matrix
- */
-function getNextAvailableIndex() {
-    if (currentTrackIndex === -1 || currentTvPlaylist.length === 0) return -1;
-    for (let i = currentTrackIndex + 1; i < currentTvPlaylist.length; i++) {
-        if (currentTvPlaylist[i].available) return i;
-    }
-    return -1;
-}
+            if (now - lastSavedTime > SYNC_INTERVAL_MS) {
+                lastSavedTime = now;
+                
+                fetch('/api/profile/playback/sync', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-user-profile': activeUserProfile
+                    },
+                    body: JSON.stringify({
+                        mediaId: currentMediaId,
+                        position: currentTime
+                    })
+                }).catch(err => console.error("Heartbeat frame update fail:", err));
+            }
+        });
 
-/**
- * TV Playback Worker Logic Engine
- */
-function playEpisodeIndex(index) {
-    if (index < 0 || index >= currentTvPlaylist.length) return;
-    
-    const episode = currentTvPlaylist[index];
-    currentTrackIndex = index;
+        // Trigger timestamp restorations right as the stream asset tracks align completely
+        videoEl.addEventListener('loadedmetadata', applyResumeMarker);
 
-    videoEl.src = `/movie-assets/${episode.localRelativePath}`;
-    qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
-    qualityTag.style.background = "#6366f1"; 
+        async function initializePremiumStream() {
+            if (!movieId) {
+                alert("No media identifier provided.");
+                window.location.href = "/";
+                return;
+            }
 
-    const newUrl = `player.html?id=${encodeURIComponent(movieId)}&season=${seasonParam}&episode=${episode.episodeNumber}`;
-    window.history.replaceState({ path: newUrl }, '', newUrl);
+            if (seasonParam && episodeParam) {
+                try {
+                    const cleanFolder = movieId.replace('series/', '');
+                    const response = await fetch(`/api/series/${encodeURIComponent(cleanFolder)}`);
+                    const showData = await response.json();
+                    
+                    const targetSeason = showData.seasons ? showData.seasons[seasonParam] : null;
+                    currentTvPlaylist = targetSeason ? targetSeason.episodes : [];
+                    currentTrackIndex = currentTvPlaylist.findIndex(ep => ep.episodeNumber == parseInt(episodeParam, 10));
 
-    // Update Visibility status check on the skip layout element
-    updateNextButtonVisibility();
+                    if (currentTrackIndex !== -1) {
+                        playEpisodeIndex(currentTrackIndex);
+                    } else {
+                        alert("Target episode track index bounds out of file system alignment.");
+                    }
+                } catch (err) {
+                    console.error("TV context initialization fault:", err);
+                }
+                return;
+            }
 
-    videoEl.play().catch(() => {});
-}
+            // Standard Movie Fallback Pass
+            nextBtn.style.display = 'none';
+            currentMediaId = movieId; // Base context movie fallback tag setup
+            setupMoviePlayback();
+        }
 
-function updateNextButtonVisibility() {
-    if (getNextAvailableIndex() !== -1) {
-        nextBtn.style.display = 'flex';
-    } else {
-        nextBtn.style.display = 'none'; // Clear from view on the absolute last episode
-    }
-}
+        async function setupMoviePlayback() {
+            let speedMbps = 10;
+            if (navigator.connection && navigator.connection.downlink) speedMbps = navigator.connection.downlink;
 
-// Wire manual skip click directly to layout element
-nextBtn.addEventListener('click', () => {
-    const nextIdx = getNextAvailableIndex();
-    if (nextIdx !== -1) {
-        console.log("⏭️ Manual episode skip intercept triggered.");
-        playEpisodeIndex(nextIdx);
-    }
-});
+            try {
+                const response = await fetch(`/api/movies/${movieId}`);
+                const movie = await response.json();
+                let targetStreamUrl = '';
+                
+                if (speedMbps < 2.5 && movie.file480p) {
+                    targetStreamUrl = movie.file480p.replace('/movies/', '/movie-assets/');
+                    qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
+                } else if (speedMbps < 6.0 && movie.file720p) {
+                    targetStreamUrl = movie.file720p.replace('/movies/', '/movie-assets/');
+                    qualityTag.innerText = "HD 720P (BALANCED)";
+                } else {
+                    const fallbackFile = movie.file1080p || movie.fileSource || '';
+                    targetStreamUrl = fallbackFile.replace('/movies/', '/movie-assets/');
+                    qualityTag.innerText = "FHD 1080P (SOURCE)";
+                }
 
-// Autoplay continuous sequence tracking logic 
-videoEl.addEventListener('ended', () => {
-    const nextIdx = getNextAvailableIndex();
-    if (nextIdx !== -1) {
-        playEpisodeIndex(nextIdx);
-    } else {
-        qualityTag.innerText = "SEASON ENDED";
-        qualityTag.style.background = "#22c55e";
-    }
-});
+                videoEl.src = targetStreamUrl;
+                loadSubtitles();
+                videoEl.play().catch(() => {});
+            } catch (err) {
+                qualityTag.innerText = "STREAM CORRUPTED";
+            }
+        }
 
-// Custom UI Polish: Include nextBtn in the visibility fade wrapper array structures
-let mouseMoveTimeout;
-function resetControlVisibility() {
-    backBtn.classList.remove('hide-controls');
-    nextBtn.classList.remove('hide-controls');
-    qualityTag.classList.remove('hide-controls');
-    stage.style.cursor = 'default';
-    
-    clearTimeout(mouseMoveTimeout);
-    if (!videoEl.paused) {
-        mouseMoveTimeout = setTimeout(() => {
-            backBtn.classList.add('hide-controls');
-            nextBtn.classList.add('hide-controls');
-            qualityTag.classList.add('hide-controls');
-            stage.style.cursor = 'none';
-        }, 3000); 
-    }
-}
+        /**
+         * Finds the index of the next available episode file in the sequence matrix
+         */
+        function getNextAvailableIndex() {
+            if (currentTrackIndex === -1 || currentTvPlaylist.length === 0) return -1;
+            for (let i = currentTrackIndex + 1; i < currentTvPlaylist.length; i++) {
+                if (currentTvPlaylist[i].available) return i;
+            }
+            return -1;
+        }
 
-document.addEventListener('mousemove', resetControlVisibility);
-videoEl.addEventListener('play', resetControlVisibility);
-videoEl.addEventListener('pause', resetControlVisibility);
+        /**
+         * TV Playback Worker Logic Engine
+         */
+        function playEpisodeIndex(index) {
+            if (index < 0 || index >= currentTvPlaylist.length) return;
+            
+            const episode = currentTvPlaylist[index];
+            currentTrackIndex = index;
 
-// Keyboard Intercept Controls
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-        e.preventDefault(); 
-        if (videoEl.paused) videoEl.play(); else videoEl.pause();
-    }
-    // Added quick keyboard hotkey alternative: 'N' steps to next track profile
-    if (e.key.toLowerCase() === 'n') {
-        const nextIdx = getNextAvailableIndex();
-        if (nextIdx !== -1) playEpisodeIndex(nextIdx);
-    }
-});
+            // Generate deterministic string for unique TV episode tracking arrays
+            const cleanFolder = movieId.replace('series/', '');
+            currentMediaId = `${cleanFolder}-S${seasonParam}E${episode.episodeNumber}`;
 
-initializePremiumStream();
+            videoEl.src = `/movie-assets/${episode.localRelativePath}`;
+            qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
+            qualityTag.style.background = "#6366f1"; 
+
+            const newUrl = `player.html?id=${encodeURIComponent(movieId)}&season=${seasonParam}&episode=${episode.episodeNumber}`;
+            window.history.replaceState({ path: newUrl }, '', newUrl);
+
+            // Update Visibility status check on the skip layout element
+            updateNextButtonVisibility();
+
+            // Fire an explicit lookup payload fetch immediately for the new episode target profile
+            applyResumeMarker();
+
+            videoEl.play().catch(() => {});
+        }
+
+        function updateNextButtonVisibility() {
+            if (getNextAvailableIndex() !== -1) {
+                nextBtn.style.display = 'flex';
+            } else {
+                nextBtn.style.display = 'none'; // Clear from view on the absolute last episode
+            }
+        }
+
+        // Wire manual skip click directly to layout element
+        nextBtn.addEventListener('click', () => {
+            const nextIdx = getNextAvailableIndex();
+            if (nextIdx !== -1) {
+                console.log("⏭️ Manual episode skip intercept triggered.");
+                playEpisodeIndex(nextIdx);
+            }
+        });
+
+        // Autoplay continuous sequence tracking logic 
+        videoEl.addEventListener('ended', () => {
+            const nextIdx = getNextAvailableIndex();
+            if (nextIdx !== -1) {
+                playEpisodeIndex(nextIdx);
+            } else {
+                qualityTag.innerText = "SEASON ENDED";
+                qualityTag.style.background = "#22c55e";
+            }
+        });
+
+        // Custom UI Polish: Include nextBtn in the visibility fade wrapper array structures
+        let mouseMoveTimeout;
+        function resetControlVisibility() {
+            backBtn.classList.remove('hide-controls');
+            nextBtn.classList.remove('hide-controls');
+            qualityTag.classList.remove('hide-controls');
+            stage.style.cursor = 'default';
+            
+            clearTimeout(mouseMoveTimeout);
+            if (!videoEl.paused) {
+                mouseMoveTimeout = setTimeout(() => {
+                    backBtn.classList.add('hide-controls');
+                    nextBtn.classList.add('hide-controls');
+                    qualityTag.classList.add('hide-controls');
+                    stage.style.cursor = 'none';
+                }, 3000); 
+            }
+        }
+
+        document.addEventListener('mousemove', resetControlVisibility);
+        videoEl.addEventListener('play', resetControlVisibility);
+        videoEl.addEventListener('pause', resetControlVisibility);
+
+        // Keyboard Intercept Controls
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); 
+                if (videoEl.paused) videoEl.play(); else videoEl.pause();
+            }
+            // Added quick keyboard hotkey alternative: 'N' steps to next track profile
+            if (e.key.toLowerCase() === 'n') {
+                const nextIdx = getNextAvailableIndex();
+                if (nextIdx !== -1) playEpisodeIndex(nextIdx);
+            }
+        });
+
+        initializePremiumStream();
     </script>
 </body>
 </html>
