@@ -213,6 +213,17 @@ app.post('/api/profile/playback/sync', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing sync states' });
         }
 
+        // 🛡️ ANTI-RESET SHIELD: 
+        // If the frontend tries to save exactly 0, check what we already have on disk first.
+        // If we already have a progress position saved, don't let a sudden 0 wipe it out.
+        if (parseFloat(position) === 0) {
+            const currentPlayback = await ProfileManager.getPlaybackState(username);
+            if (currentPlayback && currentPlayback[mediaId] && currentPlayback[mediaId].position > 10) {
+                // Ignore the rogue 0 save and return early safely
+                return res.json({ success: true, message: 'Ignored teardown zero reset.' });
+            }
+        }
+
         await ProfileManager.savePlaybackPosition(username, mediaId, position);
         res.json({ success: true });
     } catch (err) {
