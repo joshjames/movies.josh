@@ -102,12 +102,9 @@ const ProfileManager = {
         if (history.logins.length > 50) history.logins.pop();
         
         return await this.writeData(username, 'history', history);
-    }
-};
+    },
 
-
-const ProfileManager = {
-    // ... keep your existing readData, writeData, and playback sync methods ...
+ // ... keep your existing readData, writeData, and playback sync methods ...
 
     /**
      * REGISTRATION ENGINE
@@ -153,6 +150,9 @@ const ProfileManager = {
 
         return { success: true };
     }
+
+
 };
+
 
 module.exports = ProfileManager;
