@@ -20,13 +20,45 @@ const logger = require('./logger');
 if (!fs.existsSync(MOVIES_DIR)) {
     fs.mkdirSync(MOVIES_DIR, { recursive: true });
 }
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '20mb' }));
+app.use(cookieParser());
+
+
+// Middleware: Enforce profile authentication walls
+function requireAuth(req, res, next) {
+    // 1. Exclude core authentication API loops and the login page to prevent infinite redirect spirals
+    const publicPaths = ['/login.html', '/api/auth/login', '/api/auth/register'];
+    
+    if (publicPaths.includes(req.path)) {
+        return next();
+    }
+
+    // 2. Inspect browser cookies for an active session anchor
+    const activeUser = req.cookies.user_profile;
+
+    if (!activeUser) {
+        // If it's an API request data fetch, send a formal 401 Unauthorized status code
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({ success: false, error: "Authentication required." });
+        }
+        // If it's a standard page navigation index lookup, force back to the access card
+        return res.redirect('/login.html');
+    }
+
+    // Session verified safely, hand execution back to the next controller step
+    next();
+}
+
+// ⚠️ REGISTER THIS MIDDLEWARE RIGHT HERE (Crucial placement index)
+app.use(requireAuth);
+
+// Your existing static asset delivery mapping arrays follow below:
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
 
 
-app.use(cookieParser());
 
 // POST: Process user enrollment pipelines
 app.post('/api/auth/register', async (req, res) => {
@@ -80,6 +112,10 @@ app.get('/api/auth/me', async (req, res) => {
     res.json({ loggedIn: true, username: activeUser, config });
 });
 
+app.get('/api/auth/logout', (req, res) => {
+    res.clearCookie('user_profile', { path: '/' });
+    res.redirect('/login.html');
+});
 
 
 // GET: Stream Live Real-Time Logs straight to Admin UI via SSE

@@ -174,6 +174,37 @@
             </svg>
         </div>
 
+        <div class="nav-header" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; background: #0f172a; border-bottom: 1px solid #1e293b;">
+    <div class="logo" style="font-size: 1.5rem; font-weight: bold; color: #e50914;">Joshflix</div>
+    
+    <div class="profile-controls" style="display: flex; align-items: center; gap: 16px;">
+        <span id="welcome-user" style="color: #94a3b8; font-size: 0.9rem; font-weight: 500;">Cinema Active</span>
+        <a href="/api/auth/logout" class="logout-btn" style="background: rgba(229, 9, 20, 0.1); border: 1px solid rgba(229, 9, 20, 0.4); color: #f87171; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; transition: all 0.2s;">
+            Switch Profile ⎋
+        </a>
+    </div>
+</div>
+
+<script>
+    // Optional client-side polish: Fetch active metadata profile configuration details on page load
+    async function hydrateUserProfileHeader() {
+        try {
+            const res = await fetch('/api/auth/me');
+            const data = await res.json();
+            if (data.loggedIn) {
+                // Capitalize first character of username dynamically
+                const formattedName = data.username.charAt(0).toUpperCase() + data.username.slice(1);
+                document.getElementById('welcome-user').innerText = `🍿 Operator: ${formattedName}`;
+            }
+        } catch (e) {
+            console.error("Profile name tracking sync lost.");
+        }
+    }
+    
+    // Execute profile verification when page context completes rendering
+    document.addEventListener('DOMContentLoaded', hydrateUserProfileHeader);
+</script>
+
         <div class="nav-actions">
             <a href="/browse.html" class="browse-nav-btn">
                 🔍 Browse Catalog
