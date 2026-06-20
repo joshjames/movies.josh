@@ -139,7 +139,7 @@ const fsPromises = fs.promises;
 const { sendVerificationEmail } = require('./mailer');
 const cookieParser = require('cookie-parser');
 const ProfileManager = require('./profile-manager');
-
+const crypto = require('crypto');
 const logger = require('./logger');
 
 
