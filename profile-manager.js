@@ -106,6 +106,49 @@ const ProfileManager = {
         return await this.writeData(username, 'history', history);
     },
 
+
+
+    /**
+     * REGISTRATION ENGINE (Updated to include validation parameters)
+     */
+    async registerUser(username, password, email) { // 👈 Added email parameter here
+        const cleanName = username.toLowerCase().trim();
+        const roster = await readRoster();
+
+        if (roster[cleanName]) {
+            return { success: false, error: "Username already taken." };
+        }
+
+        // Add user to master ledger list
+        roster[cleanName] = { password: password, createdAt: Date.now() };
+        await writeRoster(roster);
+
+        // Generate temporary registration tokens cleanly
+        const token = require('crypto').randomBytes(32).toString('hex');
+        const expires = Date.now() + (24 * 60 * 60 * 1000); // 24 Hours
+
+        // Provision initial configuration profiles & folder layout structures
+        const defaultConfigs = {
+            username: username,
+            email: email.trim(),                       // 👈 Preserved your structure, added field
+            isVerified: false,                         // 👈 Added validation state
+            verificationToken: token,                  // 👈 Added temp parameters
+            verificationExpires: expires,               // 👈 Added temp parameters
+            avatar: "default.png",
+            preferences: { autoplay: true, UITheme: "dark" }
+        };
+        
+        await this.writeData(cleanName, 'config', defaultConfigs);
+        await this.writeData(cleanName, 'history', { logins: [], lastLogin: null });
+        await this.writeData(cleanName, 'playback', {});
+
+        logger.log(`👤 [USER PROVISIONING] Created new profile volume workspace for: ${cleanName}`);
+        
+        // Return success along with the token so the email handler can send it out
+        return { success: true, token: token }; 
+    },
+
+    
  // ... keep your existing readData, writeData, and playback sync methods ...
 
     /**
