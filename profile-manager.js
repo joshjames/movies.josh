@@ -148,13 +148,13 @@ const ProfileManager = {
         return { success: true, token: token }; 
     },
 
-    
+
  // ... keep your existing readData, writeData, and playback sync methods ...
 
     /**
-     * REGISTRATION ENGINE
+     * REGISTRATION ENGINE (Updated to include validation parameters)
      */
-    async registerUser(username, password) {
+    async registerUser(username, password, email) { // 👈 Added email parameter here
         const cleanName = username.toLowerCase().trim();
         const roster = await readRoster();
 
@@ -166,9 +166,17 @@ const ProfileManager = {
         roster[cleanName] = { password: password, createdAt: Date.now() };
         await writeRoster(roster);
 
+        // 🪙 Generate temporary registration verification tokens cleanly
+        const token = require('crypto').randomBytes(32).toString('hex');
+        const expires = Date.now() + (24 * 60 * 60 * 1000); // 24-hour expiration matrix
+
         // Provision initial configuration profiles & folder layout structures
         const defaultConfigs = {
             username: username,
+            email: email.trim(),                       // 👈 Saved email parameter
+            isVerified: false,                         // 👈 Added verification safety state flag
+            verificationToken: token,                  // 👈 Appended token reference
+            verificationExpires: expires,              // 👈 Appended expiration date
             avatar: "default.png",
             preferences: { autoplay: true, UITheme: "dark" }
         };
@@ -177,8 +185,10 @@ const ProfileManager = {
         await this.writeData(cleanName, 'history', { logins: [], lastLogin: null });
         await this.writeData(cleanName, 'playback', {});
 
-        logger.log(`👤 [USER PRIVISIONING] Created new profile volume workspace for: ${cleanName}`);
-        return { success: true };
+        logger.log(`👤 [USER PROVISIONING] Created new profile volume workspace for: ${cleanName}`);
+        
+        // 🔑 Return success along with the token so the email handler route can catch it
+        return { success: true, token: token }; 
     },
 
     /**

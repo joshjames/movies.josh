@@ -154,8 +154,8 @@ app.use(cookieParser());
 
 // Middleware: Enforce profile authentication walls
 function requireAuth(req, res, next) {
-    // 1. Exclude core authentication API loops and the login page to prevent infinite redirect spirals
-    const publicPaths = ['/login.html', '/api/auth/login', '/api/auth/register'];
+    // 1. Exclude core authentication API loops to prevent locking out unverified guests
+    const publicPaths = ['/login.html', '/api/auth/login', '/api/auth/register', '/api/auth/verify']; // 👈 Added /api/auth/verify
     
     if (publicPaths.includes(req.path)) {
         return next();
@@ -184,23 +184,26 @@ app.use(requireAuth);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
 
-
-// POST: Process user enrollment pipelines
 app.post('/api/auth/register', async (req, res) => {
-    const { username, password, email } = req.body; // 👈 Accept email from payload
+    const { username, password, email } = req.body;
     if (!username || !password || !email) {
         return res.status(400).json({ success: false, error: "Fields cannot be blank." });
     }
 
     try {
-        // Pass email into your function
         const result = await ProfileManager.registerUser(username, password, email);
         
         if (result.success) {
-            // Asynchronously dispatch your mail out via Brevo using the returned token
-            sendVerificationEmail(email.trim(), username.trim(), result.token);
+            // 🧠 FIX: Ensure result.token exists based on the object returned from ProfileManager
+            const verificationToken = result.token;
 
-            // Inform the front-end to show the success banner check
+            if (!verificationToken) {
+                console.error("❌ [BUG] Token was not generated or returned from ProfileManager.");
+            }
+
+            // Dispatch mailer tracking sequence
+            sendVerificationEmail(email.trim(), username.trim(), verificationToken);
+
             return res.json({ 
                 success: true, 
                 message: "Registration successful! Check your inbox to verify your profile." 
