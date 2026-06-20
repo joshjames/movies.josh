@@ -27,7 +27,6 @@
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
         }
 
-        /* Branding Container Wrapper placement constraints */
         .login-logo-wrapper {
             width: 100%;
             max-width: 260px;
@@ -42,7 +41,7 @@
 
         h1 {
             font-size: 1.6rem;
-            margin: 0 fill 8px fill;
+            margin: 0 0 8px 0;
             margin-top: 0;
             margin-bottom: 8px;
             color: #f1f5f9;
@@ -62,6 +61,11 @@
             flex-direction: column;
             gap: 6px;
             margin-bottom: 18px;
+        }
+
+        /* Email field injection animations toggle rules */
+        #emailFieldGroup {
+            display: none;
         }
 
         label {
@@ -119,16 +123,24 @@
             cursor: pointer;
         }
 
-        .error-banner {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid #ef4444;
-            color: #f87171;
+        .banner {
             padding: 12px;
             border-radius: 6px;
             font-size: 0.85rem;
             margin-bottom: 20px;
             display: none;
             text-align: center;
+            line-height: 1.4;
+        }
+        .banner-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+            color: #f87171;
+        }
+        .banner-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid #10b981;
+            color: #34d399;
         }
     </style>
 </head>
@@ -160,12 +172,17 @@
         <h1 id="form-title">Welcome Back</h1>
         <div class="subtitle" id="form-subtitle">Enter your details to open the home cinema desk</div>
 
-        <div class="error-banner" id="errorBlock"></div>
+        <div class="banner" id="alertBlock"></div>
 
         <form id="authForm" onsubmit="handleFormSubmit(event)">
             <div class="form-group">
                 <label for="usernameIn">Username</label>
                 <input type="text" id="usernameIn" required autocomplete="username">
+            </div>
+
+            <div class="form-group" id="emailFieldGroup">
+                <label for="emailIn">Email Address</label>
+                <input type="email" id="emailIn" autocomplete="email">
             </div>
 
             <div class="form-group">
@@ -185,6 +202,21 @@
     <script>
         let isLoginMode = true;
 
+        // Auto-check on initialization to look for verification query returns
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('verified') === 'true') {
+                showAlert("Account activated successfully! You can now log in below.", "success");
+            }
+        });
+
+        function showAlert(message, type) {
+            const block = document.getElementById('alertBlock');
+            block.innerText = message;
+            block.className = `banner banner-${type}`;
+            block.style.display = 'block';
+        }
+
         function toggleAuthMode() {
             isLoginMode = !isLoginMode;
             
@@ -193,30 +225,45 @@
             const submitBtn = document.getElementById('submitBtn');
             const toggleText = document.getElementById('toggleText');
             const toggleLink = document.getElementById('toggleLink');
-            document.getElementById('errorBlock').style.display = 'none';
+            const emailGroup = document.getElementById('emailFieldGroup');
+            const emailInput = document.getElementById('emailIn');
+            
+            document.getElementById('alertBlock').style.display = 'none';
 
             if (isLoginMode) {
                 title.innerText = "Welcome Back";
                 subtitle.innerText = "Enter your details to open the home cinema desk";
-                submitBtn.innerText = "Login to Joshflix";
+                submitBtn.innerText = "Access Workspace";
                 toggleText.innerText = "New to Joshflix?";
                 toggleLink.innerText = "Create a profile";
+                
+                emailGroup.style.display = 'none';
+                emailInput.removeAttribute('required');
             } else {
                 title.innerText = "Provision Profile";
                 subtitle.innerText = "Configure a brand new local isolation directory layout";
                 submitBtn.innerText = "Register System Anchor";
                 toggleText.innerText = "Already registered?";
                 toggleLink.innerText = "Sign in here";
+                
+                emailGroup.style.display = 'flex';
+                emailInput.setAttribute('required', 'true');
             }
         }
 
         async function handleFormSubmit(e) {
             e.preventDefault();
-            const errorBlock = document.getElementById('errorBlock');
-            errorBlock.style.display = 'none';
+            document.getElementById('alertBlock').style.display = 'none';
 
             const username = document.getElementById('usernameIn').value;
             const password = document.getElementById('passwordIn').value;
+            
+            const payload = { username, password };
+            
+            // Gather email only if the field is active on screen
+            if (!isLoginMode) {
+                payload.email = document.getElementById('emailIn').value;
+            }
 
             const targetEndpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
 
@@ -224,20 +271,24 @@
                 const response = await fetch(targetEndpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    window.location.href = "/";
+                    if (isLoginMode) {
+                        window.location.href = "/";
+                    } else {
+                        // Registration success: Clear fields and show notice
+                        document.getElementById('authForm').reset();
+                        showAlert(data.message, "success");
+                    }
                 } else {
-                    errorBlock.innerText = data.error || "Failed handling authorization state.";
-                    errorBlock.style.display = 'block';
+                    showAlert(data.error || "Failed handling authorization state.", "error");
                 }
             } catch (err) {
-                errorBlock.innerText = "Network loop transmission exception dropped.";
-                errorBlock.style.display = 'block';
+                showAlert("Network loop transmission exception dropped.", "error");
             }
         }
     </script>

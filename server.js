@@ -136,7 +136,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { exec, spawn } = require('child_process');
 const fsPromises = fs.promises;
-
+const { sendVerificationEmail } = require('./mailer');
 const cookieParser = require('cookie-parser');
 const ProfileManager = require('./profile-manager');
 
@@ -185,45 +185,99 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/movie-assets', express.static(MOVIES_DIR));
 
 
-
-// POST: Process user enrollment pipelines
+// POST: Process user enrollment pipelines with email validation
 app.post('/api/auth/register', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
+    const { username, password, email } = req.body;
+    
+    if (!username || !password || !email) {
         return res.status(400).json({ success: false, error: "Fields cannot be blank." });
     }
 
     try {
+        // 1. Write the base core credential profiles via ProfileManager
         const result = await ProfileManager.registerUser(username, password);
-        if (result.success) {
-            // Log them in immediately by assigning their user cookie context
-            res.cookie('user_profile', username.toLowerCase().trim(), { maxAge: 31536000000, path: '/' });
-            return res.json({ success: true });
+        if (!result.success) {
+            return res.status(400).json(result);
         }
-        res.status(400).json(result);
+
+        // 2. Provision temporary cryptographic tokens
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = Date.now() + (24 * 60 * 60 * 1000); // 24-hour lifetime window
+
+        // 3. Inject configuration details with active fallback flags
+        const configPayload = {
+            email: email.trim(),
+            isVerified: false,
+            verificationToken: token,
+            verificationExpires: expires
+        };
+        await ProfileManager.saveUserConfig(username, configPayload);
+
+        // 4. Send the confirmation layout email out to the user asynchronously
+        sendVerificationEmail(email.trim(), username.trim(), token);
+
+        // Return confirmation code telling them to verify their inbox without setting login cookies
+        return res.json({ 
+            success: true, 
+            message: "Registration successful! Please check your email inbox to activate your profile before attempting access." 
+        });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// POST: Validate credentials and establish session context
-app.post('/api/auth/login', async (req, res) => {
-    const { username, password } = req.body;
+// GET: Capture incoming verification verification redirects
+app.get('/api/auth/verify', async (req, res) => {
+    const { token, user } = req.query;
     
     try {
-        const auth = await ProfileManager.authenticateUser(username, password);
-        if (auth.success) {
-            const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-            const cleanName = username.toLowerCase().trim();
-            
-            // Log network history footprints asynchronously
-            await ProfileManager.updateLoginHistory(cleanName, clientIp);
-
-            // Plant tracking session cookies (lasts 1 Year)
-            res.cookie('user_profile', cleanName, { maxAge: 31536000000, path: '/' });
-            return res.json({ success: true });
+        const userConfig = await ProfileManager.getUserConfig(user);
+        
+        if (!userConfig || userConfig.verificationToken !== token) {
+            return res.send('<h3>Invalid verification link mapping configuration.</h3>');
         }
-        res.status(401).json(auth);
+        if (Date.now() > userConfig.verificationExpires) {
+            return res.send('<h3>Verification window has expired. Please register your profile layout again.</h3>');
+        }
+
+        // Flip status flags and purge temp tokens from persistence JSON arrays
+        userConfig.isVerified = true;
+        delete userConfig.verificationToken;
+        delete userConfig.verificationExpires;
+        
+        await ProfileManager.saveUserConfig(user, userConfig);
+        
+        // Return browser to login screen with explicit url indicator parameter
+        res.redirect('/login.html?verified=true');
+    } catch (err) {
+        res.status(500).send('Verification error occurred.');
+    }
+});
+
+// POST: Authenticate user profile state boundaries
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    try {
+        // Assert password matches historical hashing signatures
+        // (Assuming you have a traditional auth handler check here)
+        const authCheck = await ProfileManager.authenticateUser(username, password); 
+        if (!authCheck.success) {
+            return res.status(401).json({ success: false, error: "Invalid credential entries." });
+        }
+
+        // 🛡️ Guardrail Check: Assess email verification states before establishing session tracking
+        const userConfig = await ProfileManager.getUserConfig(username);
+        if (userConfig && userConfig.isVerified === false) {
+            return res.status(403).json({ 
+                success: false, 
+                error: "Access Denied. Account verification pending. Please validate your configuration via email link." 
+            });
+        }
+
+        // Setup session profile tracking cookies cleanly
+        res.cookie('user_profile', username.toLowerCase().trim(), { maxAge: 31536000000, path: '/' });
+        return res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
