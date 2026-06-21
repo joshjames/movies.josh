@@ -588,7 +588,7 @@ function rebuildLibraryCache() {
         const cleanMovies = folders.filter(folder => {
             const folderPath = path.join(MOVIES_DIR, folder);
             if (folder.startsWith('.') || !fs.lstatSync(folderPath).isDirectory()) return false;
-            if (['sample', 'series'].includes(folder.toLowerCase())) return false; // Skip the TV branch here
+            if (['sample', 'series'].includes(folder.toLowerCase())) return false; 
             if (fs.existsSync(path.join(folderPath, '.processing'))) return false;
 
             const files = fs.readdirSync(folderPath);
@@ -632,7 +632,7 @@ function rebuildLibraryCache() {
                 }
 
                 temporaryCache.push({
-                    id: encodeURIComponent(`series/${showFolder}`), // Keeps resource paths descriptive and unique
+                    id: encodeURIComponent(`series/${showFolder}`),
                     title: metaData.title,
                     year: metaData.year,
                     plot: metaData.plot,
@@ -643,8 +643,10 @@ function rebuildLibraryCache() {
             });
         }
 
-        INSTANT_LIBRARY_CACHE = temporaryCache;
-        console.log(`⚡ [Cache Worker] Cache initialized. ${INSTANT_LIBRARY_CACHE.length} active multi-tier assets mapped.`);
+        // 🧠 THE FIX: Mutate the array safely or explicitly write to global scope
+        global.INSTANT_LIBRARY_CACHE = temporaryCache; 
+        
+        console.log(`⚡ [Cache Worker] Cache initialized. ${global.INSTANT_LIBRARY_CACHE.length} active multi-tier assets mapped.`);
     } catch (err) {
         console.error("❌ Failed building internal memory cache maps:", err);
     }
