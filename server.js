@@ -340,10 +340,11 @@ app.post('/api/admin/refetch-metadata', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
         }
 
-        // Calculate location target paths matching your dual tier workspace rules
+        // 🧠 FIX: Match your server's exact path resolution logic
+        // If it's a series, it goes into the 'series' subfolder. If a movie, it lives directly in MOVIES_DIR.
         const targetDir = (contentType === 'series') 
-            ? path.join('/app/movies', 'series', folder) 
-            : path.join('/app/movies', 'movies', folder); // Adjust to your MOVIES_DIR context layout variable
+            ? path.join(MOVIES_DIR, 'series', folder) 
+            : path.join(MOVIES_DIR, folder); // 👈 Removed the duplicate 'movies' nesting sub-path
 
         // 1. Establish Query String targeting explicit IMDB IDs or fallback text strings
         let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
