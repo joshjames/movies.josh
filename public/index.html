@@ -201,9 +201,11 @@
             </div>
 
             <div class="profile-controls">
-                <span id="welcome-user" class="welcome-msg">Cinema Active</span>
-                <a href="/api/auth/logout" class="logout-btn">Switch Profile ⎋</a>
-            </div>
+    <a href="/admin.html" id="admin-action-btn" style="display: none; background: #9333ea; color: white; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; transition: all 0.2s; white-space: nowrap;">🛠️ Admin Desk</a>
+    
+    <span id="welcome-user" class="welcome-msg">Cinema Active</span>
+    <a href="/api/auth/logout" class="logout-btn">Switch Profile ⎋</a>
+</div>
 
             <div class="nav-actions">
                 <a href="/browse.html" class="browse-nav-btn">🔍 Browse Catalog</a>
@@ -236,8 +238,17 @@
                 const res = await fetch('/api/auth/me');
                 const data = await res.json();
                 if (data.loggedIn) {
+                    const cleanUsername = data.username.toLowerCase().trim();
                     const formattedName = data.username.charAt(0).toUpperCase() + data.username.slice(1);
                     document.getElementById('welcome-user').innerText = `🍿 Operator: ${formattedName}`;
+                    
+                    // 🛡️ IDENTITY GATING: Expose admin configurations explicitly for 'josh'
+                    if (cleanUsername === 'josh') {
+                        const adminBtn = document.getElementById('admin-action-btn');
+                        if (adminBtn) {
+                            adminBtn.style.display = 'inline-block';
+                        }
+                    }
                 }
             } catch (e) {
                 console.error("Profile name tracking sync lost.");
