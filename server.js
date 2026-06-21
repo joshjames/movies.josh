@@ -136,6 +136,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { exec, spawn } = require('child_process');
 const fsPromises = fs.promises;
+const download = require('image-downloader'); // Optional utility or use an inline axios stream helper
 const { sendVerificationEmail } = require('./mailer');
 const cookieParser = require('cookie-parser');
 const ProfileManager = require('./profile-manager');
@@ -332,32 +333,103 @@ app.post('/api/admin/sanitizer/run', async (req, res) => {
     }
 });
 
+app.post('/api/admin/refetch-metadata', async (req, res) => {
+    try {
+        const { folder, contentType, imdbId, title } = req.body;
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
+        }
+
+        // Calculate location target paths matching your dual tier workspace rules
+        const targetDir = (contentType === 'series') 
+            ? path.join('/app/movies', 'series', folder) 
+            : path.join('/app/movies', 'movies', folder); // Adjust to your MOVIES_DIR context layout variable
+
+        // 1. Establish Query String targeting explicit IMDB IDs or fallback text strings
+        let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
+        if (imdbId && imdbId.trim().startsWith('tt')) {
+            queryUrl += `&i=${encodeURIComponent(imdbId.trim())}`;
+        } else if (title) {
+            queryUrl += `&t=${encodeURIComponent(title.trim())}`;
+        } else {
+            queryUrl += `&t=${encodeURIComponent(folder.replace(/[-_.]/g, ' '))}`;
+        }
+
+        const omdbResponse = await axios.get(queryUrl);
+        const data = omdbResponse.data;
+
+        if (!data || data.Response === "False") {
+            return res.status(404).json({ success: false, error: data.Error || 'No matching titles found inside OMDb library registry.' });
+        }
+
+        // 2. Format a unified metadata structure object
+        const normalizedMetadata = {
+            title: data.Title || folder.replace(/[-_.]/g, ' '),
+            year: data.Year || '',
+            genre: data.Genre || 'N/A',
+            imdbId: data.imdbID || imdbId || '',
+            plot: data.Plot || '',
+            contentType: contentType
+        };
+
+        // Write the configuration schema out to disk directly
+        await fsPromises.writeFile(path.join(targetDir, 'metadata.json'), JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
+
+        // 3. Download Poster Cover Art if returned asset path is valid
+        if (data.Poster && data.Poster !== "N/A") {
+            try {
+                const imageResponse = await axios({
+                    url: data.Poster,
+                    method: 'GET',
+                    responseType: 'arraybuffer'
+                });
+                await fsPromises.writeFile(path.join(targetDir, 'cover.jpg'), Buffer.from(imageResponse.data));
+                logger.log(`📥 [METADATA REFETCH] Cover artwork downloaded successfully for: ${folder}`);
+            } catch (imgErr) {
+                logger.log(`⚠️ [METADATA WARN] Failed retrieving art asset: ${imgErr.message}`, 'warn');
+            }
+        }
+
+        // 4. Force synchronization tables to clear cache mismatches across memory states
+        if (typeof rebuildLibraryCache === 'function') {
+            rebuildLibraryCache();
+        }
+
+        res.json({ success: true, metadata: normalizedMetadata });
+    } catch (err) {
+        logger.log(`❌ [REFETCH FAILURE] Exception dropped: ${err.message}`, 'error');
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.post('/api/admin/upload-poster', async (req, res) => {
     try {
-        const { folder, name, image } = req.body;
+        const { folder, image, contentType } = req.body; // 👈 Extract contentType sent from frontend
         if (!folder || !image) {
             return res.status(400).json({ success: false, error: 'Missing parameters.' });
         }
 
-        // Clean up data URL base64 prefix if present
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
         const buffer = Buffer.from(base64Data, 'base64');
 
-        // Target the absolute directory mapping for the specific show
-        const targetDir = path.join('/app/movies', 'series', folder);
+        // 🧠 Dynamically route depending on category
+        const targetDir = (contentType === 'series')
+            ? path.join('/app/movies', 'series', folder)
+            : path.join('/app/movies', folder); 
         
         try {
-            // Non-blocking asynchronous directory verification
             await fsPromises.access(targetDir);
         } catch {
             return res.status(404).json({ success: false, error: 'Target directory not found.' });
         }
 
-        // Save cleanly as poster.jpg using non-blocking async writes
         const finalPath = path.join(targetDir, 'cover.jpg');
         await fsPromises.writeFile(finalPath, buffer);
 
         logger.log(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
+        
+        if (typeof rebuildLibraryCache === 'function') rebuildLibraryCache(); // Flush cache arrays
+        
         res.json({ success: true, message: 'Poster written to disk.' });
     } catch (err) {
         logger.log(`Asset upload exception: ${err.message}`, 'error');
@@ -741,30 +813,6 @@ app.post('/api/admin/override-metadata', (req, res) => {
     }
 });
 
-
-// POST: Adaptive upload-poster layer targeting subfolders contextually
-app.post('/api/admin/upload-poster', (req, res) => {
-    try {
-        const { folder, image, contentType } = req.body;
-        if (!folder || !image) return res.status(400).json({ success: false, error: "Missing assets." });
-
-        const baseRoute = (contentType === 'series') ? path.join(MOVIES_DIR, 'series') : MOVIES_DIR;
-        const destinationFolder = path.join(baseRoute, folder);
-
-        if (!fs.existsSync(destinationFolder)) {
-            return res.status(404).json({ success: false, error: "Target directory missing." });
-        }
-
-        // Strip incoming base64 payload header strings safely
-        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-        const buffer = Buffer.from(base64Data, 'base64');
-
-        fs.writeFileSync(path.join(destinationFolder, 'cover.jpg'), buffer);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
 
 
 // GET: Expose list of configured local runtime user profile folders

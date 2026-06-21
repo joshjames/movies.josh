@@ -166,7 +166,6 @@
             }
 
             container.innerHTML = collection.map(item => {
-                // Point asset resolution mappings contextually to matching route subfolders
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
                 const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
                 
@@ -215,11 +214,37 @@
                                 <label>Plot Synopsis Outline</label>
                                 <textarea id="plot-${item.folder}" rows="2">${item.metadata.plot || ''}</textarea>
                             </div>
-                            <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
+                            <div style="display: flex; gap: 12px; grid-column: 1 / -1; justify-content: flex-end;">
+                                <button type="button" style="background: #a855f7;" onclick="refetchMetadata('${item.folder}', '${currentTabMode}')">🔄 Refetch Metadata</button>
+                                <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
+                            </div>
                         </div>
                     </div>
                 </div>
             `}).join('');
+        }
+
+        // --- NEW METADATA AUTO-REFETCH TRIGGER ---
+        async function refetchMetadata(folder, type) {
+            const imdbId = document.getElementById(`imdbId-${folder}`).value.trim();
+            const fallbackTitle = document.getElementById(`title-${folder}`).value.trim();
+
+            try {
+                const res = await fetch('/api/admin/refetch-metadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type, imdbId, title: fallbackTitle })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert("✨ Metadata sync complete! Re-indexing cache tables...");
+                    fetchLibraryData(); // Soft refresh UI layout instantly
+                } else {
+                    alert("❌ Target Query Failed: " + result.error);
+                }
+            } catch (err) {
+                alert("❌ Critical transport loop error while communicating with OMDb script.");
+            }
         }
 
         // --- 4. DRAG & DROP POSTER INTERCEPTS ---
