@@ -3,7 +3,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const logger = require('./logger');
+const logger = require('../logger');
 // ADD THIS TO THE TOP PROTOCOLS REGION:
 const TorrentService = require('../services/TorrentService');
 
