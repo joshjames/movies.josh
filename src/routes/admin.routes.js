@@ -218,10 +218,12 @@ router.get('/library-metadata', (req, res) => {
 });
 
 
+
+
 // =========================================================================
 // QB_TORRENT AUTOMATION TRIGGER ENDPOINT
 // =========================================================================
-app.post('/api/trigger-automation', (req, res) => {
+router.post('/api/trigger-automation', (req, res) => {
     res.status(202).send('Automation trigger received. Processing pool in background.');
     console.log(`\n⚡ qBittorrent completion trigger received! Firing media pipeline...`);
 
