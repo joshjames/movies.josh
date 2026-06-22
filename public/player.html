@@ -250,33 +250,44 @@
         }
 
         async function setupMoviePlayback() {
-            let speedMbps = 10;
-            if (navigator.connection && navigator.connection.downlink) speedMbps = navigator.connection.downlink;
+                let speedMbps = 10;
+                if (navigator.connection && navigator.connection.downlink) speedMbps = navigator.connection.downlink;
 
-            try {
-                const response = await fetch(`/api/movies/${movieId}`);
-                const movie = await response.json();
-                let targetStreamUrl = '';
-                
-                if (speedMbps < 2.5 && movie.file480p) {
-                    targetStreamUrl = movie.file480p.replace('/movies/', '/movie-assets/');
-                    qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
-                } else if (speedMbps < 6.0 && movie.file720p) {
-                    targetStreamUrl = movie.file720p.replace('/movies/', '/movie-assets/');
-                    qualityTag.innerText = "HD 720P (BALANCED)";
-                } else {
-                    const fallbackFile = movie.file1080p || movie.fileSource || '';
-                    targetStreamUrl = fallbackFile.replace('/movies/', '/movie-assets/');
-                    qualityTag.innerText = "FHD 1080P (SOURCE)";
+                try {
+                    const response = await fetch(`/api/movies/${movieId}`);
+                    const movie = await response.json();
+                    let targetStreamUrl = '';
+                    
+                    // Helper function to safely map local assets without touching cloud signatures
+                    const resolveStreamSource = (fileUrl) => {
+                        if (!fileUrl) return '';
+                        // If it's a remote URL from B2, bypass string manipulation completely
+                        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+                            return fileUrl;
+                        }
+                        // Fallback: If it's a local relative file path, map it to the static server mount
+                        return fileUrl.replace('/movies/', '/movie-assets/');
+                    };
+
+                    if (speedMbps < 2.5 && movie.file480p) {
+                        targetStreamUrl = resolveStreamSource(movie.file480p);
+                        qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
+                    } else if (speedMbps < 6.0 && movie.file720p) {
+                        targetStreamUrl = resolveStreamSource(movie.file720p);
+                        qualityTag.innerText = "HD 720P (BALANCED)";
+                    } else {
+                        const fallbackFile = movie.file1080p || movie.fileSource || '';
+                        targetStreamUrl = resolveStreamSource(fallbackFile);
+                        qualityTag.innerText = "FHD 1080P (SOURCE)";
+                    }
+
+                    videoEl.src = targetStreamUrl;
+                    loadSubtitles();
+                    videoEl.play().catch(() => {});
+                } catch (err) {
+                    qualityTag.innerText = "STREAM CORRUPTED";
                 }
-
-                videoEl.src = targetStreamUrl;
-                loadSubtitles();
-                videoEl.play().catch(() => {});
-            } catch (err) {
-                qualityTag.innerText = "STREAM CORRUPTED";
-            }
-        }
+}
 
         /**
          * Finds the index of the next available episode file in the sequence matrix
