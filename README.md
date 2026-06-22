@@ -1,7 +1,7 @@
 # 🎬 StreamEngine Node
 A lightweight, automated, database-less home media streaming server built with Node.js, Express, and Docker.
 
-This platform allows you to search a global movie index, queue downloads with a single click directly into an isolated client, automatically sanitize incoming file structures, optimize video containers via an asynchronous FFmpeg transcoding loop, and stream high-performance progressive video directly to native HTML5 web players.
+This platform allows you to search a global movie and TV series index, queue downloads with a single click directly into an isolated client, the meda is then automatically sanitized incoming file structures are renamed, cleaned up, deleted excess, optimize video containers via an asynchronous FFmpeg transcoding loop, stream high-performance progressive video directly to native HTML5 web players.
 
 ## 🚀 Core Features
 Database-Less State Architecture: Zero database footprint. The system leverages the native storage engine of the torrent client for active tasks and uses on-disk metadata and transient file-system locks (.processing) to calculate live processing states.
@@ -33,7 +33,7 @@ Web-Native Streaming Engine: Serves video assets over high-performance HTTP Byte
 Plaintext
 ```
 .
-├── movies/                       # Mounted media volumes container layer
+├── movies/                       # Mounted media volumes container layer represents a local media folder
 │   └── [Movie-Folder-Name]/
 │       ├── Cover.jpg             # Local cover graphic asset
 │       ├── Metadata.json         # Localized data record track
@@ -75,7 +75,7 @@ Plaintext
 To trigger the post-processing optimization loop automatically when a download hits 100%, add this run command into your qBittorrent client configuration options under "Run external program on torrent completion":
 ```
 Bash
-curl -X POST http://movie-streamer-app:3000/api/trigger-automation
+curl -X POST http://movie-streamer-app:3000/api/trigger-automation < this  is not necassary anymore as the internal monitoring will trigger it itself.
 ```
 
 ## 🔧 Automation Pipeline Workflow Details
@@ -99,3 +99,12 @@ Start the core streamer system engine cluster manually:
 Bash
 node server.js
 For production deployment environments, wrap your operational container layer via Docker Compose mapping paths down onto local storage disks.
+
+# To Do.
+
+document updates made to the cloud / object storage expansion
+document the worker configuration
+document the auto subtitles
+document the admin interface
+document the user manager and signup process.
+document the media profile configuration and automation transcode.
