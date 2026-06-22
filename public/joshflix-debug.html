@@ -186,36 +186,47 @@
         const qualityTag = document.getElementById('qualityTag');
 
         // --- Nextcloud Public Folder WebDAV Parser ---
-        async function scanSharedFolder() {
-            const token = document.getElementById('folderTokenInput').value.trim();
-            if(!token) return alert("Please present a valid public share token.");
+        // --- Nextcloud Public Share HTML Scraping Fallback Engine ---
+async function scanSharedFolder() {
+    const token = document.getElementById('folderTokenInput').value.trim();
+    if(!token) return alert("Please present a valid public share token.");
 
-            browserStatus.innerText = "Querying Nextcloud Node File Vectors...";
-            fileGrid.innerHTML = '';
+    browserStatus.innerText = "Scraping Nextcloud Stream Vectors...";
+    fileGrid.innerHTML = '';
 
-            try {
-                // Querying Nextcloud's public WebDAV endpoint inside the share context wrapper
-                const targetEndpoint = `https://cloud.joshjames.site/public.php/webdav/`;
-                
-                // Fetching via PROPFIND request structure to fetch file listing info
-                const response = await fetch(targetEndpoint, {
-                    method: 'PROPFIND',
-                    headers: {
-                        'Authorization': 'Basic ' + btoa(token + ':'),
-                        'Depth': '1'
-                    }
-                });
+    try {
+        // We bypass the clunky WebDAV OPTIONS preflight block entirely by pulling the public share root page
+        const targetEndpoint = `https://cloud.joshjames.site/s/${token}`;
+        
+        const response = await fetch(targetEndpoint, { method: 'GET' });
+        if(!response.ok) throw new Error(`HTTP Status Error Context: ${response.status}`);
+        
+        const htmlText = await response.text();
+        
+        // Nextcloud embeds file layouts directly inside a server-side JSON variable block on the page 
+        const fileRegex = /"name":"([^"]+\.(?:mp4|mkv|webm))"/gi;
+        let match;
+        let matchCount = 0;
 
-                if(!response.ok) throw new Error(`HTTP Status Error Context: ${response.status}`);
-                
-                const xmlText = await response.text();
-                parseAndRenderFiles(xmlText, token);
-
-            } catch (err) {
-                console.error(err);
-                browserStatus.innerText = "Scan Connection Faulted. Verify Cloudflare Proxy State.";
-            }
+        const uniqueFiles = new Set();
+        while ((match = fileRegex.exec(htmlText)) !== null) {
+            // Decode any escaped unicode characters out of the regex string output
+            const fileName = JSON.parse(`"${match[1]}"`);
+            uniqueFiles.add(fileName);
         }
+
+        uniqueFiles.forEach(fileName => {
+            matchCount++;
+            createMediaCard(fileName, token);
+        });
+
+        browserStatus.innerText = matchCount > 0 ? `Discovered ${matchCount} Streamable Assets` : "Folder layout processed successfully, but no video media tracks matched current constraints.";
+
+    } catch (err) {
+        console.error(err);
+        browserStatus.innerText = "Vector compilation failed. Ensure Cloudflare CORS rule is active.";
+    }
+}
 
         function parseAndRenderFiles(xmlStr, token) {
             const parser = new DOMParser();
