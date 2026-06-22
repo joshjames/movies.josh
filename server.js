@@ -5,19 +5,22 @@ API DOCUMENTATION
 Authentication and Profiles
 ---------------------------
 POST /api/auth/register
-  - Registers a new user with username and password.
-  - Sets the user_profile cookie on success for immediate login.
+  - Registers a new user with username, password, and email.
+  - Sends a verification email to complete account activation.
   - Returns JSON: { success: true } or { success: false, error }
 
+GET /api/auth/verify
+  - Verifies a newly registered account via token and user query parameters.
+  - Query params: token, user
+  - Redirects to /login.html?verified=true on success.
+
 POST /api/auth/login
-  - Authenticates credentials and updates login history.
-  - Sets the user_profile cookie for session state.
+  - Authenticates credentials and sets session cookie.
   - Returns JSON: { success: true } or { success: false, error }
 
 GET /api/auth/me
-  - Returns the current authenticated profile state.
+  - Returns the authenticated user's profile state.
   - Uses the user_profile cookie.
-  - Returns JSON: { loggedIn: true, username, config }
 
 GET /api/auth/logout
   - Clears the user_profile cookie.
@@ -31,27 +34,32 @@ GET /api/admin/logs/stream
 
 POST /api/admin/sanitizer/run
   - Triggers the library sanitizer workflow from the web UI.
-  - Responds immediately with success while sanitization runs asynchronously.
+  - Responds immediately while sanitization runs asynchronously.
+
+POST /api/admin/refetch-metadata
+  - Refetches metadata from OMDb for a movie or series folder.
+  - Request body: { folder, contentType, imdbId, title }
 
 POST /api/admin/upload-poster
   - Uploads a base64-encoded poster image for a series folder.
-  - Writes the image to /app/movies/series/:folder/cover.jpg.
+  - Stores the image under the series folder cover asset.
   - Request body: { folder, name, image }
 
-GET /api/admin/series-metadata
-  - Returns raw series metadata for each show folder under movies/series.
-  - Useful for manual curation workflows.
+GET /api/admin/library-metadata
+  - Returns the current library metadata for all movies and series.
 
 POST /api/admin/override-metadata
-  - Saves manually overridden metadata for a series folder.
-  - Request body: { folder, title, year, plot, genre, imdbId }
+  - Overrides metadata for a movie or series folder.
+  - Request body: { folder, title, year, plot, genre, imdbId, contentType }
+
+GET /api/admin/users
+  - Lists configured local runtime user profiles.
 
 Playback and Profile State
 --------------------------
 POST /api/profile/playback/sync
   - Saves playback progress for a media item.
   - Request body: { mediaId, position }
-  - Includes anti-reset logic to ignore unsafe zero resets.
 
 GET /api/profile/playback/state
   - Returns the saved playback position for a mediaId.
@@ -60,56 +68,46 @@ GET /api/profile/playback/state
 Library and Content Discovery
 -----------------------------
 GET /api/movies
-  - Returns paginated movie/series library entries from an in-memory cache.
+  - Returns paginated movie/series library entries.
   - Query params: page, limit
-  - Response: { totalMovies, totalPages, currentPage, movies }
 
 GET /api/movies/:id
-  - Returns stream metadata and accessible file paths for a single movie folder.
-  - Path param: id
-  - Looks for 1080p/720p/480p assets and fallback MP4 files.
+  - Returns stream metadata and playback URLs for a single movie folder.
 
 GET /api/series/:showFolder
-  - Returns a unified series payload for a specific show folder.
-  - Path param: showFolder
-  - Includes metadata, poster path, seasons, and totalSeasons.
+  - Returns series metadata plus season data for a show folder.
 
 GET /api/eztv/browse
-  - Searches EZTV torrents by query term and optional pack-only filter.
+  - Searches EZTV torrents by query term.
   - Query params: query, packsOnly
-  - Uses OMDb to resolve title metadata and poster imagery.
 
 GET /api/yts/browse
   - Proxies YTS movie browse requests through a fixed API endpoint.
   - Query params: query_term, page, genre, minimum_rating, sort_by
 
 POST /api/yts/add
-  - Adds a magnet link to qBittorrent with a fixed save path and tag.
+  - Adds a magnet link to qBittorrent for YTS-sourced movie downloads.
   - Request body: { magnetUrl }
 
 POST /api/downloader/add
-  - Adds a magnet link to qBittorrent with a save path by category.
+  - Adds a magnet link to qBittorrent with category-based save path.
   - Request body: { magnetUrl, category }
 
 Pipeline and Automation
 -----------------------
 POST /api/trigger-automation
   - Triggers the post-download automation pipeline in the background.
-  - Executes library-sanitizer.js and pre-transcode.js.
 
 GET /api/pipeline/status
-  - Returns current pipeline state for tagged qBittorrent torrents and active processing folders.
-  - Includes download progress and transcode status.
+  - Returns current pipeline status for tagged qBittorrent torrents and active processing folders.
 
 Streaming and Assets
 --------------------
 GET /api/raw-file/:id
-  - Streams a video file directly from a movie folder with Range support.
-  - Path param: id
+  - Streams a playable video file from a movie folder with Range support.
 
 GET /api/subtitles/:id
-  - Converts an SRT subtitle file to WebVTT on-demand.
-  - Path param: id
+  - Converts an SRT subtitle file to WebVTT on demand.
 
 Static Asset Delivery
 ---------------------
@@ -122,6 +120,7 @@ Auth Middleware
   - /login.html
   - /api/auth/login
   - /api/auth/register
+  - /api/auth/verify
 */
 
 console.log("!!! SERVER IS CURRENTLY INITIALIZING !!!");
@@ -142,6 +141,7 @@ const cookieParser = require('cookie-parser');
 const ProfileManager = require('./profile-manager');
 const crypto = require('crypto');
 const logger = require('./logger');
+const MediaService = require('./services/MediaService');
 
 
 if (!fs.existsSync(MOVIES_DIR)) {
@@ -319,6 +319,8 @@ app.get('/api/admin/logs/stream', (req, res) => {
         logger.logStream.off('line', logListener);
     });
 });
+
+
 
 // POST: Let the admin trigger the sanitizer manually from the web UI
 app.post('/api/admin/sanitizer/run', async (req, res) => {
@@ -654,12 +656,14 @@ function rebuildLibraryCache() {
 rebuildLibraryCache();
 
 // INDIVIDUAL MOVIE STREAM PROFILE ROUTER
-app.get('/api/movies/:id', (req, res) => {
+
+app.get('/api/movies/:id', async (req, res) => {
     const movieId = req.params.id;
     
     // Construct the absolute path to this specific movie's metadata folder
     const movieFolder = path.join(MOVIES_DIR, movieId);
     const infoFilePath = path.join(movieFolder, 'movie_info.json');
+    const metaFilePath = path.join(movieFolder, 'metadata.json'); // New unified file for metadata/B2 flags
 
     // Fallback Verification: Ensure the requested directory is physically present
     if (!fs.existsSync(movieFolder)) {
@@ -669,7 +673,7 @@ app.get('/api/movies/:id', (req, res) => {
     // Baseline fallback payload matching your stream-switcher properties
     let streamPayload = {
         id: movieId,
-        title: movieId.replace(/\./g, ' '), // Quick string regex replacement for human readable title fallback
+        title: movieId.replace(/\./g, ' '), 
         file1080p: null,
         file720p: null,
         file480p: null
@@ -687,18 +691,16 @@ app.get('/api/movies/:id', (req, res) => {
     }
 
     // Dynamic Filesystem Probe: Map available profile outputs to payload properties
-    // Looks for local files matching your pre-transcode script definitions
     const expectedOutputs = {
-        '1080p': `${movieId}.web.mp4`,      // Your master progressive output asset
-        '720p': `${movieId}.720p.mp4`,      // Item 1 downscaled profile
-        '480p': `${movieId}.480p.mp4`       // Item 1 cellular profile
+        '1080p': `${movieId}.web.mp4`,      
+        '720p': `${movieId}.720p.mp4`,      
+        '480p': `${movieId}.480p.mp4`       
     };
 
-    // Build functional streaming asset paths accessible over HTTP
+    // Build functional streaming asset paths accessible over HTTP (Your original local logic)
     if (fs.existsSync(path.join(movieFolder, expectedOutputs['1080p']))) {
         streamPayload.file1080p = `/movies/${movieId}/${expectedOutputs['1080p']}`;
     } else {
-        // Fallback: If your preprocessing rename wasn't run yet, probe for standard .mp4 containers
         const files = fs.readdirSync(movieFolder);
         const sourceMp4 = files.find(f => f.endsWith('.mp4') && !f.includes('720p') && !f.includes('480p'));
         if (sourceMp4) streamPayload.file1080p = `/movies/${movieId}/${sourceMp4}`;
@@ -712,9 +714,31 @@ app.get('/api/movies/:id', (req, res) => {
         streamPayload.file480p = `/movies/${movieId}/${expectedOutputs['480p']}`;
     }
 
-    // Safety: If no specific targeted mp4 was matched, just serve up the base source file
     if (!streamPayload.file1080p) {
         streamPayload.file1080p = `/movies/${movieId}`;
+    }
+
+    // 🚀 THE B2 CLOUD OVERRIDE LAYER
+    // Check if a sync tracking config file exists for this folder
+    if (fs.existsSync(metaFilePath)) {
+        try {
+            const metaData = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            
+            if (metaData && metaData.storage && metaData.storage.location === 'remote') {
+                // If remote flags are verified, swap out local URLs with secure presigned B2 streams
+                // passing your resolved local streaming links as the automatic fallback strings!
+                streamPayload.file1080p = await MediaService.getPlaybackUrl(metaData, '1080p', streamPayload.file1080p);
+                
+                if (streamPayload.file720p) {
+                    streamPayload.file720p = await MediaService.getPlaybackUrl(metaData, '720p', streamPayload.file720p);
+                }
+                if (streamPayload.file480p) {
+                    streamPayload.file480p = await MediaService.getPlaybackUrl(metaData, '480p', streamPayload.file480p);
+                }
+            }
+        } catch (err) {
+            console.error(`⚠️ Cloud fallback resolution bypassed: ${err.message}`);
+        }
     }
 
     // Ship the fully compiled structural map back to player.html
