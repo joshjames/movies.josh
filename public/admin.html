@@ -10,16 +10,39 @@
         h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-top: 0; }
         
         /* Grid Layout split split for log stream vs content data */
-        .admin-layout-wrapper { display: grid; grid-template-columns: 1fr 400px; gap: 30px; align-items: start; }
+        .admin-layout-wrapper { display: grid; grid-template-columns: 1fr 420px; gap: 30px; align-items: start; }
         @media(max-width: 1100px) { .admin-layout-wrapper { grid-template-columns: 1fr; } }
 
         /* Component Panels */
         .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
-        .panel h2, .panel h3 { margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: fill; padding-bottom: 8px; }
+        .panel h2, .panel h3 { margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+
+        /* --- MONITOR COMPONENT STYLES --- */
+        .monitor-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; }
+        .service-card { background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #64748b; }
+        .service-card.active-worker { border-left-color: #2563eb; animation: pulse-border 2s infinite; }
+        .service-card.processing { border-left-color: #a855f7; }
+        .service-card.syncing { border-left-color: #10b981; }
+        
+        .service-info { display: flex; flex-direction: column; gap: 2px; }
+        .service-name { font-weight: bold; font-size: 0.9rem; color: #f1f5f9; }
+        .service-task { font-family: 'Courier New', monospace; font-size: 0.75rem; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+        
+        .status-pill { font-size: 0.7rem; font-weight: bold; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; background: #334155; color: #94a3b8; }
+        .status-pill.idle { background: #1e293b; color: #64748b; }
+        .status-pill.active { background: #1e40af; color: #38bdf8; }
+        .status-pill.run { background: #581c87; color: #c084fc; }
+        .status-pill.sync { background: #064e3b; color: #34d399; }
+
+        @keyframes pulse-border {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; border-left-color: #38bdf8; }
+            100% { opacity: 0.8; }
+        }
 
         /* Tab toggles for catalog separation */
-        .tab-bar { display: flex; gap: fill; gap: 8px; border-bottom: 2px solid #334155; margin-bottom: 20px; }
-        .tab-btn { background: none; border: none; color: #94a3b8; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 6px 6px 0 0; font-size: fill; font-size: 0.95rem; }
+        .tab-bar { display: flex; gap: 8px; border-bottom: 2px solid #334155; margin-bottom: 20px; }
+        .tab-btn { background: none; border: none; color: #94a3b8; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 6px 6px 0 0; font-size: 0.95rem; }
         .tab-btn.active { background: #334155; color: white; border-bottom: 3px solid #2563eb; }
 
         /* Media Curation Row Layouts */
@@ -32,7 +55,7 @@
         .form-group { display: flex; flex-direction: column; gap: 4px; }
         .form-group.full-width { grid-column: 1 / -1; }
         label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
-        input, textarea { background: #020617; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; font-family: inherit; }
+        input, textarea, select { background: #020617; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; font-family: inherit; }
         
         button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
@@ -41,9 +64,10 @@
 
         .badge { background: #e50914; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
         .badge.type-badge { background: #6366f1; }
+        .badge.cloud-badge { background: #059669; }
 
         /* Console Terminal Custom Styles */
-        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; height: 450px; overflow-y: auto; color: #38bdf8; white-space: pre-wrap; }
+        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; height: 320px; overflow-y: auto; color: #38bdf8; white-space: pre-wrap; }
         .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; line-height: 1.4; }
         .log-error { color: #f87171; }
         .log-warn { color: #fbbf24; }
@@ -59,7 +83,7 @@
         .drop-zone-text { position: absolute; text-align: center; color: #64748b; font-size: 0.75rem; padding: 8px; pointer-events: none; }
 
         /* Users Panel Table list */
-        .user-row { display: flex; justify-content: space-between; align-items: center; background: #020617; padding: 10px 14px; border-radius: 6px; margin-bottom: fill; margin-bottom: 8px; border-left: 3px solid #3b82f6; }
+        .user-row { display: flex; justify-content: space-between; align-items: center; background: #020617; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #3b82f6; }
         .user-name { font-weight: bold; color: #f1f5f9; }
         .user-meta-flags { font-size: 0.75rem; color: #64748b; }
     </style>
@@ -89,6 +113,40 @@
                 </div>
 
                 <div class="panel">
+                    <h3>📡 Engine Architecture Pipeline Monitor</h3>
+                    <div class="monitor-grid">
+                        <div class="service-card" id="srv-Orchestrator">
+                            <div class="service-info">
+                                <span class="service-name">Orchestrator Core</span>
+                                <span class="service-task" id="task-Orchestrator">Polling file tables...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-Orchestrator">Idle</span>
+                        </div>
+                        <div class="service-card" id="srv-Sanitizer">
+                            <div class="service-info">
+                                <span class="service-name">Ingest Sanitizer</span>
+                                <span class="service-task" id="task-Sanitizer">Waiting for download trigger...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-Sanitizer">Idle</span>
+                        </div>
+                        <div class="service-card" id="srv-Transcoder">
+                            <div class="service-info">
+                                <span class="service-name">FFmpeg Transcoder</span>
+                                <span class="service-task" id="task-Transcoder">No active video matrices...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-Transcoder">Idle</span>
+                        </div>
+                        <div class="service-card" id="srv-CloudSync">
+                            <div class="service-info">
+                                <span class="service-name">CloudSync Worker</span>
+                                <span class="service-task" id="task-CloudSync">R2/B2 channels clear...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-CloudSync">Idle</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
                     <h3>🖥️ Live Application Stream Monitor</h3>
                     <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
                 </div>
@@ -100,7 +158,7 @@
         let currentTabMode = 'movies';
         let fullLibraryCache = { movies: [], shows: [] };
 
-        // --- 1. LIVE LOG MONITOR STREAM ---
+        // --- 1. LIVE LOG MONITOR STREAM & STATUS INTERCEPTOR ---
         function connectToLogStream() {
             const consoleTerminal = document.getElementById('terminal-stream');
             consoleTerminal.innerHTML = '';
@@ -117,6 +175,9 @@
                 lineEl.textContent = line;
                 consoleTerminal.appendChild(lineEl);
                 consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
+
+                // Parse standard server log markers to automatically feed the status tracking blocks
+                parseLogForMonitor(line);
             };
 
             eventSource.onerror = function() {
@@ -124,7 +185,57 @@
             };
         }
 
-        // --- 2. BACKGROUND INVOCATIONS ---
+        // --- 2. LOG ANALYSIS AND MONITOR STATE PARSER ---
+        function parseLogForMonitor(logLine) {
+            // Orchestrator State Triggers
+            if (logLine.includes('Autonomous pipeline agent active') || logLine.includes('Polling loop')) {
+                updateMonitorCard('Orchestrator', 'active', 'Polling library filesystem trees...');
+            }
+            // Sanitizer State Triggers
+            if (logLine.includes('[SANITIZER] Processing folder:')) {
+                const match = logLine.match(/folder:\s*(.*)/);
+                updateMonitorCard('Sanitizer', 'active', match ? match[1] : 'Cleaning assets...');
+            } else if (logLine.includes('[SANITIZER] Sweep complete')) {
+                updateMonitorCard('Sanitizer', 'idle', 'Waiting for download trigger...');
+            }
+            // Transcoder State Triggers
+            if (logLine.includes('[FFMPEG] Starting chunk renderingpass:')) {
+                const match = logLine.match(/renderingpass:\s*(.*)/);
+                updateMonitorCard('Transcoder', 'run', match ? match[1] : 'Rendering video streams...');
+            } else if (logLine.includes('[FFMPEG] Transcoding task complete')) {
+                updateMonitorCard('Transcoder', 'idle', 'No active video matrices...');
+            }
+            // CloudSync State Triggers
+            if (logLine.includes('[CLOUDSYNC] Initializing S3 stream wrapper for:')) {
+                const match = logLine.match(/wrapper for:\s*(.*)/);
+                updateMonitorCard('CloudSync', 'sync', match ? match[1] : 'Pushing video segments...');
+            } else if (logLine.includes('[CLOUDSYNC] Synchronization task clear')) {
+                updateMonitorCard('CloudSync', 'idle', 'R2/B2 channels clear...');
+            }
+        }
+
+        function updateMonitorCard(serviceId, state, taskMessage) {
+            const card = document.getElementById(`srv-${serviceId}`);
+            const textBlock = document.getElementById(`task-${serviceId}`);
+            const pill = document.getElementById(`status-${serviceId}`);
+
+            if (!card || !textBlock || !pill) return;
+
+            textBlock.textContent = taskMessage;
+            pill.textContent = state;
+            
+            // Clean active classes
+            card.className = 'service-card';
+            pill.className = `status-pill ${state}`;
+
+            if (state !== 'idle') {
+                card.classList.add('active-worker');
+                if (state === 'run') card.classList.add('processing');
+                if (state === 'sync') card.classList.add('syncing');
+            }
+        }
+
+        // --- 3. BACKGROUND INVOCATIONS ---
         async function triggerSanitizer() {
             try {
                 const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
@@ -135,7 +246,7 @@
             }
         }
 
-        // --- 3. DYNAMIC CONTENT RENDERING PIPELINES ---
+        // --- 4. DYNAMIC CONTENT RENDERING PIPELINES ---
         async function fetchLibraryData() {
             try {
                 const res = await fetch('/api/admin/library-metadata');
@@ -169,6 +280,9 @@
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
                 const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
                 
+                // Track actual cloud storage state mapping
+                const storageLoc = item.storage ? item.storage.location : 'local';
+                
                 return `
                 <div class="show-row" id="row-${item.folder}">
                     <div class="poster-aside">
@@ -188,8 +302,9 @@
                     <div class="main-form-content">
                         <div class="row-header">
                             <span>Path: /movies/${urlPath}</span>
-                            <div style="display:flex; gap:6px;">
+                            <div style="display:flex; gap:6px; align-items: center;">
                                 <span class="badge type-badge">${currentTabMode}</span>
+                                ${storageLoc === 'remote' ? '<span class="badge cloud-badge">☁️ Cloud Storage</span>' : ''}
                                 ${!item.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
                             </div>
                         </div>
@@ -203,8 +318,11 @@
                                 <input type="text" id="year-${item.folder}" value="${item.metadata.year || ''}">
                             </div>
                             <div class="form-group">
-                                <label>Genre tags</label>
-                                <input type="text" id="genre-${item.folder}" value="${item.metadata.genre || ''}">
+                                <label>Storage Allocation Target</label>
+                                <select id="storage-${item.folder}">
+                                    <option value="local" ${storageLoc === 'local' ? 'selected' : ''}>Local Drive (NVMe)</option>
+                                    <option value="remote" ${storageLoc === 'remote' ? 'selected' : ''}>Archived to Cloud (R2/B2)</option>
+                                </select>
                             </div>
                             <div class="form-group">
                                 <label>IMDb Override ID Link</label>
@@ -247,7 +365,7 @@
             }
         }
 
-        // --- 4. DRAG & DROP POSTER INTERCEPTS ---
+        // --- 5. DRAG & DROP POSTER INTERCEPTS ---
         function handleImgError(folder) {
             document.getElementById(`img-${folder}`).style.display = 'none';
             document.getElementById(`text-${folder}`).style.display = 'block';
@@ -302,16 +420,18 @@
             }
         }
 
-        // --- 5. TEXT METADATA SAVE INTERCEPTS ---
+        // --- 6. TEXT METADATA & CLOUD STRATEGY SAVE INTERCEPTS ---
         async function saveOverride(folder, type) {
             const payload = {
                 folder,
                 contentType: type,
                 title: document.getElementById(`title-${folder}`).value,
                 year: document.getElementById(`year-${folder}`).value,
-                genre: document.getElementById(`genre-${folder}`).value,
                 imdbId: document.getElementById(`imdbId-${folder}`).value,
-                plot: document.getElementById('plot-' + folder).value
+                plot: document.getElementById('plot-' + folder).value,
+                storage: {
+                    location: document.getElementById(`storage-${folder}`).value
+                }
             };
 
             try {
@@ -331,7 +451,7 @@
             }
         }
 
-        // --- 6. USER PROFILE RENDER COMPONENT ---
+        // --- 7. USER PROFILE RENDER COMPONENT ---
         async function fetchUserProfileIndexes() {
             try {
                 const res = await fetch('/api/admin/users');
