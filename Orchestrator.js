@@ -98,7 +98,6 @@ async function processAsset(folder, destinationParent) {
         activeJobs.delete(folderPath);
     }
 }
-
 async function orchestrateStorageTree() {
     try {
         // Phase 1: Fire off the standalone download ingest cleaner endpoint first
@@ -136,6 +135,41 @@ async function orchestrateStorageTree() {
         for (const folder of seriesFolders) {
             if (!fs.lstatSync(path.join(seriesDir, folder)).isDirectory()) continue;
 
+            const metaFile = path.join(seriesDir, folder, 'metadata.json');
+            
+            // 🔄 RESET TRIGGER: If a new file landed inside a season, drop state back to re-scan
+            if (fs.existsSync(metaFile)) {
+                try {
+                    let meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+                    if (meta.pipelineState?.currentStep === 'COMPLETED') {
+                        // Look inside the actual seasons to see if any untranscoded content needs handling
+                        const seasons = fs.readdirSync(path.join(seriesDir, folder)).filter(s => s.startsWith('Season.'));
+                        let hasNewFiles = false;
+                        
+                        for (const season of seasons) {
+                            const seasonFiles = fs.readdirSync(path.join(seriesDir, folder, season));
+                            // If we find raw media files that aren't accounted for in your DB structures yet, kick off the loop
+                            if (seasonFiles.some(f => f.endsWith('.mp4') || f.endsWith('.mkv'))) {
+                                // Simple flag: if metadata has no recorded episodes yet or total mismatch, mark it
+                                if (!meta.episodes || Object.keys(meta.episodes).length === 0) {
+                                    hasNewFiles = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (hasNewFiles) {
+                            meta.pipelineState.currentStep = 'METADATA';
+                            meta.pipelineState.lastUpdated = new Date().toISOString();
+                            fs.writeFileSync(metaFile, JSON.stringify(meta, null, 4));
+                            logger.log(`🔄 [Orchestrator] Detected new episodic drops inside ${folder}. Resetting tracking step to METADATA.`);
+                        }
+                    }
+                } catch (e) {
+                    // Fail silently to avoid breaking the core loop on bad metadata formatting
+                }
+            }
+
             runningPromises.push(processAsset(folder, seriesDir));
             if (runningPromises.length >= CONCURRENCY_LIMIT) {
                 await Promise.all(runningPromises);
@@ -156,8 +190,14 @@ async function orchestrateStorageTree() {
 module.exports = {
     startOrchestrator(intervalMs = 30000) {
         logger.log(`🚀 Master Pipeline Orchestrator online with concurrency boundary [Cap: 2]. Scanning every ${intervalMs}ms...`);
-        // Trigger initial sweep immediately, then drop onto standard intervals
         orchestrateStorageTree();
         setInterval(orchestrateStorageTree, intervalMs);
+    },
+    
+    // 🎛️ Alias exported method to satisfy the Express router invocation from the UI panel button
+    async runFullAutomationPipeline() {
+        logger.log(`⚡ [Manual Trigger] Manual library automation sweep invoked from admin override desk.`);
+        await orchestrateStorageTree();
+        return { success: true };
     }
 };
