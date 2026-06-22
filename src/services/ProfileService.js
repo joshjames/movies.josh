@@ -7,8 +7,9 @@ const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
 
-const USER_BASE_DIR = path.join(__dirname, '../../../metadata/users');
-const ROSTER_FILE = path.join(USER_BASE_DIR, 'roster.json');
+// Point exactly to where your host data bridges into the container
+const USER_BASE_DIR = '/app/metadata/users';
+const ROSTER_FILE = '/app/metadata/users/roster.json'; // 👈 Note it sits inside the users/ folder on your host!
 
 // ====== PRIVATE DATA UTILITIES ======
 async function ensureUserDir(username) {
@@ -27,7 +28,8 @@ async function readRoster() {
 }
 
 async function writeRoster(roster) {
-    await fs.mkdir(USER_BASE_DIR, { recursive: true });
+    // Ensure the users base directory exists before saving the roster
+    await fs.mkdir('/app/metadata/users', { recursive: true });
     await fs.writeFile(ROSTER_FILE, JSON.stringify(roster, null, 4), 'utf-8');
 }
 
