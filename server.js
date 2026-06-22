@@ -10,7 +10,7 @@ const cookieParser = require('cookie-parser');
 // All relative imports now explicitly point down into the src/ directory tree
 const logger = require('./src/services/logger');
 const { rebuildLibraryCache } = require('./src/services/CacheWorker');
-const { startPipelineWorker } = require('./src/services/PipelineWorker');
+const { startPipelineWorker } = require('./src/services/workers/PipelineWorker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
