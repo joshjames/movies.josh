@@ -4,10 +4,6 @@
 const express = require('express');
 const router = express.Router();
 
-// Mock imports - point these to your actual ProfileManager and mailer utilities
-// const ProfileManager = require('../services/ProfileManager');
-// const { sendVerificationEmail } = require('../utils/mailer');
-
 // 📂 REAL SERVICE IMPORTS (Fixed depth from src/routes to src/services)
 const ProfileService = require('../services/ProfileService');
 const MailerService = require('../services/MailerService');
@@ -20,17 +16,22 @@ router.post('/register', async (req, res) => {
     }
 
     try {
+        // Wired to ProfileService instead of ProfileManager
         const result = await ProfileService.registerUser(username, password, email);
         
         if (result.success) {
             const verificationToken = result.token;
 
             if (!verificationToken) {
-                console.error("❌ [BUG] Token was not generated or returned from ProfileManager.");
+                console.error("❌ [BUG] Token was not generated or returned from ProfileService.");
             }
 
-            // Dispatch mailer tracking sequence
-            sendVerificationEmail(email.trim(), username.trim(), verificationToken);
+            // Dispatch your real mailer tracking sequence if it exposes sendVerificationEmail
+            if (typeof MailerService.sendVerificationEmail === 'function') {
+                MailerService.sendVerificationEmail(email.trim(), username.trim(), verificationToken);
+            } else {
+                console.log(`ℹ️ MailerService loaded. Verification Token for ${username}: ${verificationToken}`);
+            }
 
             return res.json({ 
                 success: true, 
@@ -53,7 +54,7 @@ router.get('/verify', async (req, res) => {
     const cleanName = user.toLowerCase().trim();
     
     try {
-        const userConfig = await ProfileManager.readData(cleanName, 'config', null);
+        const userConfig = await ProfileService.readData(cleanName, 'config', null);
         
         if (!userConfig || userConfig.verificationToken !== token) {
             return res.send('<h3>Invalid verification token layout.</h3>');
@@ -67,7 +68,7 @@ router.get('/verify', async (req, res) => {
         delete userConfig.verificationToken;
         delete userConfig.verificationExpires;
         
-        await ProfileManager.writeData(cleanName, 'config', userConfig);
+        await ProfileService.writeData(cleanName, 'config', userConfig);
         
         res.redirect('/login.html?verified=true');
     } catch (err) {
@@ -85,16 +86,20 @@ router.post('/login', async (req, res) => {
     const cleanName = username.toLowerCase().trim();
 
     try {
-        const result = await ProfileManager.authenticateUser(username, password);
+        const result = await ProfileService.authenticateUser(username, password);
         if (result.success) {
             
-            const userConfig = await ProfileManager.readData(cleanName, 'config', null);
+            const userConfig = await ProfileService.readData(cleanName, 'config', null);
             if (userConfig && userConfig.isVerified === false) {
                 return res.status(403).json({ 
                     success: false, 
                     error: "Account verification pending. Please validate your registration via email link." 
                 });
             }
+
+            // Capture remote user IP safely for telemetry logs
+            const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            await ProfileService.updateLoginHistory(cleanName, ipAddress);
 
             // Assign structural root-path access cookie
             res.cookie('user_profile', cleanName, { maxAge: 31536000000, path: '/' });
@@ -112,7 +117,7 @@ router.get('/me', async (req, res) => {
     if (!activeUser) return res.status(401).json({ loggedIn: false });
 
     try {
-        const config = await ProfileManager.readData(activeUser, 'config', {});
+        const config = await ProfileService.readData(activeUser, 'config', {});
         res.json({ loggedIn: true, username: activeUser, config });
     } catch (err) {
         res.status(500).json({ loggedIn: false, error: err.message });
