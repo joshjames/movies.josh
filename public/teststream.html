@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Joshflix Player</title>
+    <title>Joshflix Player - Direct Stream Test</title>
     <style>
         * { box-sizing: border-box; }
         body, html {
@@ -68,7 +68,7 @@
             bottom: 24px;
             right: 24px;
             z-index: 10;
-            background: rgba(229, 9, 20, 0.8); /* Joshflix Red */
+            background: #0284c7; /* Testing Blue */
             padding: 4px 8px;
             border-radius: 4px;
             font-size: 0.75rem;
@@ -83,266 +83,44 @@
             opacity: 0 !important;
             cursor: none;
         }
-        /* Premium Floating Overlay Next Button */
-        .next-overlay-btn {
-            position: absolute;
-            top: 24px;
-            right: 24px;
-            z-index: 10;
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #f1f5f9;
-            padding: 10px 18px;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            opacity: 0.3;
-        }
-
-        .next-overlay-btn:hover {
-            opacity: 1;
-            background: rgba(15, 23, 42, 0.9);
-            transform: translateX(2px);
-        }
     </style>
 </head>
 <body>
 
     <div class="player-container" id="stage">
-        <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
-        <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
-        
-        <div class="quality-badge" id="qualityTag">DETECTING...</div>
+        <a href="/" class="back-overlay-btn" id="backBtn">⏮ Exit Test Mode</a>
+        <div class="quality-badge" id="qualityTag">CONNECTING TO NEXTCLOUD STAGE...</div>
         <video id="cinemaVideo" controls autoplay playsinline></video>
     </div>
 
     <script>
-        // 1. Declare URL Params FIRST so they are available to everything below
-        const params = new URLSearchParams(window.location.search);
-        const movieId = params.get('id');
-        let seasonParam = params.get('season');
-        let episodeParam = params.get('episode');
-
-        // 2. Initialize UI Element References and State Trackers
-        let currentTvPlaylist = [];
-        let currentTrackIndex = -1;
         const videoEl = document.getElementById('cinemaVideo');
         const qualityTag = document.getElementById('qualityTag');
         const backBtn = document.getElementById('backBtn');
-        const nextBtn = document.getElementById('nextBtn');
         const stage = document.getElementById('stage');
 
-        // RESUME ENGINE CORE STATES
-        let currentMediaId = movieId; // Fallback to raw ID for movies
-        let lastSavedTime = 0;
-        const SYNC_INTERVAL_MS = 5000; 
-        const activeUserProfile = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('user_profile='))
-            ?.split('=')[1] || 'guest';
-        // Update the Back Button dynamically if viewing a TV show to return to the Show details page
-        if (movieId && seasonParam) {
-            backBtn.href = `series.html?id=${encodeURIComponent(movieId)}`;
-            backBtn.innerText = "⏮ Back to Show";
-        }
-
-        // --- Subtitle Ingestion Function ---
-        function loadSubtitles() {
-            const existingTracks = videoEl.querySelectorAll('track');
-            existingTracks.forEach(track => track.remove());
-
-            const track = document.createElement('track');
-            track.kind = 'subtitles';
-            track.label = 'English';
-            track.srclang = 'en';
-            track.src = `/api/subtitles/${encodeURIComponent(movieId)}`;
-            track.default = true; 
+        function runDirectStreamTest() {
+            // Using your confirmed working public folder share token
+            const folderShareToken = "fSEHqLFCmfoorRT";
             
-            videoEl.appendChild(track);
-        }
-
-        // --- Playback Sync Loop Functions ---
-        async function applyResumeMarker() {
-            try {
-                const res = await fetch(`/api/profile/playback/state?mediaId=${encodeURIComponent(currentMediaId)}`, {
-                    headers: { 'x-user-profile': activeUserProfile }
-                });
-                const data = await res.json();
-                
-                if (data.success && data.position > 5) {
-                    // Only apply if user didn't complete the track down to the final 30 seconds
-                    if (videoEl.duration && data.position < videoEl.duration - 30) {
-                        videoEl.currentTime = data.position;
-                        console.log(`▶️ Playback restored to location timestamp: ${data.position}s`);
-                    } else if (!videoEl.duration) {
-                        // Fallback constraint case check if metadata speed lagged behind slightly
-                        videoEl.currentTime = data.position;
-                    }
-                }
-            } catch (e) {
-                console.error("Playback tracking check sync dropped:", e);
-            }
-        }
-
-        // Send a continuous heartbeat tick down to the file server pipeline
-        videoEl.addEventListener('timeupdate', () => {
-            const currentTime = videoEl.currentTime;
-            const now = Date.now();
-
-            if (now - lastSavedTime > SYNC_INTERVAL_MS) {
-                lastSavedTime = now;
-                
-                fetch('/api/profile/playback/sync', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'x-user-profile': activeUserProfile
-                    },
-                    body: JSON.stringify({
-                        mediaId: currentMediaId,
-                        position: currentTime
-                    })
-                }).catch(err => console.error("Heartbeat frame update fail:", err));
-            }
-        });
-
-        // Trigger timestamp restorations right as the stream asset tracks align completely
-        videoEl.addEventListener('loadedmetadata', applyResumeMarker);
-
-        async function initializePremiumStream() {
-            if (!movieId) {
-                alert("No media identifier provided.");
-                window.location.href = "/";
-                return;
-            }
-
-            if (seasonParam && episodeParam) {
-                try {
-                    const cleanFolder = movieId.replace('series/', '');
-                    const response = await fetch(`/api/series/${encodeURIComponent(cleanFolder)}`);
-                    const showData = await response.json();
-                    
-                    const targetSeason = showData.seasons ? showData.seasons[seasonParam] : null;
-                    currentTvPlaylist = targetSeason ? targetSeason.episodes : [];
-                    currentTrackIndex = currentTvPlaylist.findIndex(ep => ep.episodeNumber == parseInt(episodeParam, 10));
-
-                    if (currentTrackIndex !== -1) {
-                        playEpisodeIndex(currentTrackIndex);
-                    } else {
-                        alert("Target episode track index bounds out of file system alignment.");
-                    }
-                } catch (err) {
-                    console.error("TV context initialization fault:", err);
-                }
-                return;
-            }
-
-            // Standard Movie Fallback Pass
-            nextBtn.style.display = 'none';
-            currentMediaId = movieId; // Base context movie fallback tag setup
-            setupMoviePlayback();
-        }
-
-        async function setupMoviePlayback() {
-            try {
-                // Hardcoded direct stream link using your public folder token and filename
-                const targetStreamUrl = "https://cloud.joshjames.site/s/fSEHqLFCmfoorRT/download?path=%2F&files=Iron.Man.2008.1080p.BrRip.x264.YIFY.web.mp4";
-                
-                qualityTag.innerText = "FHD 1080P (NEXTCLOUD DIRECT STREAM)";
-                qualityTag.style.background = "#0284c7"; // Distinct blue badge for testing
-
-                videoEl.src = targetStreamUrl;
-                
-                // Commenting out subtitles for the hardcoded isolation test
-                // loadSubtitles(); 
-                
-                videoEl.play().catch((err) => {
-                    console.log("Autoplay blocked by browser policy, awaiting user click.", err);
-                });
-            } catch (err) {
-                qualityTag.innerText = "STREAM CORRUPTED";
-            }
-        }
-
-        /**
-         * Finds the index of the next available episode file in the sequence matrix
-         */
-        function getNextAvailableIndex() {
-            if (currentTrackIndex === -1 || currentTvPlaylist.length === 0) return -1;
-            for (let i = currentTrackIndex + 1; i < currentTvPlaylist.length; i++) {
-                if (currentTvPlaylist[i].available) return i;
-            }
-            return -1;
-        }
-
-        /**
-         * TV Playback Worker Logic Engine
-         */
-        function playEpisodeIndex(index) {
-            if (index < 0 || index >= currentTvPlaylist.length) return;
+            // Once rclone finishes the upload over Cloudflare, this path construction will resolve the media bytes
+            const targetFileName = "The.Avengers.2012.1080p.BluRay.x264.YIFY.web.mp4";
             
-            const episode = currentTvPlaylist[index];
-            currentTrackIndex = index;
+            const targetStreamUrl = `https://cloud.joshjames.site/s/${folderShareToken}/download?path=%2F&files=${encodeURIComponent(targetFileName)}`;
+            
+            qualityTag.innerText = "FHD 1080P (NEXTCLOUD DIRECT STREAM)";
+            videoEl.src = targetStreamUrl;
 
-            // Generate deterministic string for unique TV episode tracking arrays
-            const cleanFolder = movieId.replace('series/', '');
-            currentMediaId = `${cleanFolder}-S${seasonParam}E${episode.episodeNumber}`;
-
-            videoEl.src = `/movie-assets/${episode.localRelativePath}`;
-            qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
-            qualityTag.style.background = "#6366f1"; 
-
-            const newUrl = `player.html?id=${encodeURIComponent(movieId)}&season=${seasonParam}&episode=${episode.episodeNumber}`;
-            window.history.replaceState({ path: newUrl }, '', newUrl);
-
-            // Update Visibility status check on the skip layout element
-            updateNextButtonVisibility();
-
-            // Fire an explicit lookup payload fetch immediately for the new episode target profile
-            applyResumeMarker();
-
-            videoEl.play().catch(() => {});
+            videoEl.play().catch((err) => {
+                console.log("Autoplay context initialization paused for manual user interaction click event.", err);
+                qualityTag.innerText = "AWAITING USER INTERACTION (CLICK PLAY)";
+            });
         }
 
-        function updateNextButtonVisibility() {
-            if (getNextAvailableIndex() !== -1) {
-                nextBtn.style.display = 'flex';
-            } else {
-                nextBtn.style.display = 'none'; // Clear from view on the absolute last episode
-            }
-        }
-
-        // Wire manual skip click directly to layout element
-        nextBtn.addEventListener('click', () => {
-            const nextIdx = getNextAvailableIndex();
-            if (nextIdx !== -1) {
-                console.log("⏭️ Manual episode skip intercept triggered.");
-                playEpisodeIndex(nextIdx);
-            }
-        });
-
-        // Autoplay continuous sequence tracking logic 
-        videoEl.addEventListener('ended', () => {
-            const nextIdx = getNextAvailableIndex();
-            if (nextIdx !== -1) {
-                playEpisodeIndex(nextIdx);
-            } else {
-                qualityTag.innerText = "SEASON ENDED";
-                qualityTag.style.background = "#22c55e";
-            }
-        });
-
-        // Custom UI Polish: Include nextBtn in the visibility fade wrapper array structures
+        // Custom UI Polish: Visibility fade controls
         let mouseMoveTimeout;
         function resetControlVisibility() {
             backBtn.classList.remove('hide-controls');
-            nextBtn.classList.remove('hide-controls');
             qualityTag.classList.remove('hide-controls');
             stage.style.cursor = 'default';
             
@@ -350,7 +128,6 @@
             if (!videoEl.paused) {
                 mouseMoveTimeout = setTimeout(() => {
                     backBtn.classList.add('hide-controls');
-                    nextBtn.classList.add('hide-controls');
                     qualityTag.classList.add('hide-controls');
                     stage.style.cursor = 'none';
                 }, 3000); 
@@ -361,20 +138,16 @@
         videoEl.addEventListener('play', resetControlVisibility);
         videoEl.addEventListener('pause', resetControlVisibility);
 
-        // Keyboard Intercept Controls
+        // Keyboard Controls
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
                 e.preventDefault(); 
                 if (videoEl.paused) videoEl.play(); else videoEl.pause();
             }
-            // Added quick keyboard hotkey alternative: 'N' steps to next track profile
-            if (e.key.toLowerCase() === 'n') {
-                const nextIdx = getNextAvailableIndex();
-                if (nextIdx !== -1) playEpisodeIndex(nextIdx);
-            }
         });
 
-        initializePremiumStream();
+        // Initialize immediately without param dependency checks
+        runDirectStreamTest();
     </script>
 </body>
 </html>
