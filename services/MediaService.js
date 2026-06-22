@@ -22,31 +22,36 @@ const MediaService = {
     async getPlaybackUrl(metadata, resolutionProfile, localFallbackPath) {
         const storage = metadata.storage;
 
-        // 🛡️ Rule A: If no remote orchestration record exists, serve the local mount point instantly
         if (!storage || storage.location !== 'remote' || !storage.files || !storage.files[resolutionProfile]) {
             return localFallbackPath;
         }
 
         const fileMeta = storage.files[resolutionProfile];
 
-        // 🛡️ Rule B: Record exists but data upload migration hasn't cleared successfully yet
         if (fileMeta.status !== 'synced' || !fileMeta.remoteKey) {
             return localFallbackPath;
         }
 
-        // 🚀 Rule C: Asset is fully remote. Generate a 2-hour secure presigned play link
         try {
+            // 🧹 SANITIZE THE KEY: Remove duplicate forward slashes completely
+            let cleanKey = fileMeta.remoteKey.replace(/\/+/g, '/');
+            
+            // If it accidentally picked up a leading slash (e.g. "/movies/..."), strip it out
+            if (cleanKey.startsWith('/')) {
+                cleanKey = cleanKey.substring(1);
+            }
+
             const command = new GetObjectCommand({
-                Bucket: process.env.joshflixmedia || 'joshflixmedia',
-                Key: fileMeta.remoteKey
+                Bucket: storage.bucket || 'joshflixmedia',
+                Key: cleanKey // Using the completely clean key string
             });
 
-            // Stream connections can keep the URL alive for 7200 seconds (2 Hours)
+            // Stream connections keep the URL alive for 7200 seconds (2 Hours)
             const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 7200 });
             return presignedUrl;
         } catch (err) {
             console.error(`[B2 ENGINE ERROR] Presigned translation failed for ${fileMeta.remoteKey}:`, err);
-            return localFallbackPath; // Fallback to safe local file gracefully if API drops
+            return localFallbackPath; 
         }
     }
 };
