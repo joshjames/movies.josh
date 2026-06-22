@@ -8,6 +8,10 @@ const router = express.Router();
 // const ProfileManager = require('../services/ProfileManager');
 // const { sendVerificationEmail } = require('../utils/mailer');
 
+// 📂 REAL SERVICE IMPORTS (Fixed depth from src/routes to src/services)
+const ProfileService = require('../services/ProfileService');
+const MailerService = require('../services/MailerService');
+
 // POST: /api/auth/register
 router.post('/register', async (req, res) => {
     const { username, password, email } = req.body;
@@ -16,7 +20,7 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        const result = await ProfileManager.registerUser(username, password, email);
+        const result = await ProfileService.registerUser(username, password, email);
         
         if (result.success) {
             const verificationToken = result.token;
