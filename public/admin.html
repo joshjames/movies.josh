@@ -158,59 +158,97 @@
         let currentTabMode = 'movies';
         let fullLibraryCache = { movies: [], shows: [] };
 
-        // --- 1. LIVE LOG MONITOR STREAM & STATUS INTERCEPTOR ---
+        // --- 1. DYNAMIC HEALTH CHECK API POLLERS ---
+        // Instead of guessing from console lines, explicitly verify endpoints are awake
+        const WORKER_PORTS = {
+            'Orchestrator': 3000,
+            'Sanitizer': 5000,
+            'Transcoder': 5002,
+            'CloudSync': 5003
+            // Metadata runs on 5001, handled in the orchestrator pipeline check
+        };
+
+        async function checkWorkerHealth() {
+            // We check the internal metadata worker by calling the backend's status or direct ping
+            for (const [service, port] of Object.entries(WORKER_PORTS)) {
+                try {
+                    // Try hitting a lightweight internal check route or standard endpoint
+                    const controller = new AbortController();
+                    const id = setTimeout(() => controller.abort(), 2000);
+                    
+                    // Route through a simple proxy check or hit directly if exposed inside the local network
+                    const res = await fetch(`/api/admin/health-check/${service.toLowerCase()}`, { signal: controller.signal });
+                    clearTimeout(id);
+                    
+                    if (res.ok) {
+                        if (service === 'Orchestrator') updateMonitorCard('Orchestrator', 'active', 'Polling library filesystem trees...');
+                        if (service === 'Sanitizer') updateMonitorCard('Sanitizer', 'idle', 'Ingester online. Awaiting data drops...');
+                        if (service === 'Transcoder') updateMonitorCard('Transcoder', 'idle', 'No active video matrices...');
+                        if (service === 'CloudSync') updateMonitorCard('CloudSync', 'idle', 'R2/B2 channels clear...');
+                    } else {
+                        throw new Error("Down");
+                    }
+                } catch (e) {
+                    updateMonitorCard(service, 'idle', '❌ OFFLINE (Connection Refused)');
+                    // Force the card to clear active statuses if dead
+                    document.getElementById(`srv-${service}`).className = 'service-card';
+                    document.getElementById(`status-${service}`).className = 'status-pill idle';
+                }
+            }
+        }
+
+        // --- 2. LIVE LOG MONITOR STREAM ---
         function connectToLogStream() {
             const consoleTerminal = document.getElementById('terminal-stream');
-            consoleTerminal.innerHTML = '';
-            const eventSource = new EventSource('/api/admin/logs/stream');
+            consoleTerminal.innerHTML = '<div style="color: #64748b;">Establishing connection to backend stream...</div>';
+            
+            let eventSource = new EventSource('/api/admin/logs/stream');
+
+            eventSource.onopen = function() {
+                consoleTerminal.innerHTML = `<div style="color: #10b981;">[SYSTEM] Connected to core logger pipeline. Listening for updates...</div>`;
+            };
 
             eventSource.onmessage = function(event) {
+                // Handle empty keep-alive pings safely
+                if (!event.data || event.data.trim() === '') return;
+
                 const line = event.data;
                 const lineEl = document.createElement('div');
                 lineEl.className = 'log-line';
                 
-                if (line.includes('[ERROR]')) lineEl.className += ' log-error';
-                if (line.includes('[WARN]')) lineEl.className += ' log-warn';
+                if (line.includes('[ERROR]') || line.includes('❌')) lineEl.className += ' log-error';
+                if (line.includes('[WARN]') || line.includes('⚠️')) lineEl.className += ' log-warn';
                 
                 lineEl.textContent = line;
                 consoleTerminal.appendChild(lineEl);
+                
+                // Keep view pinned to bottom
                 consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
 
-                // Parse standard server log markers to automatically feed the status tracking blocks
+                // Fallback text parser
                 parseLogForMonitor(line);
             };
 
-            eventSource.onerror = function() {
-                consoleTerminal.innerHTML = `<div class="log-error">[SYSTEM] Connection lost. Re-establishing secure transport socket...</div>`;
+            eventSource.onerror = function(err) {
+                eventSource.close();
+                consoleTerminal.insertAdjacentHTML('beforeend', `<div class="log-error">[SYSTEM] Core log line transport dropped. Reconnecting in 5s...</div>`);
+                setTimeout(connectToLogStream, 5000);
             };
         }
 
-        // --- 2. LOG ANALYSIS AND MONITOR STATE PARSER ---
+        // --- 3. LOG ANALYSIS AND MONITOR STATE PARSER ---
         function parseLogForMonitor(logLine) {
-            // Orchestrator State Triggers
-            if (logLine.includes('Autonomous pipeline agent active') || logLine.includes('Polling loop')) {
-                updateMonitorCard('Orchestrator', 'active', 'Polling library filesystem trees...');
-            }
-            // Sanitizer State Triggers
             if (logLine.includes('[SANITIZER] Processing folder:')) {
                 const match = logLine.match(/folder:\s*(.*)/);
                 updateMonitorCard('Sanitizer', 'active', match ? match[1] : 'Cleaning assets...');
-            } else if (logLine.includes('[SANITIZER] Sweep complete')) {
-                updateMonitorCard('Sanitizer', 'idle', 'Waiting for download trigger...');
-            }
-            // Transcoder State Triggers
+            } 
             if (logLine.includes('[FFMPEG] Starting chunk renderingpass:')) {
                 const match = logLine.match(/renderingpass:\s*(.*)/);
                 updateMonitorCard('Transcoder', 'run', match ? match[1] : 'Rendering video streams...');
-            } else if (logLine.includes('[FFMPEG] Transcoding task complete')) {
-                updateMonitorCard('Transcoder', 'idle', 'No active video matrices...');
             }
-            // CloudSync State Triggers
             if (logLine.includes('[CLOUDSYNC] Initializing S3 stream wrapper for:')) {
                 const match = logLine.match(/wrapper for:\s*(.*)/);
                 updateMonitorCard('CloudSync', 'sync', match ? match[1] : 'Pushing video segments...');
-            } else if (logLine.includes('[CLOUDSYNC] Synchronization task clear')) {
-                updateMonitorCard('CloudSync', 'idle', 'R2/B2 channels clear...');
             }
         }
 
@@ -224,29 +262,30 @@
             textBlock.textContent = taskMessage;
             pill.textContent = state;
             
-            // Clean active classes
             card.className = 'service-card';
             pill.className = `status-pill ${state}`;
 
-            if (state !== 'idle') {
+            if (state !== 'idle' && !taskMessage.includes('OFFLINE')) {
                 card.classList.add('active-worker');
                 if (state === 'run') card.classList.add('processing');
                 if (state === 'sync') card.classList.add('syncing');
             }
         }
 
-        // --- 3. BACKGROUND INVOCATIONS ---
+        // --- 4. BACKGROUND INVOCATIONS ---
         async function triggerSanitizer() {
             try {
                 const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
                 const data = await res.json();
-                if(data.success) alert("Library sanitization process has been kicked off in background.");
+                if(data.success) {
+                    alert("Library sanitization process has been kicked off in background.");
+                }
             } catch(e) {
                 console.error("Transport pipeline failed invocation:", e);
             }
         }
 
-        // --- 4. DYNAMIC CONTENT RENDERING PIPELINES ---
+        // --- 5. DYNAMIC CONTENT RENDERING PIPELINES ---
         async function fetchLibraryData() {
             try {
                 const res = await fetch('/api/admin/library-metadata');
@@ -279,8 +318,6 @@
             container.innerHTML = collection.map(item => {
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
                 const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
-                
-                // Track actual cloud storage state mapping
                 const storageLoc = item.storage ? item.storage.location : 'local';
                 
                 return `
@@ -305,17 +342,17 @@
                             <div style="display:flex; gap:6px; align-items: center;">
                                 <span class="badge type-badge">${currentTabMode}</span>
                                 ${storageLoc === 'remote' ? '<span class="badge cloud-badge">☁️ Cloud Storage</span>' : ''}
-                                ${!item.metadata.plot ? '<span class="badge">Missing Metadata</span>' : ''}
+                                ${(!item.metadata || !item.metadata.plot) ? '<span class="badge">Missing Metadata</span>' : ''}
                             </div>
                         </div>
                         <div class="meta-form">
                             <div class="form-group">
                                 <label>Display Title</label>
-                                <input type="text" id="title-${item.folder}" value="${item.metadata.title || ''}">
+                                <input type="text" id="title-${item.folder}" value="${(item.metadata && item.metadata.title) || ''}">
                             </div>
                             <div class="form-group">
                                 <label>Release Year</label>
-                                <input type="text" id="year-${item.folder}" value="${item.metadata.year || ''}">
+                                <input type="text" id="year-${item.folder}" value="${(item.metadata && item.metadata.year) || ''}">
                             </div>
                             <div class="form-group">
                                 <label>Storage Allocation Target</label>
@@ -326,11 +363,11 @@
                             </div>
                             <div class="form-group">
                                 <label>IMDb Override ID Link</label>
-                                <input type="text" id="imdbId-${item.folder}" placeholder="e.g., tt0123456" value="${item.metadata.imdbId || ''}">
+                                <input type="text" id="imdbId-${item.folder}" placeholder="e.g., tt0123456" value="${(item.metadata && item.metadata.imdbId) || ''}">
                             </div>
                             <div class="form-group full-width">
                                 <label>Plot Synopsis Outline</label>
-                                <textarea id="plot-${item.folder}" rows="2">${item.metadata.plot || ''}</textarea>
+                                <textarea id="plot-${item.folder}" rows="2">${(item.metadata && item.metadata.plot) || ''}</textarea>
                             </div>
                             <div style="display: flex; gap: 12px; grid-column: 1 / -1; justify-content: flex-end;">
                                 <button type="button" style="background: #a855f7;" onclick="refetchMetadata('${item.folder}', '${currentTabMode}')">🔄 Refetch Metadata</button>
@@ -342,7 +379,6 @@
             `}).join('');
         }
 
-        // --- NEW METADATA AUTO-REFETCH TRIGGER ---
         async function refetchMetadata(folder, type) {
             const imdbId = document.getElementById(`imdbId-${folder}`).value.trim();
             const fallbackTitle = document.getElementById(`title-${folder}`).value.trim();
@@ -356,7 +392,7 @@
                 const result = await res.json();
                 if (result.success) {
                     alert("✨ Metadata sync complete! Re-indexing cache tables...");
-                    fetchLibraryData(); // Soft refresh UI layout instantly
+                    fetchLibraryData();
                 } else {
                     alert("❌ Target Query Failed: " + result.error);
                 }
@@ -365,26 +401,17 @@
             }
         }
 
-        // --- 5. DRAG & DROP POSTER INTERCEPTS ---
         function handleImgError(folder) {
             document.getElementById(`img-${folder}`).style.display = 'none';
             document.getElementById(`text-${folder}`).style.display = 'block';
         }
 
-        function handleDragOver(e, folder) {
-            e.preventDefault();
-            document.getElementById(`dropzone-${folder}`).classList.add('dragover');
-        }
-
-        function handleDragLeave(e, folder) {
-            e.preventDefault();
-            document.getElementById(`dropzone-${folder}`).classList.remove('dragover');
-        }
+        function handleDragOver(e, folder) { e.preventDefault(); document.getElementById(`dropzone-${folder}`).classList.add('dragover'); }
+        function handleDragLeave(e, folder) { e.preventDefault(); document.getElementById(`dropzone-${folder}`).classList.remove('dragover'); }
 
         function handleDrop(e, folder, type) {
             e.preventDefault();
             document.getElementById(`dropzone-${folder}`).classList.remove('dragover');
-            
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 const file = files[0];
@@ -412,15 +439,12 @@
                     img.src = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
                     img.style.display = 'block';
                     document.getElementById(`text-${folder}`).style.display = 'none';
-                } else {
-                    alert("Upload error: " + resData.error);
                 }
             } catch (err) {
-                alert("Network communication error during artwork stream.");
+                console.error(err);
             }
         }
 
-        // --- 6. TEXT METADATA & CLOUD STRATEGY SAVE INTERCEPTS ---
         async function saveOverride(folder, type) {
             const payload = {
                 folder,
@@ -429,9 +453,7 @@
                 year: document.getElementById(`year-${folder}`).value,
                 imdbId: document.getElementById(`imdbId-${folder}`).value,
                 plot: document.getElementById('plot-' + folder).value,
-                storage: {
-                    location: document.getElementById(`storage-${folder}`).value
-                }
+                storage: { location: document.getElementById(`storage-${folder}`).value }
             };
 
             try {
@@ -441,17 +463,12 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await res.json();
-                if (result.success) {
-                    fetchLibraryData();
-                } else {
-                    alert("❌ Override failure: " + result.error);
-                }
+                if (result.success) fetchLibraryData();
             } catch (err) {
                 alert("❌ Critical transport loop disruption.");
             }
         }
 
-        // --- 7. USER PROFILE RENDER COMPONENT ---
         async function fetchUserProfileIndexes() {
             try {
                 const res = await fetch('/api/admin/users');
@@ -465,7 +482,6 @@
                             <div class="user-meta-flags">
                                 ${u.hasHistory ? '📜 History' : ''} 
                                 ${u.hasPlayback ? '⏳ Progress' : ''}
-                                ${!u.hasHistory && !u.hasPlayback ? 'Empty Profile' : ''}
                             </div>
                         </div>
                     `).join('');
@@ -481,6 +497,10 @@
         connectToLogStream();
         fetchLibraryData();
         fetchUserProfileIndexes();
+
+        // Establish background health ping system (runs every 5s)
+        checkWorkerHealth();
+        setInterval(checkWorkerHealth, 5000);
     </script>
 </body>
 </html>

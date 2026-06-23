@@ -8,6 +8,16 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
 
+
+// Route map to local worker microservices ports running in the container
+const SERVICE_PORTS = {
+    orchestrator: 3000,
+    sanitizer: 5000,
+    metadata: 5001,
+    transcoder: 5002,
+    cloudsync: 5003
+};
+
 const logger = require('../services/logger');
 const pipelineOrchestrator = require('../../Orchestrator');
 const metadataService = require('../services/MetadataService');
@@ -72,6 +82,29 @@ router.get('/logs/stream', (req, res) => {
         }
     });
 });
+
+
+
+router.get('/health-check/:service', async (req, res) => {
+    const serviceName = req.params.service;
+    const port = SERVICE_PORTS[serviceName];
+    
+    if (!port) return res.status(404).json({ alive: false });
+    
+    try {
+        // Ping local ports inside the monolithic container space
+        await axios.get(`http://127.0.0.1:${port}/health`, { timeout: 1000 });
+        return res.json({ alive: true });
+    } catch (e) {
+        // If it returns a bad status but connected, it's alive. If ECONNREFUSED, it's dead.
+        if (e.code !== 'ECONNREFUSED') {
+            return res.json({ alive: true });
+        }
+        return res.status(503).json({ alive: false, error: 'ECONNREFUSED' });
+    }
+});
+
+
 
 // POST: /api/admin/sanitizer/run
 router.post('/sanitizer/run', (req, res) => {
