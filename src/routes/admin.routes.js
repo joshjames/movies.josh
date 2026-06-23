@@ -340,14 +340,14 @@ router.post('/override-metadata', async (req, res) => {
 
         // 3. Fire-and-Forget Dispatch Hook to the CloudSync Worker
         if (triggerCloudSync) {
-            logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
+            logger.log(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
             
             // We don't await this, letting it work safely in the background thread
             axios.post('http://127.0.0.1:5003/process', {
                 folderPath: folderPath,
                 folderName: folder
             }).catch(err => {
-                logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
+                logger.log(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
             });
         }
 
