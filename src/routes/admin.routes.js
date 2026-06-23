@@ -279,36 +279,6 @@ router.post('/api/trigger-automation', (req, res) => {
     });
 });
 
-// POST: /api/admin/override-metadata
-router.post('/override-metadata', (req, res) => {
-    try {
-        const { folder, title, year, plot, genre, imdbId, contentType } = req.body;
-        
-        const baseRoute = (contentType === 'series') ? path.join(MOVIES_DIR, 'series') : MOVIES_DIR;
-        const targetPath = path.join(baseRoute, folder);
-
-        if (!fs.existsSync(targetPath)) {
-            return res.status(404).json({ success: false, error: `Directory target not found: ${folder}` });
-        }
-
-        const metadataPath = path.join(targetPath, 'metadata.json');
-        const updatedMeta = {
-            title: title || folder,
-            year: year || '',
-            plot: plot || '',
-            genre: genre || '',
-            contentType: contentType || 'movie',
-            imdbId: imdbId || ''
-        };
-
-        fs.writeFileSync(metadataPath, JSON.stringify(updatedMeta, null, 4));
-        logger.log(`🔧 [ADMIN OVERRIDE] Saved metadata manually for ${contentType}: ${folder}`);
-        
-        res.json({ success: true, message: "Metadata overrides saved successfully." });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-})
 
 router.post('/override-metadata', async (req, res) => {
     const { folder, contentType, title, year, imdbId, plot, storage } = req.body;
