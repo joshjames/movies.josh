@@ -13,13 +13,15 @@ const logger = require('../services/logger'); // Adjust path to your logger
 
 
 // Route map to local worker microservices ports running in the container
-const SERVICE_PORTS = {
+const WORKER_PORTS = {
     orchestrator: 3000,
     sanitizer: 5000,
     metadata: 5001,
-    transcoder: 5002,
-    cloudsync: 5003
+    subtitle: 5002,
+    transcoder: 5003,
+    cloudsync: 5004
 };
+
 
 const pipelineOrchestrator = require('../../Orchestrator');
 const metadataService = require('../services/MetadataService');
@@ -89,7 +91,7 @@ router.get('/logs/stream', (req, res) => {
 
 router.get('/health-check/:service', async (req, res) => {
     const serviceName = req.params.service;
-    const port = SERVICE_PORTS[serviceName];
+    const port = WORKER_PORTS[serviceName];
     
     if (!port) return res.status(404).json({ alive: false });
     

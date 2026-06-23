@@ -163,9 +163,10 @@
         const WORKER_PORTS = {
             'Orchestrator': 3000,
             'Sanitizer': 5000,
-            'Transcoder': 5002,
-            'CloudSync': 5003
-            // Metadata runs on 5001, handled in the orchestrator pipeline check
+            'Metadata': 5001,
+            'Subtitle': 5002,
+            'Transcoder': 5003,
+            'CloudSync': 5004
         };
 
         async function checkWorkerHealth() {
