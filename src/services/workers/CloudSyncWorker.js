@@ -74,7 +74,7 @@ app.post('/process', async (req, res) => {
         let metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
 
         // Initialize storage schema structures dynamically if missing
-        if (!metadata.storage) {
+        if (!metadata.storage) { 
             metadata.storage = { location: 'local', files: {} };
         }
 

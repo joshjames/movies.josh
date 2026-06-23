@@ -9,6 +9,9 @@ const fsPromises = require('fs').promises;
 const axios = require('axios');
 
 
+const logger = require('../services/logger'); // Adjust path to your logger
+
+
 // Route map to local worker microservices ports running in the container
 const SERVICE_PORTS = {
     orchestrator: 3000,
@@ -305,6 +308,85 @@ router.post('/override-metadata', (req, res) => {
         res.json({ success: true, message: "Metadata overrides saved successfully." });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
+    }
+})
+
+router.post('/override-metadata', async (req, res) => {
+    const { folder, contentType, title, year, imdbId, plot, storage } = req.body;
+    
+    // 1. Resolve absolute server pathing based on movie vs show context
+    const baseDir = contentType === 'series' ? path.join(__dirname, '../../movies/series') : path.join(__dirname, '../../movies');
+    const folderPath = path.join(baseDir, folder);
+    const metaFilePath = path.join(folderPath, 'metadata.json');
+
+    try {
+        if (!fs.existsSync(metaFilePath)) {
+            return res.status(404).json({ success: false, error: "metadata.json manifest missing on disk." });
+        }
+
+        let metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+
+        // Update standard text records
+        metadata.metadata = {
+            ...metadata.metadata,
+            title,
+            year,
+            imdbId,
+            plot
+        };
+
+        let triggerCloudSync = false;
+
+        // 2. Intercept Storage Strategy Transitions
+        if (storage && storage.location === 'remote') {
+            if (!metadata.storage) {
+                metadata.storage = { location: 'local', files: {} };
+            }
+
+            // Check if it's already remote. If it's turning from local -> remote, we prime it
+            if (metadata.storage.location !== 'remote') {
+                metadata.storage.location = 'remote';
+                
+                // Ensure media profile tracking rows exist
+                const profiles = ['1080p', '720p', '480p'];
+                if (!metadata.storage.files) metadata.storage.files = {};
+
+                profiles.forEach(profile => {
+                    if (!metadata.storage.files[profile]) {
+                        metadata.storage.files[profile] = {};
+                    }
+                    // Only flag it as pending if it hasn't already been marked uploaded/completed
+                    if (metadata.storage.files[profile].status !== 'completed') {
+                        metadata.storage.files[profile].status = 'pending';
+                        triggerCloudSync = true;
+                    }
+                });
+            }
+        } else if (storage) {
+            metadata.storage = { location: 'local', files: {} };
+        }
+
+        // Write the changes back to disk
+        fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 2), 'utf-8');
+
+        // 3. Fire-and-Forget Dispatch Hook to the CloudSync Worker
+        if (triggerCloudSync) {
+            logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
+            
+            // We don't await this, letting it work safely in the background thread
+            axios.post('http://127.0.0.1:5003/process', {
+                folderPath: folderPath,
+                folderName: folder
+            }).catch(err => {
+                logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
+            });
+        }
+
+        return res.json({ success: true, libraryLocation: metadata.storage.location });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
