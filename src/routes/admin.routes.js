@@ -21,7 +21,6 @@ const SERVICE_PORTS = {
     cloudsync: 5003
 };
 
-const logger = require('../services/logger');
 const pipelineOrchestrator = require('../../Orchestrator');
 const metadataService = require('../services/MetadataService');
 
