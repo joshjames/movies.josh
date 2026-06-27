@@ -1,8 +1,8 @@
 // src/services/workers/LibraryScanner.js
 const fs = require('fs');
 const path = require('path');
-const logger = require('../logger');
-const { syncLibraryToStorage } = require('../db');
+const logger = require('./logger');
+const { syncLibraryToStorage } = require('./db');
 
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/storage/movies';
 const SERIES_DIR = process.env.SERIES_DIR || '/app/storage/series';
