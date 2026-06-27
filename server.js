@@ -9,7 +9,7 @@ const cookieParser = require('cookie-parser');
 
 // All relative imports now explicitly point down into the src/ directory tree
 const logger = require('./src/services/logger');
-const { rebuildLibraryCache } = require('./src/services/CacheWorker');
+const LibraryScanner = require('./src/services/LibraryScanner');
 const { startPipelineWorker } = require('./src/services/workers/PipelineWorker');
 
 const app = express();
@@ -58,7 +58,7 @@ app.use('/api/*', (req, res) => {
 // =========================================================================
 // STARTUP AGENTS BOOTSTRAP INITIALIZATION
 // =========================================================================
-rebuildLibraryCache();
+LibraryScanner.runLibraryScanSweep().catch(err => console.error(err));
 startPipelineWorker(10000);
 
 app.listen(PORT, () => {
