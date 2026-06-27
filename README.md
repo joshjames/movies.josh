@@ -1,3 +1,41 @@
+# v2 UPDATE
+
+complete re-write - microservice seperation
+
+orchastrator and workers and prover routes
+
+
+```
+                  ┌──────────────────────────────┐
+                  │   Background Cron Worker     │
+                  │   (Runs LibraryScanner)      │
+                  └──────────────┬───────────────┘
+                                 │ Scans Drives & Read metadata.json
+                                 ▼
+                  ┌──────────────────────────────┐
+                  │    Redis DB (Selected DB)    │◄─── [Acts as Source of Truth]
+                  └──────────────┬───────────────┘
+                                 │
+         ┌───────────────────────┴───────────────────────┐
+         ▼                                               ▼
+┌──────────────────────────────┐                ┌──────────────────────────────┐
+│       /api/library           │                │       /api/movies/:id        │
+│    (Serves Dashboard)        │                │   (Resolves Playback URIs)   │
+├──────────────────────────────┤                ├──────────────────────────────┤
+│ Pulls complete catalog grid  │                │ Checks metadata storage tags.│
+│ payload from Redis memory in │                │ If 'remote' -> calls B2 API. │
+│ less than 1ms.               │                │ If 'local' -> targets NVMe.  │
+└──────────────────────────────┘                └──────────────────────────────┘
+
+```
+
+
+
+
+
+
+
+
 # 🎬 StreamEngine Node
 A lightweight, automated, database-less home media streaming server built with Node.js, Express, and Docker.
 

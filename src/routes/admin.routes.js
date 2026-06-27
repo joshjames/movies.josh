@@ -7,10 +7,12 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
+const { exec } = require('child_process'); // Restored explicit missing shell execution utility
 
-
-const logger = require('../services/logger'); // Adjust path to your logger
-
+const logger = require('../services/logger'); 
+const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
+// 🚨 NEW FIX: Require your unified pipeline background engine scanner
+const LibraryScanner = require('../services/LibraryScanner'); 
 
 // Route map to local worker microservices ports running in the container
 const WORKER_PORTS = {
@@ -22,11 +24,12 @@ const WORKER_PORTS = {
     cloudsync: 5004
 };
 
-
 const pipelineOrchestrator = require('../../Orchestrator');
 const metadataService = require('../services/MetadataService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
+// 🚨 NEW FIX: Isolated pathway pointing to your separate TV series mount location
+const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
 
 // =========================================================================
 // 🛡️ ADMIN VERIFICATION INTERCEPTOR LAYER
@@ -38,14 +41,12 @@ function requireAdmin(req, res, next) {
         return next();
     }
     
-    // Explicitly handle data requests vs standard administrative views
     if (req.path.startsWith('/api/') || req.baseUrl.startsWith('/api/')) {
         return res.status(403).json({ success: false, error: "Access denied. Administrator clearance required." });
     }
     res.redirect('/login.html');
 }
 
-// Bind the security wall globally to all routes nested inside this router instance
 router.use(requireAdmin);
 
 // =========================================================================
@@ -87,8 +88,6 @@ router.get('/logs/stream', (req, res) => {
     });
 });
 
-
-
 router.get('/health-check/:service', async (req, res) => {
     const serviceName = req.params.service;
     const port = WORKER_PORTS[serviceName];
@@ -96,19 +95,15 @@ router.get('/health-check/:service', async (req, res) => {
     if (!port) return res.status(404).json({ alive: false });
     
     try {
-        // Ping local ports inside the monolithic container space
         await axios.get(`http://127.0.0.1:${port}/health`, { timeout: 1000 });
         return res.json({ alive: true });
     } catch (e) {
-        // If it returns a bad status but connected, it's alive. If ECONNREFUSED, it's dead.
         if (e.code !== 'ECONNREFUSED') {
             return res.json({ alive: true });
         }
         return res.status(503).json({ alive: false, error: 'ECONNREFUSED' });
     }
 });
-
-
 
 // POST: /api/admin/sanitizer/run
 router.post('/sanitizer/run', (req, res) => {
@@ -126,8 +121,9 @@ router.post('/refetch-metadata', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
         }
 
+        // 🚨 FIX 1: Point to correct paths when refetching series metadata on your new drive structure
         const targetDir = (contentType === 'series') 
-            ? path.join(MOVIES_DIR, 'series', folder) 
+            ? path.join(SERIES_DIR, folder) 
             : path.join(MOVIES_DIR, folder);
 
         let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
@@ -166,9 +162,9 @@ router.post('/refetch-metadata', async (req, res) => {
             }
         }
 
-        if (global.rebuildLibraryCache && typeof global.rebuildLibraryCache === 'function') {
-            global.rebuildLibraryCache();
-        }
+        // 🚨 FIX 2: Swap dead global memory cache hooks to fire a true worker library scan sweep
+        LibraryScanner.runLibraryScanSweep()
+            .catch(err => logger.log(`Error updating database cache values: ${err.message}`, 'error'));
 
         res.json({ success: true, metadata: normalizedMetadata });
     } catch (err) {
@@ -188,8 +184,9 @@ router.post('/upload-poster', async (req, res) => {
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
         const buffer = Buffer.from(base64Data, 'base64');
 
+        // 🚨 FIX 3: Point poster uploads to correct directory mount if it is a show
         const targetDir = (contentType === 'series')
-            ? path.join(MOVIES_DIR, 'series', folder)
+            ? path.join(SERIES_DIR, folder)
             : path.join(MOVIES_DIR, folder); 
 
         try {
@@ -201,9 +198,9 @@ router.post('/upload-poster', async (req, res) => {
         await fsPromises.writeFile(path.join(targetDir, 'cover.jpg'), buffer);
         logger.log(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
         
-        if (global.rebuildLibraryCache && typeof global.rebuildLibraryCache === 'function') {
-            global.rebuildLibraryCache();
-        }
+        // 🚨 FIX 4: Fire background db refresh instead of relying on broken global function hooks
+        LibraryScanner.runLibraryScanSweep()
+            .catch(err => logger.log(`Error running library sweep: ${err.message}`, 'error'));
         
         res.json({ success: true, message: 'Poster written to disk.' });
     } catch (err) {
@@ -213,40 +210,16 @@ router.post('/upload-poster', async (req, res) => {
 });
 
 // GET: /api/admin/library-metadata
-router.get('/library-metadata', (req, res) => {
+router.get('/library-metadata', async (req, res) => {
     try {
-        const results = { movies: [], shows: [] };
-
-        // 1. Process Movie Assets
-        if (fs.existsSync(MOVIES_DIR)) {
-            fs.readdirSync(MOVIES_DIR).forEach(folder => {
-                const itemPath = path.join(MOVIES_DIR, folder);
-                if (folder === 'series' || !fs.lstatSync(itemPath).isDirectory()) return;
-
-                const metaPath = path.join(itemPath, 'metadata.json');
-                let meta = { title: folder, year: '', plot: '', genre: '', contentType: 'movie' };
-                if (fs.existsSync(metaPath)) {
-                    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-                }
-                results.movies.push({ folder, metadata: meta });
-            });
-        }
-
-        // 2. Process Series Assets
-        const seriesDir = path.join(MOVIES_DIR, 'series');
-        if (fs.existsSync(seriesDir)) {
-            fs.readdirSync(seriesDir).forEach(folder => {
-                const itemPath = path.join(seriesDir, folder);
-                if (!fs.lstatSync(itemPath).isDirectory()) return;
-
-                const metaPath = path.join(itemPath, 'metadata.json');
-                let meta = { title: folder, year: '', plot: '', genre: '', contentType: 'series' };
-                if (fs.existsSync(metaPath)) {
-                    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-                }
-                results.shows.push({ folder, metadata: meta });
-            });
-        }
+        // 🚨 FIX 5: Completely rewrite this endpoint to return high-speed structured metadata from 
+        // Redis instead of locking the thread by re-reading thousands of files on disk raw.
+        const library = await getLibrary();
+        
+        const results = {
+            movies: (library.movies || []).map(m => ({ folder: decodeURIComponent(m.id), metadata: m })),
+            shows: (library.shows || []).map(s => ({ folder: s.id.replace('series/', ''), metadata: s }))
+        };
 
         res.json({ success: true, library: results });
     } catch (err) {
@@ -254,13 +227,10 @@ router.get('/library-metadata', (req, res) => {
     }
 });
 
-
-
-
 // =========================================================================
 // QB_TORRENT AUTOMATION TRIGGER ENDPOINT
 // =========================================================================
-router.post('/api/trigger-automation', (req, res) => {
+router.post('/trigger-automation', (req, res) => {
     res.status(202).send('Automation trigger received. Processing pool in background.');
     console.log(`\n⚡ qBittorrent completion trigger received! Firing media pipeline...`);
 
@@ -281,12 +251,11 @@ router.post('/api/trigger-automation', (req, res) => {
     });
 });
 
-
 router.post('/override-metadata', async (req, res) => {
     const { folder, contentType, title, year, imdbId, plot, storage } = req.body;
     
-    // 1. Resolve absolute server pathing based on movie vs show context
-    const baseDir = contentType === 'series' ? path.join(__dirname, '../../movies/series') : path.join(__dirname, '../../movies');
+    // 🚨 FIX 6: Ensure custom dashboard panel modifications write metadata out to the true folder mounts
+    const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
     const folderPath = path.join(baseDir, folder);
     const metaFilePath = path.join(folderPath, 'metadata.json');
 
@@ -297,28 +266,26 @@ router.post('/override-metadata', async (req, res) => {
 
         let metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
 
-        // Update standard text records
-        metadata.metadata = {
-            ...metadata.metadata,
-            title,
-            year,
-            imdbId,
-            plot
-        };
+        // Handle both raw metadata blocks and standard flattened mappings gracefully
+        if (!metadata.metadata) {
+            metadata.title = title;
+            metadata.year = year;
+            metadata.imdbId = imdbId;
+            metadata.plot = plot;
+        } else {
+            metadata.metadata = { ...metadata.metadata, title, year, imdbId, plot };
+        }
 
         let triggerCloudSync = false;
 
-        // 2. Intercept Storage Strategy Transitions
         if (storage && storage.location === 'remote') {
             if (!metadata.storage) {
                 metadata.storage = { location: 'local', files: {} };
             }
 
-            // Check if it's already remote. If it's turning from local -> remote, we prime it
             if (metadata.storage.location !== 'remote') {
                 metadata.storage.location = 'remote';
                 
-                // Ensure media profile tracking rows exist
                 const profiles = ['1080p', '720p', '480p'];
                 if (!metadata.storage.files) metadata.storage.files = {};
 
@@ -326,8 +293,7 @@ router.post('/override-metadata', async (req, res) => {
                     if (!metadata.storage.files[profile]) {
                         metadata.storage.files[profile] = {};
                     }
-                    // Only flag it as pending if it hasn't already been marked uploaded/completed
-                    if (metadata.storage.files[profile].status !== 'completed') {
+                    if (metadata.storage.files[profile].status !== 'synced') {
                         metadata.storage.files[profile].status = 'pending';
                         triggerCloudSync = true;
                     }
@@ -337,14 +303,14 @@ router.post('/override-metadata', async (req, res) => {
             metadata.storage = { location: 'local', files: {} };
         }
 
-        // Write the changes back to disk
-        fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 2), 'utf-8');
+        fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
 
-        // 3. Fire-and-Forget Dispatch Hook to the CloudSync Worker
+        // Refresh database record tracking arrays automatically
+        await LibraryScanner.runLibraryScanSweep();
+
         if (triggerCloudSync) {
             logger.log(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
             
-            // We don't await this, letting it work safely in the background thread
             axios.post('http://127.0.0.1:5003/process', {
                 folderPath: folderPath,
                 folderName: folder
@@ -364,7 +330,6 @@ router.post('/override-metadata', async (req, res) => {
 // GET: /api/admin/users
 router.get('/users', (req, res) => {
     try {
-        // Points safely toward your consolidated metadata base folder path
         const userMetaDir = path.join(__dirname, '../../metadata', 'users');
         if (!fs.existsSync(userMetaDir)) return res.json({ success: true, users: [] });
 
