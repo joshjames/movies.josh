@@ -5,8 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const logger = require('./src/services/logger');
-const { rebuildLibraryCache } = require('./src/services/CacheWorker');
-
+//const { rebuildLibraryCache } = require('./src/services/CacheWorker');
+const LibraryScanner = require('../services/LibraryScanner'); 
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
 
 const WORKERS = {
@@ -86,7 +86,8 @@ async function processAsset(folder, destinationParent) {
             // ⚡ AUTOMATED FLUSH: Rebuild RAM cache instantly when any item hits completion state
             if (nextStep === 'COMPLETED') {
                 logger.log(`⚡ [Cache System Trigger] Asset ${folder} complete. Triggering instant library re-indexing.`);
-                rebuildLibraryCache();
+               LibraryScanner.runLibraryScanSweep()
+            .catch(err => logger.log(`Error updating database cache values: ${err.message}`, 'error'));
             }
         } else {
             logger.log(`⚠️ Worker Engine Alert [${currentStep}] on [${folder}]: ${response.data?.error}`, 'warn');
