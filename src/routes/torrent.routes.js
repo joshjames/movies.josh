@@ -20,38 +20,37 @@ router.get('/yts/browse', async (req, res) => {
     try {
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
         
-        // Build query arguments cleanly
-        const params = new URLSearchParams({
-            page: page || '1',
-            limit: '24',
-            order_by: 'desc',
-            sort_by: sort_by || 'date_added'
-        });
+        // 💡 SWAPPED TARGET: Community edge proxy built to punch through server-side timeouts
+        const ytsUrl = `https://yts.t0m.me/api/v2/list_movies.json`;
+        
+        const apiParams = {
+            page: page || 1,
+            limit: 24,
+            order_by: 'desc'
+        };
 
-        if (query_term && query_term.trim() !== '' && query_term !== '0') params.append('query_term', query_term.trim());
-        if (genre && genre.toLowerCase() !== 'all') params.append('genre', genre.toLowerCase());
-        if (minimum_rating && minimum_rating !== '0') params.append('minimum_rating', minimum_rating);
-
-        const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json?${params.toString()}`;
-        console.log(`📡 Fetching direct via native web stream: ${ytsUrl}`);
-
-        // Native global fetch isolates away from Axios interceptor configurations
-        const response = await fetch(ytsUrl, { 
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            signal: AbortSignal.timeout(12000) // Slightly longer grace gap
-        });
-
-        if (!response.ok) {
-            throw new Error(`Upstream responded with status code: ${response.status}`);
+        if (query_term && query_term.trim() !== '' && query_term !== '0') {
+            apiParams.query_term = query_term.trim();
         }
+        if (genre && genre.toLowerCase() !== 'all') {
+            apiParams.genre = genre.toLowerCase();
+        }
+        if (minimum_rating && minimum_rating !== '0') {
+            apiParams.minimum_rating = minimum_rating;
+        }
+        apiParams.sort_by = sort_by || 'date_added';
 
-        const data = await response.json();
-        return res.json(data);
+        console.log(`📡 Relaying sanitized query params to unblocked YTS proxy:`, apiParams);
+
+        const response = await axios.get(ytsUrl, { 
+            params: apiParams, 
+            timeout: 8000,
+            headers: { 'Accept': 'application/json' }
+        });
+
+        return res.json(response.data);
     } catch (err) {
-        console.error("❌ Native network pipeline error:", err.message);
+        console.error("❌ YTS proxy mirror connection exception:", err.message);
         return res.status(500).json({ 
             success: false,
             error: "Failed to fetch media data source indices.",
@@ -59,6 +58,8 @@ router.get('/yts/browse', async (req, res) => {
         });
     }
 });
+
+
 
 // GET: /api/eztv/browse
 router.get('/eztv/browse', async (req, res) => {
