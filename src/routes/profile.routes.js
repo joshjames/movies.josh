@@ -1,7 +1,6 @@
 // src/routes/profile.routes.js
 const express = require('express');
 const router = express.Router();
-// 🎯 FIX: Import the correct file name
 const ProfileService = require('../services/ProfileService'); 
 
 // Helper function to force uniform media keys matching your storage tree structure
@@ -17,7 +16,13 @@ function sanitizeMediaId(id) {
 
 // POST: /api/profile/playback/sync
 router.post('/playback/sync', async (req, res) => {
-    const { username, mediaId, position } = req.body; // Adjusted if username is extracted from session/token instead
+    // 🎯 FIX: Safely fallback to the cookie identity if the payload body lacks a username
+    const username = (req.body.username || req.cookies?.user_profile || '').toLowerCase().trim();
+    const { mediaId, position } = req.body; 
+
+    if (!username) {
+        return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+    }
 
     if (!mediaId || position === undefined) {
         return res.status(400).json({ success: false, error: 'Missing sync states' });
@@ -35,7 +40,6 @@ router.post('/playback/sync', async (req, res) => {
             }
         }
 
-        // 🎯 FIX: Explicitly target ProfileService
         await ProfileService.savePlaybackPosition(username, cleanMediaId, numericPosition);
         res.json({ success: true });
     } catch (err) {
@@ -46,8 +50,13 @@ router.post('/playback/sync', async (req, res) => {
 // GET: /api/profile/playback/state
 router.get('/playback/state', async (req, res) => {
     try {
-        const username = getActiveUser(req); // Keeps your existing user verification function
+        // 🎯 FIX: Extract directly from cookies to match your server.js auth state
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
         const { mediaId } = req.query;
+
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
 
         if (!mediaId) {
             return res.status(400).json({ success: false, error: 'Missing media identity key.' });
