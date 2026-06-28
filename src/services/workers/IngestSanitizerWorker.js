@@ -88,12 +88,13 @@ function generateSkeletonSeason(seasonNum, structure, physicalFileMap) {
     structure.seasons[seasonNum].episodes.sort((a,b) => a.episodeNumber - b.episodeNumber);
 }
 
-/**
- * Analyzes the interior contents of an incoming directory to determine if it is a 
- * monolithic Season Pack or an amorphous dump folder.
- */
 function analyzeDirectoryContents(dirPath) {
     if (!fs.existsSync(dirPath)) return { isSeasonPack: false, detectedEpisodes: [] };
+    
+    // If it's a file instead of a directory, handle gracefully
+    const stat = fs.statSync(dirPath);
+    if (!stat.isDirectory()) return { isSeasonPack: false, detectedEpisodes: [] };
+
     const files = fs.readdirSync(dirPath);
     let tvMatches = [];
     let mediaCount = 0;
@@ -120,10 +121,6 @@ function analyzeDirectoryContents(dirPath) {
     };
 }
 
-/**
- * Searches the destination directory to see if a variation of the show title 
- * already exists (e.g., matching "Hijack" to "Hijack.2023" or "hijack")
- */
 function findExistingShowFolder(cleanTitle, targetSeriesDir) {
     if (!fs.existsSync(targetSeriesDir)) return null;
     
@@ -145,23 +142,22 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
 app.post('/process', async (req, res) => {
     const { folderPath, folderName, contentType } = req.body;
 
-    // SCENARIO A: Global loop trigger from Orchestrator -> Directory sweep discovery
+    // SCENARIO A: Global manual sweep invocation
     if (!folderPath || !folderName) {
         try {
             logger.log("🔍 Running global recursive Ingest sweep to discover untracked media assets...");
             await autoDiscoverAndOrganize(MOVIES_DIR);
+            await autoDiscoverAndOrganize(SERIES_DIR); // 🎯 FIX: Scan series storage pools too
             return res.json({ success: true, message: "Global collection discovery sweep complete." });
         } catch (crawlErr) {
             return res.status(500).json({ success: false, error: crawlErr.message });
         }
     }
 
-    // SCENARIO B: Targeted pipeline processing for an active download
+    // SCENARIO B: Target automated pipeline handler
     try {
-        // 1. Run immediate layout scrub to purge torrent spam and trash files
         cleanJunkFiles(folderPath);
 
-        // 2. Resolve clean directory name strings
         const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folderName);
         const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
         
@@ -172,12 +168,11 @@ app.post('/process', async (req, res) => {
 
         let finalPath = folderPath;
 
-        // 3. Mutate directory if structural adjustments are needed
         if (folderName !== targetFolderName) {
             const parentDir = path.dirname(folderPath);
             const computedPath = path.join(parentDir, targetFolderName);
 
-            if (!fs.existsSync(computedPath)) {
+            if (!fs.existsSync(computedPath) && fs.existsSync(folderPath)) {
                 await fsp.rename(folderPath, computedPath);
                 finalPath = computedPath;
                 logger.log(`🗂️ Ingest Alignment Mutator: [${folderName}] ➡️ [${targetFolderName}]`, 'info');
@@ -185,17 +180,14 @@ app.post('/process', async (req, res) => {
         }
 
         // =====================================================================
-        // 📺 BRANCH OVER: TV SERIES DETAILED EXTENSION INGESTION
+        // 📺 TV SERIES BRANCH
         // =====================================================================
         if (contentType === 'series') {
-            
-            // 🎯 RUN CONTENT PASS ANALYSIS SAFELY INSIDE ROUTE EXTRACTOR
             const analysis = analyzeDirectoryContents(finalPath);
 
             if (analysis.isSeasonPack) {
                 logger.log(`🧠 [Smart Ingest] Detected multi-file TV Season Pack inside: [${targetFolderName}]`);
 
-                // 1. Determine the canonical root folder for this show
                 let showFolder = findExistingShowFolder(cleanTitle, SERIES_DIR);
                 if (!showFolder) {
                     showFolder = dotNotationTitle;
@@ -205,7 +197,6 @@ app.post('/process', async (req, res) => {
                     logger.log(`🎯 [Smart Ingest] Linked incoming assets to existing archive: ${showFolder}`);
                 }
 
-                // 2. Process every individual file out of the download dump into the archive structure
                 for (const ep of analysis.detectedEpisodes) {
                     const seasonFolder = `Season.${String(ep.season).padStart(2, '0')}`;
                     const targetDir = path.join(SERIES_DIR, showFolder, seasonFolder);
@@ -215,7 +206,6 @@ app.post('/process', async (req, res) => {
                     }
 
                     const cleanFileTitle = `${showFolder}.S${String(ep.season).padStart(2, '0')}E${String(ep.episode).padStart(2, '0')}${path.extname(ep.fileName)}`;
-                    
                     const sourcePath = path.join(finalPath, ep.fileName);
                     const destinationPath = path.join(targetDir, cleanFileTitle);
 
@@ -235,11 +225,9 @@ app.post('/process', async (req, res) => {
             }
 
             logger.log(`📺 Mapping deep TV configuration manifests for series structural tree: [${targetFolderName}]`);
-            
             let mainMeta = { title: cleanTitle, year: parsedYear || '', plot: '', genre: '', contentType: 'series' };
             let totalSeasons = 1;
 
-            // Step B.1: Hit OMDb API for high-level envelope structure definitions
             try {
                 const showRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(cleanTitle)}&type=series`, { timeout: 5000 });
                 if (showRes.data && showRes.data.Response === "True") {
@@ -253,28 +241,27 @@ app.post('/process', async (req, res) => {
                 logger.log(`⚠️ OMDb API series query exception for ${cleanTitle}: ${err.message}`, 'warn');
             }
 
-            // Step B.2: Index physical files to establish mapping tracking keys
             let physicalFileMap = {};
-            const diskItems = fs.readdirSync(finalPath);
+            if (fs.existsSync(finalPath)) {
+                const diskItems = fs.readdirSync(finalPath);
+                diskItems.forEach(item => {
+                    const itemPath = path.join(finalPath, item);
+                    if (!fs.lstatSync(itemPath).isDirectory()) return;
 
-            diskItems.forEach(item => {
-                const itemPath = path.join(finalPath, item);
-                if (!fs.lstatSync(itemPath).isDirectory()) return;
-
-                const files = fs.readdirSync(itemPath);
-                files.forEach(file => {
-                    if (!KEEP_EXTENSIONS.includes(path.extname(file).toLowerCase())) return;
-                    
-                    const match = file.match(/s\s*(\d+)\s*e\s*(\d+)/i);
-                    if (match) {
-                        const sNum = parseInt(match[1], 10);
-                        const eNum = parseInt(match[2], 10);
-                        physicalFileMap[`${sNum}-${eNum}`] = `series/${targetFolderName}/${item}/${file}`;
-                    }
+                    const files = fs.readdirSync(itemPath);
+                    files.forEach(file => {
+                        if (!KEEP_EXTENSIONS.includes(path.extname(file).toLowerCase())) return;
+                        
+                        const match = file.match(/s\s*(\d+)\s*e\s*(\d+)/i);
+                        if (match) {
+                            const sNum = parseInt(match[1], 10);
+                            const eNum = parseInt(match[2], 10);
+                            physicalFileMap[`${sNum}-${eNum}`] = `series/${targetFolderName}/${item}/${file}`;
+                        }
+                    });
                 });
-            });
+            }
 
-            // Step B.3: Build individual season episode matrices
             let fullSeriesStructure = { totalSeasons: totalSeasons.toString(), seasons: {} };
 
             for (let s = 1; s <= totalSeasons; s++) {
@@ -291,7 +278,7 @@ app.post('/process', async (req, res) => {
                                 episodeNumber: epNum,
                                 title: ep.Title || `Episode ${epNum}`,
                                 released: ep.Released || 'Unknown',
-                                plot: 'Fetch individual plot details via extended loop if desired or leave crisp summary snapshots.',
+                                plot: 'Crisp summary snapshot placeholder.',
                                 imdbRating: ep.imdbRating || 'N/A',
                                 available: isAvailable,
                                 localRelativePath: isAvailable ? physicalFileMap[lookupKey] : null
@@ -305,14 +292,13 @@ app.post('/process', async (req, res) => {
                 }
             }
 
-            // Step B.4: Commit structured artifacts to disk
-            fs.writeFileSync(path.join(finalPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
-
-            const metaFilePath = path.join(finalPath, 'metadata.json');
-            mainMeta.pipelineState = { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() };
-
-            fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
-            logger.log(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and marked pipeline COMPLETED.`);
+            if (fs.existsSync(finalPath)) {
+                fs.writeFileSync(path.join(finalPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
+                const metaFilePath = path.join(finalPath, 'metadata.json');
+                mainMeta.pipelineState = { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() };
+                fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
+                logger.log(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and marked pipeline COMPLETED.`);
+            }
 
             return res.json({
                 success: true,
@@ -342,8 +328,8 @@ app.post('/process', async (req, res) => {
     }
 });
 
-// Recursive crawler (Maintained for standalone collection sweeps)
 async function autoDiscoverAndOrganize(currentDir) {
+    if (!fs.existsSync(currentDir)) return;
     const items = await fsp.readdir(currentDir, { withFileTypes: true });
 
     for (const item of items) {
