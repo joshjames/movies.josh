@@ -40,6 +40,7 @@ app.use(express.json({ limit: '20mb' }));
 app.use(cookieParser());
 
 // =========================================================================
+// =========================================================================
 // ROUTING TABLES LAYERS
 // =========================================================================
 const authRouter = require('./src/routes/auth.routes');
@@ -51,8 +52,12 @@ const profileRouter = require('./src/routes/profile.routes');
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', mediaRouter); 
-app.use('/api/torrent', torrentRouter);
-app.use('/api/profile', profileRouter);
+
+// 💡 MOUNT HERE FOR /api/yts/browse AND /api/eztv/browse
+app.use('/api', torrentRouter); 
+// 💡 KEEP THIS TOO IF OTHER FILES USE THE /api/torrent PATH
+app.use('/api/torrent', torrentRouter); 
+
 
 // Administrative Page Access Gatekeeper
 app.use('/admin.html', (req, res, next) => {
