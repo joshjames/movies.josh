@@ -16,46 +16,49 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 // =========================================================================
 // 🔍 FIXED YTS BROWSE PROXY ENDPOINT
 // =========================================================================
-router.get('/yts/browse', async (req, res) => {
+app.get('/yts/browse', async (req, res) => {
     try {
+        // Collect the incoming variables sent from the frontend template
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
+        const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
         
-        // 💡 SWAPPED TARGET: Community edge proxy built to punch through server-side timeouts
-        const ytsUrl = `https://yts.t0m.me/api/v2/list_movies.json`;
-        
+        // Build an explicit clean object containing only valid API arguments
         const apiParams = {
             page: page || 1,
             limit: 24,
             order_by: 'desc'
         };
 
+        // Rule 1: Only append query_term if the string is populated and not '0'
         if (query_term && query_term.trim() !== '' && query_term !== '0') {
             apiParams.query_term = query_term.trim();
         }
+
+        // Rule 2: Pass genre ONLY if it's explicitly chosen and not generic 'All'
         if (genre && genre.toLowerCase() !== 'all') {
             apiParams.genre = genre.toLowerCase();
         }
+
+        // Rule 3: Pass rating constraints cleanly if higher than baseline zero
         if (minimum_rating && minimum_rating !== '0') {
             apiParams.minimum_rating = minimum_rating;
         }
-        apiParams.sort_by = sort_by || 'date_added';
 
-        console.log(`📡 Relaying sanitized query params to unblocked YTS proxy:`, apiParams);
+        // Rule 4: Map your dynamic frontend sort option directly down to the payload
+        if (sort_by) {
+            apiParams.sort_by = sort_by;
+        } else {
+            apiParams.sort_by = 'date_added'; // Safe fallback baseline
+        }
 
-        const response = await axios.get(ytsUrl, { 
-            params: apiParams, 
-            timeout: 8000,
-            headers: { 'Accept': 'application/json' }
-        });
+        console.log(`📡 Relaying sanitized query params to YTS:`, apiParams);
 
-        return res.json(response.data);
+        const response = await axios.get(ytsUrl, { params: apiParams });
+
+        res.json(response.data);
     } catch (err) {
-        console.error("❌ YTS proxy mirror connection exception:", err.message);
-        return res.status(500).json({ 
-            success: false,
-            error: "Failed to fetch media data source indices.",
-            errorMessage: err.message
-        });
+        console.error("❌ YTS directory route communication failure:", err.message);
+        res.status(500).json({ error: "Failed to fetch media data source indices." });
     }
 });
 
