@@ -91,7 +91,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api', mediaRouter); 
 app.use('/api', torrentRouter); 
 app.use('/api/torrent', torrentRouter); 
-app.use('/api', profileRouter);
+app.use('/api/profile', profileRouter);
 
 app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: "Requested core API coordinate map not found." });
