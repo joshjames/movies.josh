@@ -1,7 +1,7 @@
 // src/services/MetadataRegistry.js
 const fs = require('fs');
 const path = require('path');
-const Redis = require('ioredis'); // Assuming ioredis usage
+//const Redis = require('ioredis'); // Assuming ioredis usage
 const redis = new Redis({ db: 3 }); // Using your isolated DB Index path 3
 const logger = require('./logger');
 
