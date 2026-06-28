@@ -17,20 +17,27 @@ const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt',
 // 🧹 LEGACY REGEX PATTERN AND EXTENSION FILTERS (RETAINED)
 // =========================================================================
 function cleanReleaseName(folderName) {
-    let title = folderName.replace(/\/+$/, '').replace(/\[.*?\]/g, '').replace(/\((.*?)\)/g, '$1');
+    // 1. Strip out bracketed blocks entirely before doing core text cleaning
+    let title = folderName.replace(/\[.*?\]/g, '').replace(/\((.*?)\)/g, '$1').replace(/\/+$/, '');
+    
     title = title.replace(/^www\.[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
     title = title.replace(/^[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
 
     const junkPatterns = [
         /[._-]v\d+/i, /[._-]v[eE]r\d+/i, /720p|1080p|2160p|4k/i,
         /HDTS|CAM|TS|TC|HDRip|WEBRip|BluRay|BRRip/i,
-        /x264|x265|h264|hevc|AVC|AAC|MP3|DDP5\.1/i, /-[a-zA-Z0-9]+$/
+        /x264|x265|h264|hevc|AVC|AAC|MP3|DDP5\.1/i,
+        /\b(yts|yts\.mx|yts\.am|yts\.gg|yts\.bz)\b/i, // Aggressively flush legacy indexing tags
+        /-[a-zA-Z0-9]+$/
     ];
+    
     junkPatterns.forEach(pattern => title = title.replace(pattern, ''));
 
     const yearMatch = title.match(/(.*?)[._-\s](\d{4})/);
     let year = '';
     if (yearMatch) { title = yearMatch[1]; year = yearMatch[2]; }
+    
+    // Clean up residual dangling characters or hanging double spaces
     title = title.replace(/[-_.]/g, ' ').replace(/\s+/g, ' ').trim();
     return { title, year };
 }

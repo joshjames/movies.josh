@@ -113,6 +113,7 @@ router.post('/sanitizer/run', (req, res) => {
         .catch(err => logger.log(`Critical background processing fault: ${err.message}`, 'error'));
 });
 
+
 // POST: /api/admin/refetch-metadata
 router.post('/refetch-metadata', async (req, res) => {
     try {
@@ -121,10 +122,11 @@ router.post('/refetch-metadata', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
         }
 
-        // 🚨 FIX 1: Point to correct paths when refetching series metadata on your new drive structure
         const targetDir = (contentType === 'series') 
             ? path.join(SERIES_DIR, folder) 
             : path.join(MOVIES_DIR, folder);
+
+        const metaFilePath = path.join(targetDir, 'metadata.json');
 
         let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
         if (imdbId && imdbId.trim().startsWith('tt')) {
@@ -142,16 +144,43 @@ router.post('/refetch-metadata', async (req, res) => {
             return res.status(404).json({ success: false, error: data.Error || 'No matching titles found inside OMDb library registry.' });
         }
 
+        // Read the file context if it already exists to avoid smashing your storage sync metrics
+        let existingMeta = {};
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                existingMeta = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            } catch (pErr) {
+                existingMeta = {};
+            }
+        }
+
+        // Ensure both camelCase and snake_case variations are stored identically
+        const finalImdbId = data.imdbID || imdbId || '';
+
         const normalizedMetadata = {
+            ...existingMeta, // Retain underlying storage/file status states safely
             title: data.Title || folder.replace(/[-_.]/g, ' '),
             year: data.Year || '',
             genre: data.Genre || 'N/A',
-            imdbId: data.imdbID || imdbId || '',
+            imdbId: finalImdbId,
+            imdb_id: finalImdbId, // ✨ Map snake_case to preserve frontend input bindings
             plot: data.Plot || '',
             contentType: contentType
         };
 
-        await fsPromises.writeFile(path.join(targetDir, 'metadata.json'), JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
+        // If your database scanner expects an implicit wrapper, bridge the object structure 
+        if (existingMeta.metadata) {
+            normalizedMetadata.metadata = {
+                ...existingMeta.metadata,
+                title: data.Title || folder.replace(/[-_.]/g, ' '),
+                year: data.Year || '',
+                imdbId: finalImdbId,
+                imdb_id: finalImdbId,
+                plot: data.Plot || ''
+            };
+        }
+
+        await fsPromises.writeFile(metaFilePath, JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
 
         if (data.Poster && data.Poster !== "N/A") {
             try {
@@ -162,9 +191,8 @@ router.post('/refetch-metadata', async (req, res) => {
             }
         }
 
-        // 🚨 FIX 2: Swap dead global memory cache hooks to fire a true worker library scan sweep
-        LibraryScanner.runLibraryScanSweep()
-            .catch(err => logger.log(`Error updating database cache values: ${err.message}`, 'error'));
+        // Fire background DB sync loop cleanly
+        await LibraryScanner.runLibraryScanSweep();
 
         res.json({ success: true, metadata: normalizedMetadata });
     } catch (err) {
