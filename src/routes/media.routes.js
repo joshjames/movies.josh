@@ -72,27 +72,7 @@ router.get('/movies', async (req, res) => {
     }
 });
 
-// =========================================================================
-// ⚙️ SYSTEM PIPELINE MONITOR ROUTE (Stops frontend 500/404 errors)
-// =========================================================================
-router.get('/pipeline/status', async (req, res) => {
-    try {
-        // Pull the main dataset schema object
-        const library = await getLibrary();
-        
-        // If your downloaders/pipeline engine sync status array keys to another property 
-        // inside the core schema (like library.pipeline), read that, otherwise fallback to empty
-        const currentActivePipelineJobs = library.pipeline || [];
 
-        return res.json({
-            success: true,
-            pipeline: currentActivePipelineJobs
-        });
-    } catch (err) {
-        console.error("❌ Pipeline status sync reporting fault:", err);
-        return res.status(500).json({ success: false, pipeline: [] });
-    }
-});
 
 // GET: /api/movies/:id (Individual Stream Quality Switcher Profile Router)
 router.get('/movies/:id', async (req, res) => {

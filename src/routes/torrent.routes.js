@@ -14,35 +14,50 @@ const TorrentService = require('../services/TorrentService');
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
 
 // =========================================================================
-// 🔍 MEDIA INDEXER & SEARCH PROXIES
+// 🔍 FIXED YTS BROWSE PROXY ENDPOINT
 // =========================================================================
-
-// GET: /api/torrent/yts/browse
 router.get('/yts/browse', async (req, res) => {
     try {
+        // Collect the incoming variables sent from the frontend template
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
         const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
         
+        // Build an explicit clean object containing only valid API arguments
         const apiParams = {
-            page: parseInt(page, 10) || 1,
+            page: page || 1,
             limit: 24,
             order_by: 'desc'
         };
 
-        if (query_term && query_term.trim() !== '' && query_term !== '0') apiParams.query_term = query_term.trim();
-        if (genre && genre.toLowerCase() !== 'all') apiParams.genre = genre.toLowerCase();
-        if (minimum_rating && minimum_rating !== '0') apiParams.minimum_rating = minimum_rating;
+        // Rule 1: Only append query_term if the string is populated and not '0'
+        if (query_term && query_term.trim() !== '' && query_term !== '0') {
+            apiParams.query_term = query_term.trim();
+        }
+
+        // Rule 2: Pass genre ONLY if it's explicitly chosen and not generic 'All'
+        if (genre && genre.toLowerCase() !== 'all') {
+            apiParams.genre = genre.toLowerCase();
+        }
+
+        // Rule 3: Pass rating constraints cleanly if higher than baseline zero
+        if (minimum_rating && minimum_rating !== '0') {
+            apiParams.minimum_rating = minimum_rating;
+        }
+
+        // Rule 4: Map your dynamic frontend sort option directly down to the payload
         apiParams.sort_by = sort_by || 'date_added';
 
-        const response = await axios.get(ytsUrl, { params: apiParams });
-        res.json(response.data);
+        console.log(`📡 Relaying sanitized query params to YTS:`, apiParams);
+
+        const response = await axios.get(ytsUrl, { params: apiParams, timeout: 8000 });
+        return res.json(response.data);
     } catch (err) {
-        logger.log(`❌ YTS proxy route failure: ${err.message}`, 'error');
-        res.status(500).json({ error: "Failed to fetch media data source indices." });
+        console.error("❌ YTS directory route communication failure:", err.message);
+        return res.status(500).json({ error: "Failed to fetch media data source indices.", details: err.message });
     }
 });
 
-// GET: /api/torrent/eztv/browse
+// GET: /api/eztv/browse
 router.get('/eztv/browse', async (req, res) => {
     try {
         const queryTerm = req.query.query ? req.query.query.trim() : '';
@@ -94,19 +109,18 @@ router.get('/eztv/browse', async (req, res) => {
             cover: omdbMeta?.Poster !== "N/A" ? omdbMeta.Poster : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>'
         }));
 
-        res.json({ success: true, torrents: results });
+        return res.json({ success: true, torrents: results });
     } catch (err) {
         logger.log(`EZTV proxy route failure: ${err.message}`, 'error');
-        res.status(500).json({ success: false, error: err.message });
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // =========================================================================
-// 📥 QB_TORRENT DOWN-PIPE INGESTION INTERFACES
+// 📥 QB_TORRENT INTERNAL INGESTION ROUTING MATCHES
 // =========================================================================
 
-
-// REPLACE OLD POST '/downloader/add' WITH THIS:
+// POST: /api/downloader/add
 router.post('/downloader/add', async (req, res) => {
     const { magnetUrl, category } = req.body; 
 
@@ -116,26 +130,30 @@ router.post('/downloader/add', async (req, res) => {
 
     try {
         await TorrentService.addMagnet(magnetUrl, category);
-        res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
+        return res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 });
 
-// POST: /api/torrent/yts/add (Legacy structural alias mapping route)
+// POST: /api/yts/add (Legacy alias layout router mapping)
 router.post('/yts/add', async (req, res) => {
     const { magnetUrl } = req.body;
     if (!magnetUrl) return res.status(400).json({ error: "Missing target magnet payload." });
 
-    req.body.category = 'movie';
-    return router.handle(req, res); 
+    try {
+        await TorrentService.addMagnet(magnetUrl, 'movie');
+        return res.status(200).json({ success: true, message: "Successfully queued layout allocation pipeline records." });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
 });
 
 // =========================================================================
 // 📊 TELEMETRY & WORKFLOW DATA MONITOR
 // =========================================================================
 
-// GET: /api/torrent/pipeline/status
+// GET: /api/pipeline/status
 router.get('/pipeline/status', async (req, res) => {
     try {
         let pipeline = [];
@@ -179,9 +197,9 @@ router.get('/pipeline/status', async (req, res) => {
             }));
         } catch (fsErr) {}
 
-        res.json({ success: true, pipeline });
+        return res.json({ success: true, pipeline });
     } catch (err) {
-        res.status(500).json({ error: "Failed to assemble pipeline matrix state structures." });
+        return res.status(500).json({ error: "Failed to assemble pipeline matrix state structures." });
     }
 });
 
