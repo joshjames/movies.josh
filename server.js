@@ -7,17 +7,32 @@ const fs = require('fs');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 
-// All relative imports now explicitly point down into the src/ directory tree
+// All relative imports explicitly point down into the src/ directory tree
 const logger = require('./src/services/logger');
 const LibraryScanner = require('./src/services/LibraryScanner');
 const { startPipelineWorker } = require('./src/services/workers/PipelineWorker');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MOVIES_DIR = process.env.MOVIES_DIR || path.join(__dirname, 'movies');
 
-if (!fs.existsSync(MOVIES_DIR)) {
-    fs.mkdirSync(MOVIES_DIR, { recursive: true });
+// 🚨 FIX: Explicitly target the mounted container directory paths directly
+const MOVIES_STORAGE_DIR = '/app/storage/movies';
+const SERIES_STORAGE_DIR = '/app/storage/series';
+
+// Alias global and process-level flags for legacy module backward compatibility
+global.MOVIES_DIR = MOVIES_STORAGE_DIR;
+global.SERIES_DIR = SERIES_STORAGE_DIR;
+process.env.MOVIES_DIR = MOVIES_STORAGE_DIR;
+process.env.SERIES_DIR = SERIES_STORAGE_DIR;
+
+
+
+// Verify storage paths exist on initialization
+if (!fs.existsSync(MOVIES_STORAGE_DIR)) {
+    fs.mkdirSync(MOVIES_STORAGE_DIR, { recursive: true });
+}
+if (!fs.existsSync(SERIES_STORAGE_DIR)) {
+    fs.mkdirSync(SERIES_STORAGE_DIR, { recursive: true });
 }
 
 app.use(express.urlencoded({ extended: true }));
@@ -48,8 +63,16 @@ app.use('/admin.html', (req, res, next) => {
     return res.redirect('/login.html');
 });
 
+// 📁 CORE STATIC FILE AND STREAMING LAYER
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/movie-assets', express.static(MOVIES_DIR));
+
+// 🎨 Cover Artwork Mappings
+app.use('/movie-assets', express.static(MOVIES_STORAGE_DIR));
+app.use('/movie-assets/series', express.static(SERIES_STORAGE_DIR));
+
+// 🎬 Direct Player Media Video Stream Mappings
+app.use('/movies', express.static(MOVIES_STORAGE_DIR));
+app.use('/series', express.static(SERIES_STORAGE_DIR));
 
 app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: "Requested core API coordinate map not found." });
@@ -65,6 +88,6 @@ app.listen(PORT, () => {
     console.log(`\n==================================================`);
     console.log(`🚀 MOVIE STREAMER ENGINE IS NOW LIVE`);
     console.log(`🔊 Listening on internal port: ${PORT}`);
-    console.log(`📂 Scanning library at: ${MOVIES_DIR}`);
+    console.log(`📂 Scanning media collection volumes cleanly.`);
     console.log(`==================================================\n`);
 });
