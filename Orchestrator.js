@@ -6,7 +6,7 @@ const path = require('path');
 const axios = require('axios');
 const logger = require('./src/services/logger');
 //const { rebuildLibraryCache } = require('./src/services/CacheWorker');
-const LibraryScanner = require('./services/LibraryScanner'); 
+const LibraryScanner = require('./src/services/LibraryScanner'); 
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
 
 const WORKERS = {
