@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Joshflix - Access Terminal</title>
+    <title>AnyMovie - Login</title>
     <style>
         body {
             background: #020617;
@@ -184,7 +184,7 @@
     </div>
 
         <h1 id="form-title">Welcome Back</h1>
-        <div class="subtitle" id="form-subtitle">Enter your details to open the home cinema desk</div>
+        <div class="subtitle" id="form-subtitle">Enter your details to Signup for Anymovie</div>
 
         <div class="banner" id="alertBlock"></div>
 
@@ -204,11 +204,11 @@
                 <input type="password" id="passwordIn" required autocomplete="current-password">
             </div>
 
-            <button type="submit" class="submit-btn" id="submitBtn">Access Workspace</button>
+            <button type="submit" class="submit-btn" id="submitBtn">Login</button>
         </form>
 
         <div class="toggle-box">
-            <span id="toggleText">New to Joshflix?</span>
+            <span id="toggleText">New to Anymovie?</span>
             <span class="toggle-link" id="toggleLink" onclick="toggleAuthMode()">Create a profile</span>
         </div>
     </div>
@@ -247,8 +247,8 @@
             if (isLoginMode) {
                 title.innerText = "Welcome Back";
                 subtitle.innerText = "Enter your details to start streaming";
-                submitBtn.innerText = "Login to Joshflix";
-                toggleText.innerText = "New to Joshflix?";
+                submitBtn.innerText = "Login to Anymovie";
+                toggleText.innerText = "New to Anymovie?";
                 toggleLink.innerText = "Create a profile";
                 
                 emailGroup.style.display = 'none';

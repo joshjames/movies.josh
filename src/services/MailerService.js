@@ -9,11 +9,11 @@ async function sendVerificationEmail(email, username, token) {
     
     const payload = {
         sender: { 
-            name: process.env.SENDER_NAME || "Joshflix Admin", 
-            email: process.env.SENDER_EMAIL || "josh@joshjames.site" 
+            name: process.env.SENDER_NAME || "AnyMovie Admin", 
+            email: process.env.SENDER_EMAIL || "admin@anymovie.online" 
         },
         to: [{ email: email, name: username }],
-        subject: "🎬 Activate Your Joshflix Profile",
+        subject: "🎬 Activate Your AnyMovie Profile",
         htmlContent: `
         <!DOCTYPE html>
         <html>
@@ -32,21 +32,42 @@ async function sendVerificationEmail(email, username, token) {
         </head>
         <body>
             <div class="email-container">
-                <div class="logo-container">
-                    <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg" width="100%">
-                        <defs>
-                            <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
-                            <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
-                                <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
-                                <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
-                            </filter>
-                        </defs>
-                        <text font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="900" letter-spacing="4" fill="#e50914" filter="url(#cinematicGlow)">
-                            <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">JOSHFLIX</textPath>
-                        </text>
-                    </svg>
-                </div>
-                <h2>Welcome to Joshflix, ${username}!</h2>
+                <div class="logo-wrapper">
+                    <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
+                    
+                    <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
+                        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
+                    </filter>
+                </defs>
+
+                <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+                    font-size="52" 
+                    font-weight="900" 
+                    letter-spacing="5" 
+                    fill="#e50914" 
+                    filter="url(#cinematicGlow)">
+                    <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
+                        ANYMOVIE
+                    </textPath>
+                </text>
+
+                <text x="50%" 
+                    y="118" 
+                    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+                    font-size="16" 
+                    font-weight="700" 
+                    letter-spacing="14" 
+                    fill="#ffffff" 
+                    text-anchor="middle"
+                    opacity="0.9">
+                    ONLINE
+                </text>
+            </svg>
+            </div>
+                <h2>Welcome to AnyMovie, ${username}!</h2>
                 <p>Please follow this link to activate your account and secure your access:</p>
                 <a href="${verificationUrl}" class="btn-verify">Activate Account</a>
                 <p>Enjoy a more personalized media experience. Be sure to check out the library or browse the extended media browser once authenticated.</p>
@@ -54,8 +75,8 @@ async function sendVerificationEmail(email, username, token) {
                     Please feel free to reach out if you have any feedback or issues directly to me at 
                     <a href="mailto:josh@joshjames.site">josh@joshjames.site</a>.<br><br>
                     Thanks,<br>
-                    <strong>Josh</strong><br>
-                    <a href="https://movies.joshjames.site">movies.joshjames.site</a>
+                    <strong>AnyMovie Admin</strong><br>
+                    <a href="https://anymovie.online">Anymovie.online</a>
                 </div>
             </div>
         </body>
