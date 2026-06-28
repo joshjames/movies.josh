@@ -1,67 +1,68 @@
 // src/routes/profile.routes.js
-// User profile settings, watch history tracking, and playback position state persistence.
-
 const express = require('express');
 const router = express.Router();
+// 🎯 FIX: Import the correct file name
+const ProfileService = require('../services/ProfileService'); 
 
-const { getActiveUser } = require('../middleware/auth');
-// Import your data manager instance
-// const ProfileManager = require('../services/ProfileManager');
+// Helper function to force uniform media keys matching your storage tree structure
+function sanitizeMediaId(id) {
+    if (!id) return '';
+    return id
+        .replace(/\[.*?\]/g, '')                  // Strip release group metadata tags like [YTS]
+        .replace(/\(.*?\)/g, '')                  // Strip year tags or parenthesis
+        .replace(/[-_\s]+/g, '.')                 // Normalize spaces/dashes to dot-notation
+        .replace(/\.+$/, '')                      // Trim trailing periods
+        .trim();
+}
 
-// =========================================================================
-// PLAYBACK RESUME & SYNC PORTS
-// =========================================================================
-
-// POST: /api/profile/playback/sync (Heartbeat endpoint for active video players)
+// POST: /api/profile/playback/sync
 router.post('/playback/sync', async (req, res) => {
+    const { username, mediaId, position } = req.body; // Adjusted if username is extracted from session/token instead
+
+    if (!mediaId || position === undefined) {
+        return res.status(400).json({ success: false, error: 'Missing sync states' });
+    }
+
+    const numericPosition = parseFloat(position);
+    const cleanMediaId = sanitizeMediaId(mediaId);
+
     try {
-        const username = getActiveUser(req);
-        const { mediaId, position } = req.body;
-
-        if (!mediaId || position === undefined) {
-            return res.status(400).json({ success: false, error: 'Missing sync states' });
-        }
-
-        const numericPosition = parseFloat(position);
-
         // 🛡️ ANTI-RESET SHIELD
-        // Prevents unmount/page tear-down race conditions from zeroing out saved progress.
         if (numericPosition === 0) {
-            const currentPlayback = await ProfileManager.getPlaybackState(username);
-            if (currentPlayback && currentPlayback[mediaId] && currentPlayback[mediaId].position > 10) {
-                // Ignore the rogue 0 save and preserve the asset coordinate maps
+            const currentPlayback = await ProfileService.getPlaybackState(username);
+            if (currentPlayback[cleanMediaId] && currentPlayback[cleanMediaId].position > 10) {
                 return res.json({ success: true, message: 'Ignored teardown zero reset.' });
             }
         }
 
-        await ProfileManager.savePlaybackPosition(username, mediaId, numericPosition);
+        // 🎯 FIX: Explicitly target ProfileService
+        await ProfileService.savePlaybackPosition(username, cleanMediaId, numericPosition);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// GET: /api/profile/playback/state (Fetch current progress coordinates for resume windows)
+// GET: /api/profile/playback/state
 router.get('/playback/state', async (req, res) => {
     try {
-        const username = getActiveUser(req);
+        const username = getActiveUser(req); // Keeps your existing user verification function
         const { mediaId } = req.query;
 
         if (!mediaId) {
             return res.status(400).json({ success: false, error: 'Missing media identity key.' });
         }
 
-        const playback = await ProfileManager.getPlaybackState(username);
-        const state = playback?.[mediaId] || { position: 0 };
+        const cleanMediaId = sanitizeMediaId(mediaId);
+        const playbackState = await ProfileService.getPlaybackState(username);
+        
+        // Check both normalized and original raw key variants for legacy fallback
+        const state = playbackState[cleanMediaId] || playbackState[mediaId] || { position: 0 };
 
         res.json({ success: true, position: state.position });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
-
-// SKELETONS FOR COMPLEMENTARY PROFILE DATA TRACKS
-router.get('/history', (req, res) => res.status(501).json({ error: 'Not implemented' }));
-router.post('/history/clear', (req, res) => res.status(501).json({ error: 'Not implemented' }));
 
 module.exports = router;
