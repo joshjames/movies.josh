@@ -163,6 +163,43 @@
             color: #94a3b8;
         }
 
+                /* Container for alignment */
+        .brand-logo-container {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            font-family: 'Helvetica Neue', Arial, sans-serif; /* Adjust to match your current font choice */
+        }
+
+        /* The upper arced text string */
+        .logo-main-arc {
+            color: #E50914; /* Netflix/Joshflix core structural red */
+            font-size: 1.8rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            
+            /* 3D Transform to simulate a cinematic lens arc distortion */
+            transform: perspective(100px) rotateX(15deg) scaleY(1.1);
+            display: inline-block;
+            
+            /* Subtle text shadow to give it depth on a dark UI background */
+            text-shadow: 0px 4px 10px rgba(0, 0, 0, 0.7);
+        }
+
+        /* The lower aligned element text string */
+        .logo-sub-text {
+            color: #FFFFFF; /* High contrast white text */
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 6px; /* High tracking spacing to make it fit evenly under the main text frame */
+            text-transform: uppercase;
+            margin-top: -2px; /* Pulls it up slightly so it nests nicely right inside the curve line */
+            opacity: 0.9;
+        }
+
         /* Tablet/Desktop expansion sizing overrides */
         @media(min-width: 640px) {
             body { padding: 20px; }
@@ -178,33 +215,47 @@
 
     <header class="main-header">
         <div class="header-content">
-            <div class="logo-wrapper" onclick="window.location.reload();">
-                <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
-                        <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
-                            <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
-                        </filter>
-                    </defs>
-                    <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                          font-size="52" 
-                          font-weight="900" 
-                          letter-spacing="4" 
-                          fill="#e50914" 
-                          filter="url(#cinematicGlow)">
-                        <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
-                            JOSHFLIX
-                        </textPath>
-                    </text>
-                </svg>
-            </div>
+           
 
             <div class="profile-controls">
     <a href="/admin.html" id="admin-action-btn" style="display: none; background: #9333ea; color: white; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; transition: all 0.2s; white-space: nowrap;">🛠️ Admin Desk</a>
     
     <span id="welcome-user" class="welcome-msg">Cinema Active</span>
     <a href="/api/auth/logout" class="logout-btn">Switch Profile ⎋</a>
+</div><div class="logo-wrapper" onclick="window.location.href='/';">
+    <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
+            
+            <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
+                <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
+            </filter>
+        </defs>
+
+        <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+              font-size="52" 
+              font-weight="900" 
+              letter-spacing="5" 
+              fill="#e50914" 
+              filter="url(#cinematicGlow)">
+            <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
+                ANYMOVIE
+            </textPath>
+        </text>
+
+        <text x="50%" 
+              y="118" 
+              font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+              font-size="16" 
+              font-weight="700" 
+              letter-spacing="14" 
+              fill="#ffffff" 
+              text-anchor="middle"
+              opacity="0.9">
+            ONLINE
+        </text>
+    </svg>
 </div>
 
             <div class="nav-actions">

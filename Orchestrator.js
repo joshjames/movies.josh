@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const logger = require('./src/services/logger');
+const MetadataRegistry = require('./src/services/MetadataRegistry');
 //const { rebuildLibraryCache } = require('./src/services/CacheWorker');
 const LibraryScanner = require('./src/services/LibraryScanner'); 
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
@@ -79,6 +80,13 @@ async function processAsset(folder, destinationParent) {
                     error: null
                 }
             };
+
+// note to update below: and other files that write metadata.json should use the new MetadataRegistry.writeAndCommit() method to ensure Redis cache is updated as well.
+// fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4));
+
+// New Unidirectional Way:
+//await MetadataRegistry.writeAndCommit(metaFilePath, folder, metadata);
+
 
             fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4));
             logger.log(`✅ Asset [${folder}] advanced successfully down-pipe to state: ${nextStep}`);
