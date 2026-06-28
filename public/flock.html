@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boids Flocking Animation</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #121212; /* Matching the dark theme */
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="animationCanvas"></canvas>
+
+<script>
+// --- UTILITY FUNCTIONS FROM THE SCRIPTS ---
+const mapRange = (e, t, r, i, n) => (e - t) / (r - t) * (n - i) + i;
+const randomRange = (e, t) => void 0 === e && void 0 === t ? Math.random() : void 0 === t && void 0 !== e ? Math.random() * e : void 0 !== e && void 0 !== t ? Math.random() * (t - e) + e : Math.random();
+const cosineEase = e => .5 * (1 - Math.cos(e * Math.PI));
+
+// --- PERLIN/VALUE NOISE IMPLEMENTATION ---
+let noiseTable = null;
+const noise3D = (e, t = 0, r = 0) => {
+    let i, n, o, a, d;
+    if (null == noiseTable) {
+        noiseTable = Array(4096);
+        for (let e = 0; e < 4096; e++) noiseTable[e] = Math.random();
+    }
+    e < 0 && (e = -e), t < 0 && (t = -t), r < 0 && (r = -r);
+    let c = Math.floor(e), u = Math.floor(t), f = Math.floor(r),
+        h = e - c, m = t - u, p = r - f, g = 0, x = .5;
+    
+    for (let e = 0; e < 4; e++) {
+        let e = c + (u << 4) + (f << 8);
+        i = cosineEase(h), n = cosineEase(m);
+        o = noiseTable[4095 & e];
+        o += i * (noiseTable[e + 1 & 4095] - o);
+        a = noiseTable[e + 16 & 4095];
+        a += i * (noiseTable[e + 16 + 1 & 4095] - a);
+        o += n * (a - o);
+        e += 256;
+        a = noiseTable[4095 & e];
+        a += i * (noiseTable[e + 1 & 4095] - a);
+        d = noiseTable[e + 16 & 4095];
+        d += i * (noiseTable[e + 16 + 1 & 4095] - d);
+        a += n * (d - a);
+        g += o * x;
+        x *= .5;
+        c <<= 1; u <<= 1; m *= 2; f <<= 1; p *= 2;
+        (h *= 2) >= 1 && (c++, h--);
+        m >= 1 && (u++, m--);
+        p >= 1 && (f++, p--);
+    }
+    return g;
+};
+
+// --- CLASS C: 2D VECTOR ENGINE ---
+class Vector2D {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+    add(v) { this.x += v.x; this.y += v.y; return this; }
+    sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+    static sub(v1, v2) { return new Vector2D(v1.x - v2.x, v1.y - v2.y); }
+    mult(n) { this.x *= n; this.y *= n; return this; }
+    div(n) { this.x /= n; this.y /= n; return this; }
+    mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+    normalize() {
+        let m = this.mag();
+        if (0 !== m && 1 !== m) this.div(m);
+        return this;
+    }
+    limit(max) {
+        if (this.mag() > max) { this.normalize(); this.mult(max); }
+        return this;
+    }
+    heading() { return Math.atan2(this.y, this.x); }
+    dist(v) {
+        let dx = this.x - v.x;
+        let dy = this.y - v.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+}
+
+// --- CLASS U: THE BOID PARTICLES ---
+class Boid {
+    constructor(x, y, id) {
+        this.position = new Vector2D(x, y);
+        this.velocity = new Vector2D(randomRange(-1, 1), randomRange(-1, 1));
+        this.acceleration = new Vector2D(0, 0);
+        this.r = 3;
+        this.maxspeed = 3;
+        this.maxforce = .05;
+        this.id = id;
+        this.noiseOffsetX = randomRange(1e3);
+        this.noiseOffsetY = randomRange(1e3);
+        this.noiseIncrement = .002;
+    }
+
+    run(ctx, boids, width, height, leaderId, particleColor) {
+        this.flock(boids, leaderId);
+        this.update();
+        this.borders(width, height);
+        this.render(ctx, leaderId, particleColor);
+    }
+
+    applyForce(force) {
+        this.acceleration.add(force);
+    }
+
+    flock(boids, leaderId) {
+        // If it's the designated alpha/leader particle, it moves on erratic noise rather than flocking guidelines
+        if (this.id === leaderId && boids.length > 2) {
+            let nx = noise3D(this.noiseOffsetX);
+            let ny = noise3D(this.noiseOffsetY);
+            let noiseForce = new Vector2D(mapRange(nx, 0, 1, -1, 1), mapRange(ny, 0, 1, -1, 1));
+            noiseForce.mult(5.5);
+            this.applyForce(noiseForce);
+            this.noiseOffsetX += this.noiseIncrement;
+            this.noiseOffsetY += this.noiseIncrement + .001;
+        } else {
+            let sep = this.separate(boids);
+            let ali = this.align(boids);
+            let coh = this.cohesion(boids);
+            sep.mult(1.5);
+            ali.mult(1);
+            coh.mult(1);
+            this.applyForce(sep);
+            this.applyForce(ali);
+            this.applyForce(coh);
+        }
+    }
+
+    update() {
+        this.velocity.add(this.acceleration);
+        this.velocity.limit(this.maxspeed);
+        this.position.add(this.velocity);
+        this.acceleration.mult(0);
+    }
+
+    seek(target) {
+        let desired = Vector2D.sub(target, this.position);
+        desired.normalize();
+        desired.mult(this.maxspeed);
+        let steer = Vector2D.sub(desired, this.velocity);
+        steer.limit(this.maxforce);
+        return steer;
+    }
+
+    borders(width, height) {
+        if (this.position.x < -this.r) this.position.x = width + this.r;
+        if (this.position.y < -this.r) this.position.y = height + this.r;
+        if (this.position.x > width + this.r) this.position.x = -this.r;
+        if (this.position.y > height + this.r) this.position.y = -this.r;
+    }
+
+    render(ctx, leaderId, particleColor) {
+        let theta = this.velocity.heading() + 90 * Math.PI / 180;
+        let isLeader = this.id === leaderId;
+        
+        ctx.save();
+        ctx.translate(this.position.x, this.position.y);
+        ctx.rotate(theta - Math.PI / 2);
+        ctx.scale(.02, .02); // Scales down the enormous vector paths below
+        
+        ctx.fillStyle = isLeader ? "#E10600" : particleColor;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, 554.58227);
+        ctx.bezierCurveTo(0, 539.57642, 12.277536, 527.29883, 27.283415, 527.29883);
+        ctx.bezierCurveTo(137.78125, 527.29883, 237.36554, 570.95227, 311.03076, 641.89916);
+        ctx.bezierCurveTo(350.5917, 588.69652, 376.51114, 524.71648, 381.9678, 453.77966);
+        ctx.lineTo(154.15112, 452.53317);
+        ctx.bezierCurveTo(139.14525, 452.53317, 126.86771, 440.25564, 126.86771, 425.24979);
+        ctx.bezierCurveTo(126.86771, 410.24393, 139.14525, 397.96639, 154.15112, 397.96639);
+        ctx.lineTo(410.61548, 397.96639);
+        ctx.bezierCurveTo(582.50098, 397.96639, 744.83722, 464.8106, 866.24841, 586.22177);
+        ctx.lineTo(941.27783, 661.25118);
+        ctx.bezierCurveTo(946.7345, 666.70785, 949.46289, 673.52902, 949.46289, 680.34982);
+        ctx.bezierCurveTo(949.46289, 687.17062, 946.7345, 693.99142, 941.27783, 699.44808);
+        ctx.lineTo(866.24841, 774.47749);
+        ctx.bezierCurveTo(744.83722, 896.88866, 582.50098, 963.7329, 410.61548, 963.7329);
+        ctx.lineTo(154.15112, 963.7329);
+        ctx.bezierCurveTo(139.14525, 963.7329, 126.86771, 951.45536, 126.86771, 936.44951);
+        ctx.bezierCurveTo(126.86771, 921.44365, 139.14525, 909.16611, 154.15112, 909.16611);
+        ctx.lineTo(381.9678, 909.16611);
+        ctx.bezierCurveTo(376.51114, 839.69397, 350.5917, 774.21393, 311.03076, 721.01129);
+        ctx.bezierCurveTo(237.36554, 791.94812, 137.78125, 835.60156, 27.283415, 835.60156);
+        ctx.bezierCurveTo(12.277536, 835.60156, 0, 823.32398, 0, 808.31811);
+        ctx.bezierCurveTo(0, 793.31226, 12.277536, 781.03467, 27.283415, 781.03467);
+        ctx.bezierCurveTo(124.13953, 781.03467, 211.44664, 742.83795, 275.56265, 680.08612);
+        ctx.bezierCurveTo(211.44664, 617.33429, 124.13953, 579.13757, 27.283415, 579.13757);
+        ctx.bezierCurveTo(12.277536, 581.86597, 0, 569.58814, 0, 554.58227);
+        ctx.moveTo(883.98248, 682.81421);
+        ctx.lineTo(828.05182, 626.88355);
+        ctx.bezierCurveTo(723.01068, 521.84241, 585.22925, 460.45465, 436.53464, 454.99799);
+        ctx.bezierCurveTo(431.07794, 540.94074, 398.33786, 620.06238, 347.86352, 682.81421);
+        ctx.bezierCurveTo(398.33786, 745.5661, 431.07794, 824.68817, 436.53464, 910.63092);
+        ctx.bezierCurveTo(583.86505, 903.81006, 723.01068, 843.7865, 828.05182, 738.74476);
+        ctx.lineTo(883.98248, 682.81421);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    separate(boids) {
+        let steer = new Vector2D(0, 0);
+        let count = 0;
+        for (let i = 0; i < boids.length; i++) {
+            let other = boids[i];
+            let d = this.position.dist(other.position);
+            if (d > 0 && d < 20) {
+                let diff = Vector2D.sub(this.position, other.position);
+                diff.normalize();
+                diff.div(d);
+                steer.add(diff);
+                count++;
+            }
+        }
+        if (count > 0) steer.div(count);
+        if (steer.mag() > 0) {
+            steer.normalize();
+            steer.mult(this.maxspeed);
+            steer.sub(this.velocity);
+            steer.limit(this.maxforce);
+        }
+        return steer;
+    }
+
+    align(boids) {
+        let sum = new Vector2D(0, 0);
+        let count = 0;
+        for (let i = 0; i < boids.length; i++) {
+            let other = boids[i];
+            let d = this.position.dist(other.position);
+            if (d > 0 && d < 40) {
+                sum.add(other.velocity);
+                count++;
+            }
+        }
+        if (count > 0) {
+            sum.div(count);
+            sum.normalize();
+            sum.mult(this.maxspeed);
+            let steer = Vector2D.sub(sum, this.velocity);
+            steer.limit(this.maxforce);
+            return steer;
+        }
+        return new Vector2D(0, 0);
+    }
+
+    cohesion(boids) {
+        let sum = new Vector2D(0, 0);
+        let count = 0;
+        for (let i = 0; i < boids.length; i++) {
+            let other = boids[i];
+            let d = this.position.dist(other.position);
+            if (d > 0 && d < 50) {
+                sum.add(other.position);
+                count++;
+            }
+        }
+        return count > 0 ? (sum.div(count), this.seek(sum)) : new Vector2D(0, 0);
+    }
+}
+
+// --- INITIALIZATION AND LOOP SETUP ---
+const canvas = document.getElementById("animationCanvas");
+const ctx = canvas.getContext("2d");
+
+let boidsList = [];
+let idCounter = 1;
+let lastTime = 0;
+const particleColor = "rgba(140, 140, 140, 0.6)"; // Subtle gray flock colors
+
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+    ctx.scale(dpr, dpr);
+}
+
+function initSimulation() {
+    resizeCanvas();
+    boidsList = [];
+    
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    
+    // Exactly matches the original script's spawn counts (70 total particles)
+    for (let i = 0; i < 70; i++) {
+        idCounter++;
+        if (i < 35) {
+            // Half spawn clustered directly in the center
+            boidsList.push(new Boid(w / 2, h / 2, idCounter));
+        } else {
+            // Half spawn scattered randomly across screen space
+            boidsList.push(new Boid(randomRange(w), randomRange(h), idCounter));
+        }
+    }
+}
+
+function animate(timestamp) {
+    requestAnimationFrame(animate);
+    
+    let elapsed = timestamp - lastTime;
+    // Frame throttling configuration from original file (~60fps barrier execution checking)
+    if (elapsed > 16.666) {
+        lastTime = timestamp - (elapsed % 16.666);
+        
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        
+        ctx.clearRect(0, 0, w, h);
+        
+        // The original script sets the leader ID dynamically to `idCounter - 1`
+        const leaderId = idCounter - 1; 
+        
+        for (let boid of boidsList) {
+            boid.run(ctx, boidsList, w, h, leaderId, particleColor);
+        }
+    }
+}
+
+// Global Event Triggers
+window.addEventListener("resize", resizeCanvas);
+initSimulation();
+requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>
