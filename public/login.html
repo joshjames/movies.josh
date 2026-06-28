@@ -147,27 +147,41 @@
 <body>
 
     <div class="auth-card">
-        <div class="login-logo-wrapper">
-            <svg viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
+        <div class="logo-wrapper" onclick="window.location.href='/';">
+            <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
                 <defs>
-                    <path id="textArchPath" d="M 50,95 Q 250,45 450,95" fill="none" />
+                    <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
+                    
                     <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
                         <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
                         <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
                     </filter>
                 </defs>
+
                 <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                      font-size="52" 
-                      font-weight="900" 
-                      letter-spacing="4" 
-                      fill="#e50914" 
-                      filter="url(#cinematicGlow)">
+                    font-size="52" 
+                    font-weight="900" 
+                    letter-spacing="5" 
+                    fill="#e50914" 
+                    filter="url(#cinematicGlow)">
                     <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
-                        JOSHFLIX
+                        ANYMOVIE
                     </textPath>
                 </text>
+
+                <text x="50%" 
+                    y="118" 
+                    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
+                    font-size="16" 
+                    font-weight="700" 
+                    letter-spacing="14" 
+                    fill="#ffffff" 
+                    text-anchor="middle"
+                    opacity="0.9">
+                    ONLINE
+                </text>
             </svg>
-        </div>
+    </div>
 
         <h1 id="form-title">Welcome Back</h1>
         <div class="subtitle" id="form-subtitle">Enter your details to open the home cinema desk</div>
