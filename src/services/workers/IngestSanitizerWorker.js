@@ -5,6 +5,7 @@ const path = require('path');
 const fsp = require('fs').promises;
 const axios = require('axios');
 const logger = require('../logger');
+const analysis = analyzeDirectoryContents(folderPath);
 //const MetadataRegistry = require('../MetadataRegistry'); // Core disk + Redis index sync engine
 
 const app = express();
@@ -89,6 +90,68 @@ function generateSkeletonSeason(seasonNum, structure, physicalFileMap) {
     structure.seasons[seasonNum].episodes.sort((a,b) => a.episodeNumber - b.episodeNumber);
 }
 
+// Add these intelligence helpers to your IngestSanitizerWorker.js
+
+/**
+ * Analyzes the interior contents of an incoming directory to determine if it is a 
+ * monolithic Season Pack or an amorphous dump folder.
+ */
+function analyzeDirectoryContents(dirPath) {
+    const files = fs.readdirSync(dirPath);
+    let tvMatches = [];
+    let mediaCount = 0;
+
+    for (const file of files) {
+        const ext = path.extname(file).toLowerCase();
+        if (!KEEP_EXTENSIONS.includes(ext)) continue;
+        if (file.toLowerCase().includes('sample')) continue;
+
+        mediaCount++;
+        const match = file.match(/s\s*(\d+)\s*e\s*(\d+)/i);
+        if (match) {
+            tvMatches.push({
+                fileName: file,
+                season: parseInt(match[1], 10),
+                episode: parseInt(match[2], 10)
+            });
+        }
+    }
+
+    return {
+        isSeasonPack: tvMatches.length > 0 && tvMatches.length === mediaCount,
+        detectedEpisodes: tvMatches
+    };
+}
+
+/**
+ * Searches the destination directory to see if a variation of the show title 
+ * already exists (e.g., matching "Hijack" to "Hijack.2023" or "hijack")
+ */
+function findExistingShowFolder(cleanTitle, targetSeriesDir) {
+    if (!fs.existsSync(targetSeriesDir)) return null;
+    
+    const normalizedTarget = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const currentFolders = fs.readdirSync(targetSeriesDir);
+
+    for (const folder of currentFolders) {
+        const normalizedFolder = folder.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // If the names stripped of dots and spaces match, we reuse the existing folder
+        if (normalizedFolder === normalizedTarget || normalizedFolder.includes(normalizedTarget)) {
+            return folder;
+        }
+    }
+    return null;
+}
+
+// =========================================================================
+// 📥 INTELLECTUAL TV PACK ROUTE (To integrate into your POST '/process')
+// =========================================================================
+// Inside your app.post('/process', ...) interceptor, before step B.1:
+
+
+
+
+
 // =========================================================================
 // 📥 UNIFIED INGEST PROCESSING ENDPOINT
 // =========================================================================
@@ -138,6 +201,59 @@ app.post('/process', async (req, res) => {
         // 📺 BRANCH OVER: TV SERIES DETAILED EXTENSION INGESTION
         // =====================================================================
         if (contentType === 'series') {
+
+            if (analysis.isSeasonPack) {
+    logger.log(`🧠 [Smart Ingest] Detected multi-file TV Season Pack inside: [${folderName}]`);
+
+    // 1. Get clean base title without release group junk
+    const { title: cleanTitle } = cleanReleaseName(folderName);
+    
+    // 2. Determine the canonical root folder for this show
+    let showFolder = findExistingShowFolder(cleanTitle, SERIES_DIR);
+    if (!showFolder) {
+        // If it doesn't exist, create it cleanly using dot notation
+        showFolder = cleanTitle.replace(/\s+/g, '.');
+        fs.mkdirSync(path.join(SERIES_DIR, showFolder), { recursive: true });
+        logger.log(`📁 [Smart Ingest] Established brand new show root entry: ${showFolder}`);
+    } else {
+        logger.log(`🎯 [Smart Ingest] Linked incoming assets to existing archive: ${showFolder}`);
+    }
+
+    // 3. Process every individual file out of the download dump into the archive structure
+    for (const ep of analysis.detectedEpisodes) {
+        const seasonFolder = `Season.${String(ep.season).padStart(2, '0')}`;
+        const targetDir = path.join(SERIES_DIR, showFolder, seasonFolder);
+        
+        // Ensure the specific season directory exists
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+
+        // Compute a clean, standardized filename: Show.Name.SXXEXX.mkv
+        const cleanFileTitle = `${showFolder}.S${String(ep.season).padStart(2, '0')}E${String(ep.episode).padStart(2, '0')}${path.extname(ep.fileName)}`;
+        
+        const sourcePath = path.join(folderPath, ep.fileName);
+        const destinationPath = path.join(targetDir, cleanFileTitle);
+
+        // Atomic move statement
+        if (!fs.existsSync(destinationPath)) {
+            fs.renameSync(sourcePath, destinationPath);
+        }
+    }
+
+    logger.log(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
+    deleteFolderRecursive(folderPath); // Wipe out the original empty torrent download folder
+
+    // Hand back status control to update the UI
+    return res.json({
+        success: true,
+        message: "Season pack dispersed and merged into library successfully.",
+        patchData: { pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() } }
+    });
+}
+
+
+
             logger.log(`📺 Mapping deep TV configuration manifests for series structural tree: [${targetFolderName}]`);
             
             let mainMeta = { title: cleanTitle, year: parsedYear || '', plot: '', genre: '', contentType: 'series' };
