@@ -16,7 +16,7 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 // =========================================================================
 // 🔍 FIXED YTS BROWSE PROXY ENDPOINT
 // =========================================================================
-app.get('/yts/browse', async (req, res) => {
+router.get('/yts/browse', async (req, res) => {
     try {
         // Collect the incoming variables sent from the frontend template
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
