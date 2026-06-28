@@ -5,7 +5,7 @@ const path = require('path');
 const fsp = require('fs').promises;
 const axios = require('axios');
 const logger = require('../logger');
-const MetadataRegistry = require('../MetadataRegistry'); // Core disk + Redis index sync engine
+//const MetadataRegistry = require('../MetadataRegistry'); // Core disk + Redis index sync engine
 
 const app = express();
 app.use(express.json());
@@ -210,22 +210,25 @@ app.post('/process', async (req, res) => {
             }
 
             // Step B.4: Commit structured artifacts to disk
-            fs.writeFileSync(path.join(finalPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
+                fs.writeFileSync(path.join(finalPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
 
-            // Set final pipeline states and commit write-through to Disk + Redis
-            const metaFilePath = path.join(finalPath, 'metadata.json');
-            mainMeta.pipelineState = { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() };
-            
-            await MetadataRegistry.writeAndCommit(metaFilePath, targetFolderName, mainMeta);
+                // Set final pipeline states and write directly to disk locally instead of hitting the raw Redis Registry
+                const metaFilePath = path.join(finalPath, 'metadata.json');
+                mainMeta.pipelineState = { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() };
 
-            return res.json({
-                success: true,
-                patchData: {
-                    folderPath: finalPath,
-                    folderName: targetFolderName,
-                    pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() }
-                }
-            });
+                // Write the file locally to the disk right here
+                fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
+
+                logger.log(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and marked pipeline COMPLETED.`);
+
+                return res.json({
+                    success: true,
+                    patchData: {
+                        folderPath: finalPath,
+                        folderName: targetFolderName,
+                        pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() }
+                    }
+                });
         }
 
         // =====================================================================
