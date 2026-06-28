@@ -23,8 +23,10 @@ const REQUEST_HEADERS = {
  * Strategy 1: Programmatic YIFY HTML Scratch-Pad Parser
  */
 async function fetchYifySubtitles(imdbId, folderPath) {
+    const targetImdb = imdbId.startsWith('tt') ? imdbId : `tt${imdbId}`;
+    const tempZipPath = path.join(folderPath, `temp_subs_${targetImdb}.zip`);
+    
     try {
-        const targetImdb = imdbId.startsWith('tt') ? imdbId : `tt${imdbId}`;
         const movieUrl = `https://yifysubtitles.ch/movie-imdb/${targetImdb}`;
         
         logger.log(`📡 Querying YIFY database for IMDB: ${targetImdb}`);
@@ -52,7 +54,6 @@ async function fetchYifySubtitles(imdbId, folderPath) {
         }
 
         const downloadUrl = `https://yifysubtitles.ch${zipDownloadMatch[0]}`;
-        const tempZipPath = path.join(folderPath, `temp_subs_${targetImdb}.zip`);
 
         logger.log(`📥 Streaming subtitle binary file: ${downloadUrl}`);
         
@@ -71,26 +72,41 @@ async function fetchYifySubtitles(imdbId, folderPath) {
         // Write buffer out to block space cleanly
         fs.writeFileSync(tempZipPath, Buffer.from(binaryStream.data));
 
-        // Use adm-zip to unpack the contents natively without executing system commands
+        // 🛠️ FIX: Use adm-zip with the correct native method map (.getEntries())
         const zip = new AdmZip(tempZipPath);
-        const zipEntries = zip.getZipEntries();
+        const zipEntries = zip.getEntries();
         
-        let extractedSrtName = 'English.srt';
-        
+        let srtExtracted = false;
+        const standardizedName = 'English.srt';
+
         zipEntries.forEach((entry) => {
-            if (entry.entryName.toLowerCase().endsWith('.srt')) {
-                // Unpack file and standardize the naming convention inside the media folder
-                zip.extractSaveTo(entry, folderPath, false, true, extractedSrtName);
+            if (entry.entryName.toLowerCase().endsWith('.srt') && !srtExtracted) {
+                // Extract to the target folder natively
+                zip.extractEntryTo(entry, folderPath, false, true);
+                
+                const rawExtractedPath = path.join(folderPath, entry.entryName);
+                const finalSrtPath = path.join(folderPath, standardizedName);
+                
+                if (fs.existsSync(rawExtractedPath)) {
+                    fs.renameSync(rawExtractedPath, finalSrtPath);
+                    srtExtracted = true;
+                }
             }
         });
 
         // Clean up temporary tracking artifacts instantly
         if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
 
-        logger.log(`✨ YIFY Pipeline successfully downloaded and mapped: English.srt`);
-        return [{ language: 'eng', relativePath: 'English.srt', source: 'yify' }];
+        if (srtExtracted) {
+            logger.log(`✨ YIFY Pipeline successfully downloaded and mapped: English.srt`);
+            return [{ language: 'eng', relativePath: 'English.srt', source: 'yify' }];
+        } else {
+            throw new Error("No usable SRT files found inside the downloaded archive container.");
+        }
 
     } catch (err) {
+        // Safe clean up fallback check if zip processing bombed out midway
+        if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
         logger.log(`⚠️ YIFY subtitle ingestion skipped: ${err.message}. Routing to fallbacks...`, 'warn');
         return null;
     }
@@ -111,7 +127,7 @@ function fetchSubliminalFallback(imdbId, folderPath) {
             }
 
             const files = fs.readdirSync(folderPath);
-            const srtFile = files.find(f => f.endsWith('.srt') && f !== 'English.srt');
+            const srtFile = files.find(f => f.endsWith('.srt') && f.toLowerCase() !== 'english.srt');
 
             if (srtFile) {
                 const standardizedName = 'English.srt';
@@ -134,16 +150,22 @@ app.post('/process', async (req, res) => {
         return res.status(400).json({ success: false, error: "Missing required folderPath or imdbId context parameters." });
     }
 
-    // Fast Pass Check: If English subtitles already exist, bypass lookups entirely
-    if (fs.existsSync(path.join(folderPath, 'English.srt'))) {
-        return res.json({
-            success: true,
-            message: "Subtitle track verified instantly via local storage check.",
-            patchData: { subtitles: [{ language: 'eng', relativePath: 'English.srt', source: 'local-cached' }] }
-        });
-    }
-
     try {
+        // ✨ FAST PASS SYSTEM CHECK: Scan files for ANY common subtitle tracks to bypass APIs entirely
+        const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
+        const subtitleExists = filesOnDisk.some(f => 
+            f.toLowerCase() === 'english.srt' || f.toLowerCase().endsWith('.vtt')
+        );
+
+        if (subtitleExists) {
+            logger.log(`⏭️ [SUBTITLES] Skipping [${folderName || path.basename(folderPath)}]. Subtitle track already present on disk.`);
+            return res.json({
+                success: true,
+                message: "Subtitle track verified instantly via local storage check.",
+                patchData: { subtitles: [{ language: 'eng', relativePath: 'English.srt', source: 'local-cached' }] }
+            });
+        }
+
         // Step 1: Fire high-speed YIFY custom pipeline
         let records = await fetchYifySubtitles(imdbId, folderPath);
 
