@@ -11,17 +11,23 @@ class TorrentService {
     /**
      * Dispatched a formatted magnet stream download command into qBittorrent.
      * @param {string} magnetUrl 
-     * @param {string} category 'movie' or 'series'
+     * @param {string} category 'movie' or 'series-streamer'
      */
     async addMagnet(magnetUrl, category = 'movie') {
         try {
             const form = new FormData();
             form.append('urls', magnetUrl);
             
-            // Map download target storage paths based on media categories
-            const targetPath = category === 'series' ? '/downloads/series' : '/downloads';
-            form.append('savepath', targetPath);
-            form.append('tags', 'movie-streamer');
+            // Map incoming requests directly to your updated client categories
+            const targetCategory = (category === 'series-streamer' || category === 'series') 
+                ? 'series-streamer' 
+                : 'movie-streamer';
+
+            form.append('category', targetCategory);
+            
+            // Set dynamic workflow tags based on the media type
+            const targetTag = targetCategory === 'series-streamer' ? 'series-streamer' : 'movie-streamer';
+            form.append('tags', targetTag);
 
             const endpoint = `${QBIT_BASE_URL}/torrents/add`;
             await axios.post(endpoint, form, {
@@ -29,7 +35,7 @@ class TorrentService {
                 timeout: 5000
             });
 
-            logger.log(`📥 [Torrent Service] Successfully queued [${category}] download payload.`);
+            logger.log(`📥 [Torrent Service] Successfully queued [${targetCategory}] download payload with tag [${targetTag}].`);
             return { success: true };
         } catch (err) {
             logger.log(`❌ [Torrent Service] Failed to add magnet to qBit: ${err.message}`, 'error');
@@ -42,12 +48,16 @@ class TorrentService {
      */
     async getActivePipelineTorrents() {
         try {
-            const endpoint = `${QBIT_BASE_URL}/torrents/info?tag=movie-streamer`;
+            // Fetch everything so we capture both 'movie-stream' and 'tv-pack' tags
+            const endpoint = `${QBIT_BASE_URL}/torrents/info`;
             const response = await axios.get(endpoint, { timeout: 3000 });
-            return response.data || [];
+            
+            // Filter down to elements currently processing under either active pipe tag
+            return (response.data || []).filter(t => 
+                t.tags && (t.tags.includes('movie-streamer') || t.tags.includes('series-streamer'))
+            );
         } catch (err) {
             logger.log(`⚠️ [Torrent Service] Pipeline target unreachable: ${err.message}`, 'warn');
-            // Return an empty array instead of crashing so file system scans can continue smoothly
             return [];
         }
     }
@@ -56,14 +66,17 @@ class TorrentService {
      * Swaps systemic metadata identification tracking tokens inside the tracker client.
      * @param {string} hash Torrent identifier hex
      */
-    async rotateWorkflowTags(hash) {
+    async rotateWorkflowTags(hash, isSeries = false) {
         try {
+            const oldTag = isSeries ? 'series-streamer' : 'movie-streamer';
+            const newTag = isSeries ? 'series-streamer-processed' : 'movie-streamer-processed';
+
             // Remove ingestion tracking tags
-            await axios.post(`${QBIT_BASE_URL}/torrents/removeTags`, `hashes=${hash}&tags=movie-streamer`, {
+            await axios.post(`${QBIT_BASE_URL}/torrents/removeTags`, `hashes=${hash}&tags=${oldTag}`, {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
             // Append completion status flag metrics
-            await axios.post(`${QBIT_BASE_URL}/torrents/addTags`, `hashes=${hash}&tags=movie-streamer-processed`, {
+            await axios.post(`${QBIT_BASE_URL}/torrents/addTags`, `hashes=${hash}&tags=${newTag}`, {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
             logger.log(`🏷️ [Torrent Service] Rotated workflow tags cleanly for hash: ${hash}`);

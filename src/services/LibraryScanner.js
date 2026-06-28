@@ -1,4 +1,4 @@
-// src/services/workers/LibraryScanner.js
+// src/services/LibraryScanner.js
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');

@@ -50,6 +50,25 @@ async function checkPipelineCompletions() {
             return;
         }
 
+
+
+// // Inside your modernized PipelineWorker.js completion loop block:
+// const completedMovie = torrents.find(t => t.progress === 1 && t.tags.includes('movie-streamer'));
+// const completedShow = torrents.find(t => t.progress === 1 && t.tags.includes('series-streamer'));
+
+// if (completedMovie) {
+//     await processIngestJob(completedMovie, 'movie');
+// } else if (completedShow) {
+//     await processIngestJob(completedShow, 'series');
+// }
+
+
+
+
+
+
+
+
         // 3. Hand control off to the new, managed Orchestrator
         try {
             logger.log(`⚡ Invoking unified Orchestrator automation tree sweep...`);

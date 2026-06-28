@@ -113,7 +113,7 @@
                 const response = await fetch('/api/downloader/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ magnetUrl, category: 'series' })
+                    body: JSON.stringify({ magnetUrl, category: 'series-streamer' })
                 });
 
                 if (response.ok) {

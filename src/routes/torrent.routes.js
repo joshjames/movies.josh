@@ -136,7 +136,9 @@ router.post('/downloader/add', async (req, res) => {
     }
 
     try {
-        await TorrentService.addMagnet(magnetUrl, category);
+        // Capture 'series-streamer' from shows.html cleanly
+        const targetCategory = category || 'series-streamer';
+        await TorrentService.addMagnet(magnetUrl, targetCategory);
         return res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -149,7 +151,8 @@ router.post('/yts/add', async (req, res) => {
     if (!magnetUrl) return res.status(400).json({ error: "Missing target magnet payload." });
 
     try {
-        await TorrentService.addMagnet(magnetUrl, 'movie');
+        // Movies default cleanly to movie-streamer via TorrentService's base parameters
+        await TorrentService.addMagnet(magnetUrl, 'movie-streamer');
         return res.status(200).json({ success: true, message: "Successfully queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
