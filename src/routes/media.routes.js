@@ -28,8 +28,6 @@ router.get('/library', async (req, res) => {
 });
 
 // GET: /api/movies (High-Performance Paginated Catalog Discovery utilizing Redis lookups)
-const express = require('express');
-const router = express.Router();
 // Import your Redis client wrapper or global cache interface instance here
 // const redisClient = require('../services/redis'); 
 
