@@ -8,7 +8,9 @@ const logger = require('../logger');
 const app = express();
 app.use(express.json());
 
-const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
+// 🚨 FIX: Force explicit target paths directly matching your real Docker container storage layout
+const MOVIES_DIR = '/app/storage/movies';
+const SERIES_DIR = '/app/storage/series';
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.json', '.jpg', '.jpeg', '.png', '.ts'];
 
 // =========================================================================
@@ -146,13 +148,15 @@ async function autoDiscoverAndOrganize(currentDir) {
                     const seriesIndex = pathParts.indexOf('series');
                     
                     if (seriesIndex !== -1 && pathParts[seriesIndex + 1]) {
-                        const showFolderName = pathParts[seriesIndex + 1];
-                        const standardizedDir = path.join(MOVIES_DIR, 'series', showFolderName, seasonStr);
-                        const cleanFinalPath = path.join(standardizedDir, cleanEpTitle);
+                    const showFolderName = pathParts[seriesIndex + 1];
+                    
+                    // 💡 FIX: Use the explicit SERIES_DIR path instead of nesting under MOVIES_DIR
+                    const standardizedDir = path.join(SERIES_DIR, showFolderName, seasonStr);
+                    const cleanFinalPath = path.join(standardizedDir, cleanEpTitle);
 
-                        logger.log(`🎯 [AUTOMATION DISCOVERY] Found out-of-spec asset. Realigning: ${item.name}`);
-                        await fsp.mkdir(standardizedDir, { recursive: true });
-                        await fsp.rename(fullPath, cleanFinalPath);
+                    logger.log(`🎯 [AUTOMATION DISCOVERY] Found out-of-spec asset. Realigning: ${item.name}`);
+                    await fsp.mkdir(standardizedDir, { recursive: true });
+                    await fsp.rename(fullPath, cleanFinalPath);
                     }
                 }
             }
