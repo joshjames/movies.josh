@@ -43,13 +43,23 @@ function scanDirectory(basePath, contentType) {
         }
 
         if (mediaFiles.length > 0 || isRemote || contentType === 'series') {
-            registry.push({
-                folder,
-                contentType,
-                storageLocation: isRemote ? 'remote' : 'local',
-                metadata: meta,
-                updatedAt: new Date().toISOString()
-            });
+    registry.push({
+        // 🚨 FLATTENED ROOT PROPERTIES FOR THE FRONTEND
+        id: contentType === 'series' ? `series/${encodeURIComponent(folder)}` : encodeURIComponent(folder),
+        title: meta.title || folder.replace(/[-_.]/g, ' '),
+        year: meta.year || '',
+        plot: meta.plot || '',
+        genre: meta.genre || '',
+        contentType: contentType,
+        storageLocation: isRemote ? 'remote' : 'local',
+        cover: contentType === 'series' 
+            ? `/movie-assets/series/${encodeURIComponent(folder)}/cover.jpg`
+            : `/movie-assets/${encodeURIComponent(folder)}/cover.jpg`,
+        
+        // Keep the raw block intact just in case other services need it
+        storage: meta.storage || { location: 'local', files: {} },
+        updatedAt: new Date().toISOString()
+        });
         } else {
             logger.log(`🗑️ Stripping empty untracked local trace directory from listings: ${folder}`, 'info');
         }
