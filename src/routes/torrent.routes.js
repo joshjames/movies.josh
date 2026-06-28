@@ -19,51 +19,43 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 router.get('/yts/browse', async (req, res) => {
     try {
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
-        const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
         
-        const apiParams = {
-            page: page || 1,
-            limit: 24,
-            order_by: 'desc'
-        };
-
-        if (query_term && query_term.trim() !== '' && query_term !== '0') {
-            apiParams.query_term = query_term.trim();
-        }
-        if (genre && genre.toLowerCase() !== 'all') {
-            apiParams.genre = genre.toLowerCase();
-        }
-        if (minimum_rating && minimum_rating !== '0') {
-            apiParams.minimum_rating = minimum_rating;
-        }
-        apiParams.sort_by = sort_by || 'date_added';
-
-        console.log(`📡 Relaying sanitized query params to YTS:`, apiParams);
-
-        // Explicit fallback configuration to isolate container network quirks
-        const response = await axios.get(ytsUrl, { 
-            params: apiParams, 
-            timeout: 10000,
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+        // Build query arguments cleanly
+        const params = new URLSearchParams({
+            page: page || '1',
+            limit: '24',
+            order_by: 'desc',
+            sort_by: sort_by || 'date_added'
         });
 
-        return res.json(response.data);
-    } catch (err) {
-        console.error("❌ YTS directory route communication failure:", err.message);
-        
-        // Extract deep details if the error came from Axios interacting with the remote host
-        const upstreamStatus = err.response ? err.response.status : 'NO_RESPONSE';
-        const upstreamData = err.response ? err.response.data : null;
+        if (query_term && query_term.trim() !== '' && query_term !== '0') params.append('query_term', query_term.trim());
+        if (genre && genre.toLowerCase() !== 'all') params.append('genre', genre.toLowerCase());
+        if (minimum_rating && minimum_rating !== '0') params.append('minimum_rating', minimum_rating);
 
+        const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json?${params.toString()}`;
+        console.log(`📡 Fetching direct via native web stream: ${ytsUrl}`);
+
+        // Native global fetch isolates away from Axios interceptor configurations
+        const response = await fetch(ytsUrl, { 
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            signal: AbortSignal.timeout(12000) // Slightly longer grace gap
+        });
+
+        if (!response.ok) {
+            throw new Error(`Upstream responded with status code: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return res.json(data);
+    } catch (err) {
+        console.error("❌ Native network pipeline error:", err.message);
         return res.status(500).json({ 
             success: false,
-            error: "Failed to fetch media data source indices.", 
-            errorMessage: err.message,
-            upstreamStatus: upstreamStatus,
-            upstreamData: upstreamData
+            error: "Failed to fetch media data source indices.",
+            errorMessage: err.message
         });
     }
 });
