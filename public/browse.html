@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Browse & Add Movies</title>
+    <title>Unified Media Browser</title>
     <style>
         body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 12px; }
         .container { max-width: 1200px; margin: 0 auto; }
@@ -11,14 +11,21 @@
         h1 { font-size: 1.5rem; margin: 0; }
         .nav-link { color: #3b82f6; text-decoration: none; font-weight: 500; font-size: 0.9rem; }
         
-        /* Filter Controls */
+        /* Navigation Tabs Control */
+        .tabs-row { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid #1e293b; padding-bottom: 8px; }
+        .tab-btn { background: transparent; border: none; color: #94a3b8; padding: 10px 20px; font-weight: 600; cursor: pointer; font-size: 1rem; border-radius: 6px; min-width: auto; }
+        .tab-btn.active { background: #1e293b; color: #3b82f6; border-bottom: 2px solid #3b82f6; }
+
+        /* Filter Controls Container */
         .search-bar { background: #1e293b; padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; border: 1px solid #334155; }
-        .controls-row { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; }
+        .controls-row { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; align-items: center; }
         
         input, select, button { background: #0f172a; color: white; border: 1px solid #475569; padding: 10px 14px; border-radius: 6px; font-size: 0.9rem; outline: none; }
         input { flex-grow: 1; min-width: 200px; }
         button { background: #2563eb; border: none; cursor: pointer; font-weight: bold; min-width: 100px; }
         button:hover { background: #1d4ed8; }
+
+        .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #cbd5e1; cursor: pointer; white-space: nowrap; user-select: none; }
 
         /* Item 7 Manual Link Wrapper Section */
         .manual-input-box { display: flex; gap: 12px; width: 100%; border-top: 1px solid #334155; padding-top: 14px; margin-top: 2px; }
@@ -28,15 +35,21 @@
 
         /* Results Matrix Grid Layout */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
-        .card { background: #1e293b; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; }
+        .card { background: #1e293b; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; border: 1px solid #334155; }
         .cover-frame { width: 100%; aspect-ratio: 2/3; background: #020617; position: relative; }
         .cover-frame img { width: 100%; height: 100%; object-fit: cover; }
-        .rating-badge { position: absolute; top: 8px; right: 8px; background: rgba(15, 23, 42, 0.85); color: #f59e0b; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; backdrop-filter: blur(4px); }
+        
+        .badge-row { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; pointer-events: none; }
+        .rating-badge, .seeds-badge, .size-badge { background: rgba(15, 23, 42, 0.85); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; backdrop-filter: blur(4px); }
+        .rating-badge { color: #f59e0b; }
+        .seeds-badge { color: #22c55e; }
+        .size-badge { color: #38bdf8; }
+
         .card-info { padding: 12px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
-        .title { font-size: 0.9rem; font-weight: bold; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .title { font-size: 0.85rem; font-weight: bold; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #f8fafc; }
         .meta { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
         
-        .add-btn { background: #10b981; border: none; width: 100%; padding: 8px; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        .add-btn { background: #10b981; border: none; width: 100%; padding: 8px; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
         .add-btn:hover { background: #059669; }
 
         /* Notification Toast Styling */
@@ -61,34 +74,40 @@
             <a href="/" class="nav-link">← Return to Library</a>
         </div>
 
+        <div class="tabs-row">
+            <button class="tab-btn active" id="tab-movies" onclick="switchMode('movies')">Movies</button>
+            <button class="tab-btn" id="tab-shows" onclick="switchMode('shows')">TV Series</button>
+        </div>
+
         <div class="search-bar">
             <div class="controls-row">
                 <input type="text" id="searchIn" placeholder="Search title, actor, or genre...">
-               <select id="genreIn">
-    <option value="All">All Genres</option>
-    <option value="action">Action</option>
-    <option value="adventure">Adventure</option>
-    <option value="animation">Animation</option>
-    <option value="biography">Biography</option>
-    <option value="comedy">Comedy</option>
-    <option value="crime">Crime</option>
-    <option value="documentary">Documentary</option>
-    <option value="drama">Drama</option>
-    <option value="family">Family</option>
-    <option value="fantasy">Fantasy</option>
-    <option value="film-noir">Film-Noir</option>
-    <option value="history">History</option>
-    <option value="horror">Horror</option>
-    <option value="music">Music</option>
-    <option value="musical">Musical</option>
-    <option value="mystery">Mystery</option>
-    <option value="romance">Romance</option>
-    <option value="sci-fi">Sci-Fi</option>
-    <option value="sport">Sport</option>
-    <option value="thriller">Thriller</option>
-    <option value="war">War</option>
-    <option value="western">Western</option>
-</select>
+                
+                <select id="genreIn">
+                    <option value="All">All Genres</option>
+                    <option value="action">Action</option>
+                    <option value="adventure">Adventure</option>
+                    <option value="animation">Animation</option>
+                    <option value="biography">Biography</option>
+                    <option value="comedy">Comedy</option>
+                    <option value="crime">Crime</option>
+                    <option value="documentary">Documentary</option>
+                    <option value="drama">Drama</option>
+                    <option value="family">Family</option>
+                    <option value="fantasy">Fantasy</option>
+                    <option value="film-noir">Film-Noir</option>
+                    <option value="history">History</option>
+                    <option value="horror">Horror</option>
+                    <option value="music">Music</option>
+                    <option value="musical">Musical</option>
+                    <option value="mystery">Mystery</option>
+                    <option value="romance">Romance</option>
+                    <option value="sci-fi">Sci-Fi</option>
+                    <option value="sport">Sport</option>
+                    <option value="thriller">Thriller</option>
+                    <option value="war">War</option>
+                    <option value="western">Western</option>
+                </select>
                 <select id="ratingIn">
                     <option value="0">Any Rating</option>
                     <option value="6">⭐ 6.0+ IMDb</option>
@@ -96,16 +115,18 @@
                     <option value="8">⭐ 8.0+ IMDb</option>
                 </select>
                 <select id="sortIn">
-                <option value="date_added">Sort: Latest Added</option> 
-                <option value="seeds">Sort: Most Seeds</option>
-                <option value="year">Sort: Release Year</option>
-                <option value="rating">Sort: IMDb Score</option>
-            </select>
+                    <option value="date_added">Sort: Latest Added</option> 
+                    <option value="seeds">Sort: Most Seeds</option>
+                    <option value="year">Sort: Release Year</option>
+                    <option value="rating">Sort: IMDb Score</option>
+                </select>
+
+                <label class="checkbox-container" id="packsWrapper" style="display: none;">
+                    <input type="checkbox" id="packsOnlyIn" checked> TV Packs Only
+                </label>
+
                 <button onclick="triggerNewSearch()">Search</button>
             </div>
-
-
-            
 
             <div class="manual-input-box">
                 <input type="text" id="manualMagnetIn" placeholder="Paste external custom magnet link layout directly here (e.g., magnet:?xt=...)">
@@ -121,24 +142,50 @@
     <div class="toast" id="toastNotice"></div>
 
     <script>
+let currentMode = 'movies'; // 'movies' or 'shows'
 let currentBrowsePage = 1;
 
-// Helper to ensure any input modification safely forces validation back to page 1 bounds
-function triggerNewSearch() {
-    fetchCatalog(1, false);
+function switchMode(mode) {
+    currentMode = mode;
+    document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
+    document.getElementById('tab-shows').classList.toggle('active', mode === 'shows');
+    
+    // Toggle element groups inside the dashboard layout controls
+    const isMovie = mode === 'movies';
+    document.getElementById('genreIn').style.display = isMovie ? 'inline-block' : 'none';
+    document.getElementById('ratingIn').style.display = isMovie ? 'inline-block' : 'none';
+    document.getElementById('sortIn').style.display = isMovie ? 'inline-block' : 'none';
+    document.getElementById('packsWrapper').style.display = isMovie ? 'none' : 'flex';
+    
+    document.getElementById('searchIn').placeholder = isMovie 
+        ? "Search title, actor, or genre..." 
+        : "Enter show name (e.g. Star Trek Strange New Worlds)...";
+        
+    triggerNewSearch();
 }
 
-// Attach listeners so clicking options or pressing enter immediately fires the search update
+function triggerNewSearch() {
+    if (currentMode === 'movies') {
+        fetchMovieCatalog(1, false);
+    } else {
+        fetchShowCatalog();
+    }
+}
+
+// Global UI input listeners
 document.getElementById('genreIn').addEventListener('change', triggerNewSearch);
 document.getElementById('ratingIn').addEventListener('change', triggerNewSearch);
 document.getElementById('sortIn').addEventListener('change', triggerNewSearch);
+document.getElementById('packsOnlyIn').addEventListener('change', triggerNewSearch);
 document.getElementById('searchIn').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') triggerNewSearch();
 });
 
-async function fetchCatalog(pageUpdate = 1, appendMode = false) {
+// =========================================================================
+// 🎬 MOVIE ENGINE PIPELINE FETCHING
+// =========================================================================
+async function fetchMovieCatalog(pageUpdate = 1, appendMode = false) {
     currentBrowsePage = pageUpdate;
-    
     const query = document.getElementById('searchIn').value.trim();
     const genre = document.getElementById('genreIn').value;
     const rating = document.getElementById('ratingIn').value;
@@ -148,33 +195,23 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
     const paginationWrapper = document.getElementById('pagination-wrapper');
     
     if (!appendMode) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying index structures...</div>';
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying movie index structures...</div>';
         paginationWrapper.innerHTML = ''; 
     }
 
     try {
-        // --- FIX: Map parameters cleanly to exact upstream API requirements ---
         let apiTarget = `/api/yts/browse?page=${currentBrowsePage}`;
-        
-        if (query) {
-            apiTarget += `&query_term=${encodeURIComponent(query)}`; // Fixed from 'query' to 'query_term'
-        }
-        if (genre && genre !== 'All') {
-            apiTarget += `&genre=${genre}`;
-        }
-        if (rating && rating !== '0') {
-            apiTarget += `&minimum_rating=${rating}`; // Fixed from 'min_rating' to 'minimum_rating'
-        }
-        if (sortBy) {
-            apiTarget += `&sort_by=${sortBy}`;
-        }
+        if (query) apiTarget += `&query_term=${encodeURIComponent(query)}`;
+        if (genre && genre !== 'All') apiTarget += `&genre=${genre}`;
+        if (rating && rating !== '0') apiTarget += `&minimum_rating=${rating}`;
+        if (sortBy) apiTarget += `&sort_by=${sortBy}`;
 
         const res = await fetch(apiTarget);
         const resData = await res.json();
 
         if (resData.status !== 'ok' || !resData.data.movies || resData.data.movies.length === 0) {
             if (!appendMode) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matches found matching criteria targets.</div>';
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching movie indexes found.</div>';
                 paginationWrapper.innerHTML = '';
             }
             return;
@@ -187,11 +224,7 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
             const trackers = [
                 'udp://tracker.opentrackr.org:1337/announce',
                 'udp://tracker.torrent.eu.org:451/announce',
-                'udp://open.stealth.si:80/announce',
-                'https://tracker.zhuqiy.com:443/announce',
-                'https://tracker.moeblog.cn:443/announce',
-                'udp://tracker.dler.org:6969/announce',
-                'udp://open.demonii.com:1337/announce'
+                'udp://open.stealth.si:80/announce'
             ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
 
             const cleanHash = targetTorrent.hash.toUpperCase().trim();
@@ -201,31 +234,78 @@ async function fetchCatalog(pageUpdate = 1, appendMode = false) {
                 <div class="card">
                     <div class="cover-frame">
                         <img src="${movie.medium_cover_image}" alt="${movie.title}">
-                        <div class="rating-badge">⭐ ${movie.rating.toFixed(1)}</div>
+                        <div class="badge-row">
+                            <span class="rating-badge">⭐ ${movie.rating.toFixed(1)}</span>
+                        </div>
                     </div>
                     <div class="card-info">
                         <div>
                             <div class="title">${movie.title}</div>
                             <div class="meta">${movie.year} • ${movie.runtime} min</div>
                         </div>
-                        <button class="add-btn" onclick="addMovie(this, '${btoa(baseMagnet)}')">Add to Library</button>
+                        <button class="add-btn" onclick="addMediaAsset(this, '${btoa(baseMagnet)}', 'movie-streamer')">Add to Library</button>
                     </div>
                 </div>
             `;
         }).join('');
 
-        if (appendMode) {
-            grid.innerHTML += cardsHtml;
-        } else {
-            grid.innerHTML = cardsHtml;
-            window.scrollTo({ top: 0, behavior: 'smooth' }); 
-        }
-
+        if (appendMode) grid.innerHTML += cardsHtml; else grid.innerHTML = cardsHtml;
         renderPaginationControls(resData.data.movie_count, resData.data.limit);
 
     } catch (err) {
-        console.error("Failed fetching catalog matrix states:", err);
         grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing network catalog array requests.</div>';
+    }
+}
+
+// =========================================================================
+// 📺 TV SHOW ENGINE PIPELINE FETCHING
+// =========================================================================
+async function fetchShowCatalog() {
+    const query = document.getElementById('searchIn').value.trim();
+    const packsOnly = document.getElementById('packsOnlyIn').checked;
+    const grid = document.getElementById('catalog-grid');
+    const paginationWrapper = document.getElementById('pagination-wrapper');
+    
+    paginationWrapper.innerHTML = ''; // TV indexes do not use standard YTS pagination bounds
+
+    if (!query) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Enter a series search query above.</div>';
+        return;
+    }
+    
+    grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Performing OMDb structural resolve & scanning trackers...</div>';
+
+    try {
+        const res = await fetch(`/api/eztv/browse?query=${encodeURIComponent(query)}&packsOnly=${packsOnly}`);
+        const data = await res.json();
+
+        if (!data.success || !data.torrents || data.torrents.length === 0) {
+            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching television indexes found.</div>';
+            return;
+        }
+
+        grid.innerHTML = data.torrents.map(torrent => {
+            return `
+                <div class="card">
+                    <div class="cover-frame">
+                        <img src="${torrent.cover}">
+                        <div class="badge-row">
+                            <span class="seeds-badge">▲ ${torrent.seeds}</span>
+                            <span class="size-badge">💾 ${torrent.size}</span>
+                        </div>
+                    </div>
+                    <div class="card-info">
+                        <div>
+                            <div class="title" title="${torrent.title}">${torrent.title}</div>
+                        </div>
+                        <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer')">Ingest Series Pack</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (err) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing network data matrices.</div>';
     }
 }
 
@@ -234,63 +314,51 @@ function renderPaginationControls(totalMovies, pageLimit) {
     if (!totalMovies || !pageLimit) return;
 
     const totalPages = Math.ceil(totalMovies / pageLimit);
-    
-    if (totalPages <= 1) {
-        paginationWrapper.innerHTML = '';
-        return;
-    }
+    if (totalPages <= 1) return;
 
     paginationWrapper.innerHTML = `
         <div class="pagination-container">
-            <button class="page-btn" id="prevPageBtn" ${currentBrowsePage === 1 ? 'disabled' : ''} onclick="fetchCatalog(${currentBrowsePage - 1}, false)">
-                ◀ Previous
-            </button>
-            <div class="page-indicator">
-                Page ${currentBrowsePage} / ${totalPages}
-            </div>
-            <button class="page-btn" id="nextPageBtn" ${currentBrowsePage === totalPages ? 'disabled' : ''} onclick="fetchCatalog(${currentBrowsePage + 1}, false)">
-                Next ▶
-            </button>
+            <button class="page-btn" id="prevPageBtn" ${currentBrowsePage === 1 ? 'disabled' : ''} onclick="fetchMovieCatalog(${currentBrowsePage - 1}, false)">◀ Previous</button>
+            <div class="page-indicator">Page ${currentBrowsePage} / ${totalPages}</div>
+            <button class="page-btn" id="nextPageBtn" ${currentBrowsePage === totalPages ? 'disabled' : ''} onclick="fetchMovieCatalog(${currentBrowsePage + 1}, false)">Next ▶</button>
         </div>
     `;
 }
 
-// Shared central function to post the data payload directly down to your express server route
-async function executeIngestPost(rawMagnetLink, successCallback, failureCallback) {
+// Unified route dispatcher pushing directly downstream 
+async function addMediaAsset(btn, base64Magnet, targetCategory) {
+    const magnetUrl = atob(base64Magnet);
+    btn.disabled = true;
+    btn.style.background = '#475569';
+    btn.innerText = 'Queuing...';
+
+    const apiRoute = targetCategory === 'series-streamer' ? '/api/downloader/add' : '/api/yts/add';
+
     try {
-        const response = await fetch('/api/yts/add', {
+        const response = await fetch(apiRoute, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ magnetUrl: rawMagnetLink })
+            body: JSON.stringify({ magnetUrl, category: targetCategory })
         });
-        if (response.ok) successCallback(); else throw new Error();
+
+        if (response.ok) {
+            showToast(targetCategory === 'series-streamer' 
+                ? "🚀 Show package pushed to qBittorrent series queue!" 
+                : "🎬 Added to queue! Ingestion will resume once download finishes."
+            );
+            btn.innerText = '✓ Queued';
+            btn.style.background = '#059669';
+        } else {
+            throw new Error();
+        }
     } catch(e) {
-        failureCallback();
+        showToast("❌ Core pipeline rejected tracker linkage.");
+        btn.disabled = false;
+        btn.style.background = '#10b981';
+        btn.innerText = targetCategory === 'series-streamer' ? 'Ingest Series Pack' : 'Add to Library';
     }
 }
 
-async function addMovie(buttonObj, base64Magnet) {
-    const magnetUrl = atob(base64Magnet);
-    buttonObj.disabled = true;
-    buttonObj.style.background = '#475569';
-    buttonObj.innerText = 'Queuing...';
-
-    executeIngestPost(magnetUrl, 
-        () => {
-            showToast("🎬 Added to queue! Ingestion processing will resume once download finishes.");
-            buttonObj.innerText = '✓ Queued';
-            buttonObj.style.background = '#059669';
-        },
-        () => {
-            showToast("❌ Pipeline communication block encountered.");
-            buttonObj.disabled = false;
-            buttonObj.style.background = '#10b981';
-            buttonObj.innerText = 'Add to Library';
-        }
-    );
-}
-
-// Item 7: Custom Manual Link Verification Handler
 function addManualMagnet(buttonObj) {
     const inputEl = document.getElementById('manualMagnetIn');
     const rawMagnet = inputEl.value.trim();
@@ -303,19 +371,11 @@ function addManualMagnet(buttonObj) {
     buttonObj.disabled = true;
     buttonObj.innerText = 'Processing...';
 
-    executeIngestPost(rawMagnet,
-        () => {
-            showToast("🚀 Custom external stream queued directly inside downstream client!");
-            inputEl.value = ''; // Reset input field on successful entry
-            buttonObj.disabled = false;
-            buttonObj.innerText = 'Ingest Link';
-        },
-        () => {
-            showToast("❌ External link rejection met at backend routing interface.");
-            buttonObj.disabled = false;
-            buttonObj.innerText = 'Ingest Link';
-        }
-    );
+    // Manual additions fallback gracefully to movie-streamer profiles
+    addMediaAsset(buttonObj, btoa(rawMagnet), currentMode === 'movies' ? 'movie-streamer' : 'series-streamer');
+    inputEl.value = '';
+    buttonObj.disabled = false;
+    buttonObj.innerText = 'Ingest Link';
 }
 
 function showToast(msg) {
@@ -325,7 +385,8 @@ function showToast(msg) {
     setTimeout(() => { toast.style.display = 'none'; }, 6000);
 }
 
-fetchCatalog(1, false);
+// Inital view execution load sequence
+fetchMovieCatalog(1, false);
     </script>
 </body>
 </html>
