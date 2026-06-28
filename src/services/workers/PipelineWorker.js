@@ -17,20 +17,26 @@ async function checkPipelineCompletions() {
         
         if (!torrents || torrents.length === 0) return;
 
-        // Isolate complete items belonging specifically to our pipeline types
-        const completedTorrent = torrents.find(t => 
-            t.progress === 1 && 
-            t.tags && 
-            (t.tags.includes('movie-streamer') || t.tags.includes('series-streamer'))
-        );
-        
-        if (!completedTorrent) return;
+        // Isolate complete items belonging specifically to our pipeline types safely
+            const completedTorrent = torrents.find(t => {
+                if (t.progress !== 1 || !t.tags) return false;
+                
+                // Normalize tags to a string for bulletproof substring matching
+                const tagStr = Array.isArray(t.tags) ? t.tags.join(',') : String(t.tags);
+                return tagStr.includes('movie-streamer') || tagStr.includes('series-streamer');
+            });
 
-        isProcessingPipeline = true;
-        const torrentHash = completedTorrent.hash;
-        const isSeries = completedTorrent.tags.includes('series-streamer');
-        const activeTag = isSeries ? 'series-streamer' : 'movie-streamer';
-        const processedTag = isSeries ? 'series-streamer-processed' : 'movie-streamer-processed';
+            if (!completedTorrent) return;
+
+            isProcessingPipeline = true;
+            const torrentHash = completedTorrent.hash;
+
+            // Determine if it's a show or movie by testing the normalized tag string
+            const tagStr = Array.isArray(completedTorrent.tags) ? completedTorrent.tags.join(',') : String(completedTorrent.tags);
+            const isSeries = tagStr.includes('series-streamer');
+
+            const activeTag = isSeries ? 'series-streamer' : 'movie-streamer';
+            const processedTag = isSeries ? 'series-streamer-processed' : 'movie-streamer-processed';
 
         logger.log(`🎉 [Pipeline Agent] Download completion caught: [${completedTorrent.name}] (${isSeries ? 'TV Show' : 'Movie'})`);
 
