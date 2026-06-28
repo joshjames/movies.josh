@@ -5,7 +5,7 @@ const axios = require('axios');
 const logger = require('./logger');
 
 async function sendVerificationEmail(email, username, token) {
-    const verificationUrl = `https://movies.joshjames.site/api/auth/verify?token=${token}&user=${username}`;
+    const verificationUrl = `https://anymovie.online/api/auth/verify?token=${token}&user=${username}`;
     
     const payload = {
         sender: { 
