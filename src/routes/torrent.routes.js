@@ -18,42 +18,53 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 // =========================================================================
 router.get('/yts/browse', async (req, res) => {
     try {
-        // Collect the incoming variables sent from the frontend template
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
         const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
         
-        // Build an explicit clean object containing only valid API arguments
         const apiParams = {
             page: page || 1,
             limit: 24,
             order_by: 'desc'
         };
 
-        // Rule 1: Only append query_term if the string is populated and not '0'
         if (query_term && query_term.trim() !== '' && query_term !== '0') {
             apiParams.query_term = query_term.trim();
         }
-
-        // Rule 2: Pass genre ONLY if it's explicitly chosen and not generic 'All'
         if (genre && genre.toLowerCase() !== 'all') {
             apiParams.genre = genre.toLowerCase();
         }
-
-        // Rule 3: Pass rating constraints cleanly if higher than baseline zero
         if (minimum_rating && minimum_rating !== '0') {
             apiParams.minimum_rating = minimum_rating;
         }
-
-        // Rule 4: Map your dynamic frontend sort option directly down to the payload
         apiParams.sort_by = sort_by || 'date_added';
 
         console.log(`📡 Relaying sanitized query params to YTS:`, apiParams);
 
-        const response = await axios.get(ytsUrl, { params: apiParams, timeout: 8000 });
+        // Explicit fallback configuration to isolate container network quirks
+        const response = await axios.get(ytsUrl, { 
+            params: apiParams, 
+            timeout: 10000,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
         return res.json(response.data);
     } catch (err) {
         console.error("❌ YTS directory route communication failure:", err.message);
-        return res.status(500).json({ error: "Failed to fetch media data source indices.", details: err.message });
+        
+        // Extract deep details if the error came from Axios interacting with the remote host
+        const upstreamStatus = err.response ? err.response.status : 'NO_RESPONSE';
+        const upstreamData = err.response ? err.response.data : null;
+
+        return res.status(500).json({ 
+            success: false,
+            error: "Failed to fetch media data source indices.", 
+            errorMessage: err.message,
+            upstreamStatus: upstreamStatus,
+            upstreamData: upstreamData
+        });
     }
 });
 
