@@ -15,7 +15,7 @@ const { startPipelineWorker } = require('./src/services/workers/PipelineWorker')
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 🚨 FIX: Explicitly target the mounted container directory paths directly
+// 🚨 CONTAINER MOUNT DIRECTORY MAPS
 const MOVIES_STORAGE_DIR = '/app/storage/movies';
 const SERIES_STORAGE_DIR = '/app/storage/series';
 
@@ -25,21 +25,6 @@ global.SERIES_DIR = SERIES_STORAGE_DIR;
 process.env.MOVIES_DIR = MOVIES_STORAGE_DIR;
 process.env.SERIES_DIR = SERIES_STORAGE_DIR;
 
-// =========================================================================
-// SECURITY & GATEKEEPER ROUTING LAYERS
-// =========================================================================
-const { requireAuth } = require('./src/middleware/auth'); // Add this import
-
-// Administrative Page Access Gatekeeper (Keep this as-is)
-app.use('/admin.html', (req, res, next) => {
-    const activeUser = req.cookies?.user_profile;
-    if (activeUser && activeUser.toLowerCase().trim() === 'josh') {
-        return next();
-    }
-    return res.redirect('/login.html');
-});
-
-
 // Verify storage paths exist on initialization
 if (!fs.existsSync(MOVIES_STORAGE_DIR)) {
     fs.mkdirSync(MOVIES_STORAGE_DIR, { recursive: true });
@@ -48,37 +33,42 @@ if (!fs.existsSync(SERIES_STORAGE_DIR)) {
     fs.mkdirSync(SERIES_STORAGE_DIR, { recursive: true });
 }
 
+// =========================================================================
+// 🌐 GLOBAL CORE MIDDLEWARE STACK (Must come first to parse cookies & bodies)
+// =========================================================================
+app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '20mb' }));
-app.use(cookieParser());
 
 // =========================================================================
+// 🔓 PUBLIC ACCESS LAYER & AUTH EXEMPTIONS
 // =========================================================================
-// ROUTING TABLES LAYERS
-// =========================================================================
-const authRouter = require('./src/routes/auth.routes');
-const adminRouter = require('./src/routes/admin.routes');
-const mediaRouter = require('./src/routes/media.routes');
-const torrentRouter = require('./src/routes/torrent.routes');
-const profileRouter = require('./src/routes/profile.routes');
-
-// 🔓 ALLOW PUBLIC ACCESS TO LOGIN & REGISTRATION FILES ONLY
 app.use('/login.html', express.static(path.join(__dirname, 'public/login.html')));
-// If your registration or css/js assets for the login screen are inside public:
 app.use('/css', express.static(path.join(__dirname, 'public/css'))); 
 app.use('/js', express.static(path.join(__dirname, 'public/js'))); 
 app.use('/favicon.ico', express.static(path.join(__dirname, 'public/favicon.ico')));
 
-
-
+const authRouter = require('./src/routes/auth.routes');
 app.use('/api/auth', authRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api', mediaRouter); 
 
+// =========================================================================
+// 🛡️ ADMINISTRATIVE ACCESS GATEKEEPER (Terminal Route Execution)
+// =========================================================================
+app.get('/admin.html', (req, res) => {
+    const activeUser = req.cookies?.user_profile;
+    if (activeUser && activeUser.toLowerCase().trim() === 'josh') {
+        return res.sendFile(path.join(__dirname, 'public/admin.html'));
+    }
+    return res.redirect('/login.html');
+});
+
+// =========================================================================
 // 🔐 THE SECURE BOUNDARY: Protect everything below this line
+// =========================================================================
+const { requireAuth } = require('./src/middleware/auth');
 app.use(requireAuth);
 
-// 📁 CORE STATIC FILE AND STREAMING LAYER (Now safe behind requireAuth)
+// 📁 CORE STATIC FILE AND STREAMING LAYER (Safe behind requireAuth)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 🎨 Cover Artwork Mappings
@@ -89,18 +79,26 @@ app.use('/movie-assets/series', express.static(SERIES_STORAGE_DIR));
 app.use('/movies', express.static(MOVIES_STORAGE_DIR));
 app.use('/series', express.static(SERIES_STORAGE_DIR));
 
-// 💡 MOUNT HERE FOR /api/yts/browse AND /api/eztv/browse
-app.use('/api', torrentRouter); 
-// 💡 KEEP THIS TOO IF OTHER FILES USE THE /api/torrent PATH
-app.use('/api/torrent', torrentRouter); 
+// =========================================================================
+// 🔌 ROUTING TABLES LAYERS
+// =========================================================================
+const adminRouter = require('./src/routes/admin.routes');
+const mediaRouter = require('./src/routes/media.routes');
+const torrentRouter = require('./src/routes/torrent.routes');
+const profileRouter = require('./src/routes/profile.routes');
 
+app.use('/api/admin', adminRouter);
+app.use('/api', mediaRouter); 
+app.use('/api', torrentRouter); 
+app.use('/api/torrent', torrentRouter); 
+app.use('/api', profileRouter);
 
 app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: "Requested core API coordinate map not found." });
 });
 
 // =========================================================================
-// STARTUP AGENTS BOOTSTRAP INITIALIZATION
+// 🚀 STARTUP AGENTS BOOTSTRAP INITIALIZATION
 // =========================================================================
 LibraryScanner.runLibraryScanSweep().catch(err => console.error(err));
 startPipelineWorker(10000);

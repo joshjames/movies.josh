@@ -3,7 +3,7 @@ const axios = require('axios');
 const logger = require('../logger'); 
 const Orchestrator = require('../../../Orchestrator'); 
 
-const QBIT_URL = process.env.QBIT_URL || 'http://localhost:8080'; 
+const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080'; 
 
 let isProcessingPipeline = false;
 
