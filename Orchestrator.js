@@ -5,8 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const logger = require('./src/services/logger');
-//const MetadataRegistry = require('./src/services/MetadataRegistry');
-//const { rebuildLibraryCache } = require('./src/services/CacheWorker');
 const LibraryScanner = require('./src/services/LibraryScanner'); 
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
 
@@ -18,16 +16,16 @@ const WORKERS = {
     UPLOAD:    process.env.WORKER_URL_UPLOAD    || 'http://localhost:5004/process'
 };
 
-// In-memory set acting as our mutual exclusion mechanism to block race states
 const activeJobs = new Set();
 
 async function processAsset(folder, destinationParent) {
     const folderPath = path.join(destinationParent, folder);
-    if (activeJobs.has(folderPath)) return; // Worker protection skip boundary
+    if (activeJobs.has(folderPath)) return; 
+
+    // If the directory was deleted by an ingestion worker early, drop execution gracefully
+    if (!fs.existsSync(folderPath)) return;
 
     const metaFilePath = path.join(folderPath, 'metadata.json');
-    
-    // Respect OS file-system lock rings instantly
     if (fs.existsSync(path.join(folderPath, '.processing'))) return;
 
     let metadata = { pipelineState: { currentStep: 'METADATA' } };
@@ -35,7 +33,6 @@ async function processAsset(folder, destinationParent) {
         try { 
             metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8')); 
         } catch (e) {
-            // Drop back safely if JSON got mangled mid-write cycle
             metadata = { pipelineState: { currentStep: 'METADATA' } };
         }
     }
@@ -46,7 +43,6 @@ async function processAsset(folder, destinationParent) {
     const workerUrl = WORKERS[currentStep];
     if (!workerUrl) return;
 
-    // Lock the item context before firing async HTTP channels
     activeJobs.add(folderPath);
 
     try {
@@ -58,18 +54,22 @@ async function processAsset(folder, destinationParent) {
             contentType: metadata.contentType || (destinationParent.endsWith('series') ? 'series' : 'movie'),
             imdbId: metadata.imdbId || null,
             manualImdbId: metadata.manualImdbId || null
-        }, { timeout: 1200000 }); // Transcodes or uploads can take time; set 20 min ceiling
+        }, { timeout: 1200000 });
 
         if (response.data?.success) {
-            const nextStepMap = { 
-                'METADATA': 'SUBTITLES', 
-                'SUBTITLES': 'TRANSCODE', 
-                'TRANSCODE': 'UPLOAD', 
-                'UPLOAD': 'COMPLETED' 
-            };
-            
-            const nextStep = nextStepMap[currentStep];
+            // 🎯 FIX: Check if worker returned an explicit terminal step override first
+            let nextStep = response.data.patchData?.pipelineState?.currentStep;
 
+            if (!nextStep) {
+                const nextStepMap = { 
+                    'METADATA': 'SUBTITLES', 
+                    'SUBTITLES': 'TRANSCODE', 
+                    'TRANSCODE': 'UPLOAD', 
+                    'UPLOAD': 'COMPLETED' 
+                };
+                nextStep = nextStepMap[currentStep];
+            }
+            
             // Safely merge state data fields returned by atomic worker
             metadata = {
                 ...metadata,
@@ -81,21 +81,19 @@ async function processAsset(folder, destinationParent) {
                 }
             };
 
-// note to update below: and other files that write metadata.json should use the new MetadataRegistry.writeAndCommit() method to ensure Redis cache is updated as well.
-// fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4));
-
-// New Unidirectional Way:
-//await MetadataRegistry.writeAndCommit(metaFilePath, folder, metadata);
-
-
-            fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4));
-            logger.log(`✅ Asset [${folder}] advanced successfully down-pipe to state: ${nextStep}`);
+            // 🎯 FIX: Only write metadata file if the directory still exists on disk
+            if (fs.existsSync(folderPath)) {
+                fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4));
+                logger.log(`✅ Asset [${folder}] advanced successfully down-pipe to state: ${nextStep}`);
+            } else {
+                logger.log(`✨ Asset [${folder}] path was integrated directly into backend libraries. Skipping folder state write.`);
+            }
 
             // ⚡ AUTOMATED FLUSH: Rebuild RAM cache instantly when any item hits completion state
             if (nextStep === 'COMPLETED') {
                 logger.log(`⚡ [Cache System Trigger] Asset ${folder} complete. Triggering instant library re-indexing.`);
-               LibraryScanner.runLibraryScanSweep()
-            .catch(err => logger.log(`Error updating database cache values: ${err.message}`, 'error'));
+                LibraryScanner.runLibraryScanSweep()
+                    .catch(err => logger.log(`Error updating database cache values: ${err.message}`, 'error'));
             }
         } else {
             logger.log(`⚠️ Worker Engine Alert [${currentStep}] on [${folder}]: ${response.data?.error}`, 'warn');
@@ -103,13 +101,13 @@ async function processAsset(folder, destinationParent) {
     } catch (err) {
         logger.log(`❌ Failed connecting to worker endpoint [${currentStep}] on [${folder}]: ${err.message}`, 'error');
     } finally {
-        // Unlock the directory space completely so subsequent loop sweeps can interact with it
         activeJobs.delete(folderPath);
     }
 }
+
 async function orchestrateStorageTree() {
     try {
-        // Phase 1: Fire off the standalone download ingest cleaner endpoint first
+        // Phase 1: Standalone download ingest cleaner execution
         try {
             await axios.post(WORKERS.INGEST, {}, { timeout: 30000 });
         } catch (e) {
@@ -119,12 +117,10 @@ async function orchestrateStorageTree() {
         // Phase 2: Traverse root tracks safely
         if (!fs.existsSync(MOVIES_DIR)) return;
 
-        // Collect physical tracks
         const movieFolders = fs.readdirSync(MOVIES_DIR).filter(f => !f.startsWith('.') && f !== 'series');
         const seriesDir = path.join(MOVIES_DIR, 'series');
         const seriesFolders = fs.existsSync(seriesDir) ? fs.readdirSync(seriesDir).filter(f => !f.startsWith('.')) : [];
 
-        // Concurrency cap: Process at most 2 items simultaneously to protect CPU/Disk I/O
         const CONCURRENCY_LIMIT = 2;
         let runningPromises = [];
 
@@ -142,24 +138,21 @@ async function orchestrateStorageTree() {
 
         // Run through Series folders
         for (const folder of seriesFolders) {
-            if (!fs.lstatSync(path.join(seriesDir, folder)).isDirectory()) continue;
+            const currentFolderRoot = path.join(seriesDir, folder);
+            if (!fs.existsSync(currentFolderRoot) || !fs.lstatSync(currentFolderRoot).isDirectory()) continue;
 
             const metaFile = path.join(seriesDir, folder, 'metadata.json');
             
-            // 🔄 RESET TRIGGER: If a new file landed inside a season, drop state back to re-scan
             if (fs.existsSync(metaFile)) {
                 try {
                     let meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
                     if (meta.pipelineState?.currentStep === 'COMPLETED') {
-                        // Look inside the actual seasons to see if any untranscoded content needs handling
-                        const seasons = fs.readdirSync(path.join(seriesDir, folder)).filter(s => s.startsWith('Season.'));
+                        const seasons = fs.readdirSync(currentFolderRoot).filter(s => s.startsWith('Season.'));
                         let hasNewFiles = false;
                         
                         for (const season of seasons) {
-                            const seasonFiles = fs.readdirSync(path.join(seriesDir, folder, season));
-                            // If we find raw media files that aren't accounted for in your DB structures yet, kick off the loop
+                            const seasonFiles = fs.readdirSync(path.join(currentFolderRoot, season));
                             if (seasonFiles.some(f => f.endsWith('.mp4') || f.endsWith('.mkv'))) {
-                                // Simple flag: if metadata has no recorded episodes yet or total mismatch, mark it
                                 if (!meta.episodes || Object.keys(meta.episodes).length === 0) {
                                     hasNewFiles = true;
                                     break;
@@ -175,7 +168,7 @@ async function orchestrateStorageTree() {
                         }
                     }
                 } catch (e) {
-                    // Fail silently to avoid breaking the core loop on bad metadata formatting
+                    // Fail silently to avoid breaking loop
                 }
             }
 
@@ -186,7 +179,6 @@ async function orchestrateStorageTree() {
             }
         }
 
-        // Catch the remaining queue assignments
         if (runningPromises.length > 0) {
             await Promise.all(runningPromises);
         }
@@ -203,7 +195,6 @@ module.exports = {
         setInterval(orchestrateStorageTree, intervalMs);
     },
     
-    // 🎛️ Alias exported method to satisfy the Express router invocation from the UI panel button
     async runFullAutomationPipeline() {
         logger.log(`⚡ [Manual Trigger] Manual library automation sweep invoked from admin override desk.`);
         await orchestrateStorageTree();
