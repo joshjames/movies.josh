@@ -25,6 +25,7 @@ const WORKER_PORTS = {
 };
 
 const pipelineOrchestrator = require('../../Orchestrator');
+const Orchestrator = require('../../Orchestrator'); // Adjust this path to point to your Orchestrator.js
 const metadataService = require('../services/MetadataService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
@@ -256,27 +257,21 @@ router.get('/library-metadata', async (req, res) => {
 });
 
 // =========================================================================
-// QB_TORRENT AUTOMATION TRIGGER ENDPOINT
+// QB_TORRENT / UI PANEL AUTOMATION TRIGGER ENDPOINT
 // =========================================================================
-router.post('/trigger-automation', (req, res) => {
+
+router.post('/trigger-automation', async (req, res) => {
+    // Instantly return a clean status code to the qBittorrent client agent
     res.status(202).send('Automation trigger received. Processing pool in background.');
-    console.log(`\n⚡ qBittorrent completion trigger received! Firing media pipeline...`);
+    console.log(`\n⚡ qBittorrent completion trigger received! Invoking unified Orchestrator loop...`);
 
-    const commandChain = `node /app/library-sanitizer.js && node /app/pre-transcode.js`;
-
-    exec(commandChain, (error, stdout, stderr) => {
-        const logPath = path.join(__dirname, 'automation.log');
-        const timestamp = new Date().toISOString();
-        let logOutput = `\n=== AUTOMATION RUN: ${timestamp} ===\n${stdout}`;
-
-        if (error) {
-            console.error(`❌ Automation pipeline encountered an error:`, error.message);
-            logOutput += `\n❌ ERROR: ${error.message}\nSTDERR: ${stderr}`;
-        } else {
-            console.log(`✅ Automation pipeline completed flawlessly.`);
-        }
-        fs.appendFileSync(logPath, logOutput);
-    });
+    try {
+        // Run the real, modern pipeline with managed concurrency bounds safely
+        await pipelineOrchestrator.runFullAutomationPipeline("qbittorrent_webhook");
+        console.log(`✅ Automated background library sync completed flawlessly.`);
+    } catch (err) {
+        console.error(`❌ Automated orchestration cycle block exception:`, err.message);
+    }
 });
 
 router.post('/override-metadata', async (req, res) => {
