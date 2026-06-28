@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boids Flocking Animation</title>
+    <title>Boids Flocking Animation with Controls</title>
     <style>
         body, html {
             margin: 0;
@@ -11,26 +11,107 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #121212; /* Matching the dark theme */
+            background-color: #121212;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
         canvas {
             display: block;
             width: 100vw;
             height: 100vh;
         }
+        /* Semi-transparent control panel layout */
+        #controlPanel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(30, 30, 30, 0.85);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            color: #e0e0e0;
+            width: 250px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            user-select: none;
+            z-index: 10;
+        }
+        .slider-group {
+            margin-bottom: 12px;
+        }
+        .slider-group:last-child {
+            margin-bottom: 0;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+            color: #aaa;
+        }
+        .slider-label span:last-child {
+            font-family: monospace;
+            color: #ff3333;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #E10600;
+            background: #333;
+            height: 4px;
+            border-radius: 2px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
 
+    <div id="controlPanel">
+        <div class="slider-group">
+            <div class="slider-label"><span>Separation (Avoid)</span><span id="sepVal">5.0</span></div>
+            <input type="range" id="sepSlider" min="0" max="10" step="0.1" value="5">
+        </div>
+        <div class="slider-group">
+            <div class="slider-label"><span>Alignment (Match)</span><span id="aliVal">2.0</span></div>
+            <input type="range" id="aliSlider" min="0" max="10" step="0.1" value="2">
+        </div>
+        <div class="slider-group">
+            <div class="slider-label"><span>Cohesion (Group)</span><span id="cohVal">1.0</span></div>
+            <input type="range" id="cohSlider" min="0" max="10" step="0.1" value="1">
+        </div>
+    </div>
+
     <canvas id="animationCanvas"></canvas>
 
 <script>
-// --- UTILITY FUNCTIONS FROM THE SCRIPTS ---
+// Global settings object linked directly to the UI inputs
+const flockWeights = {
+    separation: 5.0,
+    alignment: 2.0,
+    cohesion: 1.0
+};
+
+// Wire up the DOM elements to mutate weights in real-time
+document.getElementById('sepSlider').addEventListener('input', (e) => {
+    flockWeights.separation = parseFloat(e.target.value);
+    document.getElementById('sepVal').textContent = flockWeights.separation.toFixed(1);
+});
+document.getElementById('aliSlider').addEventListener('input', (e) => {
+    flockWeights.alignment = parseFloat(e.target.value);
+    document.getElementById('aliVal').textContent = flockWeights.alignment.toFixed(1);
+});
+document.getElementById('cohSlider').addEventListener('input', (e) => {
+    flockWeights.cohesion = parseFloat(e.target.value);
+    document.getElementById('cohVal').textContent = flockWeights.cohesion.toFixed(1);
+});
+
+// --- UTILITY FUNCTIONS ---
 const mapRange = (e, t, r, i, n) => (e - t) / (r - t) * (n - i) + i;
 const randomRange = (e, t) => void 0 === e && void 0 === t ? Math.random() : void 0 === t && void 0 !== e ? Math.random() * e : void 0 !== e && void 0 !== t ? Math.random() * (t - e) + e : Math.random();
 const cosineEase = e => .5 * (1 - Math.cos(e * Math.PI));
 
-// --- PERLIN/VALUE NOISE IMPLEMENTATION ---
+// --- NOISE TABLE ---
 let noiseTable = null;
 const noise3D = (e, t = 0, r = 0) => {
     let i, n, o, a, d;
@@ -66,12 +147,9 @@ const noise3D = (e, t = 0, r = 0) => {
     return g;
 };
 
-// --- CLASS C: 2D VECTOR ENGINE ---
+// --- VECTOR CLASS ---
 class Vector2D {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-    }
+    constructor(x, y) { this.x = x; this.y = y; }
     add(v) { this.x += v.x; this.y += v.y; return this; }
     sub(v) { this.x -= v.x; this.y -= v.y; return this; }
     static sub(v1, v2) { return new Vector2D(v1.x - v2.x, v1.y - v2.y); }
@@ -88,14 +166,10 @@ class Vector2D {
         return this;
     }
     heading() { return Math.atan2(this.y, this.x); }
-    dist(v) {
-        let dx = this.x - v.x;
-        let dy = this.y - v.y;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
+    dist(v) { return Math.sqrt((this.x - v.x) ** 2 + (this.y - v.y) ** 2); }
 }
 
-// --- CLASS U: THE BOID PARTICLES ---
+// --- BOID CLASS ---
 class Boid {
     constructor(x, y, id) {
         this.position = new Vector2D(x, y);
@@ -117,12 +191,9 @@ class Boid {
         this.render(ctx, leaderId, particleColor);
     }
 
-    applyForce(force) {
-        this.acceleration.add(force);
-    }
+    applyForce(force) { this.acceleration.add(force); }
 
     flock(boids, leaderId) {
-        // If it's the designated alpha/leader particle, it moves on erratic noise rather than flocking guidelines
         if (this.id === leaderId && boids.length > 2) {
             let nx = noise3D(this.noiseOffsetX);
             let ny = noise3D(this.noiseOffsetY);
@@ -135,9 +206,12 @@ class Boid {
             let sep = this.separate(boids);
             let ali = this.align(boids);
             let coh = this.cohesion(boids);
-            sep.mult(1.5);
-            ali.mult(1);
-            coh.mult(1);
+            
+            // Scaled dynamically on tick by reading global UI settings
+            sep.mult(flockWeights.separation);
+            ali.mult(flockWeights.alignment);
+            coh.mult(flockWeights.cohesion);
+            
             this.applyForce(sep);
             this.applyForce(ali);
             this.applyForce(coh);
@@ -174,7 +248,7 @@ class Boid {
         ctx.save();
         ctx.translate(this.position.x, this.position.y);
         ctx.rotate(theta - Math.PI / 2);
-        ctx.scale(.02, .02); // Scales down the enormous vector paths below
+        ctx.scale(.02, .02);
         
         ctx.fillStyle = isLeader ? "#E10600" : particleColor;
         
@@ -223,19 +297,14 @@ class Boid {
             let other = boids[i];
             let d = this.position.dist(other.position);
             if (d > 0 && d < 20) {
-                let diff = Vector2D.sub(this.position, other.position);
-                diff.normalize();
-                diff.div(d);
+                let diff = Vector2D.sub(this.position, other.position).normalize().div(d);
                 steer.add(diff);
                 count++;
             }
         }
         if (count > 0) steer.div(count);
         if (steer.mag() > 0) {
-            steer.normalize();
-            steer.mult(this.maxspeed);
-            steer.sub(this.velocity);
-            steer.limit(this.maxforce);
+            steer.normalize().mult(this.maxspeed).sub(this.velocity).limit(this.maxforce);
         }
         return steer;
     }
@@ -246,17 +315,11 @@ class Boid {
         for (let i = 0; i < boids.length; i++) {
             let other = boids[i];
             let d = this.position.dist(other.position);
-            if (d > 0 && d < 40) {
-                sum.add(other.velocity);
-                count++;
-            }
+            if (d > 0 && d < 40) { sum.add(other.velocity); count++; }
         }
         if (count > 0) {
-            sum.div(count);
-            sum.normalize();
-            sum.mult(this.maxspeed);
-            let steer = Vector2D.sub(sum, this.velocity);
-            steer.limit(this.maxforce);
+            sum.div(count).normalize().mult(this.maxspeed);
+            let steer = Vector2D.sub(sum, this.velocity).limit(this.maxforce);
             return steer;
         }
         return new Vector2D(0, 0);
@@ -268,23 +331,19 @@ class Boid {
         for (let i = 0; i < boids.length; i++) {
             let other = boids[i];
             let d = this.position.dist(other.position);
-            if (d > 0 && d < 50) {
-                sum.add(other.position);
-                count++;
-            }
+            if (d > 0 && d < 50) { sum.add(other.position); count++; }
         }
         return count > 0 ? (sum.div(count), this.seek(sum)) : new Vector2D(0, 0);
     }
 }
 
-// --- INITIALIZATION AND LOOP SETUP ---
+// --- SETUP ---
 const canvas = document.getElementById("animationCanvas");
 const ctx = canvas.getContext("2d");
-
 let boidsList = [];
 let idCounter = 1;
 let lastTime = 0;
-const particleColor = "rgba(140, 140, 140, 0.6)"; // Subtle gray flock colors
+const particleColor = "rgba(140, 140, 140, 0.6)";
 
 function resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
@@ -298,50 +357,33 @@ function resizeCanvas() {
 function initSimulation() {
     resizeCanvas();
     boidsList = [];
-    
     const w = window.innerWidth;
     const h = window.innerHeight;
-    
-    // Exactly matches the original script's spawn counts (70 total particles)
     for (let i = 0; i < 70; i++) {
         idCounter++;
-        if (i < 35) {
-            // Half spawn clustered directly in the center
-            boidsList.push(new Boid(w / 2, h / 2, idCounter));
-        } else {
-            // Half spawn scattered randomly across screen space
-            boidsList.push(new Boid(randomRange(w), randomRange(h), idCounter));
-        }
+        if (i < 35) boidsList.push(new Boid(w / 2, h / 2, idCounter));
+        else boidsList.push(new Boid(randomRange(w), randomRange(h), idCounter));
     }
 }
 
 function animate(timestamp) {
     requestAnimationFrame(animate);
-    
     let elapsed = timestamp - lastTime;
-    // Frame throttling configuration from original file (~60fps barrier execution checking)
     if (elapsed > 16.666) {
         lastTime = timestamp - (elapsed % 16.666);
-        
         const w = window.innerWidth;
         const h = window.innerHeight;
-        
         ctx.clearRect(0, 0, w, h);
-        
-        // The original script sets the leader ID dynamically to `idCounter - 1`
         const leaderId = idCounter - 1; 
-        
         for (let boid of boidsList) {
             boid.run(ctx, boidsList, w, h, leaderId, particleColor);
         }
     }
 }
 
-// Global Event Triggers
 window.addEventListener("resize", resizeCanvas);
 initSimulation();
 requestAnimationFrame(animate);
-
 </script>
 </body>
 </html>
