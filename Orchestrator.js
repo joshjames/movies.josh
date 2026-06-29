@@ -9,11 +9,11 @@ const LibraryScanner = require('./src/services/LibraryScanner');
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
 
 const WORKERS = {
-    INGEST:    process.env.WORKER_URL_INGEST    || 'http://localhost:5000/process',
-    METADATA:  process.env.WORKER_URL_METADATA  || 'http://localhost:5001/process',
-    SUBTITLES: process.env.WORKER_URL_SUBTITLES || 'http://localhost:5002/process',
-    TRANSCODE: process.env.WORKER_URL_TRANSCODE || 'http://localhost:5003/process',
-    UPLOAD:    process.env.WORKER_URL_UPLOAD    || 'http://localhost:5004/process'
+    INGEST:    process.env.WORKER_URL_INGEST    || 'http://movie-streamer-v2-test:5000/process',
+    METADATA:  process.env.WORKER_URL_METADATA  || 'http://movie-streamer-v2-test:5001/process',
+    SUBTITLES: process.env.WORKER_URL_SUBTITLES || 'http://movie-streamer-v2-test:5002/process',
+    TRANSCODE: process.env.WORKER_URL_TRANSCODE || 'http://movie-streamer-v2-test:5003/process',
+    UPLOAD:    process.env.WORKER_URL_UPLOAD    || 'http://movie-streamer-v2-test:5004/process'
 };
 
 const activeJobs = new Set();
@@ -111,15 +111,19 @@ async function processAsset(folder, destinationParent) {
 
 async function orchestrateStorageTree() {
     try {
-        // Phase 1: Standalone download ingest cleaner execution
+        // Phase 1: Standalone download ingest cleaner execution (Global discovery pass)
         try {
+            logger.debug(`🔍 Phase 1: Triggering global recursive Ingest sweep...`);
             await axios.post(WORKERS.INGEST, {}, { timeout: 30000 });
         } catch (e) {
             logger.error(`⚠️ Ingest sanitizer pipeline check-in failed or timed out: ${e.message}`);
         }
 
         // Phase 2: Traverse root tracks safely
-        if (!fs.existsSync(MOVIES_DIR)) return;
+        if (!fs.existsSync(MOVIES_DIR)) {
+            logger.error(`🚨 Target storage volume path allocation missing: ${MOVIES_DIR}`);
+            return;
+        }
 
         const movieFolders = fs.readdirSync(MOVIES_DIR).filter(f => !f.startsWith('.') && f !== 'series');
         const seriesDir = path.join(MOVIES_DIR, 'series');
@@ -128,11 +132,43 @@ async function orchestrateStorageTree() {
         const CONCURRENCY_LIMIT = 2;
         let runningPromises = [];
 
-        // Run through Movie folders
+        // =====================================================================
+        // 🎬 MOVIE DIRECTORY LOOP
+        // =====================================================================
         for (const folder of movieFolders) {
-            if (path.join(MOVIES_DIR, folder) === '/app/movies/sample') continue;
-            if (!fs.lstatSync(path.join(MOVIES_DIR, folder)).isDirectory()) continue;
+            const targetFullPath = path.join(MOVIES_DIR, folder);
+            if (targetFullPath === '/app/movies/sample') continue;
+            if (!fs.lstatSync(targetFullPath).isDirectory()) continue;
 
+            logger.debug(`🔎 [Orchestrator Evaluation] Found movie folder node: [${folder}]. Assessing status...`);
+
+            const metaFilePath = path.join(targetFullPath, 'metadata.json');
+            
+            // Check for active transcoding processing locks
+            if (fs.existsSync(path.join(targetFullPath, '.processing'))) {
+                logger.debug(`skip [Orchestrator Evaluation] Skipping [${folder}] - Active lock .processing file exists.`);
+                continue;
+            }
+
+            // 🎯 FIX: Bootstraps files without metadata files straight into the INGEST step
+            if (!fs.existsSync(metaFilePath)) {
+                logger.debug(`🆕 [Orchestrator Evaluation] No metadata found for [${folder}]. Initializing pipeline state to: INGEST`);
+                const initialSeed = {
+                    pipelineState: {
+                        currentStep: 'INGEST',
+                        lastUpdated: new Date().toISOString(),
+                        error: null
+                    }
+                };
+                try {
+                    fs.writeFileSync(metaFilePath, JSON.stringify(initialSeed, null, 4));
+                } catch (writeErr) {
+                    logger.error(`❌ Failed writing initial tracking state for [${folder}]: ${writeErr.message}`);
+                    continue;
+                }
+            }
+
+            // Queue asset processing execution window
             runningPromises.push(processAsset(folder, MOVIES_DIR));
             if (runningPromises.length >= CONCURRENCY_LIMIT) {
                 await Promise.all(runningPromises);
@@ -140,10 +176,14 @@ async function orchestrateStorageTree() {
             }
         }
 
-        // Run through Series folders
+        // =====================================================================
+        // 📺 TV SERIES DIRECTORY LOOP
+        // =====================================================================
         for (const folder of seriesFolders) {
             const currentFolderRoot = path.join(seriesDir, folder);
             if (!fs.existsSync(currentFolderRoot) || !fs.lstatSync(currentFolderRoot).isDirectory()) continue;
+
+            logger.debug(`🔎 [Orchestrator Evaluation] Found TV show folder node: [${folder}]. Assessing status...`);
 
             const metaFile = path.join(seriesDir, folder, 'metadata.json');
             
@@ -172,8 +212,13 @@ async function orchestrateStorageTree() {
                         }
                     }
                 } catch (e) {
-                    // Fail silently to avoid breaking loop
+                    // Fail silently to avoid breaking loop execution
                 }
+            } else {
+                // Seed fallback for untracked TV shows
+                logger.debug(`🆕 [Orchestrator Evaluation] No metadata found for TV Show [${folder}]. Seeding INGEST tracking loop.`);
+                const initialTvSeed = { pipelineState: { currentStep: 'INGEST', lastUpdated: new Date().toISOString() } };
+                try { fs.writeFileSync(metaFile, JSON.stringify(initialTvSeed, null, 4)); } catch (e) {}
             }
 
             runningPromises.push(processAsset(folder, seriesDir));
@@ -183,6 +228,7 @@ async function orchestrateStorageTree() {
             }
         }
 
+        // Catch remaining processing promises
         if (runningPromises.length > 0) {
             await Promise.all(runningPromises);
         }

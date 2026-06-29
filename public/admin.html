@@ -164,12 +164,20 @@
                     </div>
                 </div>
 
+
+
+
                 <div class="panel" id="log-monitor-panel">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 12px;">
                         <h3 style="margin: 0; border: none; padding: 0;">🖥️ Live Application Stream Monitor</h3>
-                        <button onclick="toggleLogSize()" id="expand-log-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="color: #cbd5e1; font-family: monospace; cursor: pointer; user-select: none; font-size: 0.8rem;">
+                                <input type="checkbox" id="pause-scroll-toggle"> ⏸️ Pause Auto-Scroll Tracking
+                            </label>
+                            <button onclick="toggleLogSize()" id="expand-log-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                        </div>
                     </div>
-                    <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
+                    <div class="console-box" id="terminal-stream" style="overflow-y: auto; height: 500px;">Connecting to core logger pipeline...</div>
                 </div>
             </div>
         </div>
@@ -217,6 +225,7 @@
         // --- 2. LIVE LOG MONITOR STREAM ---
         function connectToLogStream() {
             const consoleTerminal = document.getElementById('terminal-stream');
+            const pauseToggle = document.getElementById('pause-scroll-toggle');
             consoleTerminal.innerHTML = '<div style="color: #64748b;">Establishing connection to backend stream...</div>';
             
             // 🎯 Point to the new unified endpoint structure
@@ -247,8 +256,10 @@
                     parseLogForMonitor(line);
                 });
                 
-                // Keep view pinned to bottom
-                consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
+                // 🎯 FIX: Only pin view focus to the bottom if Pause is unchecked
+                if (!pauseToggle || !pauseToggle.checked) {
+                    consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
+                }
             };
 
             eventSource.onerror = function(err) {
