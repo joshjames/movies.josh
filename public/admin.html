@@ -220,7 +220,7 @@
             consoleTerminal.innerHTML = '<div style="color: #64748b;">Establishing connection to backend stream...</div>';
             
             // 🎯 Point to the new unified endpoint structure
-            let eventSource = new EventSource('/admin/log-stream');
+            let eventSource = new EventSource('/api/admin/log-stream');
 
             eventSource.onopen = function() {
                 consoleTerminal.innerHTML = `<div style="color: #10b981;">[SYSTEM] Connected to core logger pipeline. Listening for updates...</div>`;
