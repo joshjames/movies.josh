@@ -166,8 +166,11 @@ async function uploadLargeFileStream(localPath, remoteKey, profile) {
 
     uploadWorker.on('httpUploadProgress', (p) => {
         const mbSent = (p.loaded / (1024 * 1024)).toFixed(2);
-            logger.debug(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
-    await uploadWorker.done();
+        logger.debug(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
+    }); // 🎯 FIX: Properly closed the tracking event listener block
+
+    // Now this correctly sits at the top level body of the async wrapper function
+    await uploadWorker.done(); 
 }
 
 const PORT = process.env.CLOUD_SYNC_WORKER_PORT || 5004;
