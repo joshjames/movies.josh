@@ -21,7 +21,7 @@ const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
  * Reuses your exact high-quality stream specifications.
  */
 function generate1080pProfile(inputPath, outputPath) {
-    logger.log(`🎬 Running 1080p Core Optimization Line -> ${path.basename(outputPath)}`);
+    logger.debug(`🎬 Running 1080p Core Optimization Line -> ${path.basename(outputPath)}`);
     const ffmpegCmd = `ffmpeg -threads 6 -i "${inputPath}" -c:v libx264 -preset medium -crf 22 -c:a aac -ac 2 -b:a 192k -movflags +faststart -y "${outputPath}"`;
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
@@ -31,7 +31,7 @@ function generate1080pProfile(inputPath, outputPath) {
  * Scales vertical frame boundaries down to 720 lines, drops CRF slightly to save storage space.
  */
 function generate720pProfile(inputPath, outputPath) {
-    logger.log(`⏳ Running 720p Mid-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
+    logger.debug(`⏳ Running 720p Mid-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // -vf scale=-2:720 enforces aspect-ratio scaling while matching even pixel boundaries required by h264
     const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:720" -c:v libx264 -preset medium -crf 23 -c:a aac -ac 2 -b:a 128k -movflags +faststart -y "${outputPath}"`;
     execSync(ffmpegCmd, { stdio: 'pipe' });
@@ -42,7 +42,7 @@ function generate720pProfile(inputPath, outputPath) {
  * Optimized for mobile cellular delivery, low processor usage.
  */
 function generate480pProfile(inputPath, outputPath) {
-    logger.log(`📱 Running 480p Low-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
+    logger.debug(`📱 Running 480p Low-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:480" -c:v libx264 -preset fast -crf 24 -c:a aac -ac 2 -b:a 96k -movflags +faststart -y "${outputPath}"`;
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
@@ -113,7 +113,7 @@ app.post('/process', async (req, res) => {
         const media = inspectMediaStreams(inputPath);
 
         if (media.isWebNative) {
-            logger.log(`🚀 [Fast Pass] Bypassing transcode loop for ${sourceVideo}`);
+            logger.debug(`🚀 [Fast Pass] Bypassing transcode loop for ${sourceVideo}`);
             if (!fs.existsSync(output1080Path)) {
                 fs.renameSync(inputPath, output1080Path);
             }
@@ -143,7 +143,7 @@ app.post('/process', async (req, res) => {
         });
 
     } catch (err) {
-        logger.log(`❌ Transcoder Worker operation failure: ${err.message}`, 'error');
+        logger.error(`❌ Transcoder Worker operation failure: ${err.message}`, 'error');
         return res.json({ success: false, error: err.message });
     }
 });

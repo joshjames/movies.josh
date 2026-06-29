@@ -11,7 +11,7 @@ const BUCKET_NAME = 'joshflixmedia';
 const B2_ENDPOINT = 'https://s3.us-west-004.backblazeb2.com'; 
 
 // TARGET TEST FOLDER: Slashes will be automatically stripped for the key path
-const TEST_FOLDER_NAME = '/The.Avengers.2012/';
+const TEST_FOLDER_NAME = '/Avengers.Endgame.2019/';
 
 const cleanNamingId = TEST_FOLDER_NAME.replace(/^\/+|\/+$/g, '');
 

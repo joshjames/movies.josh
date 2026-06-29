@@ -10,16 +10,16 @@ const FALLBACK_FILE = path.join(__dirname, '../../metadata/fallback_library.json
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379/3';
 const redisClient = createClient({ url: REDIS_URL });
 
-redisClient.on('error', (err) => logger.log(`🚨 Redis Hub Error: ${err.message}`, 'error'));
+redisClient.on('error', (err) => logger.error(`🚨 Redis Hub Error: ${err.message}`));
 
 async function connectDb() {
     try {
         if (!redisClient.isOpen) {
             await redisClient.connect();
-            logger.log(`🚀 Connected to Redis Instance Successfully [Isolated DB Index Path: ${REDIS_URL.split('/').pop()}]`);
+            logger.info(`🚀 Connected to Redis Instance Successfully [Isolated DB Index Path: ${REDIS_URL.split('/').pop()}]`);
         }
     } catch (e) {
-        logger.log('⚠️ Redis engine unreachable. Shifting operational layout to Cold JSON storage layers.', 'warn');
+        logger.warn('⚠️ Redis engine unreachable. Shifting operational layout to Cold JSON storage layers.');
     }
 }
 
@@ -30,7 +30,7 @@ async function syncLibraryToStorage(libraryData) {
             await redisClient.set('joshflix:library', JSON.stringify(libraryData));
         }
     } catch (err) {
-        logger.log(`Failed updating Redis cache keys: ${err.message}`, 'error');
+        logger.error(`Failed updating Redis cache keys: ${err.message}`);
     }
 
     // Shield Backup Generation
@@ -38,7 +38,7 @@ async function syncLibraryToStorage(libraryData) {
         fs.mkdirSync(path.dirname(FALLBACK_FILE), { recursive: true });
         fs.writeFileSync(FALLBACK_FILE, JSON.stringify(libraryData, null, 4), 'utf-8');
     } catch (fsErr) {
-        logger.log(`Failed writing ultimate fallback file layout: ${fsErr.message}`, 'error');
+        logger.error(`Failed writing ultimate fallback file layout: ${fsErr.message}`);
     }
 }
 
@@ -49,7 +49,7 @@ async function getLibrary() {
             const cache = await redisClient.get('joshflix:library');
             if (cache) return JSON.parse(cache);
         } catch (e) {
-            logger.log('Fallback shift initiated away from cache tier.', 'warn');
+            logger.warn('Fallback shift initiated away from cache tier.');
         }
     }
 
@@ -57,7 +57,7 @@ async function getLibrary() {
         try {
             return JSON.parse(fs.readFileSync(FALLBACK_FILE, 'utf-8'));
         } catch (e) {
-            logger.log('Critical Fault: Backup shield corrupted.', 'error');
+            logger.error('Critical Fault: Backup shield corrupted.');
         }
     }
     return { movies: [], shows: [] };

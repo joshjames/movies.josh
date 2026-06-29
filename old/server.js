@@ -271,7 +271,7 @@ app.get('/api/eztv/browse', async (req, res) => {
         res.json({ success: true, torrents: results });
 
     } catch (err) {
-        logger.log(`OMDb/EZTV Pipeline crash: ${err.message}`, 'error');
+        logger.error(`OMDb/EZTV Pipeline crash: ${err.message}`);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -637,7 +637,7 @@ app.post('/api/downloader/add', async (req, res) => {
             headers: form.getHeaders()
         });
 
-        logger.log(`📥 Dispatched [${category || 'movie'}] magnet directly to qBittorrent.`);
+        logger.info(`📥 Dispatched [${category || 'movie'}] magnet directly to qBittorrent.`);
         res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
     } catch (err) {
         console.error("❌ qBittorrent forward block:", err.message);

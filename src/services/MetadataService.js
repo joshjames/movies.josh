@@ -14,7 +14,7 @@ class MetadataService {
             try {
                 return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
             } catch (e) {
-                logger.log("⚠️ Manifest tracking file corrupted. Initializing fresh index state.");
+                logger.warn("⚠️ Manifest tracking file corrupted. Initializing fresh index state.");
             }
         }
         return { lastRun: null, folders: {} };

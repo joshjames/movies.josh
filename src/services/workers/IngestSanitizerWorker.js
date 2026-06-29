@@ -145,7 +145,7 @@ app.post('/process', async (req, res) => {
     // SCENARIO A: Global manual sweep invocation
     if (!folderPath || !folderName) {
         try {
-            logger.log("🔍 Running global recursive Ingest sweep to discover untracked media assets...");
+            logger.debug("🔍 Running global recursive Ingest sweep to discover untracked media assets...");
             await autoDiscoverAndOrganize(MOVIES_DIR);
             await autoDiscoverAndOrganize(SERIES_DIR); // 🎯 FIX: Scan series storage pools too
             return res.json({ success: true, message: "Global collection discovery sweep complete." });
@@ -175,7 +175,7 @@ app.post('/process', async (req, res) => {
             if (!fs.existsSync(computedPath) && fs.existsSync(folderPath)) {
                 await fsp.rename(folderPath, computedPath);
                 finalPath = computedPath;
-                logger.log(`🗂️ Ingest Alignment Mutator: [${folderName}] ➡️ [${targetFolderName}]`, 'info');
+                logger.debug(`🗂️ Ingest Alignment Mutator: [${folderName}] ➡️ [${targetFolderName}]`);
             }
         }
 
@@ -186,15 +186,15 @@ app.post('/process', async (req, res) => {
             const analysis = analyzeDirectoryContents(finalPath);
 
             if (analysis.isSeasonPack) {
-                logger.log(`🧠 [Smart Ingest] Detected multi-file TV Season Pack inside: [${targetFolderName}]`);
+                logger.debug(`🧠 [Smart Ingest] Detected multi-file TV Season Pack inside: [${targetFolderName}]`);
 
                 let showFolder = findExistingShowFolder(cleanTitle, SERIES_DIR);
                 if (!showFolder) {
                     showFolder = dotNotationTitle;
                     fs.mkdirSync(path.join(SERIES_DIR, showFolder), { recursive: true });
-                    logger.log(`📁 [Smart Ingest] Established brand new show root entry: ${showFolder}`);
+                    logger.debug(`📁 [Smart Ingest] Established brand new show root entry: ${showFolder}`);
                 } else {
-                    logger.log(`🎯 [Smart Ingest] Linked incoming assets to existing archive: ${showFolder}`);
+                    logger.debug(`🎯 [Smart Ingest] Linked incoming assets to existing archive: ${showFolder}`);
                 }
 
                 for (const ep of analysis.detectedEpisodes) {
@@ -214,7 +214,7 @@ app.post('/process', async (req, res) => {
                     }
                 }
 
-                logger.log(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
+                logger.debug(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
                 deleteFolderRecursive(finalPath);
 
                 return res.json({
@@ -224,7 +224,7 @@ app.post('/process', async (req, res) => {
                 });
             }
 
-            logger.log(`📺 Mapping deep TV configuration manifests for series structural tree: [${targetFolderName}]`);
+            logger.debug(`📺 Mapping deep TV configuration manifests for series structural tree: [${targetFolderName}]`);
             let mainMeta = { title: cleanTitle, year: parsedYear || '', plot: '', genre: '', contentType: 'series' };
             let totalSeasons = 1;
 
@@ -238,7 +238,7 @@ app.post('/process', async (req, res) => {
                     totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
                 }
             } catch (err) {
-                logger.log(`⚠️ OMDb API series query exception for ${cleanTitle}: ${err.message}`, 'warn');
+                logger.error(`⚠️ OMDb API series query exception for ${cleanTitle}: ${err.message}`, 'warn');
             }
 
             let physicalFileMap = {};
@@ -297,7 +297,7 @@ app.post('/process', async (req, res) => {
                 const metaFilePath = path.join(finalPath, 'metadata.json');
                 mainMeta.pipelineState = { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() };
                 fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
-                logger.log(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and marked pipeline COMPLETED.`);
+                logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and marked pipeline COMPLETED.`);
             }
 
             return res.json({
@@ -323,7 +323,7 @@ app.post('/process', async (req, res) => {
         });
 
     } catch (err) {
-        logger.log(`❌ Error encountered during data normalization loops: ${err.message}`, 'error');
+        logger.error(`❌ Error encountered during data normalization loops: ${err.message}`, 'error');
         return res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -356,7 +356,7 @@ async function autoDiscoverAndOrganize(currentDir) {
                         const standardizedDir = path.join(SERIES_DIR, showFolderName, seasonStr);
                         const cleanFinalPath = path.join(standardizedDir, cleanEpTitle);
 
-                        logger.log(`🎯 [AUTOMATION DISCOVERY] Realigning TV asset node: ${item.name}`);
+                        logger.debug(`🎯 [AUTOMATION DISCOVERY] Realigning TV asset node: ${item.name}`);
                         await fsp.mkdir(standardizedDir, { recursive: true });
                         await fsp.rename(fullPath, cleanFinalPath);
                     }
@@ -366,5 +366,6 @@ async function autoDiscoverAndOrganize(currentDir) {
     }
 }
 
+logger.debug(`🔄 [AUTOMATION DISCOVERY] Initiating auto-discovery and organization of: ${currentDir}`);
 const PORT = process.env.INGEST_WORKER_PORT || 5000;
 app.listen(PORT, () => console.log(`🧹 Atomic Ingest Sanitizer Worker online on port ${PORT}`));

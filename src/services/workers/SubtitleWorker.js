@@ -29,7 +29,7 @@ async function fetchYifySubtitles(imdbId, folderPath) {
     try {
         const movieUrl = `https://yifysubtitles.ch/movie-imdb/${targetImdb}`;
         
-        logger.log(`📡 Querying YIFY database for IMDB: ${targetImdb}`);
+        logger.debug(`📡 Querying YIFY database for IMDB: ${targetImdb}`);
         const response = await axios.get(movieUrl, { headers: REQUEST_HEADERS, timeout: 15000 });
         const html = response.data;
 
@@ -43,7 +43,7 @@ async function fetchYifySubtitles(imdbId, folderPath) {
         const chosenSubPagePath = subtitlePageMatches[0];
         const detailPageUrl = `https://yifysubtitles.ch${chosenSubPagePath}`;
         
-        logger.log(`🔍 Navigating to sub-page tracking link: ${detailPageUrl}`);
+        logger.debug(`🔍 Navigating to sub-page tracking link: ${detailPageUrl}`);
         const detailResponse = await axios.get(detailPageUrl, { headers: REQUEST_HEADERS, timeout: 15000 });
         const detailHtml = detailResponse.data;
 
@@ -55,7 +55,7 @@ async function fetchYifySubtitles(imdbId, folderPath) {
 
         const downloadUrl = `https://yifysubtitles.ch${zipDownloadMatch[0]}`;
 
-        logger.log(`📥 Streaming subtitle binary file: ${downloadUrl}`);
+        logger.debug(`📥 Streaming subtitle binary file: ${downloadUrl}`);
         
         // Anti-403 Configuration: Spoof headers and include Referer target
         const binaryStream = await axios({
@@ -98,7 +98,7 @@ async function fetchYifySubtitles(imdbId, folderPath) {
         if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
 
         if (srtExtracted) {
-            logger.log(`✨ YIFY Pipeline successfully downloaded and mapped: English.srt`);
+            logger.debug(`✨ YIFY Pipeline successfully downloaded and mapped: English.srt`);
             return [{ language: 'eng', relativePath: 'English.srt', source: 'yify' }];
         } else {
             throw new Error("No usable SRT files found inside the downloaded archive container.");
@@ -107,7 +107,7 @@ async function fetchYifySubtitles(imdbId, folderPath) {
     } catch (err) {
         // Safe clean up fallback check if zip processing bombed out midway
         if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
-        logger.log(`⚠️ YIFY subtitle ingestion skipped: ${err.message}. Routing to fallbacks...`, 'warn');
+        logger.debug(`⚠️ YIFY subtitle ingestion skipped: ${err.message}. Routing to fallbacks...`, 'warn');
         return null;
     }
 }
@@ -117,12 +117,12 @@ async function fetchYifySubtitles(imdbId, folderPath) {
  */
 function fetchSubliminalFallback(imdbId, folderPath) {
     return new Promise((resolve) => {
-        logger.log(`⏳ Starting Subliminal verification routines on folder target...`);
+        logger.debug(`⏳ Starting Subliminal verification routines on folder target...`);
         const cmd = `subliminal download -l en -i ${imdbId} "${folderPath}"`;
 
         exec(cmd, (err) => {
             if (err) {
-                logger.log(`⚠️ Subliminal worker execution finished empty. Moving down pipeline.`, 'warn');
+                logger.debug(`⚠️ Subliminal worker execution finished empty. Moving down pipeline.`, 'warn');
                 return resolve([]);
             }
 
@@ -158,7 +158,7 @@ app.post('/process', async (req, res) => {
         );
 
         if (subtitleExists) {
-            logger.log(`⏭️ [SUBTITLES] Skipping [${folderName || path.basename(folderPath)}]. Subtitle track already present on disk.`);
+            logger.debug(`⏭️ [SUBTITLES] Skipping [${folderName || path.basename(folderPath)}]. Subtitle track already present on disk.`);
             return res.json({
                 success: true,
                 message: "Subtitle track verified instantly via local storage check.",
@@ -182,7 +182,7 @@ app.post('/process', async (req, res) => {
         });
 
     } catch (err) {
-        logger.log(`❌ Subtitle Worker structural exception on ${folderName}: ${err.message}`, 'error');
+        logger.error(`❌ Subtitle Worker structural exception on ${folderName}: ${err.message}`, 'error');
         return res.json({ success: true, patchData: { subtitles: [] } });
     }
 });

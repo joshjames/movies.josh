@@ -26,7 +26,7 @@ router.post('/square-subscriptions', (req, res) => {
     const squareCustomerId = subscriptionData.customer_id; 
     const status = subscriptionData.status; // e.g., 'ACTIVE', 'CANCELED', 'DEACTIVATED'
 
-    logger.log(`🔔 Square Webhook: Subscription update received for Customer [${squareCustomerId}] -> Status: ${status}`);
+    logger.info(`🔔 Square Webhook: Subscription update received for Customer [${squareCustomerId}] -> Status: ${status}`);
 
     // 2. Locate the databaseless user profile on NVMe storage
     // (If you save the squareCustomerId inside the user's json file on link setup)
@@ -47,13 +47,13 @@ router.post('/square-subscriptions', (req, res) => {
                     userData.pipelineState.lastBillingSync = new Date().toISOString();
                     
                     fs.writeFileSync(filePath, JSON.stringify(userData, null, 4));
-                    logger.log(`✅ User [${userData.username}] premium entitlement status flipped to: ${isPaidUp}`);
+                    logger.info(`✅ User [${userData.username}] premium entitlement status flipped to: ${isPaidUp}`);
                 }
                 break;
             }
         }
     } catch (err) {
-        logger.log(`❌ Error processing Square webhook status update: ${err.message}`, 'error');
+        logger.error(`❌ Error processing Square webhook status update: ${err.message}`);
     }
 });
 

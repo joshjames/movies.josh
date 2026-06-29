@@ -103,7 +103,7 @@ app.post('/process', async (req, res) => {
             }
 
             if (!localVideoPath || !fs.existsSync(localVideoPath)) {
-                logger.log(`ℹ️ [Cloud Sync Skip] Profile ${profile} for ${folderName} is pending but file is physically absent. Skipping.`, 'warn');
+                logger.warn(`ℹ️ [Cloud Sync Skip] Profile ${profile} for ${folderName} is pending but file is physically absent. Skipping.`);
                 continue;
             }
 
@@ -111,7 +111,7 @@ app.post('/process', async (req, res) => {
             const directoryId = (metadata.imdbId && metadata.imdbId !== 'N/A') ? metadata.imdbId : folderName;
             const remoteKey = `movies/${directoryId}/${profile}.mp4`.replace(/\/+/g, '/');
 
-            logger.log(`🚀 [Cloud Sync Engine] Stream-uploading [${profile}] to cloud block store: ${remoteKey}`);
+            logger.info(`🚀 [Cloud Sync Engine] Stream-uploading [${profile}] to cloud block store: ${remoteKey}`);
             
             // Execute atomic streaming multipart push chunks
             await uploadLargeFileStream(localVideoPath, remoteKey, profile);
@@ -126,7 +126,7 @@ app.post('/process', async (req, res) => {
 
             // OPTIONAL LOCAL STORAGE CLEANUP FOR CHEAP VPS PACKAGES:
             // Un-comment the line below if you want to delete the local file the instant it hits your cloud bucket!
-            // fs.unlinkSync(localVideoPath); logger.log(`🗑️ Swept local storage cache for [${profile}] to maintain VPS disk space limits.`);
+            // fs.unlinkSync(localVideoPath);
         }
 
         // Switch overall location descriptor state if any asset goes remote
@@ -141,7 +141,7 @@ app.post('/process', async (req, res) => {
         });
 
     } catch (err) {
-        logger.log(`❌ Cloud Sync Worker failure on target ${folderName}: ${err.message}`, 'error');
+        logger.error(`❌ Cloud Sync Worker failure on target ${folderName}: ${err.message}`);
         return res.json({ success: false, error: err.message });
     }
 });
@@ -166,9 +166,7 @@ async function uploadLargeFileStream(localPath, remoteKey, profile) {
 
     uploadWorker.on('httpUploadProgress', (p) => {
         const mbSent = (p.loaded / (1024 * 1024)).toFixed(2);
-        logger.log(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
-    });
-
+            logger.debug(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
     await uploadWorker.done();
 }
 

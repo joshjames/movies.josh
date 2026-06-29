@@ -92,10 +92,10 @@ async function sendVerificationEmail(email, username, token) {
                 'content-type': 'application/json'
             }
         });
-        logger.log(`✉️ [MAILER] Verification successfully sent to ${email}. MessageId: ${response.data.messageId}`);
+        logger.info(`✉️ [MAILER] Verification successfully sent to ${email}. MessageId: ${response.data.messageId}`);
         return { success: true };
     } catch (error) {
-        logger.log(`❌ [MAILER ERROR] Transactional relay dropped execution: ${error.response ? JSON.stringify(error.response.data) : error.message}`, 'error');
+        logger.error(`❌ [MAILER ERROR] Transactional relay dropped execution: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
         return { success: false, error: error.message };
     }
 }

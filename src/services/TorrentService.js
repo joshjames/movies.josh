@@ -35,10 +35,10 @@ class TorrentService {
                 timeout: 5000
             });
 
-            logger.log(`📥 [Torrent Service] Successfully queued [${targetCategory}] download payload with tag [${targetTag}].`);
+            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] download payload with tag [${targetTag}].`);
             return { success: true };
         } catch (err) {
-            logger.log(`❌ [Torrent Service] Failed to add magnet to qBit: ${err.message}`, 'error');
+            logger.error(`❌ [Torrent Service] Failed to add magnet to qBit: ${err.message}`);
             throw new Error("Could not communicate assignment payloads down to qBittorrent.");
         }
     }
@@ -57,7 +57,7 @@ class TorrentService {
                 t.tags && (t.tags.includes('movie-streamer') || t.tags.includes('series-streamer'))
             );
         } catch (err) {
-            logger.log(`⚠️ [Torrent Service] Pipeline target unreachable: ${err.message}`, 'warn');
+            logger.warn(`⚠️ [Torrent Service] Pipeline target unreachable: ${err.message}`);
             return [];
         }
     }
@@ -79,10 +79,10 @@ class TorrentService {
             await axios.post(`${QBIT_BASE_URL}/torrents/addTags`, `hashes=${hash}&tags=${newTag}`, {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
-            logger.log(`🏷️ [Torrent Service] Rotated workflow tags cleanly for hash: ${hash}`);
+            logger.info(`🏷️ [Torrent Service] Rotated workflow tags cleanly for hash: ${hash}`);
             return true;
         } catch (err) {
-            logger.log(`⚠️ [Torrent Service] Tag allocation failure for hash ${hash}: ${err.message}`, 'warn');
+            logger.warn(`⚠️ [Torrent Service] Tag allocation failure for hash ${hash}: ${err.message}`);
             return false;
         }
     }

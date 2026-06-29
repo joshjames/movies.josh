@@ -20,6 +20,7 @@ const activeJobs = new Set();
 
 async function processAsset(folder, destinationParent) {
     const folderPath = path.join(destinationParent, folder);
+    logger.debug(`processAsset start folder=${folder} path=${folderPath}`);
     if (activeJobs.has(folderPath)) return; 
 
     // If the directory was deleted by an ingestion worker early, drop execution gracefully
@@ -46,7 +47,7 @@ async function processAsset(folder, destinationParent) {
     activeJobs.add(folderPath);
 
     try {
-        logger.log(`🤖 Dispatching asset [${folder}] to worker node [${currentStep}]`);
+        logger.debug(`🤖 Dispatching asset [${folder}] to worker node [${currentStep}] - path=${folderPath}`);
 
         const response = await axios.post(workerUrl, {
             folderPath,
@@ -55,6 +56,8 @@ async function processAsset(folder, destinationParent) {
             imdbId: metadata.imdbId || null,
             manualImdbId: metadata.manualImdbId || null
         }, { timeout: 1200000 });
+
+        logger.debug(`Worker response status=${response.status} success=${!!response.data?.success}`);
 
         if (response.data?.success) {
             // 🎯 FIX: Check if worker returned an explicit terminal step override first
@@ -84,26 +87,27 @@ async function processAsset(folder, destinationParent) {
             // 🎯 FIX: Only write metadata file if the directory still exists on disk
             if (fs.existsSync(folderPath)) {
                 fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4));
-                logger.log(`✅ Asset [${folder}] advanced successfully down-pipe to state: ${nextStep}`);
+                logger.debug(`✅ Asset [${folder}] advanced successfully down-pipe to state: ${nextStep}`);
             } else {
-                logger.log(`✨ Asset [${folder}] path was integrated directly into backend libraries. Skipping folder state write.`);
+                logger.debug(`✨ Asset [${folder}] path was integrated directly into backend libraries. Skipping folder state write.`);
             }
 
             // ⚡ AUTOMATED FLUSH: Rebuild RAM cache instantly when any item hits completion state
             if (nextStep === 'COMPLETED') {
-                logger.log(`⚡ [Cache System Trigger] Asset ${folder} complete. Triggering instant library re-indexing.`);
+                logger.debug(`⚡ [Cache System Trigger] Asset ${folder} complete. Triggering instant library re-indexing.`);
                 LibraryScanner.runLibraryScanSweep()
-                    .catch(err => logger.log(`Error updating database cache values: ${err.message}`, 'error'));
+                    .catch(err => logger.error(`Error updating database cache values: ${err.message}`));
             }
         } else {
-            logger.log(`⚠️ Worker Engine Alert [${currentStep}] on [${folder}]: ${response.data?.error}`, 'warn');
+            logger.error(`⚠️ Worker Engine Alert [${currentStep}] on [${folder}]: ${response.data?.error}`);
         }
     } catch (err) {
-        logger.log(`❌ Failed connecting to worker endpoint [${currentStep}] on [${folder}]: ${err.message}`, 'error');
+        logger.error(`❌ Failed connecting to worker endpoint [${currentStep}] on [${folder}]: ${err.message}`);
     } finally {
         activeJobs.delete(folderPath);
+        logger.debug(`processAsset end folder=${folder} path=${folderPath}`);
     }
-}
+} 
 
 async function orchestrateStorageTree() {
     try {
@@ -111,7 +115,7 @@ async function orchestrateStorageTree() {
         try {
             await axios.post(WORKERS.INGEST, {}, { timeout: 30000 });
         } catch (e) {
-            logger.log(`⚠️ Ingest sanitizer pipeline check-in failed or timed out: ${e.message}`, 'warn');
+            logger.error(`⚠️ Ingest sanitizer pipeline check-in failed or timed out: ${e.message}`);
         }
 
         // Phase 2: Traverse root tracks safely
@@ -164,7 +168,7 @@ async function orchestrateStorageTree() {
                             meta.pipelineState.currentStep = 'METADATA';
                             meta.pipelineState.lastUpdated = new Date().toISOString();
                             fs.writeFileSync(metaFile, JSON.stringify(meta, null, 4));
-                            logger.log(`🔄 [Orchestrator] Detected new episodic drops inside ${folder}. Resetting tracking step to METADATA.`);
+                            logger.debug(`🔄 [Orchestrator] Detected new episodic drops inside ${folder}. Resetting tracking step to METADATA.`);
                         }
                     }
                 } catch (e) {
@@ -184,19 +188,19 @@ async function orchestrateStorageTree() {
         }
 
     } catch (rootErr) {
-        logger.log(`🚨 Orchestrator processing block crashed: ${rootErr.message}`, 'error');
+        logger.error(`🚨 Orchestrator processing block crashed: ${rootErr.message}`);
     }
 }
 
 module.exports = {
     startOrchestrator(intervalMs = 30000) {
-        logger.log(`🚀 Master Pipeline Orchestrator online with concurrency boundary [Cap: 2]. Scanning every ${intervalMs}ms...`);
+        logger.debug(`🚀 Master Pipeline Orchestrator online with concurrency boundary [Cap: 2]. Scanning every ${intervalMs}ms...`);
         orchestrateStorageTree();
         setInterval(orchestrateStorageTree, intervalMs);
     },
     
     async runFullAutomationPipeline() {
-        logger.log(`⚡ [Manual Trigger] Manual library automation sweep invoked from admin override desk.`);
+        logger.debug(`⚡ [Manual Trigger] Manual library automation sweep invoked from admin override desk.`);
         await orchestrateStorageTree();
         return { success: true };
     }

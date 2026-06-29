@@ -1,6 +1,6 @@
 // src/services/workers/PipelineWorker.js
 const axios = require('axios');
-const logger = require('../logger'); 
+const logger = require('../../utils/logger'); 
 const Orchestrator = require('../../../Orchestrator'); 
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080'; 
@@ -38,11 +38,11 @@ async function checkPipelineCompletions() {
         const activeTag = isSeries ? 'series-streamer' : 'movie-streamer';
         const processedTag = isSeries ? 'series-streamer-processed' : 'movie-streamer-processed';
 
-        logger.log(`🎉 [Pipeline Agent] Download completion caught: [${completedTorrent.name}] (${isSeries ? 'TV Show' : 'Movie'})`);
+        logger.debug(`🎉 [Pipeline Agent] Download completion caught: [${completedTorrent.name}] (${isSeries ? 'TV Show' : 'Movie'})`);
 
         // Rotate the workflow tag to prevent looping on the same item twice
         try {
-            logger.log(`⚙️  Rotating workflow tags [${activeTag} -> ${processedTag}] for hash: ${torrentHash}`);
+            logger.debug(`⚙️  Rotating workflow tags [${activeTag} -> ${processedTag}] for hash: ${torrentHash}`);
             
             // 🎯 FIX: Serialize form data properly so qBittorrent processes the inputs
             const removeParams = new URLSearchParams();
@@ -61,20 +61,20 @@ async function checkPipelineCompletions() {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
             
-            logger.log(`✅ Tag rotation complete. Triggering down-pipe automation.`);
+            logger.debug(`✅ Tag rotation complete. Triggering down-pipe automation.`);
         } catch (tagErr) {
-            logger.log(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`, 'warn');
+            logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`, 'warn');
             isProcessingPipeline = false;
             return;
         }
 
         // Invoke Orchestrator for local media directory structural sweeps
         try {
-            logger.log(`⚡ Invoking unified Orchestrator automation tree sweep...`);
+            logger.debug(`⚡ Invoking unified Orchestrator automation tree sweep...`);
             await Orchestrator.runFullAutomationPipeline();
-            logger.log(`✅ Managed background orchestrator pass completed successfully.`);
+            logger.debug(`✅ Managed background orchestrator pass completed successfully.`);
         } catch (orchErr) {
-            logger.log(`❌ Orchestrator execution block failed: ${orchErr.message}`, 'error');
+            logger.error(`❌ Orchestrator execution block failed: ${orchErr.message}`, 'error');
         }
 
         isProcessingPipeline = false;
@@ -86,7 +86,7 @@ async function checkPipelineCompletions() {
 
 module.exports = {
     startPipelineWorker(intervalMs = 10000) {
-        logger.log(`⚙️  Autonomous pipeline agent active. Monitoring completions every ${intervalMs}ms...`);
+        logger.debug(`⚙️  Autonomous pipeline agent active. Monitoring completions every ${intervalMs}ms...`);
         setInterval(checkPipelineCompletions, intervalMs);
     }
 };

@@ -10,7 +10,7 @@ const SERIES_DIR = process.env.SERIES_DIR || '/app/storage/series';
 function scanDirectory(basePath, contentType) {
     const registry = [];
     if (!fs.existsSync(basePath)) {
-        logger.log(`⚠️ Specified drive pathway missing index markers: ${basePath}`, 'warn');
+        logger.warn(`⚠️ Specified drive pathway missing index markers: ${basePath}`);
         return registry;
     }
 
@@ -28,7 +28,7 @@ function scanDirectory(basePath, contentType) {
             try {
                 meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
             } catch (e) {
-                logger.log(`Mangled metadata configuration block at: ${folder}`, 'warn');
+                logger.warn(`Mangled metadata configuration block at: ${folder}`);
             }
         }
 
@@ -61,14 +61,14 @@ function scanDirectory(basePath, contentType) {
         updatedAt: new Date().toISOString()
         });
         } else {
-            logger.log(`🗑️ Stripping empty untracked local trace directory from listings: ${folder}`, 'info');
+            logger.info(`🗑️ Stripping empty untracked local trace directory from listings: ${folder}`);
         }
     }
     return registry;
 }
 
 async function runLibraryScanSweep() {
-    logger.log('🔍 Executing system-wide library asset inventory sweep...');
+    logger.info('🔍 Executing system-wide library asset inventory sweep...');
     
     // Process distinct storage lines independently
     const movies = scanDirectory(MOVIES_DIR, 'movie');
@@ -78,7 +78,7 @@ async function runLibraryScanSweep() {
     
     // Sync to Redis hot memory + Fallback storage file instantly
     await syncLibraryToStorage(masterPayload);
-    logger.log(`✨ Inventory sweep complete. Cached [${movies.length}] Movies and [${shows.length}] Series.`);
+    logger.info(`✨ Inventory sweep complete. Cached [${movies.length}] Movies and [${shows.length}] Series.`);
 }
 
 module.exports = { runLibraryScanSweep };

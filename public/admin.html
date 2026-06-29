@@ -10,12 +10,30 @@
         h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-top: 0; }
         
         /* Grid Layout split split for log stream vs content data */
-        .admin-layout-wrapper { display: grid; grid-template-columns: 1fr 420px; gap: 30px; align-items: start; }
+        .admin-layout-wrapper { display: grid; grid-template-columns: 1fr 420px; gap: 30px; align-items: start; transition: all 0.3s ease; }
         @media(max-width: 1100px) { .admin-layout-wrapper { grid-template-columns: 1fr; } }
 
         /* Component Panels */
         .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
         .panel h2, .panel h3 { margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+
+        /* Panel Expansion States */
+        .panel.fullscreen-log {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            z-index: 9999;
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .panel.fullscreen-log .console-box {
+            flex: 1;
+            height: 100% !important;
+        }
 
         /* --- MONITOR COMPONENT STYLES --- */
         .monitor-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; }
@@ -59,6 +77,8 @@
         
         button { background: #2563eb; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
+        .btn-trigger { background: #10b981; }
+        .btn-trigger:hover { background: #059669; }
         .btn-save { align-self: flex-end; width: fit-content; background: #10b981; }
         .btn-save:hover { background: #059669; }
 
@@ -67,14 +87,12 @@
         .badge.cloud-badge { background: #059669; }
 
         /* Console Terminal Custom Styles */
-        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; height: 320px; overflow-y: auto; color: #38bdf8; white-space: pre-wrap; }
+        .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; height: 320px; overflow-y: auto; color: #38bdf8; white-space: pre-wrap; transition: height 0.2s ease; }
         .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; line-height: 1.4; }
         .log-error { color: #f87171; }
         .log-warn { color: #fbbf24; }
         
         .controls { display: flex; gap: 12px; margin-bottom: 20px; }
-        .btn-trigger { background: #10b981; }
-        .btn-trigger:hover { background: #059669; }
 
         /* Drag and Drop poster targets */
         .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #020617; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -146,8 +164,11 @@
                     </div>
                 </div>
 
-                <div class="panel">
-                    <h3>🖥️ Live Application Stream Monitor</h3>
+                <div class="panel" id="log-monitor-panel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 12px;">
+                        <h3 style="margin: 0; border: none; padding: 0;">🖥️ Live Application Stream Monitor</h3>
+                        <button onclick="toggleLogSize()" id="expand-log-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                    </div>
                     <div class="console-box" id="terminal-stream">Connecting to core logger pipeline...</div>
                 </div>
             </div>
@@ -159,7 +180,6 @@
         let fullLibraryCache = { movies: [], shows: [] };
 
         // --- 1. DYNAMIC HEALTH CHECK API POLLERS ---
-        // Instead of guessing from console lines, explicitly verify endpoints are awake
         const WORKER_PORTS = {
             'Orchestrator': 3000,
             'Sanitizer': 5000,
@@ -170,14 +190,11 @@
         };
 
         async function checkWorkerHealth() {
-            // We check the internal metadata worker by calling the backend's status or direct ping
             for (const [service, port] of Object.entries(WORKER_PORTS)) {
                 try {
-                    // Try hitting a lightweight internal check route or standard endpoint
                     const controller = new AbortController();
                     const id = setTimeout(() => controller.abort(), 2000);
                     
-                    // Route through a simple proxy check or hit directly if exposed inside the local network
                     const res = await fetch(`/api/admin/health-check/${service.toLowerCase()}`, { signal: controller.signal });
                     clearTimeout(id);
                     
@@ -191,7 +208,6 @@
                     }
                 } catch (e) {
                     updateMonitorCard(service, 'idle', '❌ OFFLINE (Connection Refused)');
-                    // Force the card to clear active statuses if dead
                     document.getElementById(`srv-${service}`).className = 'service-card';
                     document.getElementById(`status-${service}`).className = 'status-pill idle';
                 }
@@ -203,31 +219,36 @@
             const consoleTerminal = document.getElementById('terminal-stream');
             consoleTerminal.innerHTML = '<div style="color: #64748b;">Establishing connection to backend stream...</div>';
             
-            let eventSource = new EventSource('/api/admin/logs/stream');
+            // 🎯 Point to the new unified endpoint structure
+            let eventSource = new EventSource('/admin/log-stream');
 
             eventSource.onopen = function() {
                 consoleTerminal.innerHTML = `<div style="color: #10b981;">[SYSTEM] Connected to core logger pipeline. Listening for updates...</div>`;
             };
 
             eventSource.onmessage = function(event) {
-                // Handle empty keep-alive pings safely
                 if (!event.data || event.data.trim() === '') return;
 
-                const line = event.data;
-                const lineEl = document.createElement('div');
-                lineEl.className = 'log-line';
+                const rawLines = event.data.split('\n');
                 
-                if (line.includes('[ERROR]') || line.includes('❌')) lineEl.className += ' log-error';
-                if (line.includes('[WARN]') || line.includes('⚠️')) lineEl.className += ' log-warn';
-                
-                lineEl.textContent = line;
-                consoleTerminal.appendChild(lineEl);
+                rawLines.forEach(line => {
+                    if (!line.trim()) return;
+
+                    const lineEl = document.createElement('div');
+                    lineEl.className = 'log-line';
+                    
+                    // Match formatting structure for errors/warnings
+                    if (line.includes('[ERROR]') || line.includes('❌') || line.toLowerCase().includes('error')) lineEl.className += ' log-error';
+                    if (line.includes('[WARN]') || line.includes('⚠️') || line.toLowerCase().includes('warn')) lineEl.className += ' log-warn';
+                    
+                    lineEl.textContent = line;
+                    consoleTerminal.appendChild(lineEl);
+                    
+                    parseLogForMonitor(line);
+                });
                 
                 // Keep view pinned to bottom
                 consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
-
-                // Fallback text parser
-                parseLogForMonitor(line);
             };
 
             eventSource.onerror = function(err) {
@@ -237,19 +258,32 @@
             };
         }
 
+        // --- Window Size Handler ---
+        function toggleLogSize() {
+            const panel = document.getElementById('log-monitor-panel');
+            const btn = document.getElementById('expand-log-btn');
+            const isFull = panel.classList.toggle('fullscreen-log');
+            
+            btn.textContent = isFull ? "Collapse Window ↙" : "Expand Window ⛶";
+            btn.style.background = isFull ? "#b91c1c" : "#334155";
+            
+            // Recalculate scroll alignment down to position
+            const consoleTerminal = document.getElementById('terminal-stream');
+            setTimeout(() => {
+                consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
+            }, 50);
+        }
+
         // --- 3. LOG ANALYSIS AND MONITOR STATE PARSER ---
         function parseLogForMonitor(logLine) {
-            if (logLine.includes('[SANITIZER] Processing folder:')) {
-                const match = logLine.match(/folder:\s*(.*)/);
-                updateMonitorCard('Sanitizer', 'active', match ? match[1] : 'Cleaning assets...');
+            if (logLine.includes('[SANITIZER]') || logLine.toLowerCase().includes('sanitize')) {
+                updateMonitorCard('Sanitizer', 'active', 'Analyzing core media directories...');
             } 
-            if (logLine.includes('[FFMPEG] Starting chunk renderingpass:')) {
-                const match = logLine.match(/renderingpass:\s*(.*)/);
-                updateMonitorCard('Transcoder', 'run', match ? match[1] : 'Rendering video streams...');
+            if (logLine.includes('[FFMPEG]') || logLine.toLowerCase().includes('transcode')) {
+                updateMonitorCard('Transcoder', 'run', 'Processing target video vectors...');
             }
-            if (logLine.includes('[CLOUDSYNC] Initializing S3 stream wrapper for:')) {
-                const match = logLine.match(/wrapper for:\s*(.*)/);
-                updateMonitorCard('CloudSync', 'sync', match ? match[1] : 'Pushing video segments...');
+            if (logLine.includes('[CLOUDSYNC]') || logLine.toLowerCase().includes('storage')) {
+                updateMonitorCard('CloudSync', 'sync', 'Synchronizing remote storage branches...');
             }
         }
 

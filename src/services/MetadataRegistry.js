@@ -21,10 +21,10 @@ const MetadataRegistry = {
             // const redisKey = `media:movie:${folderName}`;
             // await redis.set(redisKey, JSON.stringify(updatedMetadata));
             
-            logger.log(`⚙️ [Registry-STUB] Committed [${folderName}] state safely to disk (Redis cache bypass).`);
+            logger.info(`⚙️ [Registry-STUB] Committed [${folderName}] state safely to disk (Redis cache bypass).`);
             return true;
         } catch (err) {
-            logger.log(`❌ [Registry Failure] Failed to execute atomic write on [${folderName}]: ${err.message}`, 'error');
+            logger.error(`❌ [Registry Failure] Failed to execute atomic write on [${folderName}]: ${err.message}`);
             throw err;
         }
     }

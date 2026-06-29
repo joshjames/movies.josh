@@ -118,7 +118,7 @@ router.get('/eztv/browse', async (req, res) => {
 
         return res.json({ success: true, torrents: results });
     } catch (err) {
-        logger.log(`EZTV proxy route failure: ${err.message}`, 'error');
+        logger.error(`EZTV proxy route failure: ${err.message}`);
         return res.status(500).json({ success: false, error: err.message });
     }
 });

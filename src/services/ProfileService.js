@@ -56,7 +56,7 @@ const ProfileService = {
             await fs.writeFile(filePath, JSON.stringify(data, null, 4), 'utf-8');
             return true;
         } catch (err) {
-            logger.log(`[PROFILE ERROR] Failed writing ${fileType} for ${username}: ${err.message}`, 'error');
+            logger.error(`[PROFILE ERROR] Failed writing ${fileType} for ${username}: ${err.message}`);
             throw err;
         }
     },
@@ -117,7 +117,7 @@ const ProfileService = {
         await this.writeData(cleanName, 'history', { logins: [], lastLogin: null });
         await this.writeData(cleanName, 'playback', {});
 
-        logger.log(`👤 [USER PROVISIONING] Created new profile volume workspace for: ${cleanName}`);
+        logger.info(`👤 [USER PROVISIONING] Created new profile volume workspace for: ${cleanName}`);
         return { success: true, token: token }; 
     },
 

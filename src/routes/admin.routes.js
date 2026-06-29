@@ -8,8 +8,8 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
 const { exec } = require('child_process'); // Restored explicit missing shell execution utility
-
-const logger = require('../services/logger'); 
+const logger = require('../utils/logger');
+//const logger = require('../services/logger'); 
 const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
 const LibraryScanner = require('../services/LibraryScanner'); 
@@ -31,6 +31,62 @@ const metadataService = require('../services/MetadataService');
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
 // 🚨 NEW FIX: Isolated pathway pointing to your separate TV series mount location
 const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
+
+router.get('/admin/log-stream', (req, res) => {
+    // Ensure only authorized admin access configurations proceed here
+    
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // Determine the current active log file name matching our DailyRotate setup
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentLogFile = path.join(logger.LOG_DIR, `anymovie-${todayStr}.log`);
+
+    // Stream existing historical context data from today's log first
+    if (fs.existsSync(currentLogFile)) {
+        const stats = fs.statSync(currentLogFile);
+        // Read the last 50KB of historical logs so the screen isn't blank on open
+        const startBytes = Math.max(0, stats.size - 50000); 
+        const stream = fs.createReadStream(currentLogFile, { start: startBytes, encoding: 'utf8' });
+        
+        stream.on('data', (chunk) => {
+            res.write(`data: ${chunk.replace(/\n/g, '\ndata: ')}\n\n`);
+        });
+    }
+
+    // Watch today's log file for real-time appends
+    let watcher;
+    if (fs.existsSync(currentLogFile)) {
+        let fileSize = fs.statSync(currentLogFile).size;
+        
+        watcher = fs.watch(currentLogFile, (eventType) => {
+            if (eventType === 'change') {
+                const stats = fs.statSync(currentLogFile);
+                if (stats.size > fileSize) {
+                    const stream = fs.createReadStream(currentLogFile, {
+                        start: fileSize,
+                        end: stats.size,
+                        encoding: 'utf8'
+                    });
+                    stream.on('data', (chunk) => {
+                        res.write(`data: ${chunk.replace(/\n/g, '\ndata: ')}\n\n`);
+                    });
+                    fileSize = stats.size;
+                }
+            }
+        });
+    }
+
+    // Clean up connections if the admin closes the tab
+    req.on('close', () => {
+        if (watcher) watcher.close();
+        res.end();
+    });
+});
+
+
 
 // =========================================================================
 // 🛡️ ADMIN VERIFICATION INTERCEPTOR LAYER
@@ -67,7 +123,7 @@ router.get('/logs/stream', (req, res) => {
             res.write(`data: ${line}\n\n`);
         });
     }
-    logger.log('📡 [SSE] Admin log stream initialized. Listening for live updates...', 'info');
+    logger.info('📡 [SSE] Admin log stream initialized. Listening for live updates...');
 
     const logListener = (line) => {
         res.write(`data: ${line}\n\n`);
@@ -111,7 +167,7 @@ router.post('/sanitizer/run', (req, res) => {
     res.json({ success: true, message: "Sanitizer execution sequence triggered." });
     
     pipelineOrchestrator.runFullAutomationPipeline("admin_manual_ui")
-        .catch(err => logger.log(`Critical background processing fault: ${err.message}`, 'error'));
+        .catch(err => logger.error(`Critical background processing fault: ${err.message}`));
 });
 
 
@@ -186,9 +242,9 @@ router.post('/refetch-metadata', async (req, res) => {
         if (data.Poster && data.Poster !== "N/A") {
             try {
                 await metadataService.downloadCover(data.Poster, path.join(targetDir, 'cover.jpg'));
-                logger.log(`📥 [METADATA REFETCH] Cover artwork downloaded successfully for: ${folder}`);
+                logger.info(`📥 [METADATA REFETCH] Cover artwork downloaded successfully for: ${folder}`);
             } catch (imgErr) {
-                logger.log(`⚠️ [METADATA WARN] Failed retrieving art asset: ${imgErr.message}`, 'warn');
+                logger.warn(`⚠️ [METADATA WARN] Failed retrieving art asset: ${imgErr.message}`);
             }
         }
 
@@ -197,7 +253,7 @@ router.post('/refetch-metadata', async (req, res) => {
 
         res.json({ success: true, metadata: normalizedMetadata });
     } catch (err) {
-        logger.log(`❌ [REFETCH FAILURE] Exception dropped: ${err.message}`, 'error');
+        logger.error(`❌ [REFETCH FAILURE] Exception dropped: ${err.message}`);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -225,15 +281,15 @@ router.post('/upload-poster', async (req, res) => {
         }
 
         await fsPromises.writeFile(path.join(targetDir, 'cover.jpg'), buffer);
-        logger.log(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
+        logger.info(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
         
         // 🚨 FIX 4: Fire background db refresh instead of relying on broken global function hooks
         LibraryScanner.runLibraryScanSweep()
-            .catch(err => logger.log(`Error running library sweep: ${err.message}`, 'error'));
+            .catch(err => logger.error(`Error running library sweep: ${err.message}`));
         
         res.json({ success: true, message: 'Poster written to disk.' });
     } catch (err) {
-        logger.log(`Asset upload exception: ${err.message}`, 'error');
+        logger.error(`Asset upload exception: ${err.message}`);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -332,13 +388,13 @@ router.post('/override-metadata', async (req, res) => {
         await LibraryScanner.runLibraryScanSweep();
 
         if (triggerCloudSync) {
-            logger.log(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
+            logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
             
             axios.post('http://127.0.0.1:5003/process', {
                 folderPath: folderPath,
                 folderName: folder
             }).catch(err => {
-                logger.log(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
+                logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
             });
         }
 

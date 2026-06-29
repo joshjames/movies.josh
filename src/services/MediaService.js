@@ -55,7 +55,7 @@ const MediaService = {
             const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 7200 });
             return presignedUrl;
         } catch (err) {
-            logger.log(`[B2 ENGINE ERROR] Presigned translation failed for ${fileMeta.remoteKey}: ${err.message}`, 'error');
+            logger.error(`[B2 ENGINE ERROR] Presigned translation failed for ${fileMeta.remoteKey}: ${err.message}`);
             return localFallbackPath; 
         }
     }

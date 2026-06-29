@@ -45,7 +45,7 @@ app.post('/process', async (req, res) => {
 
         // Fallback profile object if external lookup fails entirely
         if (data.Response === "False") {
-            logger.log(`⚠️ OMDb lookup failed for ${folderName}: ${data.Error}. Implementing local asset fallbacks.`, 'warn');
+            logger.debug(`⚠️ OMDb lookup failed for ${folderName}: ${data.Error}. Implementing local asset fallbacks.`, 'warn');
             return res.json({
                 success: true,
                 message: "Resolved using local data fallbacks.",
@@ -66,7 +66,7 @@ app.post('/process', async (req, res) => {
                 const imgRes = await axios({ method: 'GET', url: data.Poster, responseType: 'stream', timeout: 10000 });
                 imgRes.data.pipe(fs.createWriteStream(path.join(folderPath, 'cover.jpg')));
             } catch (imgErr) {
-                logger.log(`⚠️ Poster download skipped seamlessly: ${imgErr.message}`, 'warn');
+                logger.error(`⚠️ Poster download skipped seamlessly: ${imgErr.message}`, 'warn');
             }
         }
 
@@ -132,7 +132,7 @@ app.post('/process', async (req, res) => {
                         }
                     }
                 } catch (seae) {
-                    logger.log(`⚠️ Error processing details for season loop ${s}: ${seae.message}`, 'warn');
+                    logger.error(`⚠️ Error processing details for season loop ${s}: ${seae.message}`, 'warn');
                 }
                 fullSeriesStructure.seasons[s].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
             }
@@ -148,7 +148,7 @@ app.post('/process', async (req, res) => {
         });
 
     } catch (err) {
-        logger.log(`❌ Critical Metadata Worker fault on folder ${folderName}: ${err.message}`, 'error');
+        logger.error(`❌ Critical Metadata Worker fault on folder ${folderName}: ${err.message}`, 'error');
         return res.json({ success: false, error: err.message });
     }
 });
