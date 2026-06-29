@@ -32,7 +32,7 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 // 🚨 NEW FIX: Isolated pathway pointing to your separate TV series mount location
 const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
 
-router.get('/admin/log-stream', (req, res) => {
+router.get('/log-stream', (req, res) => {
     // Ensure only authorized admin access configurations proceed here
     
     res.setHeader('Content-Type', 'text/event-stream');
@@ -105,45 +105,6 @@ function requireAdmin(req, res, next) {
 }
 
 router.use(requireAdmin);
-
-// =========================================================================
-// ENDPOINTS
-// =========================================================================
-
-// GET: /api/admin/logs/stream (Server-Sent Events)
-router.get('/logs/stream', (req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); 
-    res.flushHeaders();
-
-    if (typeof logger.getHistory === 'function') {
-        logger.getHistory().forEach(line => {
-            res.write(`data: ${line}\n\n`);
-        });
-    }
-    logger.info('📡 [SSE] Admin log stream initialized. Listening for live updates...');
-
-    const logListener = (line) => {
-        res.write(`data: ${line}\n\n`);
-    };
-    
-    if (logger.logStream) {
-        logger.logStream.on('line', logListener);
-    }
-
-    const keepAliveInterval = setInterval(() => {
-        res.write(': keepalive\n\n'); 
-    }, 30000);
-
-    req.on('close', () => {
-        clearInterval(keepAliveInterval);
-        if (logger.logStream) {
-            logger.logStream.off('line', logListener);
-        }
-    });
-});
 
 router.get('/health-check/:service', async (req, res) => {
     const serviceName = req.params.service;
