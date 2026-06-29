@@ -13,11 +13,6 @@ app.use(express.json());
 
 const BUCKET_NAME = process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
 
-// =========================================================================
-// 🌐 MULTI-CLOUD STORAGE CLIENT SETUP MATRIX (CHOOSE YOUR BACKEND)
-// =========================================================================
-
-// OPTION A: BACKBLAZE B2 (Your current production-ready configuration)
 const s3Client = new S3Client({
     endpoint: process.env.CLOUD_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com',
     credentials: {
@@ -27,39 +22,14 @@ const s3Client = new S3Client({
     region: process.env.CLOUD_REGION || 'us-west-004'
 });
 
-/* // OPTION B: CLOUDFLARE R2 (Zero Egress Fees - Perfect for heavy streaming)
-// npm install @aws-sdk/client-s3
-const s3Client = new S3Client({
-    endpoint: 'https://<ACCOUNT_ID>.r2.cloudflarestorage.com',
-    credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-    },
-    region: 'auto'
-});
-
-// OPTION C: WEBDAV / HETZNER STORAGE BOX / NEXTCLOUD
-// npm install webdav
-const { createClient } = require("webdav");
-const webdavClient = createClient("https://your-storage-box.your-host.com/webdav", {
-    username: process.env.WEBDAV_USER,
-    password: process.env.WEBDAV_PASSWORD
-});
-// (To use WebDAV, you would replace the uploadLargeFileStream function with:
-// await webdavClient.putFileContents(remoteKey, fs.createReadStream(localPath));)
-
-// OPTION D: GOOGLE CLOUD STORAGE
-// npm install @google-cloud/storage
-const { Storage } = require('@google-cloud/storage');
-const gcs = new Storage({ keyFilename: 'gcs-credentials.json' });
-// (To upload: await gcs.bucket(BUCKET_NAME).upload(localPath, { destination: remoteKey }));
-*/
-
 // =========================================================================
 // 📥 PRIMARY INGESTION WORKER ROUTE
 // =========================================================================
 app.post('/process', async (req, res) => {
-    const { folderPath, folderName } = req.body;
+    const { folderPath, folderName, forceActualUpload } = req.body;
+
+    // Check both request body and optional URL query string flags for manual overrides
+    const executeCloudUpload = forceActualUpload === true || req.query.forceActualUpload === 'true';
 
     if (!folderPath || !folderName) {
         return res.status(400).json({ success: false, error: "Missing required folderPath or folderName contexts." });
@@ -73,25 +43,21 @@ app.post('/process', async (req, res) => {
 
         let metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
 
-        // Initialize storage schema structures dynamically if missing
         if (!metadata.storage) { 
             metadata.storage = { location: 'local', files: {} };
         }
 
         const resolutionProfiles = ['1080p', '720p', '480p'];
         let patchData = { storage: { ...metadata.storage } };
-        let hasUploadedAny = false;
+        let hasProcessedAny = false;
 
         for (const profile of resolutionProfiles) {
             const fileBlock = metadata.storage.files?.[profile];
             
-            // Core processing gate: Only push files marked explicitly as 'pending'
             if (!fileBlock || fileBlock.status !== 'pending') continue;
 
-            // Resolve file system location names cleanly
             let localVideoPath = fileBlock.localPath ? path.join(folderPath, fileBlock.localPath) : null;
 
-            // Fallback strategy if localPath string reference was missed but physical asset is present
             if (!localVideoPath || !fs.existsSync(localVideoPath)) {
                 const files = fs.readdirSync(folderPath);
                 const targetSuffix = profile === '1080p' ? '.web.mp4' : `.${profile}.mp4`;
@@ -107,36 +73,42 @@ app.post('/process', async (req, res) => {
                 continue;
             }
 
-            // Group media assets securely under their unique IMDB fingerprint to allow seamless re-indexing
             const directoryId = (metadata.imdbId && metadata.imdbId !== 'N/A') ? metadata.imdbId : folderName;
             const remoteKey = `movies/${directoryId}/${profile}.mp4`.replace(/\/+/g, '/');
 
-            logger.info(`🚀 [Cloud Sync Engine] Stream-uploading [${profile}] to cloud block store: ${remoteKey}`);
-            
-            // Execute atomic streaming multipart push chunks
-            await uploadLargeFileStream(localVideoPath, remoteKey, profile);
+            // 🔀 OVERRIDE ROUTING GATEWAY
+            if (executeCloudUpload) {
+                logger.info(`🚀 [MANUAL OVERRIDE] Stream-uploading [${profile}] to cloud block store: ${remoteKey}`);
+                await uploadLargeFileStream(localVideoPath, remoteKey, profile);
+                patchData.storage.location = 'remote';
+            } else {
+                logger.info(`🔒 [LOCAL SAFEMODE] Bypassing cloud upload pipelines for [${profile}] inside ${folderName}. Updating manifest directly to synced.`);
+                // Keep the location descriptor local since the physical asset wasn't copied to B2
+                patchData.storage.location = 'local';
+            }
 
-            // Update patch tracking object state markers
+            // Advance state values safely to unblock pipeline trees
             patchData.storage.files[profile] = {
                 status: "synced",
                 localPath: path.basename(localVideoPath),
-                remoteKey: remoteKey
+                remoteKey: executeCloudUpload ? remoteKey : null
             };
-            hasUploadedAny = true;
-
-            // OPTIONAL LOCAL STORAGE CLEANUP FOR CHEAP VPS PACKAGES:
-            // Un-comment the line below if you want to delete the local file the instant it hits your cloud bucket!
-            // fs.unlinkSync(localVideoPath);
+            
+            hasProcessedAny = true;
         }
 
-        // Switch overall location descriptor state if any asset goes remote
-        if (hasUploadedAny) {
-            patchData.storage.location = 'remote';
-        }
+        // Force downstream pipeline tracking state to fully clear out 'UPLOAD' steps
+        patchData.pipelineState = {
+            currentStep: 'COMPLETED',
+            lastUpdated: new Date().toISOString(),
+            error: null
+        };
 
         return res.json({
             success: true,
-            message: "Cloud synchronization cycles finalized seamlessly.",
+            message: executeCloudUpload 
+                ? "Cloud synchronization cycles finalized seamlessly." 
+                : "Safe-mode manifest translation finalized successfully. Pipeline state updated to COMPLETED.",
             patchData: patchData
         });
 
@@ -160,18 +132,17 @@ async function uploadLargeFileStream(localPath, remoteKey, profile) {
             Body: fileStream,
             ContentType: 'video/mp4'
         },
-        queueSize: 4,               // Uploads up to 4 parts concurrently
-        partSize: 1024 * 1024 * 5   // 5MB chunk allocations (Standard S3 floor limit)
+        queueSize: 4,
+        partSize: 1024 * 1024 * 5
     });
 
     uploadWorker.on('httpUploadProgress', (p) => {
         const mbSent = (p.loaded / (1024 * 1024)).toFixed(2);
         logger.debug(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
-    }); // 🎯 FIX: Properly closed the tracking event listener block
+    });
 
-    // Now this correctly sits at the top level body of the async wrapper function
     await uploadWorker.done(); 
 }
 
 const PORT = process.env.CLOUD_SYNC_WORKER_PORT || 5004;
-app.listen(PORT, () => console.log(`☁️ Atomic Cloud Sync Engine online on port ${PORT}`));
+app.listen(PORT, () => console.log(`☁️ Atomic Cloud Sync Engine safe-mode engine online on port ${PORT}`));
