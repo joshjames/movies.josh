@@ -133,92 +133,7 @@ router.post('/sanitizer/run', (req, res) => {
 });
 
 
-// POST: /api/admin/refetch-metadata
-router.post('/refetch-metadata', async (req, res) => {
-    try {
-        const { folder, contentType, imdbId, title } = req.body;
-        if (!folder) {
-            return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
-        }
 
-        const targetDir = (contentType === 'series') 
-            ? path.join(SERIES_DIR, folder) 
-            : path.join(MOVIES_DIR, folder);
-
-        const metaFilePath = path.join(targetDir, 'metadata.json');
-
-        let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
-        if (imdbId && imdbId.trim().startsWith('tt')) {
-            queryUrl += `&i=${encodeURIComponent(imdbId.trim())}`;
-        } else if (title) {
-            queryUrl += `&t=${encodeURIComponent(title.trim())}`;
-        } else {
-            queryUrl += `&t=${encodeURIComponent(folder.replace(/[-_.]/g, ' '))}`;
-        }
-
-        const omdbResponse = await axios.get(queryUrl);
-        const data = omdbResponse.data;
-
-        if (!data || data.Response === "False") {
-            return res.status(404).json({ success: false, error: data.Error || 'No matching titles found inside OMDb library registry.' });
-        }
-
-        // Read the file context if it already exists to avoid smashing your storage sync metrics
-        let existingMeta = {};
-        if (fs.existsSync(metaFilePath)) {
-            try {
-                existingMeta = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
-            } catch (pErr) {
-                existingMeta = {};
-            }
-        }
-
-        // Ensure both camelCase and snake_case variations are stored identically
-        const finalImdbId = data.imdbID || imdbId || '';
-
-        const normalizedMetadata = {
-            ...existingMeta, // Retain underlying storage/file status states safely
-            title: data.Title || folder.replace(/[-_.]/g, ' '),
-            year: data.Year || '',
-            genre: data.Genre || 'N/A',
-            imdbId: finalImdbId,
-            imdb_id: finalImdbId, // ✨ Map snake_case to preserve frontend input bindings
-            plot: data.Plot || '',
-            contentType: contentType
-        };
-
-        // If your database scanner expects an implicit wrapper, bridge the object structure 
-        if (existingMeta.metadata) {
-            normalizedMetadata.metadata = {
-                ...existingMeta.metadata,
-                title: data.Title || folder.replace(/[-_.]/g, ' '),
-                year: data.Year || '',
-                imdbId: finalImdbId,
-                imdb_id: finalImdbId,
-                plot: data.Plot || ''
-            };
-        }
-
-        await fsPromises.writeFile(metaFilePath, JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
-
-        if (data.Poster && data.Poster !== "N/A") {
-            try {
-                await metadataService.downloadCover(data.Poster, path.join(targetDir, 'cover.jpg'));
-                logger.info(`📥 [METADATA REFETCH] Cover artwork downloaded successfully for: ${folder}`);
-            } catch (imgErr) {
-                logger.warn(`⚠️ [METADATA WARN] Failed retrieving art asset: ${imgErr.message}`);
-            }
-        }
-
-        // Fire background DB sync loop cleanly
-        await LibraryScanner.runLibraryScanSweep();
-
-        res.json({ success: true, metadata: normalizedMetadata });
-    } catch (err) {
-        logger.error(`❌ [REFETCH FAILURE] Exception dropped: ${err.message}`);
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
 
 // POST: /api/admin/upload-poster
 router.post('/upload-poster', async (req, res) => {
@@ -292,10 +207,13 @@ router.post('/trigger-automation', async (req, res) => {
     }
 });
 
+// =========================================================================
+// ✍️ ENDPOINT 1: OVERRIDE METADATA (DASHBOARD PANEL SAVES)
+// =========================================================================
 router.post('/override-metadata', async (req, res) => {
     const { folder, contentType, title, year, imdbId, plot, storage } = req.body;
     
-    // 🚨 FIX 6: Ensure custom dashboard panel modifications write metadata out to the true folder mounts
+    // Ensure custom dashboard panel modifications write metadata out to the true folder mounts
     const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
     const folderPath = path.join(baseDir, folder);
     const metaFilePath = path.join(folderPath, 'metadata.json');
@@ -315,6 +233,11 @@ router.post('/override-metadata', async (req, res) => {
             metadata.plot = plot;
         } else {
             metadata.metadata = { ...metadata.metadata, title, year, imdbId, plot };
+            // Mirror back to root level to avoid background component blindness
+            metadata.title = title;
+            metadata.year = year;
+            metadata.imdbId = imdbId;
+            metadata.plot = plot;
         }
 
         let triggerCloudSync = false;
@@ -341,7 +264,17 @@ router.post('/override-metadata', async (req, res) => {
                 });
             }
         } else if (storage) {
+            // Local storage option chosen (NVMe Local)
             metadata.storage = { location: 'local', files: {} };
+
+            // 🎯 THE FIX: Force short-circuiting out of the pipeline processing loop
+            if (!metadata.pipelineState) metadata.pipelineState = {};
+            if (metadata.pipelineState.currentStep === 'UPLOAD') {
+                logger.info(`💾 [Admin Override] Local NVMe allocation set for [${folder}]. Short-circuiting UPLOAD state to COMPLETED.`);
+                metadata.pipelineState.currentStep = 'COMPLETED';
+                metadata.pipelineState.lastUpdated = new Date().toISOString();
+                metadata.pipelineState.error = null;
+            }
         }
 
         fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
@@ -365,6 +298,104 @@ router.post('/override-metadata', async (req, res) => {
     } catch (err) {
         console.error(err);
         return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// =========================================================================
+// 🔄 ENDPOINT 2: REFETCH METADATA (OMDb THIRD-PARTY SYNCHRONIZATION)
+// =========================================================================
+router.post('/refetch-metadata', async (req, res) => {
+    try {
+        const { folder, contentType, imdbId, title } = req.body;
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
+        }
+
+        const targetDir = (contentType === 'series') 
+            ? path.join(SERIES_DIR, folder) 
+            : path.join(MOVIES_DIR, folder);
+
+        const metaFilePath = path.join(targetDir, 'metadata.json');
+
+        let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
+        if (imdbId && imdbId.trim().startsWith('tt')) {
+            queryUrl += `&i=${encodeURIComponent(imdbId.trim())}`;
+        } else if (title) {
+            queryUrl += `&t=${encodeURIComponent(title.trim())}`;
+        } else {
+            queryUrl += `&t=${encodeURIComponent(folder.replace(/[-_.]/g, ' '))}`;
+        }
+
+        const omdbResponse = await axios.get(queryUrl);
+        const data = omdbResponse.data;
+
+        if (!data || data.Response === "False") {
+            return res.status(404).json({ success: false, error: data.Error || 'No matching titles found inside OMDb library registry.' });
+        }
+
+        // Read the file context if it already exists to avoid smashing your storage sync metrics
+        let existingMeta = {};
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                existingMeta = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            } catch (pErr) {
+                existingMeta = {};
+            }
+        }
+
+        // Ensure both camelCase and snake_case variations are stored identically
+        const finalImdbId = data.imdbID || imdbId || '';
+        const cleanTitle = data.Title || folder.replace(/[-_.]/g, ' ');
+
+        // Construct baseline flat map fields securely
+        const normalizedMetadata = {
+            ...existingMeta, // Retain underlying storage/file status states safely
+            title: cleanTitle,
+            year: data.Year || '',
+            genre: data.Genre || 'N/A',
+            imdbId: finalImdbId,
+            imdb_id: finalImdbId, // ✨ Map snake_case to preserve frontend input bindings
+            plot: data.Plot || '',
+            contentType: contentType
+        };
+
+        // 🎯 THE FIX: Keep nested structure perfectly mirrored so UI views and background processes are completely unified
+        normalizedMetadata.metadata = {
+            ...(existingMeta.metadata || {}),
+            title: cleanTitle,
+            year: data.Year || '',
+            imdbId: finalImdbId,
+            imdb_id: finalImdbId,
+            plot: data.Plot || ''
+        };
+
+        // Prevent structural dropouts on pipeline state properties
+        if (!normalizedMetadata.pipelineState) {
+            normalizedMetadata.pipelineState = existingMeta.pipelineState || { 
+                currentStep: 'COMPLETED', 
+                lastUpdated: new Date().toISOString(), 
+                error: null 
+            };
+        }
+
+        await fsPromises.writeFile(metaFilePath, JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
+
+        if (data.Poster && data.Poster !== "N/A") {
+            try {
+                await metadataService.downloadCover(data.Poster, path.join(targetDir, 'cover.jpg'));
+                logger.info(`📥 [METADATA REFETCH] Cover artwork downloaded successfully for: ${folder}`);
+            } catch (imgErr) {
+                logger.warn(`⚠️ [METADATA WARN] Failed retrieving art asset: ${imgErr.message}`);
+            }
+        }
+
+        // Fire background DB sync loop cleanly
+        await LibraryScanner.runLibraryScanSweep();
+
+        res.json({ success: true, metadata: normalizedMetadata });
+    } catch (err) {
+        logger.error(`❌ [REFETCH FAILURE] Exception dropped: ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
