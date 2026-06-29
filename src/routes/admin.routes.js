@@ -34,11 +34,12 @@ const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
 
 router.get('/log-stream', (req, res) => {
     // Ensure only authorized admin access configurations proceed here
+    res.setHeader('X-Accel-Buffering', 'no'); 
     
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
+    res.flushHeaders(); // Tell Node to establish the channel link immediately
 
     // Determine the current active log file name matching our DailyRotate setup
     const todayStr = new Date().toISOString().split('T')[0];
