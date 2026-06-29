@@ -9,33 +9,19 @@
         .container { max-width: 1400px; margin: 0 auto; }
         h1 { color: #f1f5f9; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-top: 0; }
         
-        /* Grid Layout split split for log stream vs content data */
         .admin-layout-wrapper { display: grid; grid-template-columns: 1fr 420px; gap: 30px; align-items: start; transition: all 0.3s ease; }
         @media(max-width: 1100px) { .admin-layout-wrapper { grid-template-columns: 1fr; } }
 
-        /* Component Panels */
         .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
         .panel h2, .panel h3 { margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 8px; }
 
-        /* Panel Expansion States */
         .panel.fullscreen-log {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            right: 20px;
-            bottom: 20px;
-            z-index: 9999;
-            margin-bottom: 0;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: fixed; top: 20px; left: 20px; right: 20px; bottom: 20px; z-index: 9999;
+            margin-bottom: 0; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
-        .panel.fullscreen-log .console-box {
-            flex: 1;
-            height: 100% !important;
-        }
+        .panel.fullscreen-log .console-box { flex: 1; height: 100% !important; }
 
-        /* --- MONITOR COMPONENT STYLES --- */
+        /* Monitor Grid Components */
         .monitor-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; }
         .service-card { background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #64748b; }
         .service-card.active-worker { border-left-color: #2563eb; animation: pulse-border 2s infinite; }
@@ -58,12 +44,10 @@
             100% { opacity: 0.8; }
         }
 
-        /* Tab toggles for catalog separation */
         .tab-bar { display: flex; gap: 8px; border-bottom: 2px solid #334155; margin-bottom: 20px; }
         .tab-btn { background: none; border: none; color: #94a3b8; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 6px 6px 0 0; font-size: 0.95rem; }
         .tab-btn.active { background: #334155; color: white; border-bottom: 3px solid #2563eb; }
 
-        /* Media Curation Row Layouts */
         .show-row { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 18px; margin-bottom: 16px; display: flex; gap: 20px; }
         .poster-aside { flex: 0 0 140px; display: flex; flex-direction: column; gap: 8px; }
         .main-form-content { flex: 1; display: flex; flex-direction: column; gap: 12px; }
@@ -81,12 +65,19 @@
         .btn-trigger:hover { background: #059669; }
         .btn-save { align-self: flex-end; width: fit-content; background: #10b981; }
         .btn-save:hover { background: #059669; }
+        .btn-cloud { background: #0284c7; }
+        .btn-cloud:hover { background: #0369a1; }
 
         .badge { background: #e50914; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
         .badge.type-badge { background: #6366f1; }
-        .badge.cloud-badge { background: #059669; }
+        .badge.cloud-badge { background: #10b981; }
+        .badge.local-badge { background: #475569; }
 
-        /* Console Terminal Custom Styles */
+        /* Manual Progress Meter bar elements */
+        .sync-progress-container { width: 100%; background: #020617; border-radius: 6px; height: 20px; overflow: hidden; margin-top: 8px; position: relative; border: 1px solid #334155; }
+        .sync-progress-bar { height: 100%; background: linear-gradient(90deg, #0284c7, #10b981); width: 0%; transition: width 0.3s ease; }
+        .sync-progress-text { position: absolute; width: 100%; text-align: center; font-size: 0.75rem; font-family: monospace; font-weight: bold; line-height: 20px; top: 0; color: #ffffff; text-shadow: 1px 1px 2px #000; }
+
         .console-box { background: #020617; border: 1px solid #1e293b; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; height: 320px; overflow-y: auto; color: #38bdf8; white-space: pre-wrap; transition: height 0.2s ease; }
         .log-line { border-bottom: 1px solid #0f172a; padding: 2px 0; line-height: 1.4; }
         .log-error { color: #f87171; }
@@ -94,13 +85,11 @@
         
         .controls { display: flex; gap: 12px; margin-bottom: 20px; }
 
-        /* Drag and Drop poster targets */
         .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #020617; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .admin-drop-zone.dragover { border-color: #38bdf8; background: #0f172a; }
         .admin-drop-zone img { width: 100%; height: 100%; object-fit: cover; }
         .drop-zone-text { position: absolute; text-align: center; color: #64748b; font-size: 0.75rem; padding: 8px; pointer-events: none; }
 
-        /* Users Panel Table list */
         .user-row { display: flex; justify-content: space-between; align-items: center; background: #020617; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #3b82f6; }
         .user-name { font-weight: bold; color: #f1f5f9; }
         .user-meta-flags { font-size: 0.75rem; color: #64748b; }
@@ -164,9 +153,6 @@
                     </div>
                 </div>
 
-
-
-
                 <div class="panel" id="log-monitor-panel">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 12px;">
                         <h3 style="margin: 0; border: none; padding: 0;">🖥️ Live Application Stream Monitor</h3>
@@ -186,8 +172,8 @@
     <script>
         let currentTabMode = 'movies';
         let fullLibraryCache = { movies: [], shows: [] };
+        let activeSyncFolder = null; // Track single folder being manual-synchronized
 
-        // --- 1. DYNAMIC HEALTH CHECK API POLLERS ---
         const WORKER_PORTS = {
             'Orchestrator': 3000,
             'Sanitizer': 5000,
@@ -216,19 +202,15 @@
                     }
                 } catch (e) {
                     updateMonitorCard(service, 'idle', '❌ OFFLINE (Connection Refused)');
-                    document.getElementById(`srv-${service}`).className = 'service-card';
-                    document.getElementById(`status-${service}`).className = 'status-pill idle';
                 }
             }
         }
 
-        // --- 2. LIVE LOG MONITOR STREAM ---
         function connectToLogStream() {
             const consoleTerminal = document.getElementById('terminal-stream');
             const pauseToggle = document.getElementById('pause-scroll-toggle');
             consoleTerminal.innerHTML = '<div style="color: #64748b;">Establishing connection to backend stream...</div>';
             
-            // 🎯 Point to the new unified endpoint structure
             let eventSource = new EventSource('/api/admin/log-stream');
 
             eventSource.onopen = function() {
@@ -239,14 +221,12 @@
                 if (!event.data || event.data.trim() === '') return;
 
                 const rawLines = event.data.split('\n');
-                
                 rawLines.forEach(line => {
                     if (!line.trim()) return;
 
                     const lineEl = document.createElement('div');
                     lineEl.className = 'log-line';
                     
-                    // Match formatting structure for errors/warnings
                     if (line.includes('[ERROR]') || line.includes('❌') || line.toLowerCase().includes('error')) lineEl.className += ' log-error';
                     if (line.includes('[WARN]') || line.includes('⚠️') || line.toLowerCase().includes('warn')) lineEl.className += ' log-warn';
                     
@@ -256,7 +236,6 @@
                     parseLogForMonitor(line);
                 });
                 
-                // 🎯 FIX: Only pin view focus to the bottom if Pause is unchecked
                 if (!pauseToggle || !pauseToggle.checked) {
                     consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
                 }
@@ -269,7 +248,6 @@
             };
         }
 
-        // --- Window Size Handler ---
         function toggleLogSize() {
             const panel = document.getElementById('log-monitor-panel');
             const btn = document.getElementById('expand-log-btn');
@@ -278,14 +256,10 @@
             btn.textContent = isFull ? "Collapse Window ↙" : "Expand Window ⛶";
             btn.style.background = isFull ? "#b91c1c" : "#334155";
             
-            // Recalculate scroll alignment down to position
             const consoleTerminal = document.getElementById('terminal-stream');
-            setTimeout(() => {
-                consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
-            }, 50);
+            setTimeout(() => { consoleTerminal.scrollTop = consoleTerminal.scrollHeight; }, 50);
         }
 
-        // --- 3. LOG ANALYSIS AND MONITOR STATE PARSER ---
         function parseLogForMonitor(logLine) {
             if (logLine.includes('[SANITIZER]') || logLine.toLowerCase().includes('sanitize')) {
                 updateMonitorCard('Sanitizer', 'active', 'Analyzing core media directories...');
@@ -295,6 +269,21 @@
             }
             if (logLine.includes('[CLOUDSYNC]') || logLine.toLowerCase().includes('storage')) {
                 updateMonitorCard('CloudSync', 'sync', 'Synchronizing remote storage branches...');
+            }
+
+            // Catch live stream chunks matching our active manually processing film
+            if (activeSyncFolder && logLine.includes('[Sync Chunk Tracking]')) {
+                // Parse strings like: "Progressed: 70.45 MB" or map arbitrary estimates
+                const progressMatch = logLine.match(/Progressed:\s+([0-9.]+)\s+MB/);
+                if (progressMatch) {
+                    const mbSent = parseFloat(progressMatch[1]);
+                    updateSyncProgressBar(activeSyncFolder, mbSent);
+                }
+            }
+            
+            // Sync cycle completion trace handler
+            if (activeSyncFolder && logLine.includes('advanced successfully down-pipe to state: COMPLETED') && logLine.includes(activeSyncFolder)) {
+                completeManualSyncUI(activeSyncFolder);
             }
         }
 
@@ -318,20 +307,39 @@
             }
         }
 
-        // --- 4. BACKGROUND INVOCATIONS ---
+        function updateSyncProgressBar(folder, mbSent) {
+            const bar = document.getElementById(`progress-bar-${folder}`);
+            const txt = document.getElementById(`progress-txt-${folder}`);
+            if (!bar || !txt) return;
+
+            // Simple incremental creep calculation for fluid visibility visual feedback
+            let computedPercentage = Math.min(Math.floor((mbSent / 800) * 100), 98); 
+            if (computedPercentage < 1) computedPercentage = 5;
+
+            bar.style.width = `${computedPercentage}%`;
+            txt.textContent = `Uploading Chunks... Total Sent: ${mbSent} MB (${computedPercentage}%)`;
+        }
+
+        function completeManualSyncUI(folder) {
+            const bar = document.getElementById(`progress-bar-${folder}`);
+            const txt = document.getElementById(`progress-txt-${folder}`);
+            if (bar && txt) {
+                bar.style.width = '100%';
+                bar.style.background = '#10b981';
+                txt.textContent = '✅ Sync Cycle Finalized Seamlessly!';
+            }
+            activeSyncFolder = null;
+            setTimeout(fetchLibraryData, 2000);
+        }
+
         async function triggerSanitizer() {
             try {
                 const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
                 const data = await res.json();
-                if(data.success) {
-                    alert("Library sanitization process has been kicked off in background.");
-                }
-            } catch(e) {
-                console.error("Transport pipeline failed invocation:", e);
-            }
+                if(data.success) alert("Library sanitization process has been kicked off in background.");
+            } catch(e) { console.error(e); }
         }
 
-        // --- 5. DYNAMIC CONTENT RENDERING PIPELINES ---
         async function fetchLibraryData() {
             try {
                 const res = await fetch('/api/admin/library-metadata');
@@ -340,9 +348,7 @@
                     fullLibraryCache = data.library;
                     renderActiveTab();
                 }
-            } catch (err) {
-                console.error("Error pooling server library array elements:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         function switchTab(mode) {
@@ -364,8 +370,16 @@
             container.innerHTML = collection.map(item => {
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
                 const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
-                const storageLoc = item.storage ? item.storage.location : 'local';
                 
+                // Read clean current location configurations directly out of target metadata
+                const storageLoc = (item.storage && item.storage.location) ? item.storage.location : 'local';
+                
+                // Track resolution profiles availability mapping
+                const profiles = item.storage && item.storage.files ? Object.keys(item.storage.files) : [];
+                const cloudStatusStr = profiles.length > 0 
+                    ? profiles.map(p => `${p}: ${item.storage.files[p].status}`).join(' | ')
+                    : 'Unprovisioned Local Store Block';
+
                 return `
                 <div class="show-row" id="row-${item.folder}">
                     <div class="poster-aside">
@@ -387,10 +401,16 @@
                             <span>Path: /movies/${urlPath}</span>
                             <div style="display:flex; gap:6px; align-items: center;">
                                 <span class="badge type-badge">${currentTabMode}</span>
-                                ${storageLoc === 'remote' ? '<span class="badge cloud-badge">☁️ Cloud Storage</span>' : ''}
-                                ${(!item.metadata || !item.metadata.plot) ? '<span class="badge">Missing Metadata</span>' : ''}
+                                ${storageLoc === 'remote' 
+                                    ? '<span class="badge cloud-badge">☁️ Cloud Storage (B2/R2)</span>' 
+                                    : '<span class="badge local-badge">💾 NVMe Array Local</span>'}
                             </div>
                         </div>
+                        
+                        <div style="font-size: 0.75rem; color: #a855f7; font-family: monospace; background: #020617; padding: 4px 8px; border-radius: 4px; border: 1px solid #1e293b;">
+                            <strong>Allocation Metrics:</strong> ${cloudStatusStr}
+                        </div>
+
                         <div class="meta-form">
                             <div class="form-group">
                                 <label>Display Title</label>
@@ -415,7 +435,18 @@
                                 <label>Plot Synopsis Outline</label>
                                 <textarea id="plot-${item.folder}" rows="2">${(item.metadata && item.metadata.plot) || ''}</textarea>
                             </div>
-                            <div style="display: flex; gap: 12px; grid-column: 1 / -1; justify-content: flex-end;">
+                            
+                            <div class="form-group full-width" id="sync-container-${item.folder}" style="display: none;">
+                                <div class="sync-progress-container">
+                                    <div class="sync-progress-bar" id="progress-bar-${item.folder}"></div>
+                                    <div class="sync-progress-text" id="progress-txt-${item.folder}">Spawning secure multipart channel chunk strings...</div>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 12px; grid-column: 1 / -1; justify-content: flex-end; align-items: center; margin-top: 4px;">
+                                ${storageLoc === 'local' ? `
+                                    <button type="button" class="btn-cloud" onclick="manualPushToCloud('${item.folder}', '${currentTabMode}')">🚀 Push to Cloud Space</button>
+                                ` : ''}
                                 <button type="button" style="background: #a855f7;" onclick="refetchMetadata('${item.folder}', '${currentTabMode}')">🔄 Refetch Metadata</button>
                                 <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
                             </div>
@@ -423,6 +454,48 @@
                     </div>
                 </div>
             `}).join('');
+        }
+
+        async function manualPushToCloud(folder, type) {
+            if (activeSyncFolder) {
+                alert(`⚠️ Another synchronization run is currently active ([${activeSyncFolder}]). Please wait until current task yields context limit flags.`);
+                return;
+            }
+
+            if (!confirm(`Confirm manual streaming multi-part push to Backblaze storage buckets for: ${folder}?`)) return;
+
+            activeSyncFolder = folder;
+            document.getElementById(`sync-container-${folder}`).style.display = 'block';
+            document.getElementById(`progress-bar-${folder}`).style.width = '2%';
+            document.getElementById(`progress-txt-${folder}`).style.text = 'Awakening dedicated cloud worker process pipeline...';
+
+            try {
+                // Fire directly out to the override block endpoint which configures file flags and triggers the worker
+                const res = await fetch('/api/admin/override-metadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder,
+                        contentType: type,
+                        title: document.getElementById(`title-${folder}`).value,
+                        year: document.getElementById(`year-${folder}`).value,
+                        imdbId: document.getElementById(`imdbId-${folder}`).value,
+                        plot: document.getElementById('plot-' + folder).value,
+                        storage: { location: 'remote' } // Force state mapping update down pipe
+                    })
+                });
+                
+                const data = await res.json();
+                if (!data.success) {
+                    alert("❌ Channel rejected payload sync: " + data.error);
+                    document.getElementById(`sync-container-${folder}`).style.display = 'none';
+                    activeSyncFolder = null;
+                }
+            } catch (err) {
+                alert("❌ Connection lost during multipart streaming allocation request.");
+                document.getElementById(`sync-container-${folder}`).style.display = 'none';
+                activeSyncFolder = null;
+            }
         }
 
         async function refetchMetadata(folder, type) {
@@ -442,9 +515,7 @@
                 } else {
                     alert("❌ Target Query Failed: " + result.error);
                 }
-            } catch (err) {
-                alert("❌ Critical transport loop error while communicating with OMDb script.");
-            }
+            } catch (err) { alert("❌ Critical transport loop error."); }
         }
 
         function handleImgError(folder) {
@@ -464,9 +535,7 @@
                 if (file.type.startsWith('image/')) {
                     const reader = new FileReader();
                     reader.readAsDataURL(file);
-                    reader.onloadend = async function() {
-                        await executePosterUpload(folder, reader.result, type);
-                    };
+                    reader.onloadend = async function() { await executePosterUpload(folder, reader.result, type); };
                 }
             }
         }
@@ -486,9 +555,7 @@
                     img.style.display = 'block';
                     document.getElementById(`text-${folder}`).style.display = 'none';
                 }
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         async function saveOverride(folder, type) {
@@ -509,10 +576,11 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await res.json();
-                if (result.success) fetchLibraryData();
-            } catch (err) {
-                alert("❌ Critical transport loop disruption.");
-            }
+                if (result.success) {
+                    alert("💾 Storage allocation configurations updated inside master tracking files successfully.");
+                    fetchLibraryData();
+                }
+            } catch (err) { alert("❌ Critical transport loop disruption."); }
         }
 
         async function fetchUserProfileIndexes() {
@@ -534,17 +602,14 @@
                 } else {
                     container.innerHTML = `<p style="color: #64748b; font-size: 0.85rem; text-align: center;">No local records discovered.</p>`;
                 }
-            } catch (e) {
-                console.error("Failed querying user lists.");
-            }
+            } catch (e) { console.error(e); }
         }
 
-        // Initialization mount routines
+        // Execution mounts
         connectToLogStream();
         fetchLibraryData();
         fetchUserProfileIndexes();
 
-        // Establish background health ping system (runs every 5s)
         checkWorkerHealth();
         setInterval(checkWorkerHealth, 5000);
     </script>
