@@ -52,9 +52,22 @@ class TorrentService {
             const endpoint = `${QBIT_BASE_URL}/torrents/info`;
             const response = await axios.get(endpoint, { timeout: 3000 });
             
-            // Filter down to elements currently processing under either active pipe tag  (but not yet marked as processed)
-            return (tagStr.includes('movie-streamer') || tagStr.includes('series-streamer')) 
+            const activeTorrents = (response.data || []).filter(t => {
+    const tagStr = String(t.tags || '');
+    
+    // 🎯 FIX: Check for the active tag, but explicitly reject if it has already been processed
+    return (tagStr.includes('movie-streamer') || tagStr.includes('series-streamer')) 
         && !tagStr.includes('-processed');
+});
+
+
+
+            // // Filter down to elements currently processing under either active pipe tag
+            // return (response.data || []).filter(t => 
+            //     t.tags && (t.tags.includes('movie-streamer') || t.tags.includes('series-streamer'))
+            // );
+
+
         } catch (err) {
             logger.warn(`⚠️ [Torrent Service] Pipeline target unreachable: ${err.message}`);
             return [];
