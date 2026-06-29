@@ -364,8 +364,9 @@ async function autoDiscoverAndOrganize(currentDir) {
             }
         }
     }
+    logger.debug(`🔄 [AUTOMATION DISCOVERY] Initiating auto-discovery and organization of: ${currentDir}`);
 }
 
-logger.debug(`🔄 [AUTOMATION DISCOVERY] Initiating auto-discovery and organization of: ${currentDir}`);
+
 const PORT = process.env.INGEST_WORKER_PORT || 5000;
 app.listen(PORT, () => console.log(`🧹 Atomic Ingest Sanitizer Worker online on port ${PORT}`));
