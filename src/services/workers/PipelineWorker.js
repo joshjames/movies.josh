@@ -40,11 +40,13 @@ async function checkPipelineCompletions() {
 
         logger.debug(`🎉 [Pipeline Agent] Download completion caught: [${completedTorrent.name}] (${isSeries ? 'TV Show' : 'Movie'})`);
 
+        // Inside src/services/workers/PipelineWorker.js -> checkPipelineCompletions()
+
         // Rotate the workflow tag to prevent looping on the same item twice
         try {
             logger.debug(`⚙️  Rotating workflow tags [${activeTag} -> ${processedTag}] for hash: ${torrentHash}`);
             
-            // 🎯 FIX: Serialize form data properly so qBittorrent processes the inputs
+            // Use URLSearchParams directly for strict urlencoded delivery
             const removeParams = new URLSearchParams();
             removeParams.append('hashes', torrentHash);
             removeParams.append('tags', activeTag);
@@ -53,19 +55,20 @@ async function checkPipelineCompletions() {
             addParams.append('hashes', torrentHash);
             addParams.append('tags', processedTag);
 
-            await axios.post(`${QBIT_URL}/api/v2/torrents/removeTags`, removeParams, {
+            // 🎯 CRITICAL: Execute these sequentially and verify they complete
+            await axios.post(`${QBIT_URL}/api/v2/torrents/removeTags`, removeParams.toString(), {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
             
-            await axios.post(`${QBIT_URL}/api/v2/torrents/addTags`, addParams, {
+            await axios.post(`${QBIT_URL}/api/v2/torrents/addTags`, addParams.toString(), {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
             
-            logger.debug(`✅ Tag rotation complete. Triggering down-pipe automation.`);
+            logger.debug(`✅ Tag rotation complete for hash ${torrentHash.substring(0,8)}. Triggering down-pipe automation.`);
         } catch (tagErr) {
-            logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`, 'warn');
-            isProcessingPipeline = false;
-            return;
+            logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`);
+            isProcessingPipeline = false; // Release the lock so next check can recover
+            return; // Drop out early! Do not run orchestrator if tag assignment failed
         }
 
         // Invoke Orchestrator for local media directory structural sweeps
