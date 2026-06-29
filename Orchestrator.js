@@ -67,8 +67,8 @@ async function processAsset(folder, destinationParent) {
                 const nextStepMap = { 
                     'METADATA': 'SUBTITLES', 
                     'SUBTITLES': 'TRANSCODE', 
-                    'TRANSCODE': 'UPLOAD', 
-                    'UPLOAD': 'COMPLETED' 
+                    'TRANSCODE': 'COMPLETED'
+                    // 'UPLOAD': 'COMPLETED' 
                 };
                 nextStep = nextStepMap[currentStep];
             }
