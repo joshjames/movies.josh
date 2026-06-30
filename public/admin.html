@@ -428,14 +428,26 @@
             container.innerHTML = collection.map(item => {
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
                 const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
+                const syncState = item.syncState || {};
+                const isInSync = syncState.inSync === true;
+                const effectiveStorageLocation =
+                    syncState.diskStorageLocation ||
+                    syncState.redisStorageLocation ||
+                    ((item.metadata && item.metadata.storage && item.metadata.storage.location) ? item.metadata.storage.location : 'local');
                 
                 // Read clean current location configurations directly out of target metadata
-                const storageLoc = (item.storage && item.storage.location) ? item.storage.location : 'local';
+                const storageLoc = effectiveStorageLocation;
                 
                 // Track resolution profiles availability mapping
-                const profiles = item.storage && item.storage.files ? Object.keys(item.storage.files) : [];
+                const storageMeta =
+                    (item.metadata && item.metadata.storage) ||
+                    (item.diskMetadata && item.diskMetadata.storage) ||
+                    (item.redisMetadata && item.redisMetadata.storage) ||
+                    { location: storageLoc, files: {} };
+
+                const profiles = storageMeta && storageMeta.files ? Object.keys(storageMeta.files) : [];
                 const cloudStatusStr = profiles.length > 0 
-                    ? profiles.map(p => `${p}: ${item.storage.files[p].status}`).join(' | ')
+                    ? profiles.map(p => `${p}: ${storageMeta.files[p].status}`).join(' | ')
                     : 'Unprovisioned Local Store Block';
 
                 return `
@@ -459,6 +471,9 @@
                             <span>Path: /movies/${urlPath}</span>
                             <div style="display:flex; gap:6px; align-items: center;">
                                 <span class="badge type-badge">${currentTabMode}</span>
+                                ${isInSync
+                                    ? '<span class="badge" style="background:#14532d;color:#86efac;border:1px solid #166534;">● Redis Sync</span>'
+                                    : '<span class="badge" style="background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b;">● Out of Sync</span>'}
                                 ${storageLoc === 'remote' 
                                     ? '<span class="badge cloud-badge">☁️ Cloud Storage (B2/R2)</span>' 
                                     : '<span class="badge local-badge">💾 NVMe Array Local</span>'}

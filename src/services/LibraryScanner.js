@@ -32,9 +32,19 @@ function scanDirectory(basePath, contentType) {
             }
         }
 
-        // 🚨 THE CRITICAL CLOUD TRACKING PROTECTION FIX
-        // If the metadata tells us the file is remote, we mark it safe immediately
-        const isRemote = meta.storage?.location === 'remote';
+        const remoteProfiles = Object.values(meta.storage?.files || {}).filter(fileBlock =>
+            fileBlock && fileBlock.status === 'synced' && Boolean(fileBlock.remoteKey)
+        );
+
+        // Treat the item as remote when either explicit location is remote or we have synced remote keys.
+        const isRemote = meta.storage?.location === 'remote' || remoteProfiles.length > 0;
+        const normalizedStorage = {
+            ...(meta.storage || {}),
+            location: isRemote ? 'remote' : 'local',
+            files: {
+                ...(meta.storage?.files || {})
+            }
+        };
         
         // Scan for local video assets if it's not hosted in the cloud cloud environment
         let mediaFiles = [];
@@ -57,7 +67,7 @@ function scanDirectory(basePath, contentType) {
             : `/movie-assets/${encodeURIComponent(folder)}/cover.jpg`,
         
         // Keep the raw block intact just in case other services need it
-        storage: meta.storage || { location: 'local', files: {} },
+        storage: normalizedStorage,
         updatedAt: new Date().toISOString()
         });
         } else {

@@ -47,7 +47,14 @@ router.get('/movies', async (req, res) => {
         }));
 
         // Combine both internal asset segments into a flat layout matching index.html execution blocks
-        const combinedCatalog = [...cachedMovies, ...normalizedShows];
+        const combinedCatalog = [...cachedMovies, ...normalizedShows].map(item => {
+            const versionKey = encodeURIComponent(item.updatedAt || library.lastScan || Date.now());
+            const separator = (item.cover || '').includes('?') ? '&' : '?';
+            return {
+                ...item,
+                cover: item.cover ? `${item.cover}${separator}v=${versionKey}` : item.cover
+            };
+        });
 
         // Perform clean alphabetic ordering so collections don't randomly flip positions
         combinedCatalog.sort((a, b) => (a.title || '').localeCompare(b.title || ''));

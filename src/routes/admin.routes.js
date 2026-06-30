@@ -174,13 +174,53 @@ router.post('/upload-poster', async (req, res) => {
 // GET: /api/admin/library-metadata
 router.get('/library-metadata', async (req, res) => {
     try {
-        // 🚨 FIX 5: Completely rewrite this endpoint to return high-speed structured metadata from 
-        // Redis instead of locking the thread by re-reading thousands of files on disk raw.
         const library = await getLibrary();
+
+        const normalizeComparable = (meta = {}) => ({
+            title: meta.title || '',
+            year: meta.year || '',
+            imdbId: meta.imdbId || meta.imdb_id || '',
+            plot: meta.plot || '',
+            genre: meta.genre || '',
+            storageLocation: meta.storage?.location || 'local',
+            storageFiles: meta.storage?.files || {}
+        });
+
+        const buildItem = (folder, redisMeta, type) => {
+            const baseDir = type === 'series' ? SERIES_DIR : MOVIES_DIR;
+            const diskMetaPath = path.join(baseDir, folder, 'metadata.json');
+
+            let diskMeta = null;
+            if (fs.existsSync(diskMetaPath)) {
+                try {
+                    diskMeta = JSON.parse(fs.readFileSync(diskMetaPath, 'utf-8'));
+                } catch (_err) {
+                    diskMeta = null;
+                }
+            }
+
+            const redisComparable = normalizeComparable(redisMeta || {});
+            const diskComparable = normalizeComparable(diskMeta || {});
+            const inSync = JSON.stringify(redisComparable) === JSON.stringify(diskComparable);
+
+            return {
+                folder,
+                metadata: diskMeta || redisMeta,
+                redisMetadata: redisMeta,
+                diskMetadata: diskMeta,
+                syncState: {
+                    inSync,
+                    redisAvailable: Boolean(redisMeta),
+                    diskAvailable: Boolean(diskMeta),
+                    redisStorageLocation: redisComparable.storageLocation,
+                    diskStorageLocation: diskComparable.storageLocation
+                }
+            };
+        };
         
         const results = {
-            movies: (library.movies || []).map(m => ({ folder: decodeURIComponent(m.id), metadata: m })),
-            shows: (library.shows || []).map(s => ({ folder: s.id.replace('series/', ''), metadata: s }))
+            movies: (library.movies || []).map(m => buildItem(decodeURIComponent(m.id), m, 'movie')),
+            shows: (library.shows || []).map(s => buildItem(s.id.replace('series/', ''), s, 'series'))
         };
 
         res.json({ success: true, library: results });
@@ -247,22 +287,20 @@ router.post('/override-metadata', async (req, res) => {
                 metadata.storage = { location: 'local', files: {} };
             }
 
-            if (metadata.storage.location !== 'remote') {
-                metadata.storage.location = 'remote';
-                
-                const profiles = ['1080p', '720p', '480p'];
-                if (!metadata.storage.files) metadata.storage.files = {};
+            metadata.storage.location = 'remote';
 
-                profiles.forEach(profile => {
-                    if (!metadata.storage.files[profile]) {
-                        metadata.storage.files[profile] = {};
-                    }
-                    if (metadata.storage.files[profile].status !== 'synced') {
-                        metadata.storage.files[profile].status = 'pending';
-                        triggerCloudSync = true;
-                    }
-                });
-            }
+            const profiles = ['1080p', '720p', '480p'];
+            if (!metadata.storage.files) metadata.storage.files = {};
+
+            profiles.forEach(profile => {
+                if (!metadata.storage.files[profile]) {
+                    metadata.storage.files[profile] = {};
+                }
+                if (metadata.storage.files[profile].status !== 'synced') {
+                    metadata.storage.files[profile].status = 'pending';
+                    triggerCloudSync = true;
+                }
+            });
         } else if (storage) {
             // Local storage option chosen (NVMe Local)
             metadata.storage = { location: 'local', files: {} };
@@ -283,11 +321,12 @@ router.post('/override-metadata', async (req, res) => {
         await LibraryScanner.runLibraryScanSweep();
 
         if (triggerCloudSync) {
-            logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5003...`);
+            logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5004...`);
             
-            axios.post('http://127.0.0.1:5003/process', {
+            axios.post('http://127.0.0.1:5004/process', {
                 folderPath: folderPath,
-                folderName: folder
+                folderName: folder,
+                forceActualUpload: true
             }).catch(err => {
                 logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
             });
