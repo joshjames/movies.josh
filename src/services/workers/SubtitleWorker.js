@@ -19,6 +19,66 @@ const REQUEST_HEADERS = {
     'Accept-Language': 'en-US,en;q=0.5'
 };
 
+function cleanFallbackTitle(rawName = '') {
+    return String(rawName)
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/\((.*?)\)/g, ' $1 ')
+        .replace(/[._-]/g, ' ')
+        .replace(/\b(19|20)\d{2}\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function readLocalSubtitleContext(folderPath) {
+    try {
+        const metadataPath = path.join(folderPath, 'metadata.json');
+        if (!fs.existsSync(metadataPath)) return null;
+
+        const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+        return {
+            imdbId: metadata.imdbId || null,
+            title: metadata.title || metadata.name || null,
+            year: metadata.year || null,
+            contentType: metadata.contentType || null
+        };
+    } catch (err) {
+        logger.debug(`⚠️ [SUBTITLES] Could not read local metadata fallback: ${err.message}`, 'warn');
+        return null;
+    }
+}
+
+async function resolveImdbFallback({ imdbId, folderName, folderPath, contentType }) {
+    if (imdbId) return String(imdbId).startsWith('tt') ? imdbId : `tt${imdbId}`;
+
+    const localContext = readLocalSubtitleContext(folderPath);
+    if (localContext?.imdbId) {
+        logger.debug(`🧩 [SUBTITLES] IMDb resolved from local metadata.json: ${localContext.imdbId}`);
+        return String(localContext.imdbId).startsWith('tt') ? localContext.imdbId : `tt${localContext.imdbId}`;
+    }
+
+    const titleHint = cleanFallbackTitle(folderName || localContext?.title || path.basename(folderPath || ''));
+    if (!titleHint) return null;
+
+    const inferredType = contentType || localContext?.contentType || (String(folderPath || '').includes('/series') ? 'series' : 'movie');
+    const yearMatch = String(folderName || localContext?.title || '').match(/\b((?:19|20)\d{2})\b/);
+    const year = yearMatch?.[1] || localContext?.year || '';
+
+    let query = `http://www.omdbapi.com/?apikey=${process.env.OMDB_API_KEY || '84196d01'}&type=${inferredType}&t=${encodeURIComponent(titleHint)}`;
+    if (year) query += `&y=${encodeURIComponent(year)}`;
+
+    try {
+        const omdbRes = await axios.get(query, { timeout: 6000 });
+        if (omdbRes.data?.Response === 'True' && omdbRes.data?.imdbID) {
+            logger.debug(`🧩 [SUBTITLES] IMDb resolved by title fallback: ${omdbRes.data.imdbID} (${titleHint})`);
+            return omdbRes.data.imdbID;
+        }
+    } catch (err) {
+        logger.debug(`⚠️ [SUBTITLES] OMDb fallback lookup failed for "${titleHint}": ${err.message}`, 'warn');
+    }
+
+    return null;
+}
+
 /**
  * Strategy 1: Programmatic YIFY HTML Scratch-Pad Parser
  */
@@ -144,13 +204,16 @@ function fetchSubliminalFallback(imdbId, folderPath) {
 // 📥 PROCESS API ENDPOINT ROUTING
 // =========================================================================
 app.post('/process', async (req, res) => {
-    const { folderPath, imdbId, folderName } = req.body;
+    const { folderPath, imdbId, folderName, contentType } = req.body;
 
-    if (!folderPath || !imdbId) {
-        return res.status(400).json({ success: false, error: "Missing required folderPath or imdbId context parameters." });
+    if (!folderPath) {
+        logger.warn(`⚠️ [SUBTITLES] Missing folderPath. folderName=${folderName || 'unknown'} imdbId=${imdbId || 'missing'}`);
+        return res.status(400).json({ success: false, error: "Missing required folderPath context parameter." });
     }
 
     try {
+        const resolvedImdbId = await resolveImdbFallback({ imdbId, folderName, folderPath, contentType });
+
         // ✨ FAST PASS SYSTEM CHECK: Scan files for ANY common subtitle tracks to bypass APIs entirely
         const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
         const subtitleExists = filesOnDisk.some(f => 
@@ -167,11 +230,22 @@ app.post('/process', async (req, res) => {
         }
 
         // Step 1: Fire high-speed YIFY custom pipeline
-        let records = await fetchYifySubtitles(imdbId, folderPath);
+        if (!resolvedImdbId) {
+            logger.warn(`⚠️ [SUBTITLES] No IMDb ID could be resolved for ${folderName || path.basename(folderPath)}. Returning clean skip.`);
+            return res.json({
+                success: true,
+                message: 'Subtitle lookup skipped because no IMDb ID could be resolved.',
+                patchData: { subtitles: [] }
+            });
+        }
+
+        logger.debug(`🧭 [SUBTITLES] Using IMDb ${resolvedImdbId} for subtitle lookup. folderName=${folderName || 'unknown'}`);
+
+        let records = await fetchYifySubtitles(resolvedImdbId, folderPath);
 
         // Step 2: If YIFY comes up short or hits a wall, execute Subliminal
         if (!records || records.length === 0) {
-            records = await fetchSubliminalFallback(imdbId, folderPath);
+            records = await fetchSubliminalFallback(resolvedImdbId, folderPath);
         }
 
         // Return unified response structures cleanly back to the Orchestrator loop

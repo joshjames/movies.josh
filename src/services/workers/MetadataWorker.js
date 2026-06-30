@@ -43,6 +43,8 @@ app.post('/process', async (req, res) => {
         const omdbRes = await axios.get(queryUrl);
         const data = omdbRes.data;
 
+        logger.debug(`🧭 [Metadata] Resolved lookup for ${folderName} | imdbId=${data.imdbID || 'unknown'} | title=${data.Title || cleanTitle} | mode=${targetType}`);
+
         // Fallback profile object if external lookup fails entirely
         if (data.Response === "False") {
             logger.debug(`⚠️ OMDb lookup failed for ${folderName}: ${data.Error}. Implementing local asset fallbacks.`, 'warn');

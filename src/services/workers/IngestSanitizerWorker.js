@@ -12,7 +12,7 @@ app.use(express.json());
 // 🚨 CONTAINER MOUNT DIRECTORY MAPS
 const MOVIES_DIR = '/app/storage/movies';
 const SERIES_DIR = '/app/storage/series';
-const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.json', '.jpg', '.jpeg', '.png', '.ts'];
+const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.mpeg', '.nfo', '.ogg', '.ogv', '.json', '.jpg', '.jpeg', '.png', '.ts'];
 const OMDB_API_KEY = process.env.OMDB_API_KEY || '84196d01';
 
 // =========================================================================
@@ -45,18 +45,29 @@ function cleanReleaseName(folderName) {
 function cleanJunkFiles(dirPath) {
     if (!fs.existsSync(dirPath)) return;
     const contents = fs.readdirSync(dirPath);
+    let removedCount = 0;
     contents.forEach(item => {
         const itemPath = path.join(dirPath, item);
         const itemStat = fs.lstatSync(itemPath);
         if (itemStat.isDirectory()) {
-            if (item.toLowerCase() === 'sample') deleteFolderRecursive(itemPath);
-            else cleanJunkFiles(itemPath); 
+            if (item.toLowerCase() === 'sample') {
+                deleteFolderRecursive(itemPath);
+                removedCount += 1;
+            } else {
+                removedCount += cleanJunkFiles(itemPath) || 0;
+            }
         } else {
             const ext = path.extname(item).toLowerCase();
-            if (item.toLowerCase().includes('sample') && ext !== '.srt') fs.unlinkSync(itemPath);
-            else if (!KEEP_EXTENSIONS.includes(ext)) fs.unlinkSync(itemPath);
+            if (item.toLowerCase().includes('sample') && ext !== '.srt') {
+                fs.unlinkSync(itemPath);
+                removedCount += 1;
+            } else if (!KEEP_EXTENSIONS.includes(ext)) {
+                fs.unlinkSync(itemPath);
+                removedCount += 1;
+            }
         }
     });
+    return removedCount;
 }
 
 function deleteFolderRecursive(directoryPath) {
@@ -136,11 +147,187 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
     return null;
 }
 
+function flattenSingleChildMovieFolder(folderPath) {
+    if (!fs.existsSync(folderPath)) return { flattened: false, moved: 0 };
+
+    const entries = fs.readdirSync(folderPath);
+    const directories = entries.filter(entry => fs.lstatSync(path.join(folderPath, entry)).isDirectory());
+    const files = entries.filter(entry => fs.lstatSync(path.join(folderPath, entry)).isFile());
+
+    // Only flatten when the release is wrapped in one child folder and the root has no usable media.
+    const hasRootMedia = files.some(file => KEEP_EXTENSIONS.includes(path.extname(file).toLowerCase()));
+    if (hasRootMedia || directories.length !== 1) {
+        return { flattened: false, moved: 0 };
+    }
+
+    const childFolderName = directories[0];
+    const childFolderPath = path.join(folderPath, childFolderName);
+    const childEntries = fs.readdirSync(childFolderPath);
+    let movedCount = 0;
+
+    for (const entry of childEntries) {
+        const sourcePath = path.join(childFolderPath, entry);
+        const destinationPath = path.join(folderPath, entry);
+
+        if (fs.existsSync(destinationPath)) continue;
+
+        fs.renameSync(sourcePath, destinationPath);
+        movedCount += 1;
+    }
+
+    if (fs.existsSync(childFolderPath)) {
+        deleteFolderRecursive(childFolderPath);
+    }
+
+    return { flattened: movedCount > 0, moved: movedCount };
+}
+
+function mergeMovieFolderContents(sourcePath, targetPath) {
+    if (!fs.existsSync(sourcePath) || !fs.existsSync(targetPath)) {
+        return { moved: 0, removed: 0 };
+    }
+
+    const sourceEntries = fs.readdirSync(sourcePath);
+    let moved = 0;
+    let removed = 0;
+
+    for (const entry of sourceEntries) {
+        const sourceEntryPath = path.join(sourcePath, entry);
+        const targetEntryPath = path.join(targetPath, entry);
+        const stat = fs.lstatSync(sourceEntryPath);
+
+        if (stat.isDirectory()) {
+            if (!fs.existsSync(targetEntryPath)) {
+                fs.renameSync(sourceEntryPath, targetEntryPath);
+                moved += 1;
+            }
+            continue;
+        }
+
+        const ext = path.extname(entry).toLowerCase();
+        if (!KEEP_EXTENSIONS.includes(ext)) continue;
+
+        if (!fs.existsSync(targetEntryPath)) {
+            fs.renameSync(sourceEntryPath, targetEntryPath);
+            moved += 1;
+        }
+    }
+
+    const remaining = fs.existsSync(sourcePath) ? fs.readdirSync(sourcePath) : [];
+    if (remaining.length === 0) {
+        try {
+            fs.rmdirSync(sourcePath);
+            removed += 1;
+        } catch (_err) {
+            // Ignore if folder is not empty or cannot be removed right now.
+        }
+    }
+
+    return { moved, removed };
+}
+
+function safeDirectoryCandidate(candidatePath) {
+    if (!candidatePath) return null;
+    try {
+        if (!fs.existsSync(candidatePath)) return null;
+        const stat = fs.lstatSync(candidatePath);
+        if (stat.isDirectory()) return candidatePath;
+        if (stat.isFile()) return path.dirname(candidatePath);
+    } catch (_err) {
+        return null;
+    }
+    return null;
+}
+
+function normalizeNameKey(name) {
+    return String(name || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+}
+
+function resolveInputFolderContext(folderPath, folderName, contentType) {
+    const rawPath = String(folderPath || '').trim();
+    const rawName = String(folderName || '').trim();
+    const baseName = rawName ? path.basename(rawName) : '';
+
+    if (baseName) {
+        const primaryRoot = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        const topLevelPath = safeDirectoryCandidate(path.join(primaryRoot, baseName));
+        if (topLevelPath) {
+            return { path: topLevelPath, name: path.basename(topLevelPath), source: `library-top-level:${primaryRoot}` };
+        }
+    }
+
+    const directCandidates = [];
+    if (rawPath) {
+        directCandidates.push(rawPath);
+        if (baseName) {
+            directCandidates.push(path.join(rawPath, baseName));
+            directCandidates.push(path.join(path.dirname(rawPath), baseName));
+        }
+    }
+
+    for (const candidate of directCandidates) {
+        const resolved = safeDirectoryCandidate(candidate);
+        if (resolved) {
+            return { path: resolved, name: path.basename(resolved), source: `direct:${candidate}` };
+        }
+    }
+
+    if (!baseName) {
+        return { path: null, name: null, source: 'unresolved:no-folder-name' };
+    }
+
+    const configuredDownloadRoot = process.env.QBIT_DOWNLOAD_DIR || process.env.DOWNLOADS_DIR || process.env.MOVIES_DIR || null;
+    const searchRoots = [
+        configuredDownloadRoot,
+        contentType === 'series' ? SERIES_DIR : MOVIES_DIR,
+        '/app/downloads',
+        '/downloads',
+        '/app/storage/movies',
+        '/home/epic/movies'
+    ].filter(Boolean);
+
+    // Try exact folder-name match under known roots first.
+    for (const root of searchRoots) {
+        const exact = safeDirectoryCandidate(path.join(root, baseName));
+        if (exact) {
+            return { path: exact, name: path.basename(exact), source: `root-exact:${root}` };
+        }
+    }
+
+    // Then try normalized fuzzy match one level deep within known roots.
+    const targetKey = normalizeNameKey(baseName);
+    for (const root of searchRoots) {
+        if (!fs.existsSync(root)) continue;
+        let entries;
+        try {
+            entries = fs.readdirSync(root, { withFileTypes: true });
+        } catch (_err) {
+            continue;
+        }
+
+        const match = entries.find(entry => {
+            if (!entry.isDirectory()) return false;
+            return normalizeNameKey(entry.name) === targetKey;
+        });
+
+        if (match) {
+            const resolved = path.join(root, match.name);
+            return { path: resolved, name: match.name, source: `root-fuzzy:${root}` };
+        }
+    }
+
+    return { path: null, name: null, source: 'unresolved:not-found' };
+}
+
 // =========================================================================
 // 📥 UNIFIED INGEST PROCESSING ENDPOINT
 // =========================================================================
 app.post('/process', async (req, res) => {
     const { folderPath, folderName, contentType } = req.body;
+
+    logger.debug(`🧹 [Ingest] Start | folderName=${folderName || 'unknown'} | folderPath=${folderPath || 'missing'} | contentType=${contentType || 'movie'}`);
 
     // SCENARIO A: Global manual sweep invocation
     if (!folderPath || !folderName) {
@@ -156,9 +343,26 @@ app.post('/process', async (req, res) => {
 
     // SCENARIO B: Target automated pipeline handler
     try {
-        cleanJunkFiles(folderPath);
+        const resolved = resolveInputFolderContext(folderPath, folderName, contentType || 'movie');
+        if (!resolved.path) {
+            logger.warn(`⚠️ [Ingest] Could not resolve folder path | folderName=${folderName || 'unknown'} | folderPath=${folderPath || 'missing'} | source=${resolved.source}`);
+            return res.status(400).json({ success: false, error: `Could not resolve ingest folder from provided context (${resolved.source}).` });
+        }
 
-        const { title: cleanTitle, year: parsedYear } = cleanReleaseName(folderName);
+        const workingFolderPath = resolved.path;
+        const workingFolderName = resolved.name || folderName;
+
+        logger.debug(`🧭 [Ingest] Resolved folder input | folderName=${workingFolderName} | folderPath=${workingFolderPath} | source=${resolved.source}`);
+
+        const removedCount = cleanJunkFiles(workingFolderPath) || 0;
+        logger.debug(`🧹 [Ingest] Junk cleanup complete | removed=${removedCount} | folderPath=${workingFolderPath}`);
+
+        const flattenResult = flattenSingleChildMovieFolder(workingFolderPath);
+        if (flattenResult.flattened) {
+            logger.debug(`📦 [Ingest] Flattened nested movie release folder | moved=${flattenResult.moved} | folderPath=${workingFolderPath}`);
+        }
+
+        const { title: cleanTitle, year: parsedYear } = cleanReleaseName(workingFolderName);
         const dotNotationTitle = cleanTitle.replace(/\s+/g, '.');
         
         let targetFolderName = dotNotationTitle;
@@ -166,17 +370,28 @@ app.post('/process', async (req, res) => {
             targetFolderName = `${dotNotationTitle}.${parsedYear}`;
         }
 
-        let finalPath = folderPath;
+        let finalPath = workingFolderPath;
 
-        if (folderName !== targetFolderName) {
-            const parentDir = path.dirname(folderPath);
+        if (workingFolderName !== targetFolderName) {
+            const parentDir = path.dirname(workingFolderPath);
             const computedPath = path.join(parentDir, targetFolderName);
 
-            if (!fs.existsSync(computedPath) && fs.existsSync(folderPath)) {
-                await fsp.rename(folderPath, computedPath);
+            if (!fs.existsSync(computedPath) && fs.existsSync(workingFolderPath)) {
+                await fsp.rename(workingFolderPath, computedPath);
                 finalPath = computedPath;
-                logger.debug(`🗂️ Ingest Alignment Mutator: [${folderName}] ➡️ [${targetFolderName}]`);
+                logger.debug(`🗂️ Ingest Alignment Mutator: [${workingFolderName}] ➡️ [${targetFolderName}]`);
+            } else {
+                finalPath = fs.existsSync(computedPath) ? computedPath : workingFolderPath;
+
+                if (fs.existsSync(computedPath) && fs.existsSync(workingFolderPath) && workingFolderPath !== computedPath) {
+                    const mergeResult = mergeMovieFolderContents(workingFolderPath, computedPath);
+                    logger.debug(`🗂️ [Ingest] Merge into existing normalized target | moved=${mergeResult.moved} | removed=${mergeResult.removed} | targetFolderName=${targetFolderName}`);
+                } else {
+                    logger.debug(`🗂️ [Ingest] Rename skipped | computedPathExists=${fs.existsSync(computedPath)} | sourceExists=${fs.existsSync(workingFolderPath)} | targetFolderName=${targetFolderName}`);
+                }
             }
+        } else {
+            logger.debug(`🗂️ [Ingest] Folder already normalized: [${workingFolderName}]`);
         }
 
         // =====================================================================
