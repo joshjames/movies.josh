@@ -4,13 +4,25 @@ const path = require('path');
 const logger = require('./logger');
 const { syncLibraryToStorage } = require('./db');
 
-const MOVIES_DIR = process.env.MOVIES_DIR || '/app/storage/movies';
-const SERIES_DIR = process.env.SERIES_DIR || '/app/storage/series';
+const MOVIE_SCAN_PATHS = [
+    process.env.MOVIES_DIR,
+    '/home/epic/movies',
+    '/app/storage/movies',
+    '/app/movies'
+].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+const SERIES_SCAN_PATHS = [
+    process.env.SERIES_DIR,
+    '/home/epic/movies/series',
+    '/data/blockchain/media/Series',
+    '/app/storage/series',
+    '/app/series'
+].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
 function scanDirectory(basePath, contentType) {
     const registry = [];
     if (!fs.existsSync(basePath)) {
-        logger.warn(`⚠️ Specified drive pathway missing index markers: ${basePath}`);
+        logger.debug(`⏭️ Skipping unavailable scan root: ${basePath}`);
         return registry;
     }
 
@@ -53,23 +65,24 @@ function scanDirectory(basePath, contentType) {
         }
 
         if (mediaFiles.length > 0 || isRemote || contentType === 'series') {
-    registry.push({
-        // 🚨 FLATTENED ROOT PROPERTIES FOR THE FRONTEND
-        id: contentType === 'series' ? `series/${encodeURIComponent(folder)}` : encodeURIComponent(folder),
-        title: meta.title || folder.replace(/[-_.]/g, ' '),
-        year: meta.year || '',
-        plot: meta.plot || '',
-        genre: meta.genre || '',
-        contentType: contentType,
-        storageLocation: isRemote ? 'remote' : 'local',
-        cover: contentType === 'series' 
-            ? `/movie-assets/series/${encodeURIComponent(folder)}/cover.jpg`
-            : `/movie-assets/${encodeURIComponent(folder)}/cover.jpg`,
-        
-        // Keep the raw block intact just in case other services need it
-        storage: normalizedStorage,
-        updatedAt: new Date().toISOString()
-        });
+            registry.push({
+                // 🚨 FLATTENED ROOT PROPERTIES FOR THE FRONTEND
+                id: contentType === 'series' ? `series/${encodeURIComponent(folder)}` : encodeURIComponent(folder),
+                title: meta.title || folder.replace(/[-_.]/g, ' '),
+                year: meta.year || '',
+                plot: meta.plot || '',
+                genre: meta.genre || '',
+                contentType: contentType,
+                storageLocation: isRemote ? 'remote' : 'local',
+                cover: contentType === 'series'
+                    ? `/movie-assets/series/${encodeURIComponent(folder)}/cover.jpg`
+                    : `/movie-assets/${encodeURIComponent(folder)}/cover.jpg`,
+
+                // Keep the raw block intact just in case other services need it
+                storage: normalizedStorage,
+                updatedAt: new Date().toISOString(),
+                sourcePath: itemPath
+            });
         } else {
             logger.info(`🗑️ Stripping empty untracked local trace directory from listings: ${folder}`);
         }
@@ -77,18 +90,55 @@ function scanDirectory(basePath, contentType) {
     return registry;
 }
 
+function scanAcrossRoots(roots, contentType) {
+    const dedup = new Map();
+
+    for (const root of roots) {
+        const rows = scanDirectory(root, contentType);
+        for (const row of rows) {
+            const key = row.id;
+            if (!dedup.has(key)) {
+                dedup.set(key, row);
+            }
+        }
+    }
+
+    return Array.from(dedup.values());
+}
+
 async function runLibraryScanSweep() {
     logger.info('🔍 Executing system-wide library asset inventory sweep...');
+
+    const existingMovieRoots = MOVIE_SCAN_PATHS.filter(root => fs.existsSync(root));
+    const existingSeriesRoots = SERIES_SCAN_PATHS.filter(root => fs.existsSync(root));
+
+    if (existingMovieRoots.length === 0) {
+        logger.warn(`⚠️ No movie roots available for scan. Candidates: ${MOVIE_SCAN_PATHS.join(', ')}`);
+    }
+    if (existingSeriesRoots.length === 0) {
+        logger.warn(`⚠️ No series roots available for scan. Candidates: ${SERIES_SCAN_PATHS.join(', ')}`);
+    }
     
-    // Process distinct storage lines independently
-    const movies = scanDirectory(MOVIES_DIR, 'movie');
-    const shows = scanDirectory(SERIES_DIR, 'series');
+    // Process distinct storage lines independently across all known mount roots.
+    const movies = scanAcrossRoots(existingMovieRoots, 'movie');
+    const shows = scanAcrossRoots(existingSeriesRoots, 'series');
 
     const masterPayload = { movies, shows, lastScan: new Date().toISOString() };
     
     // Sync to Redis hot memory + Fallback storage file instantly
     await syncLibraryToStorage(masterPayload);
-    logger.info(`✨ Inventory sweep complete. Cached [${movies.length}] Movies and [${shows.length}] Series.`);
+    logger.info(
+        `✨ Inventory sweep complete. Cached [${movies.length}] Movies and [${shows.length}] Series. ` +
+        `Movie roots: ${existingMovieRoots.join(', ') || '(none)'} | ` +
+        `Series roots: ${existingSeriesRoots.join(', ') || '(none)'}`
+    );
+
+    return {
+        movies: movies.length,
+        shows: shows.length,
+        movieRoots: existingMovieRoots,
+        seriesRoots: existingSeriesRoots
+    };
 }
 
 module.exports = { runLibraryScanSweep };

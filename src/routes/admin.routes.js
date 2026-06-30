@@ -138,8 +138,27 @@ router.get('/health-check/:service', async (req, res) => {
 
 router.post('/sync-item', async (req, res) => {
     try {
-        await LibraryScanner.runLibraryScanSweep();
-        return res.json({ success: true, message: 'Library snapshot refreshed from disk.' });
+        const { folder, contentType } = req.body || {};
+        const summary = await LibraryScanner.runLibraryScanSweep();
+
+        let itemFound = null;
+        if (folder) {
+            const library = await getLibrary();
+            if (contentType === 'series') {
+                const expectedId = `series/${encodeURIComponent(folder)}`;
+                itemFound = (library.shows || []).some(s => s.id === expectedId || s.id === `series/${folder}`);
+            } else {
+                const expectedId = encodeURIComponent(folder);
+                itemFound = (library.movies || []).some(m => m.id === expectedId);
+            }
+        }
+
+        return res.json({
+            success: true,
+            message: 'Library snapshot refreshed from disk.',
+            summary,
+            itemFound
+        });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

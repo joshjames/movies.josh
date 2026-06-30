@@ -635,7 +635,17 @@
                     showToast('Sync failed: ' + (data.error || 'Unknown error'), 'error', 4200);
                     return;
                 }
-                showToast('Disk->Redis sync complete.', 'success');
+
+                const itemState = data.itemFound === null
+                    ? ''
+                    : (data.itemFound ? ' Item found in snapshot.' : ' Item not found in snapshot.');
+                const movieCount = data.summary?.movies;
+                const showCount = data.summary?.shows;
+                const countTail = (typeof movieCount === 'number' && typeof showCount === 'number')
+                    ? ` Movies: ${movieCount}, Shows: ${showCount}.`
+                    : '';
+
+                showToast(`Disk->Redis sync complete.${countTail}${itemState}`, 'success', 4200);
                 fetchLibraryData();
             } catch (_err) {
                 showToast('Sync request failed.', 'error', 4200);
