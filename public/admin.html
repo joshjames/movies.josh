@@ -521,12 +521,100 @@
                                     <button type="button" class="btn-cloud" onclick="manualPushToCloud('${item.folder}', '${currentTabMode}')">🚀 Push to Cloud Space</button>
                                 ` : ''}
                                 <button type="button" style="background: #a855f7;" onclick="refetchMetadata('${item.folder}', '${currentTabMode}')">🔄 Refetch Metadata</button>
+                                <button type="button" style="background: #0ea5e9;" onclick="syncItemNow('${item.folder}', '${currentTabMode}')">♻️ Sync Item</button>
                                 <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
+                            </div>
+
+                            <div class="form-group full-width" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+                                <label style="width:100%; color:#93c5fd; margin-bottom:0;">Manual Worker Trigger</label>
+                                <select id="worker-${item.folder}" style="min-width:180px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:6px 8px;">
+                                    <option value="INGEST">INGEST</option>
+                                    <option value="METADATA">METADATA</option>
+                                    <option value="SUBTITLES">SUBTITLES</option>
+                                    <option value="TRANSCODE">TRANSCODE</option>
+                                    <option value="CLOUDSYNC">CLOUDSYNC</option>
+                                </select>
+                                <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${item.folder}', '${currentTabMode}')">Run Worker</button>
+                            </div>
+
+                            <div class="form-group full-width" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:2px;">
+                                <label style="width:100%; color:#c4b5fd; margin-bottom:0;">Rename Tools</label>
+                                <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
+                                <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
+                                <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${item.folder}', '${currentTabMode}')">Apply Rename</button>
                             </div>
                         </div>
                     </div>
                 </div>
             `}).join('');
+        }
+
+        async function syncItemNow(folder, type) {
+            try {
+                const res = await fetch('/api/admin/sync-item', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Sync failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+                showToast('Disk->Redis sync complete.', 'success');
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Sync request failed.', 'error', 4200);
+            }
+        }
+
+        async function runWorkerNow(folder, type) {
+            try {
+                const worker = document.getElementById(`worker-${folder}`)?.value || 'METADATA';
+                showToast(`Running ${worker} for ${folder}...`, 'info', 3000);
+
+                const res = await fetch('/api/admin/manual-worker-run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type, worker })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast(`${worker} failed: ` + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+                showToast(`${worker} finished for ${folder}.`, 'success', 3200);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Worker trigger request failed.', 'error', 4200);
+            }
+        }
+
+        async function renameMediaNow(folder, type) {
+            const newFolderName = (document.getElementById(`rename-folder-${folder}`)?.value || '').trim();
+            const newFileName = (document.getElementById(`rename-file-${folder}`)?.value || '').trim();
+
+            if (!newFolderName && !newFileName) {
+                showToast('Nothing to rename.', 'info');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/admin/rename-media', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type, newFolderName, newFileName })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Rename failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+                showToast('Rename applied successfully.', 'success');
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Rename request failed.', 'error', 4200);
+            }
         }
 
         async function manualPushToCloud(folder, type) {

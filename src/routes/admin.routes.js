@@ -124,6 +124,150 @@ router.get('/health-check/:service', async (req, res) => {
     }
 });
 
+router.post('/sync-item', async (req, res) => {
+    try {
+        await LibraryScanner.runLibraryScanSweep();
+        return res.json({ success: true, message: 'Library snapshot refreshed from disk.' });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/manual-worker-run', async (req, res) => {
+    try {
+        const { folder, contentType, worker } = req.body || {};
+        if (!folder || !worker) {
+            return res.status(400).json({ success: false, error: 'Missing folder or worker.' });
+        }
+
+        const cleanWorker = String(worker).toUpperCase();
+        const workerMap = {
+            INGEST: 'http://127.0.0.1:5000/process',
+            METADATA: 'http://127.0.0.1:5001/process',
+            SUBTITLES: 'http://127.0.0.1:5002/process',
+            TRANSCODE: 'http://127.0.0.1:5003/process',
+            CLOUDSYNC: 'http://127.0.0.1:5004/process'
+        };
+
+        const workerUrl = workerMap[cleanWorker];
+        if (!workerUrl) {
+            return res.status(400).json({ success: false, error: `Unsupported worker: ${worker}` });
+        }
+
+        const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        const folderPath = path.join(baseDir, folder);
+        if (!fs.existsSync(folderPath)) {
+            return res.status(404).json({ success: false, error: 'Target folder not found.' });
+        }
+
+        let metadata = {};
+        const metaFilePath = path.join(folderPath, 'metadata.json');
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            } catch (_err) {
+                metadata = {};
+            }
+        }
+
+        const payload = {
+            folderPath,
+            folderName: folder,
+            contentType: contentType || metadata.contentType || (folderPath.includes('/series') ? 'series' : 'movie'),
+            imdbId: metadata.imdbId || null,
+            manualImdbId: metadata.imdbId || null,
+            forceActualUpload: cleanWorker === 'CLOUDSYNC'
+        };
+
+        const workerResponse = await axios.post(workerUrl, payload, { timeout: 1800000 });
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            worker: cleanWorker,
+            response: workerResponse.data
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.response?.data?.error || err.message });
+    }
+});
+
+router.post('/rename-media', async (req, res) => {
+    try {
+        const { folder, contentType, newFolderName, newFileName } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const hasUnsafePath = (val) => String(val || '').includes('/') || String(val || '').includes('\\');
+        if (hasUnsafePath(newFolderName) || hasUnsafePath(newFileName)) {
+            return res.status(400).json({ success: false, error: 'Invalid rename value.' });
+        }
+
+        const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        let currentFolderName = folder;
+        let currentPath = path.join(baseDir, currentFolderName);
+
+        if (!fs.existsSync(currentPath)) {
+            return res.status(404).json({ success: false, error: 'Target folder not found.' });
+        }
+
+        if (newFolderName && newFolderName.trim() && newFolderName.trim() !== currentFolderName) {
+            const nextFolderName = newFolderName.trim();
+            const nextPath = path.join(baseDir, nextFolderName);
+            if (fs.existsSync(nextPath)) {
+                return res.status(409).json({ success: false, error: 'Destination folder already exists.' });
+            }
+            await fsPromises.rename(currentPath, nextPath);
+            currentFolderName = nextFolderName;
+            currentPath = nextPath;
+        }
+
+        if (newFileName && newFileName.trim()) {
+            const files = fs.readdirSync(currentPath);
+            const videoExts = ['.web.mp4', '.mp4', '.mkv', '.m4v', '.avi', '.mov'];
+
+            const sourceFile =
+                files.find(f => f.endsWith('.web.mp4')) ||
+                files.find(f => videoExts.some(ext => f.toLowerCase().endsWith(ext)));
+
+            if (sourceFile) {
+                const sourceExt = path.extname(sourceFile);
+                const rawTarget = newFileName.trim();
+                const targetFileName = path.extname(rawTarget) ? rawTarget : `${rawTarget}${sourceExt}`;
+
+                if (targetFileName !== sourceFile) {
+                    const sourcePath = path.join(currentPath, sourceFile);
+                    const targetPath = path.join(currentPath, targetFileName);
+                    if (fs.existsSync(targetPath)) {
+                        return res.status(409).json({ success: false, error: 'Destination file already exists.' });
+                    }
+                    await fsPromises.rename(sourcePath, targetPath);
+                }
+            }
+        }
+
+        const metaFilePath = path.join(currentPath, 'metadata.json');
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                const metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+                metadata.folderName = currentFolderName;
+                metadata.folderPath = currentPath;
+                metadata.pipelineState = metadata.pipelineState || {};
+                metadata.pipelineState.lastUpdated = new Date().toISOString();
+                fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+            } catch (_err) {
+                // Best-effort metadata patch only.
+            }
+        }
+
+        await LibraryScanner.runLibraryScanSweep();
+        return res.json({ success: true, folder: currentFolderName });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // POST: /api/admin/sanitizer/run
 router.post('/sanitizer/run', (req, res) => {
     res.json({ success: true, message: "Sanitizer execution sequence triggered." });
