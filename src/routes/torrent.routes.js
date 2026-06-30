@@ -265,7 +265,7 @@ router.get('/pipeline/status', async (req, res) => {
             }
 
             // Skip completed jobs from active pipeline display
-            if (job.status === 'COMPLETE') return;
+            if (job.status === 'COMPLETE' || job.currentStep === 'COMPLETE' || job.currentStep === 'COMPLETED') return;
 
             // Map job step to human-friendly status
             const stepStatusMap = {

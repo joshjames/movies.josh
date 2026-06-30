@@ -176,6 +176,19 @@ router.get('/library-metadata', async (req, res) => {
     try {
         const library = await getLibrary();
 
+        const normalizeStorageFiles = (files = {}) => {
+            const out = {};
+            Object.keys(files || {}).sort().forEach(profile => {
+                const block = files[profile] || {};
+                out[profile] = {
+                    status: block.status || '',
+                    localPath: block.localPath || '',
+                    remoteKey: block.remoteKey || ''
+                };
+            });
+            return out;
+        };
+
         const normalizeComparable = (meta = {}) => ({
             title: meta.title || '',
             year: meta.year || '',
@@ -183,7 +196,7 @@ router.get('/library-metadata', async (req, res) => {
             plot: meta.plot || '',
             genre: meta.genre || '',
             storageLocation: meta.storage?.location || 'local',
-            storageFiles: meta.storage?.files || {}
+            storageFiles: normalizeStorageFiles(meta.storage?.files || {})
         });
 
         const buildItem = (folder, redisMeta, type) => {

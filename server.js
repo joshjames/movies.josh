@@ -107,6 +107,18 @@ app.use('/api/*', (req, res) => {
 (async () => {
     // Attempt Redis connection (optional, non-blocking)
     await initRedis().catch(err => logger.debug(`Queue initialization note: ${err.message}`));
+
+    try {
+        await LibraryScanner.runLibraryScanSweep();
+        logger.info('Library snapshot initialized at startup.');
+    } catch (scanErr) {
+        logger.warn(`Initial library scan failed: ${scanErr.message}`);
+    }
+
+    const LIBRARY_SCAN_INTERVAL_MS = parseInt(process.env.LIBRARY_SCAN_INTERVAL_MS || '300000', 10);
+    setInterval(() => {
+        LibraryScanner.runLibraryScanSweep().catch(err => logger.warn(`Scheduled library scan failed: ${err.message}`));
+    }, LIBRARY_SCAN_INTERVAL_MS);
     
     logger.info('Queue-driven pipeline active; waiting for torrent completion events.');
     startPipelineWorker(10000);

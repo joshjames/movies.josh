@@ -10,7 +10,8 @@ const {
     getAllJobs,
     getJob,
     getJobSnapshot,
-    updateJob
+    updateJob,
+    removeJob
 } = require('../PipelineQueueService');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
@@ -94,13 +95,22 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
         }
     }
 
+    const folderBaseName = path.basename(targetFolderPath);
+    const inferredYearMatch = folderBaseName.match(/\b(19|20)\d{2}\b/);
+    const inferredYear = inferredYearMatch ? inferredYearMatch[0] : '';
+    const inferredTitle = folderBaseName
+        .replace(/\.(19|20)\d{2}\b/g, '')
+        .replace(/[._-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
     const merged = {
         ...existing,
         ...patchData,
         imdbId: resolvedImdbId || patchData.imdbId || existing.imdbId || null,
         contentType: patchData.contentType || existing.contentType || job.contentType || 'movie',
-        title: patchData.title || existing.title || path.basename(targetFolderPath).replace(/[._-]/g, ' '),
-        year: patchData.year || existing.year || '',
+        title: patchData.title || existing.title || inferredTitle,
+        year: patchData.year || existing.year || inferredYear,
         plot: patchData.plot || existing.plot || '',
         genre: patchData.genre || existing.genre || '',
         runtime: patchData.runtime || existing.runtime || 'N/A',
@@ -129,6 +139,25 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
 
     fs.writeFileSync(metadataPath, JSON.stringify(merged, null, 4));
     return metadataPath;
+}
+
+async function removeCompletedTorrentFromClient(job) {
+    const torrentHash = String(job.payload?.torrentHash || '').trim();
+    if (!torrentHash) return;
+
+    const deleteParams = new URLSearchParams();
+    deleteParams.append('hashes', torrentHash);
+    deleteParams.append('deleteFiles', 'false');
+
+    try {
+        await axios.post(`${QBIT_URL}/api/v2/torrents/delete`, deleteParams.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 5000
+        });
+        logger.info(`🧹 [Queue] Removed completed torrent from qBittorrent (kept data): ${torrentHash.substring(0, 8)}`);
+    } catch (err) {
+        logger.warn(`⚠️ [Queue] Could not remove completed torrent ${torrentHash.substring(0, 8)}: ${err.message}`);
+    }
 }
 
 function findPendingDownloadJob(torrent) {
@@ -323,7 +352,7 @@ async function processNextJob(job) {
         );
 
         const updated = updateJob(job, {
-            status: response.data?.success === false ? 'FAILED' : 'QUEUED',
+            status: response.data?.success === false ? 'FAILED' : (nextStep === 'COMPLETE' ? 'COMPLETE' : 'QUEUED'),
             currentStep: response.data?.success === false ? 'FAILED' : nextStep,
             imdbId: resolvedImdbId,
             payload: mergedPayload,
@@ -343,6 +372,13 @@ async function processNextJob(job) {
             } catch (scanErr) {
                 logger.warn(`⚠️ [Queue] Library refresh failed after ${job.currentStep}: ${scanErr.message}`);
             }
+        }
+
+        if (updated.status === 'COMPLETE' || updated.currentStep === 'COMPLETE') {
+            await removeCompletedTorrentFromClient(updated);
+            removeJob(updated.id);
+            logger.debug(`✅ [Queue] Job ${updated.id} finalized and removed from active queue map.`);
+            return updated;
         }
 
         if (updated.status === 'QUEUED' && updated.currentStep !== 'COMPLETE' && updated.currentStep !== 'FAILED') {

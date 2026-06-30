@@ -104,7 +104,7 @@ app.post('/process', async (req, res) => {
                     storage: {
                         location: "local",
                         files: {
-                            "1080p": { status: "pending", localPath: existingWebFile, remoteKey: null },
+                            "1080p": { status: "synced", localPath: existingWebFile, remoteKey: null },
                             "720p": { status: "waiting", localPath: null, remoteKey: null },
                             "480p": { status: "waiting", localPath: null, remoteKey: null }
                         }
@@ -165,7 +165,7 @@ app.post('/process', async (req, res) => {
                 storage: {
                     location: "local",
                     files: {
-                        "1080p": { status: "pending", localPath: path.basename(output1080Path), remoteKey: null },
+                        "1080p": { status: "synced", localPath: path.basename(output1080Path), remoteKey: null },
                         "720p":  { status: "waiting", localPath: null, remoteKey: null },
                         "480p":  { status: "waiting", localPath: null, remoteKey: null }
                     }
