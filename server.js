@@ -11,6 +11,7 @@ const cookieParser = require('cookie-parser');
 const logger = require('./src/services/logger');
 const LibraryScanner = require('./src/services/LibraryScanner');
 const { startPipelineWorker } = require('./src/services/workers/PipelineWorker');
+const { initRedis } = require('./src/services/PipelineQueueService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -103,8 +104,13 @@ app.use('/api/*', (req, res) => {
 // =========================================================================
 // 🚀 STARTUP AGENTS BOOTSTRAP INITIALIZATION
 // =========================================================================
-LibraryScanner.runLibraryScanSweep().catch(err => console.error(err));
-startPipelineWorker(10000);
+(async () => {
+    // Attempt Redis connection (optional, non-blocking)
+    await initRedis().catch(err => logger.debug(`Queue initialization note: ${err.message}`));
+    
+    logger.info('Queue-driven pipeline active; waiting for torrent completion events.');
+    startPipelineWorker(10000);
+})();
 
 app.listen(PORT, () => {
     console.log(`\n==================================================`);

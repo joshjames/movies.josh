@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/home/epic/movie-streamer/logs/.4ad5496b902d79725e52e15f354226a1b214ec62-audit.json",
+    "files": [
+        {
+            "date": 1782830291056,
+            "name": "/home/epic/movie-streamer/logs/anymovie-2026-06-30.log",
+            "hash": "dcb021ce38fcbfa9bab102b15bf6de0d10b7d4d70dce4d891ecf49d84345edcc"
+        }
+    ],
+    "hashType": "sha256"
+}

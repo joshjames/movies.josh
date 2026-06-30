@@ -67,8 +67,8 @@ async function processAsset(folder, destinationParent) {
                 const nextStepMap = { 
                     'METADATA': 'SUBTITLES', 
                     'SUBTITLES': 'TRANSCODE', 
-                    'TRANSCODE': 'COMPLETED'
-                    // 'UPLOAD': 'COMPLETED' 
+                    'TRANSCODE': 'COMPLETED',
+                     'UPLOAD': 'COMPLETED' 
                 };
                 nextStep = nextStepMap[currentStep];
             }
@@ -242,7 +242,7 @@ async function orchestrateStorageTree() {
 }
 
 module.exports = {
-    startOrchestrator(intervalMs = 30000) {
+    startOrchestrator(intervalMs = 300000) {
         logger.debug(`🚀 Master Pipeline Orchestrator online with concurrency boundary [Cap: 2]. Scanning every ${intervalMs}ms...`);
         orchestrateStorageTree();
         setInterval(orchestrateStorageTree, intervalMs);

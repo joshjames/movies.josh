@@ -68,6 +68,7 @@ class TorrentService {
             // );
 
 
+            return activeTorrents;
         } catch (err) {
             logger.warn(`⚠️ [Torrent Service] Pipeline target unreachable: ${err.message}`);
             return [];
