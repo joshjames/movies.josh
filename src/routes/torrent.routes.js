@@ -168,7 +168,8 @@ router.post('/downloader/add', async (req, res) => {
                 rawPath: null,
                 cleanPath: null,
                 videoFile: null,
-                magnetUrl
+                magnetUrl,
+                imdbId: imdbId || null
             }
         });
         
@@ -208,7 +209,8 @@ router.post('/yts/add', async (req, res) => {
                 rawPath: null,
                 cleanPath: null,
                 videoFile: null,
-                magnetUrl
+                magnetUrl,
+                imdbId: imdbId || null
             }
         });
         

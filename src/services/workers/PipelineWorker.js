@@ -107,6 +107,10 @@ async function enqueueCompletedTorrent(torrent) {
 async function processNextJob(job) {
     if (!job) return null;
 
+    logger.debug(
+        `🧭 [Queue] Processing job ${job.id} | status=${job.status} | step=${job.currentStep} | imdbId=${job.imdbId || 'unknown'} | hasRawPath=${Boolean(job.payload?.rawPath)} | hasCleanPath=${Boolean(job.payload?.cleanPath)}`
+    );
+
     // Prevent accidental global ingest sweep when a pre-download placeholder job leaks into runnable state.
     if (job.currentStep === 'INGEST' && !(job.payload?.rawPath || job.payload?.cleanPath)) {
         logger.warn(`⏭️ [Queue] Deferring job ${job.id}: missing folder path for INGEST.`);
@@ -170,7 +174,7 @@ async function processNextJob(job) {
     }
 
     try {
-        logger.debug(`🧠 [Queue] Dispatching job ${job.id} to ${job.currentStep}`);
+        logger.debug(`🧠 [Queue] Dispatching job ${job.id} to ${job.currentStep} -> ${stepConfig.workerUrl}`);
         const response = await axios.post(stepConfig.workerUrl, stepConfig.payload, { timeout: 1800000 });
         const patchData = response.data?.patchData || {};
         const nextStep = patchData.pipelineState?.currentStep || {
@@ -188,6 +192,10 @@ async function processNextJob(job) {
             rawPath: patchData.rawPath || job.payload?.rawPath || null
         };
 
+        logger.debug(
+            `📦 [Queue] ${job.id} ${job.currentStep} response: success=${response.data?.success !== false} | nextStep=${nextStep} | patchKeys=${Object.keys(patchData).join(',') || 'none'}`
+        );
+
         const updated = updateJob(job, {
             status: response.data?.success === false ? 'FAILED' : 'QUEUED',
             currentStep: response.data?.success === false ? 'FAILED' : nextStep,
@@ -200,8 +208,15 @@ async function processNextJob(job) {
         });
 
         logger.debug(`🧠 [Queue] Job ${updated.id} moved to ${updated.currentStep}`);
+
+        if (updated.status === 'QUEUED' && updated.currentStep !== 'COMPLETE' && updated.currentStep !== 'FAILED') {
+            logger.debug(`🔁 [Queue] Continuing job ${updated.id} to ${updated.currentStep}`);
+            return processNextJob(updated);
+        }
+
         return updated;
     } catch (err) {
+        logger.error(`❌ [Queue] Job ${job.id} failed during ${job.currentStep}: ${err.message}`);
         return updateJob(job, {
             status: 'FAILED',
             currentStep: 'FAILED',
@@ -276,7 +291,10 @@ async function checkPipelineCompletions() {
 
         try {
             const job = await enqueueCompletedTorrent(completedTorrent);
-            if (job) await processNextJob(job);
+            if (job) {
+                logger.debug(`🚦 [Queue] Starting pipeline chain for job ${job.id}`);
+                await processNextJob(job);
+            }
         } catch (queueErr) {
             logger.error(`❌ Queue processing failed: ${queueErr.message}`);
         }
