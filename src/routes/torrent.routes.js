@@ -10,6 +10,13 @@ const axios = require('axios');
 
 const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
+const { 
+    createJob, 
+    getAllJobs, 
+    getFailedJobs, 
+    getJob,
+    updateJob
+} = require('../services/PipelineQueueService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
 
@@ -129,16 +136,30 @@ router.get('/eztv/browse', async (req, res) => {
 
 // POST: /api/downloader/add
 router.post('/downloader/add', async (req, res) => {
-    const { magnetUrl, category } = req.body; 
+    const { magnetUrl, category, imdbId } = req.body; 
 
     if (!magnetUrl) {
         return res.status(400).json({ error: "Missing target magnet payload." });
     }
 
     try {
-        // Capture 'series-streamer' from shows.html cleanly
         const targetCategory = category || 'series-streamer';
-        await TorrentService.addMagnet(magnetUrl, targetCategory);
+        await TorrentService.addMagnet(magnetUrl, targetCategory, imdbId);
+        
+        // Create a queue job immediately with pending status
+        const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
+        createJob({
+            imdbId: imdbId || null,
+            contentType: targetCategory === 'series-streamer' ? 'series' : 'movie',
+            payload: {
+                torrentName,
+                rawPath: null,
+                cleanPath: null,
+                videoFile: null,
+                magnetUrl
+            }
+        });
+        
         return res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -147,12 +168,26 @@ router.post('/downloader/add', async (req, res) => {
 
 // POST: /api/yts/add (Legacy alias layout router mapping)
 router.post('/yts/add', async (req, res) => {
-    const { magnetUrl } = req.body;
+    const { magnetUrl, imdbId } = req.body;
     if (!magnetUrl) return res.status(400).json({ error: "Missing target magnet payload." });
 
     try {
-        // Movies default cleanly to movie-streamer via TorrentService's base parameters
-        await TorrentService.addMagnet(magnetUrl, 'movie-streamer');
+        await TorrentService.addMagnet(magnetUrl, 'movie-streamer', imdbId);
+        
+        // Create a queue job immediately with pending status
+        const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
+        createJob({
+            imdbId: imdbId || null,
+            contentType: 'movie',
+            payload: {
+                torrentName,
+                rawPath: null,
+                cleanPath: null,
+                videoFile: null,
+                magnetUrl
+            }
+        });
+        
         return res.status(200).json({ success: true, message: "Successfully queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -163,12 +198,13 @@ router.post('/yts/add', async (req, res) => {
 // 📊 TELEMETRY & WORKFLOW DATA MONITOR
 // =========================================================================
 
-// GET: /api/pipeline/status
+// GET: /api/pipeline/status - Returns active downloads and queue jobs with stage info
 router.get('/pipeline/status', async (req, res) => {
     try {
         let pipeline = [];
+        let failedJobs = [];
 
-        // 1. Offload active downloads calculation step straight to the service agent
+        // 1. Get active downloads from qBittorrent
         const torrents = await TorrentService.getActivePipelineTorrents();
         torrents.forEach(torrent => {
             let displayStatus = 'Downloading';
@@ -180,36 +216,133 @@ router.get('/pipeline/status', async (req, res) => {
                 progress: (torrent.progress * 100).toFixed(1),
                 status: displayStatus,
                 eta: torrent.eta, 
-                size: (torrent.size / (1024 ** 3)).toFixed(2) + ' GB'
+                size: (torrent.size / (1024 ** 3)).toFixed(2) + ' GB',
+                stage: 'downloading'
             });
         });
 
-        // 2. Scan processing directory locks
-        try {
-            await fsPromises.access(MOVIES_DIR);
-            const folders = await fsPromises.readdir(MOVIES_DIR);
-            
-            await Promise.all(folders.map(async (folder) => {
-                const folderPath = path.join(MOVIES_DIR, folder);
-                try {
-                    const stat = await fsPromises.lstat(folderPath);
-                    if (stat.isDirectory()) {
-                        await fsPromises.access(path.join(folderPath, '.processing'));
-                        pipeline.push({
-                            title: folder.replace(/[._-]/g, ' '),
-                            progress: 'N/A',
-                            status: 'Pre-Transcoding (Optimizing)',
-                            eta: 'Calculating...',
-                            size: 'Processing Video Stream...'
-                        });
-                    }
-                } catch {}
-            }));
-        } catch (fsErr) {}
+        // 2. Get active jobs from queue system
+        const allJobs = getAllJobs();
+        allJobs.forEach(job => {
+            // Collect failed jobs separately
+            if (job.status === 'FAILED') {
+                failedJobs.push({
+                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    status: 'Failed at ' + job.currentStep,
+                    error: job.error || 'Unknown error',
+                    jobId: job.id,
+                    stage: job.currentStep,
+                    imdbId: job.imdbId,
+                    failedAt: job.updatedAt
+                });
+                return;
+            }
 
-        return res.json({ success: true, pipeline });
+            // Skip completed jobs from active pipeline display
+            if (job.status === 'COMPLETE') return;
+
+            // Map job step to human-friendly status
+            const stepStatusMap = {
+                'INGEST': { display: 'Ingesting (Organizing Files)', stage: 'ingest', progress: 15 },
+                'METADATA': { display: 'Fetching Metadata & Artwork', stage: 'metadata', progress: 30 },
+                'SUBTITLES': { display: 'Finding Subtitles', stage: 'subtitles', progress: 45 },
+                'TRANSCODE': { display: 'Optimizing Video', stage: 'transcode', progress: 75 },
+                'COMPLETE': { display: 'Finalizing', stage: 'complete', progress: 100 }
+            };
+
+            const stepInfo = stepStatusMap[job.currentStep] || {
+                display: 'Processing (' + job.currentStep + ')',
+                stage: 'processing',
+                progress: 50
+            };
+
+            pipeline.push({
+                title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                progress: stepInfo.progress,
+                status: stepInfo.display,
+                eta: 'Calculating...',
+                size: 'In Pipeline',
+                stage: stepInfo.stage,
+                imdbId: job.imdbId,
+                jobId: job.id
+            });
+        });
+
+        return res.json({ success: true, pipeline, failures: failedJobs });
     } catch (err) {
+        logger.error('Pipeline Status Error: ' + err.message);
         return res.status(500).json({ error: "Failed to assemble pipeline matrix state structures." });
+    }
+});
+
+// GET: /api/job/:jobId - Get detailed job information
+router.get('/job/:jobId', async (req, res) => {
+    try {
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        return res.json({ success: true, job });
+    } catch (err) {
+        logger.error('Get job error: ' + err.message);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// GET: /api/jobs/failed - Get all failed jobs
+router.get('/jobs/failed', async (req, res) => {
+    try {
+        const failed = getFailedJobs();
+        logger.debug(`[Queue API] Failed jobs requested. Count=${failed.length}`);
+        return res.json({ 
+            success: true, 
+            count: failed.length,
+            jobs: failed.map(job => ({
+                jobId: job.id,
+                title: (job.payload && job.payload.torrentName) ? job.payload.torrentName : 'Unknown',
+                stage: job.currentStep,
+                error: job.error,
+                failedAt: job.updatedAt,
+                imdbId: job.imdbId,
+                contentType: job.contentType
+            }))
+        });
+    } catch (err) {
+        logger.error('Get failed jobs error: ' + err.message);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// POST: /api/job/:jobId/retry - Retry a failed job
+router.post('/job/:jobId/retry', async (req, res) => {
+    try {
+        logger.debug(`[Queue API] Retry request received for jobId=${req.params.jobId}`);
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            logger.warn(`[Queue API] Retry failed. Job not found: ${req.params.jobId}`);
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        
+        if (job.status !== 'FAILED') {
+            logger.warn(`[Queue API] Retry rejected. Job ${job.id} status is ${job.status}, not FAILED.`);
+            return res.status(400).json({ error: 'Only failed jobs can be retried' });
+        }
+
+        // Reset job to QUEUED state at the failed step
+        const retried = updateJob(job, {
+            status: 'QUEUED',
+            error: null,
+            history: [
+                ...(job.history || []),
+                { step: 'RETRY', timestamp: new Date().toISOString() }
+            ]
+        });
+
+        logger.info(`🔄 [Queue] Job ${job.id} retrying from step ${job.currentStep}`);
+        return res.json({ success: true, message: 'Job queued for retry', job: retried });
+    } catch (err) {
+        logger.error('[Queue API] Retry job error: ' + err.message);
+        return res.status(500).json({ error: err.message });
     }
 });
 

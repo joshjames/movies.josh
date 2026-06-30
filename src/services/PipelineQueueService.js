@@ -134,6 +134,22 @@ function removeJob(id) {
   }
 }
 
+function getFailedJobs() {
+  return Array.from(jobs.values()).filter(job => job.status === 'FAILED');
+}
+
+function getCompletedJobs() {
+  return Array.from(jobs.values()).filter(job => job.status === 'COMPLETE');
+}
+
+function getActiveJobs() {
+  return Array.from(jobs.values()).filter(job => ['QUEUED', 'PROCESSING', 'WAITING'].includes(job.status));
+}
+
+function getJobsByStatus(status) {
+  return Array.from(jobs.values()).filter(job => job.status === status);
+}
+
 module.exports = {
   initRedis,
   createJob,
@@ -143,5 +159,9 @@ module.exports = {
   updateJob,
   getNextRunnableJob,
   removeJob,
+  getFailedJobs,
+  getCompletedJobs,
+  getActiveJobs,
+  getJobsByStatus,
   isRedisConnected: () => redisConnected
 };

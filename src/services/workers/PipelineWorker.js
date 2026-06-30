@@ -1,6 +1,7 @@
 // src/services/workers/PipelineWorker.js
 const axios = require('axios');
 const logger = require('../../utils/logger');
+const TorrentService = require('../TorrentService');
 const {
     createJob,
     getAllJobs,
@@ -28,8 +29,11 @@ async function enqueueCompletedTorrent(torrent) {
     if (!tagStr.includes('movie-streamer') && !tagStr.includes('series-streamer')) return null;
     if (tagStr.includes('-processed')) return null;
 
+    // Retrieve IMDB ID from TorrentService mapping
+    const imdbId = TorrentService.getImdbIdByHash(torrent.hash);
+
     const job = createJob({
-        imdbId: torrent.imdbId || null,
+        imdbId: imdbId || null,
         contentType: inferContentType(tagStr),
         payload: {
             torrentName: torrent.name,
@@ -39,7 +43,7 @@ async function enqueueCompletedTorrent(torrent) {
         }
     });
 
-    logger.info(`🧾 [Queue] Enqueued job ${job.id} for torrent ${torrent.name}`);
+    logger.info(`💾 [Queue] Enqueued job ${job.id} for torrent ${torrent.name} (IMDB: ${imdbId || 'unknown'})`);
     return job;
 }
 

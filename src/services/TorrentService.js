@@ -7,13 +7,17 @@ const logger = require('./logger');
 
 const QBIT_BASE_URL = process.env.QBIT_API_URL || 'http://qbittorrent:8080/api/v2';
 
+// Simple in-memory cache for torrent hash -> IMDB ID mapping
+const torrentImdbMap = new Map();
+
 class TorrentService {
     /**
      * Dispatched a formatted magnet stream download command into qBittorrent.
      * @param {string} magnetUrl 
      * @param {string} category 'movie' or 'series-streamer'
+     * @param {string} imdbId Optional IMDB ID to track with torrent
      */
-    async addMagnet(magnetUrl, category = 'movie') {
+    async addMagnet(magnetUrl, category = 'movie', imdbId = null) {
         try {
             const form = new FormData();
             form.append('urls', magnetUrl);
@@ -34,6 +38,20 @@ class TorrentService {
                 headers: form.getHeaders(),
                 timeout: 5000
             });
+
+            // After adding to qBittorrent, fetch the torrent info to get its hash
+            if (imdbId) {
+                try {
+                    const allTorrents = await axios.get(`${QBIT_BASE_URL}/torrents/info`, { timeout: 3000 });
+                    const addedTorrent = (allTorrents.data || []).find(t => t.category === targetCategory);
+                    if (addedTorrent && addedTorrent.hash) {
+                        torrentImdbMap.set(addedTorrent.hash, imdbId);
+                        logger.debug(`🔗 [Torrent Service] Mapped hash ${addedTorrent.hash.substring(0, 8)} -> IMDB ${imdbId}`);
+                    }
+                } catch (mapErr) {
+                    logger.warn(`⚠️ [Torrent Service] Could not map IMDB ID to torrent: ${mapErr.message}`);
+                }
+            }
 
             logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] download payload with tag [${targetTag}].`);
             return { success: true };
@@ -98,6 +116,23 @@ class TorrentService {
             logger.warn(`⚠️ [Torrent Service] Tag allocation failure for hash ${hash}: ${err.message}`);
             return false;
         }
+    }
+
+    /**
+     * Get IMDB ID for a torrent by hash
+     * @param {string} hash 
+     */
+    getImdbIdByHash(hash) {
+        return torrentImdbMap.get(hash) || null;
+    }
+
+    /**
+     * Store IMDB ID for a torrent hash
+     * @param {string} hash 
+     * @param {string} imdbId 
+     */
+    setImdbIdForHash(hash, imdbId) {
+        torrentImdbMap.set(hash, imdbId);
     }
 }
 

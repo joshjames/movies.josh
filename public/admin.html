@@ -93,9 +93,48 @@
         .user-row { display: flex; justify-content: space-between; align-items: center; background: #020617; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #3b82f6; }
         .user-name { font-weight: bold; color: #f1f5f9; }
         .user-meta-flags { font-size: 0.75rem; color: #64748b; }
+
+        .failed-job-row { background: #020617; border: 1px solid #7f1d1d; border-left: 4px solid #ef4444; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+        .failed-job-title { font-weight: 700; color: #f8fafc; font-size: 0.9rem; }
+        .failed-job-meta { font-size: 0.75rem; color: #fca5a5; margin-top: 3px; }
+        .failed-job-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
+        .btn-retry { background: #2563eb; font-size: 0.75rem; padding: 6px 10px; }
+        .btn-retry:hover { background: #1d4ed8; }
+
+        .toast-stack {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 10050;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            max-width: 360px;
+        }
+        .toast {
+            pointer-events: auto;
+            border-radius: 8px;
+            padding: 10px 12px;
+            border: 1px solid #334155;
+            background: #0b1220;
+            color: #e2e8f0;
+            font-size: 0.82rem;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+            animation: toast-in 140ms ease-out;
+        }
+        .toast.success { border-left: 4px solid #10b981; }
+        .toast.error { border-left: 4px solid #ef4444; }
+        .toast.info { border-left: 4px solid #38bdf8; }
+
+        @keyframes toast-in {
+            from { transform: translateY(-6px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <div id="toast-stack" class="toast-stack"></div>
     <div class="container">
         <h1>🛠️ Joshflix Library Override Desk</h1>
         
@@ -117,6 +156,11 @@
                 <div class="panel">
                     <h3>👥 Authorized System Profiles</h3>
                     <div id="users-list">Querying user indexes...</div>
+                </div>
+
+                <div class="panel">
+                    <h3>🧯 Queue Failures & Retry</h3>
+                    <div id="failed-jobs-list" style="font-size: 0.85rem; color: #94a3b8;">Checking failed queue jobs...</div>
                 </div>
 
                 <div class="panel">
@@ -305,6 +349,20 @@
                 if (state === 'run') card.classList.add('processing');
                 if (state === 'sync') card.classList.add('syncing');
             }
+        }
+
+        function showToast(message, level = 'info', timeoutMs = 2600) {
+            const stack = document.getElementById('toast-stack');
+            if (!stack) return;
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${level}`;
+            toast.textContent = message;
+            stack.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, timeoutMs);
         }
 
         function updateSyncProgressBar(folder, mbSent) {
@@ -605,13 +663,74 @@
             } catch (e) { console.error(e); }
         }
 
+        async function fetchFailedJobs() {
+            const container = document.getElementById('failed-jobs-list');
+            if (!container) return;
+
+            try {
+                const res = await fetch('/api/jobs/failed', { credentials: 'include' });
+                const data = await res.json();
+
+                if (!data.success || !Array.isArray(data.jobs)) {
+                    container.innerHTML = '<span style="color:#f87171;">Failed to load queue failure state.</span>';
+                    console.warn('[Admin] Failed job payload was not in expected format.');
+                    return;
+                }
+
+                if (data.jobs.length === 0) {
+                    container.innerHTML = '<span style="color:#10b981;">No failed jobs detected.</span>';
+                    return;
+                }
+
+                container.innerHTML = data.jobs.map(job => `
+                    <div class="failed-job-row">
+                        <div class="failed-job-title">${job.title}</div>
+                        <div class="failed-job-meta">Stage: ${job.stage} | Error: ${job.error || 'Unknown error'}</div>
+                        <div class="failed-job-actions">
+                            <button class="btn-retry" onclick="retryFailedJob('${job.jobId}')">Retry Job</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<span style="color:#f87171;">Error loading failed jobs.</span>';
+                console.error('[Admin] fetchFailedJobs failed:', err);
+            }
+        }
+
+        async function retryFailedJob(jobId) {
+            try {
+                console.debug('[Admin] Retrying failed job:', jobId);
+                const res = await fetch(`/api/job/${jobId}/retry`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    showToast('Retry failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    console.warn('[Admin] Retry rejected:', data.error || 'Unknown error');
+                    return;
+                }
+
+                showToast('Job queued for retry.', 'success');
+                console.info('[Admin] Retry accepted for job:', jobId);
+                fetchFailedJobs();
+                checkWorkerHealth();
+            } catch (err) {
+                showToast('Retry request failed. See logs.', 'error', 4200);
+                console.error('[Admin] Retry request failed:', err);
+            }
+        }
+
         // Execution mounts
         connectToLogStream();
         fetchLibraryData();
         fetchUserProfileIndexes();
+        fetchFailedJobs();
 
         checkWorkerHealth();
         setInterval(checkWorkerHealth, 5000);
+        setInterval(fetchFailedJobs, 7000);
     </script>
 </body>
 </html>

@@ -243,7 +243,7 @@ async function fetchMovieCatalog(pageUpdate = 1, appendMode = false) {
                             <div class="title">${movie.title}</div>
                             <div class="meta">${movie.year} • ${movie.runtime} min</div>
                         </div>
-                        <button class="add-btn" onclick="addMediaAsset(this, '${btoa(baseMagnet)}', 'movie-streamer')">Add to Library</button>
+                        <button class="add-btn" onclick="addMediaAsset(this, '${btoa(baseMagnet)}', 'movie-streamer', '${movie.imdb_code || ''}')">Add to Library</button>
                     </div>
                 </div>
             `;
@@ -298,7 +298,7 @@ async function fetchShowCatalog() {
                         <div>
                             <div class="title" title="${torrent.title}">${torrent.title}</div>
                         </div>
-                        <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer')">Ingest Series Pack</button>
+                        <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer', '${torrent.imdbId || ''}')">Ingest Series Pack</button>
                     </div>
                 </div>
             `;
@@ -326,7 +326,7 @@ function renderPaginationControls(totalMovies, pageLimit) {
 }
 
 // Unified route dispatcher pushing directly downstream 
-async function addMediaAsset(btn, base64Magnet, targetCategory) {
+async function addMediaAsset(btn, base64Magnet, targetCategory, imdbId = '') {
     const magnetUrl = atob(base64Magnet);
     btn.disabled = true;
     btn.style.background = '#475569';
@@ -338,7 +338,7 @@ async function addMediaAsset(btn, base64Magnet, targetCategory) {
         const response = await fetch(apiRoute, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ magnetUrl, category: targetCategory })
+            body: JSON.stringify({ magnetUrl, category: targetCategory, imdbId })
         });
 
         if (response.ok) {
@@ -372,7 +372,7 @@ function addManualMagnet(buttonObj) {
     buttonObj.innerText = 'Processing...';
 
     // Manual additions fallback gracefully to movie-streamer profiles
-    addMediaAsset(buttonObj, btoa(rawMagnet), currentMode === 'movies' ? 'movie-streamer' : 'series-streamer');
+    addMediaAsset(buttonObj, btoa(rawMagnet), currentMode === 'movies' ? 'movie-streamer' : 'series-streamer', '');
     inputEl.value = '';
     buttonObj.disabled = false;
     buttonObj.innerText = 'Ingest Link';

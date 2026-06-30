@@ -183,7 +183,7 @@ app.post('/process', async (req, res) => {
 
     } catch (err) {
         logger.error(`❌ Subtitle Worker structural exception on ${folderName}: ${err.message}`, 'error');
-        return res.json({ success: true, patchData: { subtitles: [] } });
+        return res.json({ success: false, error: err.message });
     }
 });
 
