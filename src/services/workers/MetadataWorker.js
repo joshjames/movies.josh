@@ -6,6 +6,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../logger');
+const metadataService = require('../MetadataService');
 
 const app = express();
 app.use(express.json());
@@ -65,8 +66,9 @@ app.post('/process', async (req, res) => {
         // Atomically handle poster streaming download directly into storage location
         if (data.Poster && data.Poster !== "N/A") {
             try {
-                const imgRes = await axios({ method: 'GET', url: data.Poster, responseType: 'stream', timeout: 10000 });
-                imgRes.data.pipe(fs.createWriteStream(path.join(folderPath, 'cover.jpg')));
+                const posterPath = path.join(folderPath, 'cover.jpg');
+                await metadataService.downloadCover(data.Poster, posterPath);
+                logger.debug(`🖼️ [Metadata] Poster saved to ${posterPath}`);
             } catch (imgErr) {
                 logger.error(`⚠️ Poster download skipped seamlessly: ${imgErr.message}`, 'warn');
             }

@@ -301,7 +301,14 @@ async function processNextJob(job) {
         const mergedPayload = {
             ...job.payload,
             ...(patchData.payload || {}),
-            cleanPath: patchData.cleanPath || patchData.payload?.cleanPath || job.payload?.cleanPath || job.payload?.rawPath || null,
+            cleanPath:
+                patchData.cleanPath ||
+                patchData.folderPath ||
+                patchData.payload?.cleanPath ||
+                patchData.payload?.folderPath ||
+                job.payload?.cleanPath ||
+                job.payload?.rawPath ||
+                null,
             rawPath: patchData.rawPath || job.payload?.rawPath || null,
             imdbId: resolvedImdbId
         };

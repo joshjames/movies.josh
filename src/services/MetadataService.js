@@ -26,17 +26,13 @@ class MetadataService {
     }
 
     async downloadCover(url, destPath) {
-        try {
-            const response = await axios({ method: 'GET', url, responseType: 'stream' });
-            const writer = fs.createWriteStream(destPath);
-            response.data.pipe(writer);
-            return new Promise((resolve, reject) => {
-                writer.on('finish', resolve);
-                writer.on('error', reject);
-            });
-        } catch (err) {
-            console.error(`   ⚠️ Cover download skipped: ${err.message}`);
-        }
+        const response = await axios({ method: 'GET', url, responseType: 'stream', timeout: 10000 });
+        const writer = fs.createWriteStream(destPath);
+        response.data.pipe(writer);
+        return new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
     }
 
     async fetchOMDb(title, year = '', type = 'movie') {
