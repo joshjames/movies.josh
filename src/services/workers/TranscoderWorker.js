@@ -114,10 +114,18 @@ app.post('/process', async (req, res) => {
         }
 
         // Clean query isolation for source video tracks
-        const sourceVideo = list.find(file => {
+        let sourceVideo = list.find(file => {
             const ext = path.extname(file).toLowerCase();
             return EXTENSIONS.includes(ext) && !file.endsWith('.web.mp4') && !file.includes('.720p') && !file.includes('.480p');
         });
+
+        if (!sourceVideo) {
+            // Fallback for titles that only exist as 720p/480p source files.
+            sourceVideo = list.find(file => {
+                const ext = path.extname(file).toLowerCase();
+                return EXTENSIONS.includes(ext) && !file.endsWith('.web.mp4');
+            });
+        }
 
         if (!sourceVideo) {
             return res.json({ success: false, error: "No viable processing source video found." });

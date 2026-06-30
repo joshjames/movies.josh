@@ -32,6 +32,18 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 // 🚨 NEW FIX: Isolated pathway pointing to your separate TV series mount location
 const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
 
+const MOVIE_PATH_CANDIDATES = [
+    MOVIES_DIR,
+    '/home/epic/movies',
+    '/app/storage/movies',
+    '/app/movies'
+].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+function resolveMovieFolderPath(folderName) {
+    const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, folderName));
+    return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, folderName);
+}
+
 router.get('/log-stream', (req, res) => {
     // Ensure only authorized admin access configurations proceed here
     res.setHeader('X-Accel-Buffering', 'no'); 
@@ -140,8 +152,9 @@ router.post('/repair-metadata', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing folder.' });
         }
 
-        const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
-        const folderPath = path.join(baseDir, folder);
+        const folderPath = contentType === 'series'
+            ? path.join(SERIES_DIR, folder)
+            : resolveMovieFolderPath(folder);
         const metaFilePath = path.join(folderPath, 'metadata.json');
 
         if (!fs.existsSync(folderPath)) {
@@ -160,10 +173,12 @@ router.post('/repair-metadata', async (req, res) => {
         }
 
         const filesOnDisk = fs.readdirSync(folderPath);
-        const profileSuffix = {
-            '1080p': '.web.mp4',
-            '720p': '.720p.mp4',
-            '480p': '.480p.mp4'
+        metadata.folderPath = folderPath;
+        metadata.folderName = folder;
+        const profileMatcher = {
+            '1080p': (f) => /\.web\.mp4$/i.test(f) || /1080p/i.test(f),
+            '720p': (f) => /720p/i.test(f),
+            '480p': (f) => /480p/i.test(f)
         };
 
         const resolveLocalPath = (profile, existingLocalPath) => {
@@ -171,8 +186,7 @@ router.post('/repair-metadata', async (req, res) => {
                 return existingLocalPath;
             }
 
-            const preferredSuffix = profileSuffix[profile];
-            const preferred = preferredSuffix ? filesOnDisk.find(f => f.endsWith(preferredSuffix)) : null;
+            const preferred = filesOnDisk.find(f => /\.(mp4|mkv|m4v)$/i.test(f) && profileMatcher[profile](f));
             if (preferred) return preferred;
 
             if (profile === '1080p') {
@@ -272,8 +286,9 @@ router.post('/manual-worker-run', async (req, res) => {
             return res.status(400).json({ success: false, error: `Unsupported worker: ${worker}` });
         }
 
-        const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
-        const folderPath = path.join(baseDir, folder);
+        const folderPath = contentType === 'series'
+            ? path.join(SERIES_DIR, folder)
+            : resolveMovieFolderPath(folder);
         if (!fs.existsSync(folderPath)) {
             return res.status(404).json({ success: false, error: 'Target folder not found.' });
         }
@@ -298,6 +313,16 @@ router.post('/manual-worker-run', async (req, res) => {
         };
 
         const workerResponse = await axios.post(workerUrl, payload, { timeout: 1800000 });
+
+        if (workerResponse?.data?.success === false) {
+            return res.status(422).json({
+                success: false,
+                error: workerResponse.data.error || `${cleanWorker} returned unsuccessful result.`,
+                worker: cleanWorker,
+                response: workerResponse.data
+            });
+        }
+
         await LibraryScanner.runLibraryScanSweep();
 
         return res.json({

@@ -13,6 +13,18 @@ const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/a
 // 🚨 NEW FIX: Isolated pathway pointing to the new separate SSD mount for TV shows
 const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
 
+const MOVIE_PATH_CANDIDATES = [
+    MOVIES_DIR,
+    '/home/epic/movies',
+    '/app/storage/movies',
+    '/app/movies'
+].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+function resolveMovieFolderPath(movieId) {
+    const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, movieId));
+    return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, movieId);
+}
+
 // =========================================================================
 // ENDPOINTS
 // =========================================================================
@@ -84,7 +96,7 @@ router.get('/movies', async (req, res) => {
 // GET: /api/movies/:id (Individual Stream Quality Switcher Profile Router)
 router.get('/movies/:id', async (req, res) => {
     const movieId = req.params.id;
-    const movieFolder = path.join(MOVIES_DIR, movieId);
+    const movieFolder = resolveMovieFolderPath(movieId);
     const infoFilePath = path.join(movieFolder, 'movie_info.json');
     const metaFilePath = path.join(movieFolder, 'metadata.json'); 
 
@@ -105,6 +117,32 @@ router.get('/movies/:id', async (req, res) => {
         // Silent block bypass for clean fallback names
     }
 
+    const rankLocalProfiles = (fileName) => {
+        const lower = String(fileName || '').toLowerCase();
+        if (!lower.endsWith('.mp4') && !lower.endsWith('.mkv') && !lower.endsWith('.m4v')) return 0;
+        if (lower.endsWith('.web.mp4')) return 100;
+        if (lower.includes('1080p')) return 90;
+        if (lower.includes('720p')) return 70;
+        if (lower.includes('480p')) return 50;
+        return 80;
+    };
+
+    const pickBestLocalFiles = (files = []) => {
+        const videos = files.filter(f => /\.(mp4|mkv|m4v)$/i.test(f));
+        const web1080 = videos.find(f => f.endsWith('.web.mp4')) || null;
+        const tagged1080 = videos.find(f => /1080p/i.test(f)) || null;
+        const tagged720 = videos.find(f => /720p/i.test(f)) || null;
+        const tagged480 = videos.find(f => /480p/i.test(f)) || null;
+
+        const bestGeneral = [...videos].sort((a, b) => rankLocalProfiles(b) - rankLocalProfiles(a))[0] || null;
+
+        return {
+            local1080: web1080 || tagged1080 || bestGeneral,
+            local720: tagged720 || null,
+            local480: tagged480 || null
+        };
+    };
+
     // 🚨 CLOUD TRACKING CHECK: Check if the file lives in object storage before running local fs checks
     try {
         if (fs.existsSync(metaFilePath)) {
@@ -113,9 +151,7 @@ router.get('/movies/:id', async (req, res) => {
             
             if (metaData?.storage?.location === 'remote') {
                 const files = await fsPromises.readdir(movieFolder).catch(() => []);
-                const local1080 = files.find(f => f.endsWith('.web.mp4')) || files.find(f => f.endsWith('.mp4') && !f.includes('.720p') && !f.includes('.480p'));
-                const local720 = files.find(f => f.endsWith('.720p.mp4'));
-                const local480 = files.find(f => f.endsWith('.480p.mp4'));
+                const { local1080, local720, local480 } = pickBestLocalFiles(files);
 
                 streamPayload.title = metaData.title || streamPayload.title;
                 streamPayload.file1080p = await MediaService.getPlaybackUrl(
@@ -156,6 +192,9 @@ router.get('/movies/:id', async (req, res) => {
         '480p': `${movieId}.480p.mp4`       
     };
 
+    const allFiles = await fsPromises.readdir(movieFolder).catch(() => []);
+    const pickedLocal = pickBestLocalFiles(allFiles);
+
     try {
         await fsPromises.access(path.join(movieFolder, expectedOutputs['1080p']));
         streamPayload.file1080p = `/movie-assets/${movieId}/${expectedOutputs['1080p']}`;
@@ -170,15 +209,27 @@ router.get('/movies/:id', async (req, res) => {
     try {
         await fsPromises.access(path.join(movieFolder, expectedOutputs['720p']));
         streamPayload.file720p = `/movie-assets/${movieId}/${expectedOutputs['720p']}`;
-    } catch {}
+    } catch {
+        if (pickedLocal.local720) {
+            streamPayload.file720p = `/movie-assets/${movieId}/${pickedLocal.local720}`;
+        }
+    }
 
     try {
         await fsPromises.access(path.join(movieFolder, expectedOutputs['480p']));
         streamPayload.file480p = `/movie-assets/${movieId}/${expectedOutputs['480p']}`;
-    } catch {}
+    } catch {
+        if (pickedLocal.local480) {
+            streamPayload.file480p = `/movie-assets/${movieId}/${pickedLocal.local480}`;
+        }
+    }
 
     if (!streamPayload.file1080p) {
-        streamPayload.file1080p = `/movie-assets/${movieId}`;
+        if (pickedLocal.local1080) {
+            streamPayload.file1080p = `/movie-assets/${movieId}/${pickedLocal.local1080}`;
+        } else {
+            streamPayload.file1080p = `/movie-assets/${movieId}`;
+        }
     }
 
     res.json(streamPayload);
@@ -228,7 +279,7 @@ router.get('/series/:showFolder', async (req, res) => {
 router.get('/raw-file/:id', async (req, res) => {
     try {
         const movieId = decodeURIComponent(req.params.id);
-        const folderPath = path.join(MOVIES_DIR, movieId);
+        const folderPath = resolveMovieFolderPath(movieId);
 
         try {
             await fsPromises.access(folderPath);
@@ -286,7 +337,7 @@ router.get('/raw-file/:id', async (req, res) => {
 router.get('/subtitles/:id', async (req, res) => {
     try {
         const movieId = decodeURIComponent(req.params.id);
-        const folderPath = path.join(MOVIES_DIR, movieId);
+        const folderPath = resolveMovieFolderPath(movieId);
 
         try {
             await fsPromises.access(folderPath);
