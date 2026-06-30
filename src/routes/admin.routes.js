@@ -133,6 +133,124 @@ router.post('/sync-item', async (req, res) => {
     }
 });
 
+router.post('/repair-metadata', async (req, res) => {
+    try {
+        const { folder, contentType, runCloudSync = true } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        const folderPath = path.join(baseDir, folder);
+        const metaFilePath = path.join(folderPath, 'metadata.json');
+
+        if (!fs.existsSync(folderPath)) {
+            return res.status(404).json({ success: false, error: 'Target folder not found.' });
+        }
+        if (!fs.existsSync(metaFilePath)) {
+            return res.status(404).json({ success: false, error: 'metadata.json not found.' });
+        }
+
+        let metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+        if (!metadata.storage) {
+            metadata.storage = { location: 'local', files: {} };
+        }
+        if (!metadata.storage.files) {
+            metadata.storage.files = {};
+        }
+
+        const filesOnDisk = fs.readdirSync(folderPath);
+        const profileSuffix = {
+            '1080p': '.web.mp4',
+            '720p': '.720p.mp4',
+            '480p': '.480p.mp4'
+        };
+
+        const resolveLocalPath = (profile, existingLocalPath) => {
+            if (existingLocalPath && fs.existsSync(path.join(folderPath, existingLocalPath))) {
+                return existingLocalPath;
+            }
+
+            const preferredSuffix = profileSuffix[profile];
+            const preferred = preferredSuffix ? filesOnDisk.find(f => f.endsWith(preferredSuffix)) : null;
+            if (preferred) return preferred;
+
+            if (profile === '1080p') {
+                const source = filesOnDisk.find(f => f.endsWith('.mp4') && !f.includes('.720p') && !f.includes('.480p'));
+                return source || null;
+            }
+
+            return null;
+        };
+
+        const profiles = ['1080p', '720p', '480p'];
+        profiles.forEach(profile => {
+            const block = metadata.storage.files[profile] || {};
+            const localPath = resolveLocalPath(profile, block.localPath || null);
+            const remoteKey = block.remoteKey || null;
+
+            let status = block.status || 'waiting';
+            if (remoteKey) {
+                status = 'synced';
+            } else if (localPath) {
+                status = metadata.storage.location === 'remote' ? 'pending' : 'synced';
+            } else {
+                status = 'waiting';
+            }
+
+            metadata.storage.files[profile] = {
+                ...block,
+                status,
+                localPath,
+                remoteKey
+            };
+        });
+
+        fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+
+        let cloudSyncTriggered = false;
+        if (runCloudSync && metadata.storage.location === 'remote') {
+            const hasPendingUpload = profiles.some(profile => metadata.storage.files[profile]?.status === 'pending');
+            if (hasPendingUpload) {
+                const cloudSyncRes = await axios.post('http://127.0.0.1:5004/process', {
+                    folderPath,
+                    folderName: folder,
+                    contentType: contentType || metadata.contentType || 'movie',
+                    forceActualUpload: true
+                }, { timeout: 1800000 });
+
+                const patchData = cloudSyncRes.data?.patchData || {};
+                metadata = {
+                    ...metadata,
+                    ...patchData,
+                    storage: {
+                        ...(metadata.storage || {}),
+                        ...(patchData.storage || {}),
+                        files: {
+                            ...(metadata.storage?.files || {}),
+                            ...(patchData.storage?.files || {})
+                        }
+                    },
+                    pipelineState: patchData.pipelineState || metadata.pipelineState
+                };
+
+                fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+                cloudSyncTriggered = true;
+            }
+        }
+
+        await LibraryScanner.runLibraryScanSweep();
+        return res.json({
+            success: true,
+            folder,
+            cloudSyncTriggered,
+            storage: metadata.storage
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.response?.data?.error || err.message });
+    }
+});
+
 router.post('/manual-worker-run', async (req, res) => {
     try {
         const { folder, contentType, worker } = req.body || {};
@@ -438,6 +556,20 @@ router.post('/override-metadata', async (req, res) => {
         }
 
         let triggerCloudSync = false;
+        const mergeStorage = (existingStorage = {}, incomingStorage = {}) => ({
+            ...existingStorage,
+            ...incomingStorage,
+            files: {
+                ...(existingStorage.files || {}),
+                ...(incomingStorage.files || {})
+            }
+        });
+
+        const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
+        const findLocalProfileFile = (profile) => {
+            const suffix = profile === '1080p' ? '.web.mp4' : `.${profile}.mp4`;
+            return filesOnDisk.find(f => f.endsWith(suffix)) || null;
+        };
 
         if (storage && storage.location === 'remote') {
             if (!metadata.storage) {
@@ -450,12 +582,27 @@ router.post('/override-metadata', async (req, res) => {
             if (!metadata.storage.files) metadata.storage.files = {};
 
             profiles.forEach(profile => {
-                if (!metadata.storage.files[profile]) {
-                    metadata.storage.files[profile] = {};
-                }
-                if (metadata.storage.files[profile].status !== 'synced') {
-                    metadata.storage.files[profile].status = 'pending';
+                const existingBlock = metadata.storage.files[profile] || {};
+                const existingLocalPath = existingBlock.localPath && fs.existsSync(path.join(folderPath, existingBlock.localPath))
+                    ? existingBlock.localPath
+                    : null;
+                const inferredLocalPath = existingLocalPath || findLocalProfileFile(profile);
+
+                if (existingBlock.status !== 'synced' && inferredLocalPath) {
+                    metadata.storage.files[profile] = {
+                        ...existingBlock,
+                        status: 'pending',
+                        localPath: inferredLocalPath,
+                        remoteKey: existingBlock.remoteKey || null
+                    };
                     triggerCloudSync = true;
+                } else if (existingBlock.status !== 'synced') {
+                    metadata.storage.files[profile] = {
+                        ...existingBlock,
+                        status: 'waiting',
+                        localPath: inferredLocalPath || null,
+                        remoteKey: existingBlock.remoteKey || null
+                    };
                 }
             });
         } else if (storage) {
@@ -474,20 +621,31 @@ router.post('/override-metadata', async (req, res) => {
 
         fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
 
-        // Refresh database record tracking arrays automatically
-        await LibraryScanner.runLibraryScanSweep();
-
         if (triggerCloudSync) {
             logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5004...`);
-            
-            axios.post('http://127.0.0.1:5004/process', {
+
+            const cloudSyncRes = await axios.post('http://127.0.0.1:5004/process', {
                 folderPath: folderPath,
                 folderName: folder,
                 forceActualUpload: true
-            }).catch(err => {
+            }, { timeout: 1800000 }).catch(err => {
                 logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
+                throw err;
             });
+
+            const patchData = cloudSyncRes.data?.patchData || {};
+            metadata = {
+                ...metadata,
+                ...patchData,
+                storage: mergeStorage(metadata.storage, patchData.storage || {}),
+                pipelineState: patchData.pipelineState || metadata.pipelineState
+            };
+
+            fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
         }
+
+        // Refresh database record tracking arrays automatically
+        await LibraryScanner.runLibraryScanSweep();
 
         return res.json({ success: true, libraryLocation: metadata.storage.location });
 

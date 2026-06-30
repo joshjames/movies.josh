@@ -112,11 +112,31 @@ router.get('/movies/:id', async (req, res) => {
             const metaData = JSON.parse(rawMeta);
             
             if (metaData?.storage?.location === 'remote') {
+                const files = await fsPromises.readdir(movieFolder).catch(() => []);
+                const local1080 = files.find(f => f.endsWith('.web.mp4')) || files.find(f => f.endsWith('.mp4') && !f.includes('.720p') && !f.includes('.480p'));
+                const local720 = files.find(f => f.endsWith('.720p.mp4'));
+                const local480 = files.find(f => f.endsWith('.480p.mp4'));
+
                 streamPayload.title = metaData.title || streamPayload.title;
-                streamPayload.file1080p = await MediaService.getPlaybackUrl(metaData, '1080p', null);
-                streamPayload.file720p = await MediaService.getPlaybackUrl(metaData, '720p', null);
-                streamPayload.file480p = await MediaService.getPlaybackUrl(metaData, '480p', null);
-                return res.json(streamPayload); // Exit completely so it doesn't fail on missing local files
+                streamPayload.file1080p = await MediaService.getPlaybackUrl(
+                    metaData,
+                    '1080p',
+                    local1080 ? `/movie-assets/${movieId}/${local1080}` : null
+                );
+                streamPayload.file720p = await MediaService.getPlaybackUrl(
+                    metaData,
+                    '720p',
+                    local720 ? `/movie-assets/${movieId}/${local720}` : null
+                );
+                streamPayload.file480p = await MediaService.getPlaybackUrl(
+                    metaData,
+                    '480p',
+                    local480 ? `/movie-assets/${movieId}/${local480}` : null
+                );
+
+                if (streamPayload.file1080p || streamPayload.file720p || streamPayload.file480p) {
+                    return res.json(streamPayload);
+                }
             }
         }
     } catch (err) {

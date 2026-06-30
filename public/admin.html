@@ -85,6 +85,42 @@
         
         .controls { display: flex; gap: 12px; margin-bottom: 20px; }
 
+        .ops-toolbar { display: flex; gap: 10px; align-items: center; justify-content: flex-end; grid-column: 1 / -1; margin-top: 4px; }
+        .ops-inline-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; grid-column: 1 / -1; margin-top: 4px; }
+        .ops-inline-row input,
+        .ops-inline-row select { min-height: 36px; }
+
+        .action-menu-wrap { position: relative; }
+        .btn-actions { background: #334155; }
+        .btn-actions:hover { background: #475569; }
+
+        .action-menu {
+            position: absolute;
+            top: 42px;
+            right: 0;
+            min-width: 260px;
+            background: #0b1220;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 6px;
+            box-shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
+            z-index: 30;
+            display: none;
+        }
+        .action-menu.show { display: block; }
+        .action-item {
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: #e2e8f0;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+        .action-item:hover { background: #1e293b; }
+
         .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #020617; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .admin-drop-zone.dragover { border-color: #38bdf8; background: #0f172a; }
         .admin-drop-zone img { width: 100%; height: 100%; object-fit: cover; }
@@ -468,7 +504,7 @@
 
                     <div class="main-form-content">
                         <div class="row-header">
-                            <span>Path: /movies/${urlPath}</span>
+                            <span>Path: /${urlPath}</span>
                             <div style="display:flex; gap:6px; align-items: center;">
                                 <span class="badge type-badge">${currentTabMode}</span>
                                 ${isInSync
@@ -516,17 +552,24 @@
                                 </div>
                             </div>
 
-                            <div style="display: flex; gap: 12px; grid-column: 1 / -1; justify-content: flex-end; align-items: center; margin-top: 4px;">
-                                ${storageLoc === 'local' ? `
-                                    <button type="button" class="btn-cloud" onclick="manualPushToCloud('${item.folder}', '${currentTabMode}')">🚀 Push to Cloud Space</button>
-                                ` : ''}
-                                <button type="button" style="background: #a855f7;" onclick="refetchMetadata('${item.folder}', '${currentTabMode}')">🔄 Refetch Metadata</button>
-                                <button type="button" style="background: #0ea5e9;" onclick="syncItemNow('${item.folder}', '${currentTabMode}')">♻️ Sync Item</button>
+                            <div class="ops-toolbar">
                                 <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
+                                ${storageLoc === 'local' ? `
+                                    <button type="button" class="btn-cloud" onclick="manualPushToCloud('${item.folder}', '${currentTabMode}')">Push to Cloud</button>
+                                ` : ''}
+                                <div class="action-menu-wrap" id="action-wrap-${item.folder}">
+                                    <button type="button" class="btn-actions" onclick="toggleActionMenu('${item.folder}')">Actions ▾</button>
+                                    <div class="action-menu" id="action-menu-${item.folder}">
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'refetch')">Refresh Metadata from OMDb</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'sync')">Sync Item to Redis Snapshot</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="form-group full-width" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;">
-                                <label style="width:100%; color:#93c5fd; margin-bottom:0;">Manual Worker Trigger</label>
+                            <div class="ops-inline-row">
                                 <select id="worker-${item.folder}" style="min-width:180px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:6px 8px;">
                                     <option value="INGEST">INGEST</option>
                                     <option value="METADATA">METADATA</option>
@@ -535,19 +578,50 @@
                                     <option value="CLOUDSYNC">CLOUDSYNC</option>
                                 </select>
                                 <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${item.folder}', '${currentTabMode}')">Run Worker</button>
-                            </div>
-
-                            <div class="form-group full-width" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:2px;">
-                                <label style="width:100%; color:#c4b5fd; margin-bottom:0;">Rename Tools</label>
                                 <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
                                 <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
                                 <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${item.folder}', '${currentTabMode}')">Apply Rename</button>
+                                <button type="button" style="background:#0ea5e9;" onclick="repairMetadataNow('${item.folder}', '${currentTabMode}')">Repair Metadata</button>
                             </div>
                         </div>
                     </div>
                 </div>
             `}).join('');
         }
+
+        function closeAllActionMenus(exceptFolder = null) {
+            const menus = document.querySelectorAll('.action-menu');
+            menus.forEach(menu => {
+                if (!exceptFolder || menu.id !== `action-menu-${exceptFolder}`) {
+                    menu.classList.remove('show');
+                }
+            });
+        }
+
+        function toggleActionMenu(folder) {
+            const menu = document.getElementById(`action-menu-${folder}`);
+            if (!menu) return;
+
+            const willShow = !menu.classList.contains('show');
+            closeAllActionMenus(folder);
+            if (willShow) menu.classList.add('show');
+        }
+
+        async function menuAction(folder, type, action) {
+            closeAllActionMenus();
+
+            if (action === 'refetch') return refetchMetadata(folder, type);
+            if (action === 'sync') return syncItemNow(folder, type);
+            if (action === 'repair') return repairMetadataNow(folder, type);
+            if (action === 'worker') return runWorkerNow(folder, type);
+            if (action === 'rename') return renameMediaNow(folder, type);
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.action-menu-wrap')) {
+                closeAllActionMenus();
+            }
+        });
 
         async function syncItemNow(folder, type) {
             try {
@@ -590,6 +664,28 @@
             }
         }
 
+        async function repairMetadataNow(folder, type) {
+            try {
+                showToast(`Repairing metadata for ${folder}...`, 'info', 2600);
+                const res = await fetch('/api/admin/repair-metadata', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type, runCloudSync: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Repair failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                const syncTail = data.cloudSyncTriggered ? ' Cloud sync executed.' : ' No cloud upload needed.';
+                showToast('Metadata repaired.' + syncTail, 'success', 3600);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Repair request failed.', 'error', 4200);
+            }
+        }
+
         async function renameMediaNow(folder, type) {
             const newFolderName = (document.getElementById(`rename-folder-${folder}`)?.value || '').trim();
             const newFileName = (document.getElementById(`rename-file-${folder}`)?.value || '').trim();
@@ -628,7 +724,7 @@
             activeSyncFolder = folder;
             document.getElementById(`sync-container-${folder}`).style.display = 'block';
             document.getElementById(`progress-bar-${folder}`).style.width = '2%';
-            document.getElementById(`progress-txt-${folder}`).style.text = 'Awakening dedicated cloud worker process pipeline...';
+            document.getElementById(`progress-txt-${folder}`).textContent = 'Awakening dedicated cloud worker process pipeline...';
 
             try {
                 // Fire directly out to the override block endpoint which configures file flags and triggers the worker
