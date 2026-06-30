@@ -7,14 +7,12 @@ const {
     getAllJobs,
     getJob,
     getJobSnapshot,
-    updateJob,
-    getNextRunnableJob
+    updateJob
 } = require('../PipelineQueueService');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 
 let isProcessingPipeline = false;
-const recentlyHandledHashes = new Set();
 
 function normalizeTags(tags) {
     if (!tags) return '';
@@ -44,12 +42,6 @@ async function enqueueCompletedTorrent(torrent) {
     if (!tagStr.includes('movie-streamer') && !tagStr.includes('series-streamer')) return null;
     if (tagStr.includes('-processed')) return null;
 
-    // Safety guard: do not enqueue the same completed hash repeatedly.
-    if (torrent.hash && recentlyHandledHashes.has(torrent.hash)) {
-        logger.debug(`⏭️ [Queue] Skipping already-handled torrent hash ${torrent.hash.substring(0, 8)}`);
-        return null;
-    }
-
     // Retrieve IMDB ID from TorrentService mapping
     const imdbId = TorrentService.getImdbIdByHash(torrent.hash);
 
@@ -72,7 +64,31 @@ async function enqueueCompletedTorrent(torrent) {
         return resumed;
     }
 
+    const existingJob = getAllJobs().find(job => {
+        const jobHash = String(job.payload?.torrentHash || '').toLowerCase();
+        const jobName = String(job.payload?.torrentName || '').trim();
+        const torrentHash = String(torrent.hash || '').toLowerCase();
+        const torrentName = String(torrent.name || '').trim();
+        return (torrentHash && jobHash && torrentHash === jobHash) || (torrentName && jobName && torrentName === jobName);
+    });
+
+    if (existingJob && ['QUEUED', 'PROCESSING', 'WAITING_DOWNLOAD'].includes(existingJob.status)) {
+        logger.info(`↩️ [Queue] Reusing existing job ${existingJob.id} for completed torrent ${torrent.name}`);
+        return updateJob(existingJob, {
+            status: 'QUEUED',
+            payload: {
+                ...existingJob.payload,
+                torrentHash: torrent.hash || existingJob.payload?.torrentHash || null,
+                torrentName: torrent.name || existingJob.payload?.torrentName || existingJob.id,
+                rawPath: torrent.content_path || torrent.save_path || existingJob.payload?.rawPath || null
+            },
+            error: null
+        });
+    }
+
     const job = createJob({
+        status: 'QUEUED',
+        currentStep: 'INGEST',
         imdbId: imdbId || null,
         contentType: inferContentType(tagStr),
         payload: {
@@ -252,7 +268,6 @@ async function checkPipelineCompletions() {
             });
             
             logger.debug(`✅ Tag rotation complete for hash ${torrentHash.substring(0,8)}. Triggering down-pipe automation.`);
-            recentlyHandledHashes.add(torrentHash);
         } catch (tagErr) {
             logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`);
             isProcessingPipeline = false; // Release the lock so next check can recover
@@ -261,23 +276,9 @@ async function checkPipelineCompletions() {
 
         try {
             const job = await enqueueCompletedTorrent(completedTorrent);
-            if (job) {
-                const nextJob = getNextRunnableJob(getAllJobs());
-                if (nextJob) {
-                    await processNextJob(nextJob);
-                }
-            }
+            if (job) await processNextJob(job);
         } catch (queueErr) {
             logger.error(`❌ Queue processing failed: ${queueErr.message}`);
-        }
-
-        try {
-            const pendingJob = getNextRunnableJob(getAllJobs());
-            if (pendingJob) {
-                await processNextJob(pendingJob);
-            }
-        } catch (pendingErr) {
-            logger.error(`❌ Pending queue drain failed: ${pendingErr.message}`);
         }
 
         isProcessingPipeline = false;
