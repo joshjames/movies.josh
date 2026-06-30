@@ -146,12 +146,24 @@ router.post('/downloader/add', async (req, res) => {
         const targetCategory = category || 'series-streamer';
         await TorrentService.addMagnet(magnetUrl, targetCategory, imdbId);
         
-        // Create a queue job immediately with pending status
+        // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
+        const infoHash = (() => {
+            try {
+                const xt = new URL(magnetUrl).searchParams.get('xt') || '';
+                return xt.includes('btih:') ? xt.split('btih:')[1] : null;
+            } catch (_e) {
+                return null;
+            }
+        })();
+
         createJob({
+            status: 'WAITING_DOWNLOAD',
+            currentStep: 'INGEST',
             imdbId: imdbId || null,
             contentType: targetCategory === 'series-streamer' ? 'series' : 'movie',
             payload: {
+                torrentHash: infoHash,
                 torrentName,
                 rawPath: null,
                 cleanPath: null,
@@ -174,12 +186,24 @@ router.post('/yts/add', async (req, res) => {
     try {
         await TorrentService.addMagnet(magnetUrl, 'movie-streamer', imdbId);
         
-        // Create a queue job immediately with pending status
+        // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
+        const infoHash = (() => {
+            try {
+                const xt = new URL(magnetUrl).searchParams.get('xt') || '';
+                return xt.includes('btih:') ? xt.split('btih:')[1] : null;
+            } catch (_e) {
+                return null;
+            }
+        })();
+
         createJob({
+            status: 'WAITING_DOWNLOAD',
+            currentStep: 'INGEST',
             imdbId: imdbId || null,
             contentType: 'movie',
             payload: {
+                torrentHash: infoHash,
                 torrentName,
                 rawPath: null,
                 cleanPath: null,
@@ -249,6 +273,20 @@ router.get('/pipeline/status', async (req, res) => {
                 'TRANSCODE': { display: 'Optimizing Video', stage: 'transcode', progress: 75 },
                 'COMPLETE': { display: 'Finalizing', stage: 'complete', progress: 100 }
             };
+
+            if (job.status === 'WAITING_DOWNLOAD') {
+                pipeline.push({
+                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    progress: 0,
+                    status: 'Waiting For Download Completion',
+                    eta: 'Pending...',
+                    size: 'Awaiting qBittorrent completion',
+                    stage: 'downloading',
+                    imdbId: job.imdbId,
+                    jobId: job.id
+                });
+                return;
+            }
 
             const stepInfo = stepStatusMap[job.currentStep] || {
                 display: 'Processing (' + job.currentStep + ')',

@@ -14,6 +14,7 @@ const {
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 
 let isProcessingPipeline = false;
+const recentlyHandledHashes = new Set();
 
 function normalizeTags(tags) {
     if (!tags) return '';
@@ -24,18 +25,58 @@ function inferContentType(tagStr) {
     return tagStr.includes('series-streamer') ? 'series' : 'movie';
 }
 
+function findPendingDownloadJob(torrent) {
+    const allJobs = getAllJobs();
+    const torrentHash = String(torrent.hash || '').toLowerCase();
+    const torrentName = String(torrent.name || '').trim();
+
+    return allJobs.find(job => {
+        if (job.status !== 'WAITING_DOWNLOAD') return false;
+        const jobHash = String(job.payload?.torrentHash || '').toLowerCase();
+        const jobName = String(job.payload?.torrentName || '').trim();
+        if (torrentHash && jobHash && torrentHash === jobHash) return true;
+        return torrentName && jobName && torrentName === jobName;
+    }) || null;
+}
+
 async function enqueueCompletedTorrent(torrent) {
     const tagStr = normalizeTags(torrent.tags);
     if (!tagStr.includes('movie-streamer') && !tagStr.includes('series-streamer')) return null;
     if (tagStr.includes('-processed')) return null;
 
+    // Safety guard: do not enqueue the same completed hash repeatedly.
+    if (torrent.hash && recentlyHandledHashes.has(torrent.hash)) {
+        logger.debug(`⏭️ [Queue] Skipping already-handled torrent hash ${torrent.hash.substring(0, 8)}`);
+        return null;
+    }
+
     // Retrieve IMDB ID from TorrentService mapping
     const imdbId = TorrentService.getImdbIdByHash(torrent.hash);
+
+    const pendingJob = findPendingDownloadJob(torrent);
+    if (pendingJob) {
+        const resumed = updateJob(pendingJob, {
+            status: 'QUEUED',
+            imdbId: pendingJob.imdbId || imdbId || null,
+            payload: {
+                ...pendingJob.payload,
+                torrentHash: torrent.hash || pendingJob.payload?.torrentHash || null,
+                torrentName: torrent.name || pendingJob.payload?.torrentName || pendingJob.id,
+                rawPath: torrent.content_path || torrent.save_path || null,
+                cleanPath: null,
+                videoFile: null
+            },
+            error: null
+        });
+        logger.info(`🔁 [Queue] Resumed placeholder job ${resumed.id} for completed torrent ${torrent.name}`);
+        return resumed;
+    }
 
     const job = createJob({
         imdbId: imdbId || null,
         contentType: inferContentType(tagStr),
         payload: {
+            torrentHash: torrent.hash || null,
             torrentName: torrent.name,
             rawPath: torrent.content_path || torrent.save_path || null,
             cleanPath: null,
@@ -49,6 +90,15 @@ async function enqueueCompletedTorrent(torrent) {
 
 async function processNextJob(job) {
     if (!job) return null;
+
+    // Prevent accidental global ingest sweep when a pre-download placeholder job leaks into runnable state.
+    if (job.currentStep === 'INGEST' && !(job.payload?.rawPath || job.payload?.cleanPath)) {
+        logger.warn(`⏭️ [Queue] Deferring job ${job.id}: missing folder path for INGEST.`);
+        return updateJob(job, {
+            status: 'WAITING_DOWNLOAD',
+            error: 'Waiting for completed download path before INGEST dispatch.'
+        });
+    }
 
     const stepMap = {
         INGEST: {
@@ -160,6 +210,7 @@ async function checkPipelineCompletions() {
             if (t.progress !== 1 || !t.tags) return false;
             
             const tagStr = normalizeTags(t.tags);
+            if (tagStr.includes('-processed')) return false;
             return tagStr.includes('movie-streamer') || tagStr.includes('series-streamer');
         });
 
@@ -201,6 +252,7 @@ async function checkPipelineCompletions() {
             });
             
             logger.debug(`✅ Tag rotation complete for hash ${torrentHash.substring(0,8)}. Triggering down-pipe automation.`);
+            recentlyHandledHashes.add(torrentHash);
         } catch (tagErr) {
             logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`);
             isProcessingPipeline = false; // Release the lock so next check can recover

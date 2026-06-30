@@ -2,8 +2,29 @@ const crypto = require('crypto');
 const redis = require('redis');
 const logger = require('./logger');
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const JOB_PREFIX = 'pipeline:job:';
+const BASE_REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379/3';
+const QUEUE_REDIS_DB = process.env.QUEUE_REDIS_DB || '4';
+const JOB_PREFIX = process.env.QUEUE_REDIS_PREFIX || 'joshflix:queue:job:';
+
+function buildQueueRedisUrl() {
+  if (process.env.QUEUE_REDIS_URL) return process.env.QUEUE_REDIS_URL;
+  try {
+    const parsed = new URL(BASE_REDIS_URL);
+    parsed.pathname = `/${QUEUE_REDIS_DB}`;
+    return parsed.toString();
+  } catch (_err) {
+    // Fallback: use provided URL as-is if parse fails.
+    return BASE_REDIS_URL;
+  }
+}
+
+function isRedisFeatureEnabled() {
+  const raw = String(process.env.ENABLE_REDIS || '').trim().toLowerCase();
+  // Default to enabled unless explicitly turned off.
+  return raw !== 'false' && raw !== '0' && raw !== 'no';
+}
+
+const REDIS_URL = buildQueueRedisUrl();
 
 let redisClient = null;
 let redisConnected = false;
@@ -12,8 +33,8 @@ const jobs = new Map();
 
 // Initialize Redis connection (non-blocking, optional)
 async function initRedis() {
-    if (!process.env.ENABLE_REDIS || process.env.ENABLE_REDIS === 'false') {
-        logger.debug('⏭️ Redis disabled. Queue operating in memory-only mode.');
+  if (!isRedisFeatureEnabled()) {
+    logger.debug('⏭️ Queue Redis explicitly disabled (ENABLE_REDIS=false). Operating in memory-only mode.');
         return;
     }
 
@@ -24,7 +45,14 @@ async function initRedis() {
             redisConnected = false;
         });
         redisClient.on('connect', () => {
-            logger.info('✅ Redis connected. Queue state is now durable.');
+          const dbIndex = (() => {
+            try {
+              return new URL(REDIS_URL).pathname.replace('/', '') || '0';
+            } catch (_e) {
+              return 'unknown';
+            }
+          })();
+          logger.info(`✅ Queue Redis connected. Durable job state active [DB: ${dbIndex}] [Prefix: ${JOB_PREFIX}]`);
             redisConnected = true;
         });
         await redisClient.connect();
@@ -61,8 +89,8 @@ function createJob(input = {}) {
   const id = input.id || `job_${crypto.randomBytes(6).toString('hex')}`;
   const job = {
     id,
-    status: 'QUEUED',
-    currentStep: 'INGEST',
+    status: input.status || 'QUEUED',
+    currentStep: input.currentStep || 'INGEST',
     imdbId: input.imdbId || null,
     contentType: input.contentType || 'movie',
     payload: input.payload || {},
@@ -123,7 +151,7 @@ function updateJob(job, patch = {}) {
 
 function getNextRunnableJob(jobList = getAllJobs()) {
   return jobList
-    .filter(job => ['QUEUED', 'WAITING'].includes(job.status))
+    .filter(job => job.status === 'QUEUED')
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0] || null;
 }
 
