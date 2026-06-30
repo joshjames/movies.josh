@@ -7,7 +7,9 @@ const logger = require('./logger');
 const FALLBACK_FILE = path.join(__dirname, '../../metadata/fallback_library.json');
 
 // Connect to the host and append the targeted database index (e.g., /3)
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379/3';
+const DEFAULT_REDIS_HOST = process.env.REDIS_HOST || 'redis';
+const DEFAULT_REDIS_PORT = process.env.REDIS_PORT || '6379';
+const REDIS_URL = process.env.REDIS_URL || `redis://${DEFAULT_REDIS_HOST}:${DEFAULT_REDIS_PORT}/3`;
 const redisClient = createClient({ url: REDIS_URL });
 
 redisClient.on('error', (err) => logger.error(`🚨 Redis Hub Error: ${err.message}`));

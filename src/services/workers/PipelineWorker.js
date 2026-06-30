@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../../utils/logger');
 const TorrentService = require('../TorrentService');
+const LibraryScanner = require('../LibraryScanner');
 const {
     createJob,
     getAllJobs,
@@ -48,6 +49,86 @@ function resolveTorrentDownloadPath(torrent) {
     }
 
     return contentPath || (savePath && torrentName ? path.join(savePath, torrentName) : savePath || null);
+}
+
+function mergeStorage(existingStorage = {}, incomingStorage = {}) {
+    return {
+        ...existingStorage,
+        ...incomingStorage,
+        files: {
+            ...(existingStorage.files || {}),
+            ...(incomingStorage.files || {})
+        }
+    };
+}
+
+function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
+    const targetFolderPath =
+        patchData.folderPath ||
+        patchData.cleanPath ||
+        patchData.payload?.cleanPath ||
+        job.payload?.cleanPath ||
+        job.payload?.rawPath ||
+        null;
+
+    if (!targetFolderPath || !fs.existsSync(targetFolderPath)) {
+        return null;
+    }
+
+    let stat;
+    try {
+        stat = fs.lstatSync(targetFolderPath);
+    } catch (_err) {
+        return null;
+    }
+    if (!stat.isDirectory()) return null;
+
+    const metadataPath = path.join(targetFolderPath, 'metadata.json');
+    let existing = {};
+
+    if (fs.existsSync(metadataPath)) {
+        try {
+            existing = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+        } catch (_err) {
+            existing = {};
+        }
+    }
+
+    const merged = {
+        ...existing,
+        ...patchData,
+        imdbId: resolvedImdbId || patchData.imdbId || existing.imdbId || null,
+        contentType: patchData.contentType || existing.contentType || job.contentType || 'movie',
+        title: patchData.title || existing.title || path.basename(targetFolderPath).replace(/[._-]/g, ' '),
+        year: patchData.year || existing.year || '',
+        plot: patchData.plot || existing.plot || '',
+        genre: patchData.genre || existing.genre || '',
+        runtime: patchData.runtime || existing.runtime || 'N/A',
+        rating: patchData.rating || existing.rating || 'N/A',
+        pipelineState: patchData.pipelineState || {
+            currentStep: nextStep,
+            lastUpdated: new Date().toISOString(),
+            error: null
+        }
+    };
+
+    if (patchData.storage || existing.storage) {
+        merged.storage = mergeStorage(existing.storage, patchData.storage || {});
+    }
+
+    if (Array.isArray(patchData.subtitles)) {
+        merged.subtitles = patchData.subtitles;
+    }
+
+    // These keys are transport-level fields and should not be persisted in metadata manifests.
+    delete merged.folderPath;
+    delete merged.folderName;
+    delete merged.cleanPath;
+    delete merged.rawPath;
+    delete merged.payload;
+
+    fs.writeFileSync(metadataPath, JSON.stringify(merged, null, 4));
+    return metadataPath;
 }
 
 function findPendingDownloadJob(torrent) {
@@ -225,6 +306,11 @@ async function processNextJob(job) {
             imdbId: resolvedImdbId
         };
 
+        const metadataPath = persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId);
+        if (metadataPath) {
+            logger.debug(`📝 [Queue] Persisted metadata snapshot for job ${job.id} at ${metadataPath}`);
+        }
+
         logger.debug(
             `📦 [Queue] ${job.id} ${job.currentStep} response: success=${response.data?.success !== false} | nextStep=${nextStep} | patchKeys=${Object.keys(patchData).join(',') || 'none'} | resolvedImdbId=${resolvedImdbId || 'unknown'}`
         );
@@ -242,6 +328,15 @@ async function processNextJob(job) {
         });
 
         logger.debug(`🧠 [Queue] Job ${updated.id} moved to ${updated.currentStep}`);
+
+        if (['INGEST', 'METADATA', 'CLOUDSYNC'].includes(job.currentStep) || updated.currentStep === 'COMPLETE') {
+            try {
+                await LibraryScanner.runLibraryScanSweep();
+                logger.debug(`♻️ [Queue] Library snapshot refreshed after ${job.currentStep} for job ${updated.id}`);
+            } catch (scanErr) {
+                logger.warn(`⚠️ [Queue] Library refresh failed after ${job.currentStep}: ${scanErr.message}`);
+            }
+        }
 
         if (updated.status === 'QUEUED' && updated.currentStep !== 'COMPLETE' && updated.currentStep !== 'FAILED') {
             logger.debug(`🔁 [Queue] Continuing job ${updated.id} to ${updated.currentStep}`);

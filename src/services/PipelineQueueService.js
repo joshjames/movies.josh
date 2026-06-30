@@ -2,7 +2,9 @@ const crypto = require('crypto');
 const redis = require('redis');
 const logger = require('./logger');
 
-const BASE_REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379/3';
+const DEFAULT_REDIS_HOST = process.env.REDIS_HOST || 'redis';
+const DEFAULT_REDIS_PORT = process.env.REDIS_PORT || '6379';
+const BASE_REDIS_URL = process.env.REDIS_URL || `redis://${DEFAULT_REDIS_HOST}:${DEFAULT_REDIS_PORT}/3`;
 const QUEUE_REDIS_DB = process.env.QUEUE_REDIS_DB || '4';
 const JOB_PREFIX = process.env.QUEUE_REDIS_PREFIX || 'joshflix:queue:job:';
 
