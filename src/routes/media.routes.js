@@ -76,15 +76,51 @@ router.get('/home-feed', (req, res) => {
     return res.json({ success: true, feed: homeFeed });
 });
 
-router.get('/tv-shows/search', (req, res) => {
+router.get('/tv-shows/search', async (req, res) => {
     try {
         const query = String(req.query.q || req.query.query || '').trim();
         const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 40, 100));
         const index = loadIndex();
-        const items = searchIndex(query, limit).map(withCover);
+        let items = searchIndex(query, limit).map(withCover);
+        let source = 'local-index';
+
+        // Container deployments may not have the generated local index file.
+        // For non-empty queries, fall back to OMDb search so TV browse still works.
+        if (items.length === 0 && query) {
+            const apiKey = process.env.OMDB_API_KEY || '84196d01';
+            const omdbRes = await axios.get(
+                `http://www.omdbapi.com/?apikey=${apiKey}&s=${encodeURIComponent(query)}&type=series`,
+                { timeout: 8000 }
+            );
+
+            const fallback = Array.isArray(omdbRes.data?.Search) ? omdbRes.data.Search : [];
+            items = fallback
+                .slice(0, limit)
+                .map(row => {
+                    const yearRaw = String(row.Year || '');
+                    const [startYear, endYear] = yearRaw.split('-');
+                    return withCover({
+                        imdbId: row.imdbID,
+                        title: row.Title,
+                        originalTitle: row.Title,
+                        startYear: startYear || '',
+                        endYear: endYear || '',
+                        genres: '',
+                        averageRating: 0,
+                        numVotes: 0,
+                        episodeCount: 0,
+                        isAdult: false
+                    });
+                });
+
+            if (items.length > 0) {
+                source = 'omdb-fallback';
+            }
+        }
 
         return res.json({
             success: true,
+            source,
             updatedAt: index.updatedAt,
             totalItems: index.totalItems,
             count: items.length,

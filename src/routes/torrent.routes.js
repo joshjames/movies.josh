@@ -66,7 +66,9 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
         deduped.push(t);
     }
 
-    const reduced = packsOnly ? deduped.filter(t => looksLikeSeasonPack(t.title || t.filename)) : deduped;
+    const packReduced = deduped.filter(t => looksLikeSeasonPack(t.title || t.filename));
+    const reduced = packsOnly ? (packReduced.length > 0 ? packReduced : deduped) : deduped;
+    const packsFallbackUsed = packsOnly && packReduced.length === 0;
 
     const bySeason = new Map();
     for (const t of reduced) {
@@ -83,7 +85,9 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
         const seeds = parseInt(t.seeds, 10) || 0;
         const peers = parseInt(t.peers, 10) || 0;
         const hasPackSignal = looksLikeSeasonPack(title);
-        const score = (hasPackSignal ? 100000 : 0) + seeds * 100 + peers;
+        // When packsOnly is enabled, we already filtered to packs. When disabled,
+        // avoid hard bias so checkbox state actually changes what gets selected.
+        const score = seeds * 100 + peers + (packsOnly && hasPackSignal ? 1000 : 0);
 
         const existing = bySeason.get(season);
         if (!existing || score > existing.score) {
@@ -94,6 +98,7 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
                 episode,
                 seeds,
                 peers,
+                isPack: hasPackSignal,
                 sizeBytes: parseFloat(t.size_bytes) || 0,
                 magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(title)}`,
                 imdbId: targetImdbId,
@@ -102,11 +107,12 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
         }
     }
 
-    return Array.from(bySeason.values())
+    const items = Array.from(bySeason.values())
         .sort((a, b) => a.season - b.season)
         .map(item => ({
             title: `Season ${item.season} complete`,
             originalTitle: item.title,
+            sourceType: item.isPack ? 'pack' : 'episode',
             size: item.sizeBytes > 0 ? `${(item.sizeBytes / (1024 ** 3)).toFixed(2)} GB` : 'N/A',
             seeds: item.seeds,
             peers: item.peers,
@@ -116,6 +122,11 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
             episode: item.episode || '',
             cover: item.cover
         }));
+
+    return {
+        items,
+        packsFallbackUsed
+    };
 }
 
 // =========================================================================
@@ -213,9 +224,14 @@ router.get('/eztv/browse', async (req, res) => {
         const cover = omdbMeta?.Poster !== 'N/A'
             ? omdbMeta.Poster
             : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>';
-        const results = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
+        const { items, packsFallbackUsed } = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
 
-        return res.json({ success: true, torrents: results });
+        return res.json({
+            success: true,
+            torrents: items,
+            packsOnlyRequested: packsOnly,
+            packsFallbackUsed
+        });
     } catch (err) {
         logger.error(`EZTV proxy route failure: ${err.message}`);
         return res.status(500).json({ success: false, error: err.message });

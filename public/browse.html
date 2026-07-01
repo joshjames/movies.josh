@@ -122,7 +122,7 @@
                 </select>
 
                 <label class="checkbox-container" id="packsWrapper" style="display: none;">
-                    <input type="checkbox" id="packsOnlyIn" checked> Show Whole Seasons Only
+                    <input type="checkbox" id="packsOnlyIn"> Show Whole Seasons Only
                 </label>
             </div>
 
@@ -351,7 +351,8 @@
                     <div style="grid-column: 1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:4px;">
                         <div>
                             <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
-                            <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} seasons</div>
+                            <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} seasons • Whole seasons only: ${packsOnly ? 'ON' : 'OFF'}</div>
+                            ${data.packsFallbackUsed ? '<div style="color:#f59e0b; font-size:0.8rem; margin-top:4px;">No explicit season-pack tags found on EZTV; showing best seeded season releases.</div>' : ''}
                         </div>
                         <button class="page-btn" style="background:#334155;" onclick="fetchShowCatalog()">Back to Shows</button>
                     </div>
@@ -367,7 +368,7 @@
                             <div class="card-info">
                                 <div>
                                     <div class="title" title="${torrent.title}">${torrent.title}</div>
-                                    <div class="meta">IMDb ${torrent.imdbId}${torrent.originalTitle ? ` • Source: ${torrent.originalTitle}` : ''}</div>
+                                    <div class="meta">IMDb ${torrent.imdbId}${torrent.originalTitle ? ` • Source: ${torrent.originalTitle}` : ''}${torrent.sourceType ? ` • Type: ${torrent.sourceType}` : ''}</div>
                                 </div>
                                 <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer', '${torrent.imdbId || ''}')">Ingest Season</button>
                             </div>
