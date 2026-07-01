@@ -217,17 +217,58 @@ function mapRawEztvRows(rawTorrents, targetImdbId, cover, packsOnly, limit = 100
         .filter(Boolean);
 
     const filteredByType = packsOnly ? parsed.filter(t => t.sourceType === 'pack') : parsed;
-    const nonZeroSeed = filteredByType.filter(t => t.seeds > 0);
-    const pool = nonZeroSeed.length ? nonZeroSeed : filteredByType;
+    const packs = filteredByType.filter(t => t.sourceType === 'pack');
+    const episodes = filteredByType.filter(t => t.sourceType === 'episode' && Number.isFinite(t.episode) && t.episode > 0);
 
-    const sorted = pool.sort((a, b) => {
-        if (a.season !== b.season) return a.season - b.season;
-        if ((a.episode || 0) !== (b.episode || 0)) return (b.episode || 0) - (a.episode || 0);
-        if (a.seeds !== b.seeds) return b.seeds - a.seeds;
-        return b.released - a.released;
-    });
+    const scoreRelease = (row) => {
+        return (row.seeds * 1000) + (row.peers * 10) + Math.floor((row.released || 0) / 1000);
+    };
 
-    const items = sorted.slice(0, limit).map(item => ({
+    const bestByEpisode = new Map();
+    for (const row of episodes) {
+        const key = `${row.season}-${row.episode}`;
+        const current = bestByEpisode.get(key);
+
+        if (!current) {
+            bestByEpisode.set(key, {
+                bestAny: row,
+                bestSeeded: row.seeds > 0 ? row : null
+            });
+            continue;
+        }
+
+        if (scoreRelease(row) > scoreRelease(current.bestAny)) {
+            current.bestAny = row;
+        }
+
+        if (row.seeds > 0) {
+            if (!current.bestSeeded || scoreRelease(row) > scoreRelease(current.bestSeeded)) {
+                current.bestSeeded = row;
+            }
+        }
+    }
+
+    const selectedEpisodes = Array.from(bestByEpisode.values())
+        .map(entry => entry.bestSeeded || entry.bestAny)
+        .filter(Boolean);
+
+    const selectedPacks = (() => {
+        if (!packsOnly) return packs;
+        const seededPacks = packs.filter(p => p.seeds > 0);
+        return seededPacks.length ? seededPacks : packs;
+    })();
+
+    const merged = [...selectedPacks, ...selectedEpisodes]
+        .sort((a, b) => {
+            if (a.season !== b.season) return a.season - b.season;
+            const ae = Number.isFinite(a.episode) ? a.episode : 0;
+            const be = Number.isFinite(b.episode) ? b.episode : 0;
+            if (ae !== be) return ae - be;
+            return scoreRelease(b) - scoreRelease(a);
+        })
+        .slice(0, limit);
+
+    const items = merged.map(item => ({
         title: item.sourceType === 'pack'
             ? `Season ${item.season} complete`
             : `S${String(item.season).padStart(2, '0')}E${String(item.episode || 1).padStart(2, '0')} release`,
@@ -247,8 +288,10 @@ function mapRawEztvRows(rawTorrents, targetImdbId, cover, packsOnly, limit = 100
         items,
         packRows: items.filter(i => i.sourceType === 'pack').length,
         episodeRows: items.filter(i => i.sourceType === 'episode').length,
-        nonZeroSeedRows: nonZeroSeed.length,
-        totalParsedRows: parsed.length
+        nonZeroSeedRows: filteredByType.filter(t => t.seeds > 0).length,
+        totalParsedRows: parsed.length,
+        totalEpisodeCandidates: episodes.length,
+        uniqueEpisodeCandidates: bestByEpisode.size
     };
 }
 
@@ -402,6 +445,8 @@ router.get('/eztv/browse', async (req, res) => {
             episodeRows: reduced.episodeRows || 0,
             nonZeroSeedRows: reduced.nonZeroSeedRows,
             totalParsedRows: reduced.totalParsedRows,
+            totalEpisodeCandidates: reduced.totalEpisodeCandidates,
+            uniqueEpisodeCandidates: reduced.uniqueEpisodeCandidates,
             upstreamWarnings: eztvFetch.upstreamWarnings,
             scannedPages: eztvFetch.scannedPages,
             rawCount: allTorrents.length

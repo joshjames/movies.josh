@@ -514,6 +514,7 @@
                             <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
                             <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} rows • Whole seasons only: ${packsOnly ? 'ON' : 'OFF'} • Mode: ${data.consolidated ? 'consolidated' : 'raw'}</div>
                             ${(typeof data.packRows === 'number' && typeof data.episodeRows === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Rows: ${data.packRows} pack • ${data.episodeRows} episode rows</div>` : ''}
+                            ${(typeof data.totalEpisodeCandidates === 'number' && typeof data.uniqueEpisodeCandidates === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Episode candidates: ${data.totalEpisodeCandidates} • Unique SxE: ${data.uniqueEpisodeCandidates} • Seeded rows: ${data.nonZeroSeedRows || 0}</div>` : ''}
                             ${data.packsFallbackUsed ? '<div style="color:#f59e0b; font-size:0.8rem; margin-top:4px;">No seeded season packs found; showing unseeded pack rows where available.</div>' : ''}
                             ${Array.isArray(data.upstreamWarnings) && data.upstreamWarnings.length ? `<div style="color:#f97316; font-size:0.8rem; margin-top:4px;">${data.upstreamWarnings[0]}</div>` : ''}
                         </div>
