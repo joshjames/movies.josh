@@ -170,6 +170,88 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
     };
 }
 
+function mapRawEztvRows(rawTorrents, targetImdbId, cover, packsOnly, limit = 120) {
+    const all = rawTorrents || [];
+    const deduped = [];
+    const seen = new Set();
+
+    for (const t of all) {
+        const titleNorm = normalizeText(t.filename || t.title);
+        const key = [String(t.hash || '').toLowerCase(), titleNorm].join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(t);
+    }
+
+    const parsed = deduped
+        .map(t => {
+            const title = String(t.title || t.filename || '').trim();
+            const parsedTitle = parseSeasonEpisodeFromTitle(title);
+            const seasonRaw = parseInt(t.season, 10);
+            const episodeRaw = parseInt(t.episode, 10);
+            const season = Number.isFinite(seasonRaw) ? seasonRaw : parsedTitle.season;
+            const episode = Number.isFinite(episodeRaw) ? episodeRaw : parsedTitle.episode;
+
+            if (!Number.isFinite(season) || season <= 0) return null;
+
+            const seeds = parseInt(t.seeds, 10) || 0;
+            const peers = parseInt(t.peers, 10) || 0;
+            const released = parseInt(t.date_released_unix, 10) || 0;
+            const isPack = looksLikeSeasonPack(title);
+
+            return {
+                title,
+                originalTitle: title,
+                sourceType: isPack ? 'pack' : 'episode',
+                season,
+                episode: Number.isFinite(episode) ? episode : '',
+                seeds,
+                peers,
+                released,
+                sizeBytes: parseFloat(t.size_bytes) || 0,
+                magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(title)}`,
+                imdbId: targetImdbId,
+                cover
+            };
+        })
+        .filter(Boolean);
+
+    const filteredByType = packsOnly ? parsed.filter(t => t.sourceType === 'pack') : parsed;
+    const nonZeroSeed = filteredByType.filter(t => t.seeds > 0);
+    const pool = nonZeroSeed.length ? nonZeroSeed : filteredByType;
+
+    const sorted = pool.sort((a, b) => {
+        if (a.season !== b.season) return a.season - b.season;
+        if ((a.episode || 0) !== (b.episode || 0)) return (b.episode || 0) - (a.episode || 0);
+        if (a.seeds !== b.seeds) return b.seeds - a.seeds;
+        return b.released - a.released;
+    });
+
+    const items = sorted.slice(0, limit).map(item => ({
+        title: item.sourceType === 'pack'
+            ? `Season ${item.season} complete`
+            : `S${String(item.season).padStart(2, '0')}E${String(item.episode || 1).padStart(2, '0')} release`,
+        originalTitle: item.originalTitle,
+        sourceType: item.sourceType,
+        size: item.sizeBytes > 0 ? `${(item.sizeBytes / (1024 ** 3)).toFixed(2)} GB` : 'N/A',
+        seeds: item.seeds,
+        peers: item.peers,
+        magnet: item.magnet,
+        imdbId: item.imdbId,
+        season: item.season,
+        episode: item.episode,
+        cover: item.cover
+    }));
+
+    return {
+        items,
+        packRows: items.filter(i => i.sourceType === 'pack').length,
+        episodeRows: items.filter(i => i.sourceType === 'episode').length,
+        nonZeroSeedRows: nonZeroSeed.length,
+        totalParsedRows: parsed.length
+    };
+}
+
 async function fetchEztvPages(imdbId, maxPages = 5) {
     const endpointCandidates = [
         'https://eztv.wf/api/get-torrents',
@@ -278,6 +360,7 @@ router.get('/eztv/browse', async (req, res) => {
         const queryTerm = req.query.query ? req.query.query.trim() : '';
         const directImdbId = req.query.imdbId ? String(req.query.imdbId).trim() : '';
         const packsOnly = req.query.packsOnly === 'true';
+        const consolidated = req.query.consolidated !== 'false';
         let targetImdbId = directImdbId ? directImdbId.replace(/^tt/i, '') : '';
         let omdbMeta = null;
 
@@ -303,15 +386,22 @@ router.get('/eztv/browse', async (req, res) => {
 
         const posterUrl = typeof omdbMeta?.Poster === 'string' ? omdbMeta.Poster.trim() : '';
         const cover = posterUrl && posterUrl !== 'N/A' ? posterUrl : FALLBACK_COVER_DATA_URI;
-        const { items, packsFallbackUsed, packRows, episodeRows } = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
+        const reduced = consolidated
+            ? simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly)
+            : mapRawEztvRows(allTorrents, targetImdbId, cover, packsOnly);
+
+        logger.debug(`[EZTV] imdb=${targetImdbId} packsOnly=${packsOnly} consolidated=${consolidated} raw=${allTorrents.length} out=${reduced.items.length} packRows=${reduced.packRows || 0} episodeRows=${reduced.episodeRows || 0}`);
 
         return res.json({
             success: true,
-            torrents: items,
+            torrents: reduced.items,
             packsOnlyRequested: packsOnly,
-            packsFallbackUsed,
-            packRows,
-            episodeRows,
+            consolidated,
+            packsFallbackUsed: Boolean(reduced.packsFallbackUsed),
+            packRows: reduced.packRows || 0,
+            episodeRows: reduced.episodeRows || 0,
+            nonZeroSeedRows: reduced.nonZeroSeedRows,
+            totalParsedRows: reduced.totalParsedRows,
             upstreamWarnings: eztvFetch.upstreamWarnings,
             scannedPages: eztvFetch.scannedPages,
             rawCount: allTorrents.length
