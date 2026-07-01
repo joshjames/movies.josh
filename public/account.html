@@ -109,6 +109,10 @@
             font-weight: 700;
             cursor: pointer;
             font-size: 0.86rem;
+            transition: opacity 0.2s;
+        }
+        .btn:hover {
+            opacity: 0.9;
         }
 
         .btn-primary {
@@ -118,6 +122,11 @@
 
         .btn-danger {
             background: #dc2626;
+            color: #ffffff;
+        }
+
+        .btn-success {
+            background: #e50914; /* Match AnyMovie brand red */
             color: #ffffff;
         }
 
@@ -134,6 +143,17 @@
 
         .status.ok { color: #34d399; }
         .status.err { color: #f87171; }
+
+        /* Billing panel custom details layout */
+        .billing-details {
+            background: #020617;
+            border: 1px solid #1e293b;
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -161,8 +181,12 @@
             </section>
 
             <section class="card">
-                <h2>Settings</h2>
-                <p class="muted">More account settings can be added here over time.</p>
+                <h2>Subscription Management</h2>
+                <div id="subscriptionContainer">
+                    <p class="muted">Subscribe to the premium plan for full access to 4K streams and native TV architecture client sideloads.</p>
+                    <button class="btn btn-success" id="subscribeBtn">Subscribe Now</button>
+                </div>
+                <div class="status" id="subscriptionStatus"></div>
             </section>
 
             <section class="card">
@@ -182,8 +206,8 @@
             </section>
 
             <section class="card">
-                <h2>Billing</h2>
-                <p class="muted">Billing management will appear here soon.</p>
+                <h2>Settings</h2>
+                <p class="muted">More account settings can be added here over time.</p>
             </section>
         </div>
     </div>
@@ -209,8 +233,76 @@
                 const email = data.config?.email || '';
                 document.getElementById('displayName').value = name;
                 document.getElementById('email').value = email;
+
+                // Sync billing states after profile contexts are assigned
+                await checkSubscriptionStatus();
             } catch (_err) {
                 setStatus('profileStatus', 'Could not load account data.', false);
+            }
+        }
+
+        /**
+         * Dynamic State Builder for Subscription Status Checks
+         */
+        async function checkSubscriptionStatus() {
+            const container = document.getElementById('subscriptionContainer');
+            try {
+                // Targeted endpoint for user/account status checking routes
+                const res = await fetch('/api/account/status', { credentials: 'include' });
+                const data = await res.json();
+
+                if (data.success && data.subscriptionStatus === 'ACTIVE') {
+                    if (data.cancelAtPeriodEnd) {
+                        // User clicked cancel, but cycle has not run out yet
+                        container.innerHTML = `
+                            <div class="billing-details" style="border-color: #eab308;">
+                                <strong>Status:</strong> Pending Termination<br>
+                                <strong>Access Until:</strong> ${data.nextBillingCycle || 'End of Period'}
+                            </div>
+                            <p class="muted" style="margin-bottom:0;">Your allocation remains active. Account down-provisions to guest states automatically upon period expiration.</p>
+                        `;
+                    } else {
+                        // Fully active paying subscription matrix
+                        container.innerHTML = `
+                            <div class="billing-details" style="border-color: #10b981;">
+                                <strong>Plan Tier:</strong> Premium Allocation Loop<br>
+                                <strong>Next Billing Date:</strong> ${data.nextBillingCycle || 'N/A'}
+                            </div>
+                            <button class="btn btn-danger" id="cancelSubBtn">Cancel Subscription</button>
+                        `;
+                        document.getElementById('cancelSubBtn').addEventListener('click', executionCancellationCall);
+                    }
+                } else {
+                    // Fallback baseline layout mapping for guest levels (Attach redirect route helper)
+                    document.getElementById('subscribeBtn').addEventListener('click', () => {
+                        window.location.href = '/subscribe.html';
+                    });
+                }
+            } catch (_err) {
+                setStatus('subscriptionStatus', 'Unable to fetch dynamic allocation metrics.', false);
+            }
+        }
+
+        async function executionCancellationCall() {
+            if (!confirm("Are you sure you want to terminate your premium pipeline access? Access remains open until your current billing period ends.")) return;
+            
+            try {
+                const res = await fetch('/api/account/billing/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include'
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    setStatus('subscriptionStatus', data.error || 'Cancellation request rejected.', false);
+                    return;
+                }
+
+                setStatus('subscriptionStatus', 'Subscription set to cancel cleanly at cycle end.');
+                await checkSubscriptionStatus(); // Force layout update
+            } catch (_err) {
+                setStatus('subscriptionStatus', 'Network handshake error updating cancellation parameters.', false);
             }
         }
 

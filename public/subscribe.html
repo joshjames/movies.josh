@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnyMovie - Choose Your Plan</title>
+    <script src="https://sandbox.web.squarecdn.com/v1/square.js"></script>
+    <style>
+        body {
+            background: #020617;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .checkout-card {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            padding: 40px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            box-sizing: border-box;
+        }
+
+        .logo-wrapper {
+            width: 100%;
+            max-width: 260px;
+            margin: 0 auto 20px auto;
+            display: block;
+            cursor: pointer;
+        }
+
+        .logo-wrapper svg {
+            width: 100%;
+            height: auto;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            margin: 0 0 8px 0;
+            color: #f1f5f9;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 28px;
+            line-height: 1.4;
+        }
+
+        /* --- Step Wizard Control Structures --- */
+        .step-panel {
+            display: none;
+        }
+        .step-panel.active {
+            display: block;
+        }
+
+        /* --- Progress Indicator Pill Bar --- */
+        .progress-bar {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 28px;
+        }
+        .progress-pill {
+            height: 4px;
+            width: 40px;
+            background: #334155;
+            border-radius: 2px;
+            transition: background 0.3s;
+        }
+        .progress-pill.active {
+            background: #e50914;
+        }
+
+        /* --- Step 1: Plan Tier Selector Layout --- */
+        .plan-card {
+            background: #020617;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .plan-card:hover {
+            border-color: #475569;
+        }
+        .plan-card.selected {
+            border-color: #e50914;
+            background: rgba(229, 9, 20, 0.03);
+        }
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .plan-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+        .plan-price {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #e50914;
+        }
+        .plan-features {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin: 0;
+            padding-left: 18px;
+            line-height: 1.5;
+        }
+
+        /* --- Step 2: Embedded Payment Containers --- */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 18px;
+        }
+        label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        /* Square UI container requirement target */
+        #card-container {
+            background: #020617;
+            border: 1px solid #334155;
+            padding: 14px;
+            border-radius: 8px;
+            min-height: 20px;
+        }
+
+        .submit-btn {
+            background: #e50914; 
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+        .submit-btn:hover {
+            background: #b90710;
+        }
+        .submit-btn:disabled {
+            background: #334155;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
+        /* --- Banners --- */
+        .banner {
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+            display: none;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .banner-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+            color: #f87171;
+        }
+
+        /* --- Processing Loading Spinner --- */
+        .spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: #e50914;
+            animation: spin 1s ease infinite;
+            margin: 30px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="checkout-card">
+        <div class="logo-wrapper" onclick="window.location.href='/';">
+            <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
+                    <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
+                        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
+                    </filter>
+                </defs>
+                <g filter="url(#cinematicGlow)">
+                    <text font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="900" letter-spacing="5" fill="#e50914">
+                        <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">ANYMOVIE</textPath>
+                    </text>
+                </g>
+                <text x="50%" y="118" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" letter-spacing="14" fill="#ffffff" text-anchor="middle" opacity="0.9">ONLINE</text>
+            </svg>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-pill active" id="pill1"></div>
+            <div class="progress-pill" id="pill2"></div>
+            <div class="progress-pill" id="pill3"></div>
+        </div>
+
+        <div class="banner banner-error" id="checkoutAlert"></div>
+
+        <div class="step-panel active" id="step1">
+            <h1>Choose Your Access Tier</h1>
+            <div class="subtitle">Select your streaming matrix below to initialize profiling</div>
+            
+            <div class="plan-card selected" onclick="selectPlan(this, 'premium-monthly')">
+                <div class="plan-header">
+                    <span class="plan-title">Premium Stream Access</span>
+                    <span class="plan-price">$9.99<span style="font-size:0.75rem; color:#64748b">/mo</span></span>
+                </div>
+                <ul class="plan-features">
+                    <li>Full 4K UHD Bitrate Pipeline Compilation</li>
+                    <li>Unrestricted Parallel Multi-Worker Core Access</li>
+                    <li>Synchronized Android TV Native Client Sideloading</li>
+                </ul>
+            </div>
+
+            <button type="button" class="submit-btn" onclick="goToStep(2)">Proceed to Payment</button>
+        </div>
+
+        <div class="step-panel" id="step2">
+            <h1>Secure Allocation Node</h1>
+            <div class="subtitle">Complete allocation authorization via Square Gateway</div>
+            
+            <form id="payment-form">
+                <div class="form-group">
+                    <label>Credit or Debit Card</label>
+                    <div id="card-container"></div>
+                </div>
+
+                <button id="card-button" type="button" class="submit-btn">Authorize Subscription</button>
+            </form>
+        </div>
+
+        <div class="step-panel" id="step3">
+            <h1 id="processing-title">Validating Handshake</h1>
+            <div class="subtitle" id="processing-subtitle">Synchronizing transaction token arrays with security core...</div>
+            <div class="spinner" id="processingSpinner" style="display: block;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let selectedPlanId = 'premium-monthly'; // Default fallback matching UI binding
+        let cardEngine = null; // Pointer for Square runtime instantiation
+
+        // Injected dynamically by your back-end profile engine view controller
+        const userSessionContext = {
+            name: "Joshua Saunders", 
+            email: "joshua.saunders@example.com" 
+        };
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Pre-initialize the Square SDK instance immediately in the background
+            try {
+                // Change to your actual sandbox application id
+                const payments = Square.payments('sandbox-sq0idb-YOUR_APPLICATION_ID_HERE'); 
+                cardEngine = await payments.card({
+                    style: {
+                        input: { backgroundColor: '#020617', color: '#ffffff' },
+                        'input:focus': { borderColor: '#2563eb' }
+                    }
+                });
+            } catch (err) {
+                showError("Failed to establish handshake link with Square API Gateway assets.");
+            }
+        });
+
+        function selectPlan(element, planId) {
+            document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+            element.classList.add('selected');
+            selectedPlanId = planId;
+        }
+
+        async function goToStep(stepNumber) {
+            document.getElementById('checkoutAlert').style.display = 'none';
+            
+            // Handle entering Step 2: Attach Square Card UI layers dynamically
+            if (stepNumber === 2) {
+                if (!cardEngine) {
+                    showError("Gateway subsystem not ready. Please refresh.");
+                    return;
+                }
+                // Mount the interactive payment iframe elements inside our container
+                await cardEngine.attach('#card-container');
+                
+                // Bind click engine trigger directly to Square's asynchronous tokenizer evaluation
+                document.getElementById('card-button').addEventListener('click', handlePaymentExecution);
+            }
+
+            // Toggle active state classes down the panel tree
+            document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.progress-pill').forEach((p, idx) => {
+                p.classList.toggle('active', idx < stepNumber);
+            });
+
+            document.getElementById(`step${stepNumber}`).classList.add('active');
+            currentStep = stepNumber;
+        }
+
+        async function handlePaymentExecution(e) {
+            e.preventDefault();
+            document.getElementById('card-button').disabled = true;
+            
+            try {
+                // 1. Force the client view into Step 3 to hide details during transit
+                goToStep(3);
+
+                // 2. Tokenize the card data directly through Square's system
+                const tokenizationResult = await cardEngine.tokenize();
+                
+                if (tokenizationResult.status === 'OK') {
+                    const cardNonce = tokenizationResult.token;
+                    // Send authorization payload straight through our Express routing line
+                    await submitSubscriptionPayload(cardNonce);
+                } else {
+                    throw new Error(tokenizationResult.errors[0].message);
+                }
+            } catch (err) {
+                document.getElementById('card-button').disabled = false;
+                goToStep(2); // Bounce user back safely to retype
+                showError(err.message || "Failed handling transaction authorization arrays.");
+            }
+        }
+
+        async function submitSubscriptionPayload(nonce) {
+            const payload = {
+                name: userSessionContext.name,
+                email: userSessionContext.email,
+                cardNonce: nonce,
+                planTierId: selectedPlanId
+            };
+
+            try {
+                const response = await fetch('/api/account/signup/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Update visual success state frames
+                    document.getElementById('processing-title').innerText = "Allocation Verified";
+                    document.getElementById('processing-subtitle').innerText = "Redirecting profile arrays to media catalog...";
+                    
+                    setTimeout(() => {
+                        window.location.href = "/";
+                    }, 2000);
+                } else {
+                    throw new Error(data.error || "Internal backend configuration loop rejected payload.");
+                }
+            } catch (err) {
+                document.getElementById('card-button').disabled = false;
+                goToStep(2);
+                showError(err.message);
+            }
+        }
+
+        function showError(msg) {
+            const alertBox = document.getElementById('checkoutAlert');
+            alertBox.innerText = msg;
+            alertBox.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

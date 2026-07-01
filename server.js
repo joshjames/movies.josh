@@ -88,8 +88,10 @@ const mediaRouter = require('./src/routes/media.routes');
 const torrentRouter = require('./src/routes/torrent.routes');
 const profileRouter = require('./src/routes/profile.routes');
 const subtitleRouter = require('./src/routes/subtitle.routes');
+const accountRouter = require('./src/routes/account.routes');
 
 
+app.use('/api/account', accountRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', mediaRouter); 
 app.use('/api', torrentRouter); 

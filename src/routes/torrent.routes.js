@@ -170,7 +170,7 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
     };
 }
 
-function mapRawEztvRows(rawTorrents, targetImdbId, cover, packsOnly, limit = 120) {
+function mapRawEztvRows(rawTorrents, targetImdbId, cover, packsOnly, limit = 100) {
     const all = rawTorrents || [];
     const deduped = [];
     const seen = new Set();

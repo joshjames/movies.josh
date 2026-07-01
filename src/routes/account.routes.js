@@ -23,6 +23,33 @@ router.post('/signup/subscribe', requireAuth, async (req, res) => {
   }
 });
 
+// Add this helper endpoint to your src/routes/account.routes.js pipeline
+router.get('/status', requireAuth, async (req, res) => {
+  try {
+    const user = await db.users.findById(req.user.id);
+    
+    // Default guest metadata contract
+    if (!user || user.subscriptionStatus !== 'ACTIVE') {
+      return res.status(200).json({ success: true, subscriptionStatus: 'GUEST' });
+    }
+
+    // Process dates cleanly from stored Unix stamps or ISO strings
+    const cycleDate = user.nextBillingDate 
+      ? new Date(user.nextBillingDate).toLocaleDateString('en-US', { dateStyle: 'long' })
+      : 'End of current cycle';
+
+    return res.status(200).json({
+      success: true,
+      subscriptionStatus: user.subscriptionStatus,
+      cancelAtPeriodEnd: user.cancelAtPeriodEnd || false,
+      nextBillingCycle: cycleDate
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'Database tracking synchronization drop.' });
+  }
+});
+
+
 /**
  * Handle manual end-of-cycle cancellation requests from account.html
  */

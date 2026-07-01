@@ -64,6 +64,24 @@
         .page-btn:hover:not(:disabled) { background: #2563eb; border-color: #3b82f6; }
         .page-btn:disabled { opacity: 0.4; cursor: not-allowed; border-color: #334155; }
         .page-indicator { font-size: 0.9rem; color: #94a3b8; font-weight: 500; min-width: 100px; text-align: center; }
+
+        .season-panel { grid-column: 1 / -1; background: #111b30; border: 1px solid #334155; border-radius: 10px; overflow: hidden; }
+        .season-panel + .season-panel { margin-top: 10px; }
+        .season-summary { cursor: pointer; list-style: none; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; background: #17233a; color: #cbd5e1; }
+        .season-summary::-webkit-details-marker { display: none; }
+        .season-summary strong { color: #f8fafc; }
+        .episode-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .episode-table th, .episode-table td { border-top: 1px solid #263247; padding: 8px 10px; text-align: left; vertical-align: top; }
+        .episode-table th { color: #94a3b8; font-weight: 600; background: #0f1b31; }
+        .episode-table td { color: #cbd5e1; }
+        .episode-table .ep-title { color: #f8fafc; font-weight: 600; }
+        .episode-table .ep-meta { color: #94a3b8; font-size: 0.72rem; margin-top: 2px; }
+        .episode-add { white-space: nowrap; }
+        .show-overview { grid-column: 1 / -1; display: grid; grid-template-columns: 92px 1fr; gap: 12px; background: #111b30; border: 1px solid #334155; border-radius: 10px; padding: 10px; }
+        .show-overview img { width: 92px; height: 138px; object-fit: cover; border-radius: 8px; background: #020617; }
+        .show-overview-meta { min-width: 0; }
+        .show-overview-meta h2 { margin: 0 0 5px; font-size: 1.05rem; color: #f8fafc; }
+        .show-overview-meta .line { font-size: 0.82rem; color: #94a3b8; }
     </style>
 </head>
 <body>
@@ -141,6 +159,7 @@
         let currentMode = 'movies';
         let currentBrowsePage = 1;
         let tvSearchTimer = null;
+        const tvCoverByImdb = Object.create(null);
 
         function switchMode(mode) {
             currentMode = mode;
@@ -217,6 +236,7 @@
                 const votes = Number(show.numVotes || 0).toLocaleString();
                 const rating = Number(show.averageRating || 0).toFixed(1);
                 const safeTitle = String(show.title || '').replace(/'/g, "\\'");
+                tvCoverByImdb[String(show.imdbId || '')] = show.cover || '';
 
                 return `
                     <div class="card">
@@ -241,6 +261,97 @@
 
         function sanitizeImageSrc(value) {
             return String(value || '').replace(/"/g, '%22').replace(/\s/g, '%20');
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function chooseBestEpisodeRows(rows) {
+            const packRows = [];
+            const byEpisode = new Map();
+
+            for (const row of (rows || [])) {
+                const sourceType = String(row.sourceType || '').toLowerCase();
+                const season = parseInt(row.season, 10);
+                const episode = parseInt(row.episode, 10);
+                const seeds = parseInt(row.seeds, 10) || 0;
+                const peers = parseInt(row.peers, 10) || 0;
+                const score = seeds * 1000 + peers;
+
+                if (sourceType === 'pack') {
+                    packRows.push(row);
+                    continue;
+                }
+                if (!Number.isFinite(season) || season <= 0 || !Number.isFinite(episode) || episode <= 0) {
+                    continue;
+                }
+
+                const key = `${season}-${episode}`;
+                const existing = byEpisode.get(key);
+                if (!existing || score > existing.score) {
+                    byEpisode.set(key, { row, score, season, episode });
+                }
+            }
+
+            const episodes = Array.from(byEpisode.values())
+                .sort((a, b) => {
+                    if (a.season !== b.season) return a.season - b.season;
+                    return a.episode - b.episode;
+                })
+                .map(x => x.row);
+
+            return { episodes, packs: packRows };
+        }
+
+        function renderEpisodeTableRows(rows) {
+            return rows.map(row => {
+                const season = String(parseInt(row.season, 10)).padStart(2, '0');
+                const episode = String(parseInt(row.episode, 10)).padStart(2, '0');
+                return `
+                    <tr>
+                        <td>
+                            <div class="ep-title">S${season}E${episode}</div>
+                            <div class="ep-meta">${escapeHtml(row.originalTitle || row.title || '')}</div>
+                        </td>
+                        <td>${escapeHtml(row.size || 'N/A')}</td>
+                        <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
+                        <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}')">Ingest Episode</button></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderPackRows(rows) {
+            if (!rows.length) return '';
+            return `
+                <div class="season-panel">
+                    <div class="season-summary"><strong>Season Packs</strong><span>${rows.length} rows</span></div>
+                    <table class="episode-table">
+                        <thead>
+                            <tr><th>Release</th><th>Size</th><th>Seeds</th><th>Action</th></tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(row => `
+                                <tr>
+                                    <td>
+                                        <div class="ep-title">${escapeHtml(row.title || '')}</div>
+                                        <div class="ep-meta">${escapeHtml(row.originalTitle || '')}</div>
+                                    </td>
+                                    <td>${escapeHtml(row.size || 'N/A')}</td>
+                                    <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
+                                    <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}')">Ingest Season</button></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
 
         async function fetchMovieCatalog(page = 1) {
@@ -368,35 +479,56 @@
                     return;
                 }
 
+                const best = chooseBestEpisodeRows(data.torrents);
+                const episodesBySeason = new Map();
+                for (const row of best.episodes) {
+                    const season = parseInt(row.season, 10);
+                    if (!episodesBySeason.has(season)) episodesBySeason.set(season, []);
+                    episodesBySeason.get(season).push(row);
+                }
+
+                const seasonSections = Array.from(episodesBySeason.entries())
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([season, rows]) => {
+                        const seededCount = rows.filter(r => (parseInt(r.seeds, 10) || 0) > 0).length;
+                        return `
+                            <details class="season-panel" open>
+                                <summary class="season-summary"><strong>Season ${season}</strong><span>${rows.length} episodes • ${seededCount} seeded</span></summary>
+                                <table class="episode-table">
+                                    <thead>
+                                        <tr><th>Episode</th><th>Size</th><th>Seeds</th><th>Action</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        ${renderEpisodeTableRows(rows)}
+                                    </tbody>
+                                </table>
+                            </details>
+                        `;
+                    }).join('');
+
+                const showCover = tvCoverByImdb[String(imdbId)] || (data.torrents[0] && data.torrents[0].cover) || '';
+
                 grid.innerHTML = `
                     <div style="grid-column: 1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:4px;">
                         <div>
                             <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
                             <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} rows • Whole seasons only: ${packsOnly ? 'ON' : 'OFF'} • Mode: ${data.consolidated ? 'consolidated' : 'raw'}</div>
-                            ${(typeof data.packRows === 'number' && typeof data.episodeRows === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Rows: ${data.packRows} pack • ${data.episodeRows} episode representative</div>` : ''}
+                            ${(typeof data.packRows === 'number' && typeof data.episodeRows === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Rows: ${data.packRows} pack • ${data.episodeRows} episode rows</div>` : ''}
                             ${data.packsFallbackUsed ? '<div style="color:#f59e0b; font-size:0.8rem; margin-top:4px;">No seeded season packs found; showing unseeded pack rows where available.</div>' : ''}
                             ${Array.isArray(data.upstreamWarnings) && data.upstreamWarnings.length ? `<div style="color:#f97316; font-size:0.8rem; margin-top:4px;">${data.upstreamWarnings[0]}</div>` : ''}
                         </div>
                         <button class="page-btn" style="background:#334155;" onclick="fetchShowCatalog()">Back to Shows</button>
                     </div>
-                    ${data.torrents.map(torrent => `
-                        <div class="card">
-                            <div class="cover-frame">
-                                <img src="${sanitizeImageSrc(torrent.cover)}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
-                                <div class="badge-row">
-                                    <span class="seeds-badge">▲ ${torrent.seeds}</span>
-                                    <span class="size-badge">💾 ${torrent.size}</span>
-                                </div>
-                            </div>
-                            <div class="card-info">
-                                <div>
-                                    <div class="title" title="${torrent.title}">${torrent.title}</div>
-                                    <div class="meta">IMDb ${torrent.imdbId}${torrent.originalTitle ? ` • Source: ${torrent.originalTitle}` : ''}${torrent.sourceType ? ` • Type: ${torrent.sourceType}` : ''}</div>
-                                </div>
-                                    <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer', '${torrent.imdbId || ''}')">${torrent.sourceType === 'pack' ? 'Ingest Season' : 'Ingest Episode'}</button>
-                            </div>
+                    <div class="show-overview">
+                        <img src="${sanitizeImageSrc(showCover)}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'" alt="${escapeHtml(showTitle)} cover">
+                        <div class="show-overview-meta">
+                            <h2>${escapeHtml(showTitle)}</h2>
+                            <div class="line">Grouped by season, then episode. Best seeded release selected per episode.</div>
+                            <div class="line">Episodes shown: ${best.episodes.length} • Pack rows: ${best.packs.length}</div>
                         </div>
-                    `).join('')}
+                    </div>
+                    ${renderPackRows(best.packs)}
+                    ${seasonSections || '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No episode rows available after filtering.</div>'}
                 `;
             } catch (err) {
                 grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading releases for this show. ${err && err.message ? err.message : ''}</div>`;
