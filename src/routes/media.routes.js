@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { getLibrary } = require('../services/db');
+const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 
 const MediaService = require('../services/MediaService');
 const MOVIES_DIR = process.env.MOVIES_DIR
@@ -40,6 +41,19 @@ router.get('/library', async (req, res) => {
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
+});
+
+// GET: /api/home-feed (Serves the pre-generated home page collections cache)
+router.get('/home-feed', (req, res) => {
+    const homeFeed = loadHomeFeedWithFallback();
+    if (!homeFeed) {
+        return res.status(503).json({
+            success: false,
+            error: 'Home feed cache missing. Ask admin to regenerate the home feed.'
+        });
+    }
+
+    return res.json({ success: true, feed: homeFeed });
 });
 
 // GET: /api/movies (High-Performance Paginated Catalog Discovery utilizing Redis lookups)

@@ -101,66 +101,150 @@
             background: #1d4ed8;
         }
 
-        /* Main Content Media Grid Layout */
-        .grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
-            gap: 16px; 
-            padding: 10px; 
-            max-width: 1200px;
-            margin: 20px auto;
+        /* Horizontal Home Collections */
+        .collections {
+            max-width: 1400px;
+            margin: 10px auto 0 auto;
+            padding: 0 10px 30px 10px;
         }
 
-        .card { 
-            background: #1e293b; 
-            border-radius: 12px; 
-            overflow: hidden; 
-            transition: transform 0.2s, box-shadow 0.2s; 
-            cursor: pointer; 
-            text-decoration: none; 
-            color: white; 
+        .collection-row {
+            margin: 0 0 30px 0;
+        }
+
+        .scroller-title {
             display: flex;
-            flex-direction: column;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            align-items: baseline;
+            gap: 12px;
+            margin: 0 0 10px 0;
+            padding: 0 4px;
         }
 
-        .card:hover { 
-            transform: translateY(-4px); 
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        .scroller-title h2 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #f1f5f9;
         }
 
-        .cover-wrapper {
+        .scroller-title span {
+            color: #94a3b8;
+            font-size: 0.8rem;
+        }
+
+        .slider-wrapper {
             position: relative;
-            width: 100%;
-            aspect-ratio: 2 / 3;
-            background: #020617;
         }
 
-        .card img { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
+        .movie-slider {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            padding: 10px 46px 18px 46px;
+            scrollbar-width: none;
+            scroll-snap-type: x mandatory;
+        }
+
+        .movie-slider::-webkit-scrollbar { display: none; }
+
+        .slider-card {
+            flex: 0 0 150px;
+            position: relative;
+            aspect-ratio: 2 / 3;
+            background: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            text-decoration: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+            transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.25s;
+            transform-origin: center center;
+            scroll-snap-align: start;
+        }
+
+        .slider-card:hover {
+            transform: scale(1.06);
+            z-index: 10;
+            box-shadow: 0 18px 24px -8px rgba(0, 0, 0, 0.65);
+        }
+
+        .slider-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center 20%;
             display: block;
         }
 
-        .card-content {
-            padding: 12px;
+        .slider-card-overlay {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            background: linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.96) 88%);
+            padding: 24px 10px 10px 10px;
             display: flex;
             flex-direction: column;
-            flex-grow: 1;
+            gap: 2px;
         }
 
-        .card .title { 
-            font-size: 0.95rem;
-            font-weight: bold; 
-            line-height: 1.3;
+        .slider-card-overlay .title {
+            font-size: 0.92rem;
+            font-weight: 700;
             color: #f1f5f9;
-            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .card .meta-line {
-            font-size: 0.8rem;
+        .slider-card-overlay .meta-line {
+            font-size: 0.72rem;
             color: #94a3b8;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .slider-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 2;
+            background: #6366f1;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .arrow__btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 34px;
+            height: 64px;
+            border: none;
+            background: rgba(15, 23, 42, 0.78);
+            color: #fff;
+            font-size: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s, opacity 0.2s;
+            user-select: none;
+            border-radius: 8px;
+            opacity: 0.95;
+        }
+
+        .arrow__btn:hover { background: rgba(15, 23, 42, 0.98); color: #e50914; }
+        .left-arrow { left: 8px; }
+        .right-arrow { right: 8px; }
+
+        .collection-empty {
+            color: #64748b;
+            padding: 18px 8px 6px 8px;
+            font-size: 0.9rem;
         }
 
                 /* Container for alignment */
@@ -203,11 +287,12 @@
         /* Tablet/Desktop expansion sizing overrides */
         @media(min-width: 640px) {
             body { padding: 20px; }
-            .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
             .main-header { padding: 20px 0; }
             .logo-wrapper { width: 220px; } 
             .welcome-msg { font-size: 0.9rem; }
             .browse-nav-btn { padding: 12px 24px; font-size: 0.95rem; }
+            .movie-slider { padding-left: 56px; padding-right: 56px; }
+            .slider-card { flex-basis: 180px; }
         }
     </style>
 </head>
@@ -264,9 +349,9 @@
         </div>
     </header>
 
-    <div class="grid" id="movie-grid"></div>
+    <div class="collections" id="movie-grid"></div>
 
-    <div id="pagination-container" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin: 30px auto; max-width: 600px;"></div>
+    <div id="pagination-container" style="display: none;"></div>
 
     <div style="text-align: center; margin-bottom: 20px;">
         <a href="/browse.html" style="background: #2563eb; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
@@ -283,6 +368,166 @@
 
     <script>
         let currentCatalogPage = 1;
+
+        function safeNumber(value) {
+            const parsed = parseFloat(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        function normalizeGenres(media) {
+            const raw = media.genre || media.enrichment?.genre || '';
+            return String(raw)
+                .split(',')
+                .map(item => item.trim())
+                .filter(Boolean);
+        }
+
+        function getScore(media) {
+            return safeNumber(media.imdbScore || media.rating || media.enrichment?.imdbScore);
+        }
+
+        async function fetchAllMovies() {
+            const pageSize = 100;
+            let page = 1;
+            let totalPages = 1;
+            const all = [];
+
+            while (page <= totalPages) {
+                const res = await fetch(`/api/movies?page=${page}&limit=${pageSize}`);
+                const data = await res.json();
+                if (!data || !Array.isArray(data.movies)) break;
+
+                all.push(...data.movies);
+                totalPages = data.totalPages || 1;
+                page += 1;
+            }
+
+            return all;
+        }
+
+        function buildSliderCard(media) {
+            const targetEndpoint = (media.contentType === 'series') ? 'series.html' : 'player.html';
+            const badgeHtml = (media.contentType === 'series')
+                ? '<span class="slider-badge">TV Show</span>'
+                : '';
+            const genreText = media.genre || media.enrichment?.genre || '';
+            const scoreText = media.imdbScore || media.rating || media.enrichment?.imdbScore || '';
+            const metaBits = [media.year || '', genreText, scoreText ? `IMDb ${scoreText}` : ''].filter(Boolean).join(' · ');
+
+            return `
+                <a class="slider-card" href="${targetEndpoint}?id=${media.id}">
+                    ${badgeHtml}
+                    <img src="${media.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
+                    <div class="slider-card-overlay">
+                        <div class="title">${media.title}</div>
+                        <div class="meta-line">${metaBits}</div>
+                    </div>
+                </a>
+            `;
+        }
+
+        function renderSliderRow(title, subtitle, items, rowId) {
+            const cards = items.length > 0
+                ? items.map(buildSliderCard).join('')
+                : '<div class="collection-empty">No titles found for this collection.</div>';
+
+            return `
+                <section class="collection-row">
+                    <div class="scroller-title">
+                        <h2>${title}</h2>
+                        ${subtitle ? `<span>${subtitle}</span>` : ''}
+                    </div>
+                    <div class="slider-wrapper">
+                        <button class="arrow__btn left-arrow" type="button" onclick="scrollSlider('${rowId}', -1)">‹</button>
+                        <div class="movie-slider" id="${rowId}">${cards}</div>
+                        <button class="arrow__btn right-arrow" type="button" onclick="scrollSlider('${rowId}', 1)">›</button>
+                    </div>
+                </section>
+            `;
+        }
+
+        function renderFeedRow(collection) {
+            const cards = Array.isArray(collection.cards) && collection.cards.length > 0
+                ? collection.cards.map(card => {
+                    const badgeHtml = card.badge ? '<span class="slider-badge">TV Show</span>' : '';
+                    const metaBits = [card.year || '', card.genre || '', card.imdbScore ? `IMDb ${card.imdbScore}` : ''].filter(Boolean).join(' · ');
+
+                    return `
+                        <a class="slider-card" href="${card.href}">
+                            ${badgeHtml}
+                            <img src="${card.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${card.title}">
+                            <div class="slider-card-overlay">
+                                <div class="title">${card.title}</div>
+                                <div class="meta-line">${metaBits}</div>
+                            </div>
+                        </a>
+                    `;
+                }).join('')
+                : '<div class="collection-empty">No titles found for this collection.</div>';
+
+            return `
+                <section class="collection-row">
+                    <div class="scroller-title">
+                        <h2>${collection.title || 'Collection'}</h2>
+                        ${collection.subtitle ? `<span>${collection.subtitle}</span>` : ''}
+                    </div>
+                    <div class="slider-wrapper">
+                        <button class="arrow__btn left-arrow" type="button" onclick="scrollSlider('${collection.id}', -1)">‹</button>
+                        <div class="movie-slider" id="${collection.id}">${cards}</div>
+                        <button class="arrow__btn right-arrow" type="button" onclick="scrollSlider('${collection.id}', 1)">›</button>
+                    </div>
+                </section>
+            `;
+        }
+
+        function buildCollectionRows(mediaList) {
+            const rows = [];
+
+            const recent = [...mediaList].sort((a, b) => {
+                const aTime = new Date(a.updatedAt || 0).getTime();
+                const bTime = new Date(b.updatedAt || 0).getTime();
+                return bTime - aTime;
+            });
+            rows.push(renderSliderRow('Recently Added', 'newest items first', recent.slice(0, 18), 'recently-added-row'));
+
+            const topRated = [...mediaList]
+                .filter(media => getScore(media) !== null && getScore(media) >= 8)
+                .sort((a, b) => (getScore(b) || 0) - (getScore(a) || 0));
+            rows.push(renderSliderRow('Top Rated', 'IMDb score 8.0 and up', topRated.slice(0, 18), 'top-rated-row'));
+
+            const shows = mediaList.filter(media => media.contentType === 'series');
+            if (shows.length > 0) {
+                rows.push(renderSliderRow('TV Shows', 'series collection', shows.slice(0, 18), 'series-row'));
+            }
+
+            const genreMap = new Map();
+            mediaList.forEach(media => {
+                normalizeGenres(media).slice(0, 2).forEach(genre => {
+                    if (!genreMap.has(genre)) genreMap.set(genre, []);
+                    genreMap.get(genre).push(media);
+                });
+            });
+
+            [...genreMap.entries()]
+                .sort((a, b) => b[1].length - a[1].length)
+                .slice(0, 3)
+                .forEach(([genre, items]) => {
+                    rows.push(renderSliderRow(genre, 'genre collection', items.slice(0, 18), `genre-${genre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`));
+                });
+
+            return rows.join('');
+        }
+
+        function scrollSlider(rowId, direction) {
+            const slider = document.getElementById(rowId);
+            if (!slider) return;
+
+            const scrollAmount = slider.clientWidth * 0.75;
+            slider.scrollBy({
+                left: direction * scrollAmount,
+                behavior: 'smooth'
+            });
+        }
 
         async function hydrateUserProfileHeader() {
             try {
@@ -309,79 +554,21 @@
         async function loadMovies(page = 1) {
             currentCatalogPage = page;
             try {
-                const res = await fetch(`/api/movies?page=${page}`);
-                const data = await res.json(); 
                 const grid = document.getElementById('movie-grid');
-                
-                if (data && data.movies && data.movies.length > 0) {
-                    grid.innerHTML = data.movies.map(media => {
-                        const targetEndpoint = (media.contentType === 'series') ? 'series.html' : 'player.html';
-                        const badgeHtml = (media.contentType === 'series') 
-                            ? `<span style="position: absolute; bottom: 8px; right: 8px; background: #6366f1; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">TV Show</span>`
-                            : '';
-                        const genreText = media.genre || media.enrichment?.genre || '';
-                        const scoreText = media.imdbScore || media.rating || media.enrichment?.imdbScore || '';
-                        const metaBits = [genreText, scoreText ? `IMDb ${scoreText}` : ''].filter(Boolean).join(' · ');
+                const res = await fetch('/api/home-feed');
+                const data = await res.json();
+                const collections = data?.feed?.collections || [];
 
-                        return `
-                            <a class="card" href="${targetEndpoint}?id=${media.id}">
-                                <div class="cover-wrapper">
-                                    <img src="${media.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
-                                    ${badgeHtml}
-                                </div>
-                                <div class="card-content">
-                                    <div class="title">${media.title}</div>
-                                    <div class="meta-line">${media.year ? media.year : ''}</div>
-                                    <div class="meta-line">${metaBits}</div>
-                                </div>
-                            </a>
-                        `;
-                    }).join('');
-
-                    renderPaginationControls(data.totalPages, data.currentPage);
+                if (collections.length > 0) {
+                    grid.innerHTML = collections.map(renderFeedRow).join('');
+                    document.getElementById('pagination-container').innerHTML = '';
                 } else {
-                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 40px;">Your media library is currently empty. Click above to add content!</div>`;
+                    grid.innerHTML = `<div class="collection-empty" style="text-align: center; padding: 40px;">Your media library is currently empty. Click above to add content!</div>`;
                     document.getElementById('pagination-container').innerHTML = '';
                 }
             } catch (err) {
-                console.error("❌ Frontend failed to unpack cached dashboard assets:", err);
+                console.error("❌ Frontend failed to load pre-generated home feed:", err);
             }
-        }
-
-        function renderPaginationControls(totalPages, currentPage) {
-            const container = document.getElementById('pagination-container');
-            if (totalPages <= 1) {
-                container.innerHTML = '';
-                return;
-            }
-
-            let html = '';
-            html += `
-                <button ${currentPage === 1 ? 'disabled' : ''} 
-                        onclick="loadMovies(${currentPage - 1})" 
-                        style="background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: ${currentPage === 1 ? 'not-allowed' : 'pointer'}; opacity: ${currentPage === 1 ? '0.4' : '1'}; transition: background 0.2s;">
-                    &larr; Prev
-                </button>
-            `;
-
-            for (let i = 1; i <= totalPages; i++) {
-                const isActive = (i === currentPage);
-                html += `
-                    <button onclick="loadMovies(${i})" 
-                            style="background: ${isActive ? '#2563eb' : '#1e293b'}; color: white; border: 1px solid ${isActive ? '#2563eb' : '#334155'}; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s;">
-                        ${i}
-                    </button>
-                `;
-            }
-
-            html += `
-                <button ${currentPage === totalPages ? 'disabled' : ''} 
-                        onclick="loadMovies(${currentPage + 1})" 
-                        style="background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: ${currentPage === totalPages ? 'not-allowed' : 'pointer'}; opacity: ${currentPage === totalPages ? '0.4' : '1'}; transition: background 0.2s;">
-                    Next &rarr;
-                </button>
-            `;
-            container.innerHTML = html;
         }
 
         async function updatePipelineStatus() {

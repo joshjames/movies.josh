@@ -176,6 +176,7 @@
         
         <div class="controls">
             <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
+            <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
 
@@ -432,6 +433,26 @@
                 const data = await res.json();
                 if(data.success) alert("Library sanitization process has been kicked off in background.");
             } catch(e) { console.error(e); }
+        }
+
+        async function rebuildHomeFeed() {
+            try {
+                showToast('Rebuilding home feed cache...', 'info', 3000);
+                const res = await fetch('/api/admin/regenerate-home-feed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshLibrary: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Home feed rebuild failed: ' + (data.error || 'Unknown error'), 'error', 4500);
+                    return;
+                }
+
+                showToast(`Home feed ready. ${data.collections} collections / ${data.totalItems} items.`, 'success', 4500);
+            } catch (err) {
+                showToast('Home feed rebuild request failed.', 'error', 4500);
+            }
         }
 
         async function fetchLibraryData() {

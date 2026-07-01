@@ -13,6 +13,7 @@ const logger = require('../utils/logger');
 const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
 const LibraryScanner = require('../services/LibraryScanner'); 
+const { buildHomeFeed, saveHomeFeed } = require('../services/HomeFeedService');
 
 // Route map to local worker microservices ports running in the container
 const WORKER_PORTS = {
@@ -194,6 +195,30 @@ router.post('/sync-item', async (req, res) => {
             message: 'Library snapshot refreshed from disk.',
             summary,
             itemFound
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/regenerate-home-feed', async (req, res) => {
+    try {
+        const { refreshLibrary = false } = req.body || {};
+
+        if (refreshLibrary) {
+            await LibraryScanner.runLibraryScanSweep();
+        }
+
+        const library = await getLibrary();
+        const feed = buildHomeFeed(library);
+        const feedPath = saveHomeFeed(feed);
+
+        return res.json({
+            success: true,
+            feedPath,
+            generatedAt: feed.generatedAt,
+            totalItems: feed.totalItems,
+            collections: feed.collections.length
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
