@@ -53,6 +53,19 @@ function scanDirectory(basePath, contentType) {
         const normalizedPlot = meta.plot || meta.metadata?.plot || '';
         const normalizedGenre = meta.genre || meta.metadata?.genre || '';
         const normalizedImdbId = meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '';
+        const normalizedTags = [...new Set(
+            (Array.isArray(meta.tags) ? meta.tags : (Array.isArray(meta.enrichment?.tags) ? meta.enrichment.tags : (Array.isArray(meta.metadata?.tags) ? meta.metadata.tags : [])))
+                .map(tag => String(tag).trim())
+                .filter(Boolean)
+        )].sort();
+        const normalizedEnrichment = {
+            genre: meta.enrichment?.genre || meta.metadata?.enrichment?.genre || normalizedGenre,
+            tags: normalizedTags.length > 0 ? normalizedTags : [...new Set((normalizedGenre ? normalizedGenre.split(',') : []).map(tag => tag.trim()).filter(Boolean))].sort(),
+            imdbScore: meta.imdbScore || meta.imdbRating || meta.rating || meta.metadata?.imdbScore || meta.metadata?.imdbRating || meta.metadata?.rating || 'N/A',
+            parentalRating: meta.parentalRating || meta.rated || meta.metadata?.parentalRating || meta.metadata?.rated || 'N/A',
+            popularity: meta.popularity || meta.metadata?.popularity || 'N/A',
+            popularitySource: meta.enrichment?.popularitySource || meta.metadata?.enrichment?.popularitySource || ''
+        };
 
         // Treat the item as remote when either explicit location is remote or we have synced remote keys.
         const isRemote = meta.storage?.location === 'remote' || remoteProfiles.length > 0;
@@ -80,6 +93,11 @@ function scanDirectory(basePath, contentType) {
                 genre: normalizedGenre,
                 imdbId: normalizedImdbId,
                 imdb_id: normalizedImdbId,
+                tags: normalizedEnrichment.tags,
+                imdbScore: normalizedEnrichment.imdbScore,
+                parentalRating: normalizedEnrichment.parentalRating,
+                popularity: normalizedEnrichment.popularity,
+                enrichment: normalizedEnrichment,
                 contentType: contentType,
                 storageLocation: isRemote ? 'remote' : 'local',
                 cover: contentType === 'series'

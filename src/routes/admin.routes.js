@@ -60,6 +60,26 @@ function resolveSeriesFolderPath(folderName) {
     return candidates.find(candidate => fs.existsSync(candidate)) || path.join(SERIES_DIR, folderName);
 }
 
+function normalizeTagList(value, fallback = []) {
+    const source = Array.isArray(value)
+        ? value
+        : (typeof value === 'string' ? value.split(',') : fallback);
+
+    return [...new Set(source.map(tag => String(tag).trim()).filter(Boolean))].sort();
+}
+
+function normalizeEnrichment(meta = {}) {
+    const rootTags = normalizeTagList(meta.tags || meta.enrichment?.tags || meta.metadata?.tags || meta.genre || meta.metadata?.genre);
+    return {
+        genre: meta.genre || meta.enrichment?.genre || meta.metadata?.genre || '',
+        tags: rootTags,
+        imdbScore: meta.imdbScore || meta.imdbRating || meta.rating || meta.enrichment?.imdbScore || meta.metadata?.imdbScore || meta.metadata?.imdbRating || meta.metadata?.rating || '',
+        parentalRating: meta.parentalRating || meta.rated || meta.enrichment?.parentalRating || meta.metadata?.parentalRating || meta.metadata?.rated || '',
+        popularity: meta.popularity || meta.enrichment?.popularity || meta.metadata?.popularity || '',
+        popularitySource: meta.enrichment?.popularitySource || meta.metadata?.enrichment?.popularitySource || ''
+    };
+}
+
 router.get('/log-stream', (req, res) => {
     // Ensure only authorized admin access configurations proceed here
     res.setHeader('X-Accel-Buffering', 'no'); 
@@ -540,6 +560,7 @@ router.get('/library-metadata', async (req, res) => {
             imdbId: meta.imdbId || meta.imdb_id || '',
             plot: meta.plot || '',
             genre: meta.genre || '',
+            enrichment: normalizeEnrichment(meta),
             storageLocation: meta.storage?.location || 'local',
             storageFiles: normalizeStorageFiles(meta.storage?.files || {})
         });
@@ -613,7 +634,7 @@ router.post('/trigger-automation', async (req, res) => {
 // ✍️ ENDPOINT 1: OVERRIDE METADATA (DASHBOARD PANEL SAVES)
 // =========================================================================
 router.post('/override-metadata', async (req, res) => {
-    const { folder, contentType, title, year, imdbId, plot, storage } = req.body;
+    const { folder, contentType, title, year, imdbId, plot, genre, storage, tags, imdbScore, parentalRating, popularity, enrichment } = req.body;
     
     // Ensure custom dashboard panel modifications write metadata out to the true folder mounts
     const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
@@ -633,13 +654,42 @@ router.post('/override-metadata', async (req, res) => {
             metadata.year = year;
             metadata.imdbId = imdbId;
             metadata.plot = plot;
+            metadata.genre = genre || metadata.genre || '';
         } else {
-            metadata.metadata = { ...metadata.metadata, title, year, imdbId, plot };
+            metadata.metadata = { ...metadata.metadata, title, year, imdbId, plot, genre: genre || metadata.metadata.genre || '' };
             // Mirror back to root level to avoid background component blindness
             metadata.title = title;
             metadata.year = year;
             metadata.imdbId = imdbId;
             metadata.plot = plot;
+            metadata.genre = genre || metadata.genre || metadata.metadata.genre || '';
+        }
+
+        const nextEnrichment = {
+            ...normalizeEnrichment(metadata),
+            ...normalizeEnrichment(enrichment || {}),
+            tags: normalizeTagList(
+                tags !== undefined ? tags : (enrichment?.tags !== undefined ? enrichment.tags : metadata.tags || metadata.enrichment?.tags)
+            ),
+            genre: enrichment?.genre || metadata.genre || metadata.metadata?.genre || metadata.enrichment?.genre || '',
+            imdbScore: imdbScore || enrichment?.imdbScore || metadata.imdbScore || metadata.rating || metadata.enrichment?.imdbScore || 'N/A',
+            parentalRating: parentalRating || enrichment?.parentalRating || metadata.parentalRating || metadata.enrichment?.parentalRating || 'N/A',
+            popularity: popularity || enrichment?.popularity || metadata.popularity || metadata.enrichment?.popularity || 'N/A'
+        };
+
+        metadata.tags = nextEnrichment.tags;
+        metadata.genre = nextEnrichment.genre || metadata.genre || '';
+        metadata.imdbScore = nextEnrichment.imdbScore;
+        metadata.parentalRating = nextEnrichment.parentalRating;
+        metadata.popularity = nextEnrichment.popularity;
+        metadata.enrichment = nextEnrichment;
+        if (metadata.metadata) {
+            metadata.metadata.genre = nextEnrichment.genre || metadata.metadata.genre || '';
+            metadata.metadata.tags = nextEnrichment.tags;
+            metadata.metadata.imdbScore = nextEnrichment.imdbScore;
+            metadata.metadata.parentalRating = nextEnrichment.parentalRating;
+            metadata.metadata.popularity = nextEnrichment.popularity;
+            metadata.metadata.enrichment = nextEnrichment;
         }
 
         let triggerCloudSync = false;
@@ -794,6 +844,10 @@ router.post('/refetch-metadata', async (req, res) => {
             title: cleanTitle,
             year: data.Year || '',
             genre: data.Genre || 'N/A',
+            tags: normalizeTagList(data.Genre || 'N/A'),
+            imdbScore: data.imdbRating || 'N/A',
+            parentalRating: data.Rated || 'N/A',
+            popularity: data.imdbVotes || 'N/A',
             imdbId: finalImdbId,
             imdb_id: finalImdbId, // ✨ Map snake_case to preserve frontend input bindings
             plot: data.Plot || '',
@@ -805,9 +859,22 @@ router.post('/refetch-metadata', async (req, res) => {
             ...(existingMeta.metadata || {}),
             title: cleanTitle,
             year: data.Year || '',
+            genre: data.Genre || 'N/A',
+            tags: normalizeTagList(data.Genre || 'N/A'),
+            imdbScore: data.imdbRating || 'N/A',
+            parentalRating: data.Rated || 'N/A',
+            popularity: data.imdbVotes || 'N/A',
             imdbId: finalImdbId,
             imdb_id: finalImdbId,
-            plot: data.Plot || ''
+            plot: data.Plot || '',
+            enrichment: {
+                genre: data.Genre || 'N/A',
+                tags: normalizeTagList(data.Genre || 'N/A'),
+                imdbScore: data.imdbRating || 'N/A',
+                parentalRating: data.Rated || 'N/A',
+                popularity: data.imdbVotes || 'N/A',
+                popularitySource: data.imdbVotes ? 'imdbVotes' : 'unknown'
+            }
         };
 
         // Prevent structural dropouts on pipeline state properties

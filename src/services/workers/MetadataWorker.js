@@ -13,6 +13,26 @@ app.use(express.json());
 
 const API_KEY = process.env.OMDB_API_KEY || '84196d01';
 
+function normalizeTagList(value, fallback = []) {
+    const source = Array.isArray(value)
+        ? value
+        : (typeof value === 'string' ? value.split(',') : fallback);
+
+    return [...new Set(source.map(tag => String(tag).trim()).filter(Boolean))].sort();
+}
+
+function buildEnrichmentBlock(data = {}, fallback = {}) {
+    const genre = data.Genre || fallback.genre || 'Media';
+    return {
+        genre,
+        tags: normalizeTagList(data.tags || data.Tags || fallback.tags || genre),
+        imdbScore: data.imdbRating || fallback.imdbScore || 'N/A',
+        parentalRating: data.Rated || fallback.parentalRating || 'N/A',
+        popularity: data.imdbVotes || fallback.popularity || 'N/A',
+        popularitySource: data.imdbVotes ? 'imdbVotes' : (fallback.popularitySource || 'unknown')
+    };
+}
+
 // =========================================================================
 // ATOMIC PROCESS API ENDPOINT
 // =========================================================================
@@ -49,6 +69,16 @@ app.post('/process', async (req, res) => {
         // Fallback profile object if external lookup fails entirely
         if (data.Response === "False") {
             logger.debug(`⚠️ OMDb lookup failed for ${folderName}: ${data.Error}. Implementing local asset fallbacks.`, 'warn');
+            const fallbackEnrichment = buildEnrichmentBlock(
+                {
+                    Genre: 'Media',
+                    imdbRating: 'N/A',
+                    Rated: 'N/A',
+                    imdbVotes: 'N/A',
+                    tags: [targetType, 'media']
+                },
+                { popularitySource: 'fallback' }
+            );
             return res.json({
                 success: true,
                 message: "Resolved using local data fallbacks.",
@@ -57,6 +87,11 @@ app.post('/process', async (req, res) => {
                     year: parsedYear || "Unknown",
                     plot: "Local library file registry asset wrapper.",
                     genre: "Media",
+                    tags: fallbackEnrichment.tags,
+                    imdbScore: fallbackEnrichment.imdbScore,
+                    parentalRating: fallbackEnrichment.parentalRating,
+                    popularity: fallbackEnrichment.popularity,
+                    enrichment: fallbackEnrichment,
                     contentType: targetType,
                     pipelineState: { currentStep: 'SUBTITLES', lastUpdated: new Date().toISOString() }
                 }
@@ -75,13 +110,19 @@ app.post('/process', async (req, res) => {
         }
 
         // Core metadata structure to apply back to metadata.json
+        const enrichment = buildEnrichmentBlock(data);
         let basePatchData = {
             imdbId: data.imdbID,
             title: data.Title,
             year: data.Year,
             plot: data.Plot,
             genre: data.Genre,
-            rating: data.imdbRating || 'N/A',
+            tags: enrichment.tags,
+            imdbScore: enrichment.imdbScore,
+            parentalRating: enrichment.parentalRating,
+            popularity: enrichment.popularity,
+            enrichment,
+            rating: enrichment.imdbScore,
             runtime: data.Runtime || 'N/A',
             contentType: targetType,
             pipelineState: { currentStep: 'SUBTITLES', lastUpdated: new Date().toISOString() }

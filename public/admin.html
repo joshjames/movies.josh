@@ -540,6 +540,26 @@
                                 <label>IMDb Override ID Link</label>
                                 <input type="text" id="imdbId-${item.folder}" placeholder="e.g., tt0123456" value="${(item.metadata && item.metadata.imdbId) || ''}">
                             </div>
+                            <div class="form-group">
+                                <label>Genres / Categories</label>
+                                <input type="text" id="genre-${item.folder}" placeholder="Action, Adventure, Sci-Fi" value="${(item.metadata && (item.metadata.genre || item.metadata.enrichment?.genre)) || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Tags</label>
+                                <input type="text" id="tags-${item.folder}" placeholder="hero, ensemble, epic" value="${Array.isArray(item.metadata && item.metadata.tags) ? (item.metadata.tags || []).join(', ') : ((item.metadata && item.metadata.tags) || (item.metadata && item.metadata.enrichment && Array.isArray(item.metadata.enrichment.tags) ? item.metadata.enrichment.tags.join(', ') : ''))}">
+                            </div>
+                            <div class="form-group">
+                                <label>IMDb Score</label>
+                                <input type="text" id="imdbScore-${item.folder}" placeholder="7.3" value="${(item.metadata && (item.metadata.imdbScore || item.metadata.imdbRating || item.metadata.rating || item.metadata.enrichment?.imdbScore)) || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Parental Rating</label>
+                                <input type="text" id="parentalRating-${item.folder}" placeholder="PG-13" value="${(item.metadata && (item.metadata.parentalRating || item.metadata.rated || item.metadata.enrichment?.parentalRating)) || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>Popularity</label>
+                                <input type="text" id="popularity-${item.folder}" placeholder="1,234,567" value="${(item.metadata && (item.metadata.popularity || item.metadata.enrichment?.popularity)) || ''}">
+                            </div>
                             <div class="form-group full-width">
                                 <label>Plot Synopsis Outline</label>
                                 <textarea id="plot-${item.folder}" rows="2">${(item.metadata && item.metadata.plot) || ''}</textarea>
@@ -747,6 +767,11 @@
                         title: document.getElementById(`title-${folder}`).value,
                         year: document.getElementById(`year-${folder}`).value,
                         imdbId: document.getElementById(`imdbId-${folder}`).value,
+                        genre: document.getElementById(`genre-${folder}`)?.value || '',
+                        tags: document.getElementById(`tags-${folder}`)?.value || '',
+                        imdbScore: document.getElementById(`imdbScore-${folder}`)?.value || '',
+                        parentalRating: document.getElementById(`parentalRating-${folder}`)?.value || '',
+                        popularity: document.getElementById(`popularity-${folder}`)?.value || '',
                         plot: document.getElementById('plot-' + folder).value,
                         storage: { location: 'remote' } // Force state mapping update down pipe
                     })
@@ -832,6 +857,11 @@
                 title: document.getElementById(`title-${folder}`).value,
                 year: document.getElementById(`year-${folder}`).value,
                 imdbId: document.getElementById(`imdbId-${folder}`).value,
+                genre: document.getElementById(`genre-${folder}`)?.value || '',
+                tags: document.getElementById(`tags-${folder}`)?.value || '',
+                imdbScore: document.getElementById(`imdbScore-${folder}`)?.value || '',
+                parentalRating: document.getElementById(`parentalRating-${folder}`)?.value || '',
+                popularity: document.getElementById(`popularity-${folder}`)?.value || '',
                 plot: document.getElementById('plot-' + folder).value,
                 storage: { location: document.getElementById(`storage-${folder}`).value }
             };
