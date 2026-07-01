@@ -9,9 +9,12 @@ const fsPromises = require('fs').promises;
 const { getLibrary } = require('../services/db');
 
 const MediaService = require('../services/MediaService');
-const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
+const MOVIES_DIR = process.env.MOVIES_DIR
+    || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
+        : (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies'));
 // 🚨 NEW FIX: Isolated pathway pointing to the new separate SSD mount for TV shows
-const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
+const SERIES_DIR = process.env.SERIES_DIR
+    || (fs.existsSync('/app/storage/series') ? '/app/storage/series' : '/data/blockchain/media/Series');
 
 const MOVIE_PATH_CANDIDATES = [
     MOVIES_DIR,

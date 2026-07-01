@@ -28,9 +28,12 @@ const pipelineOrchestrator = require('../../Orchestrator');
 const Orchestrator = require('../../Orchestrator'); // Adjust this path to point to your Orchestrator.js
 const metadataService = require('../services/MetadataService');
 
-const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
+const MOVIES_DIR = process.env.MOVIES_DIR
+    || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
+        : (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies'));
 // 🚨 NEW FIX: Isolated pathway pointing to your separate TV series mount location
-const SERIES_DIR = process.env.SERIES_DIR || '/data/blockchain/media/Series';
+const SERIES_DIR = process.env.SERIES_DIR
+    || (fs.existsSync('/app/storage/series') ? '/app/storage/series' : '/data/blockchain/media/Series');
 
 const MOVIE_PATH_CANDIDATES = [
     MOVIES_DIR,
@@ -39,9 +42,22 @@ const MOVIE_PATH_CANDIDATES = [
     '/app/movies'
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
+const SERIES_PATH_CANDIDATES = [
+    SERIES_DIR,
+    '/home/epic/movies/series',
+    '/data/blockchain/media/Series',
+    '/app/storage/series',
+    '/app/series'
+].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
 function resolveMovieFolderPath(folderName) {
     const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, folderName));
     return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, folderName);
+}
+
+function resolveSeriesFolderPath(folderName) {
+    const candidates = SERIES_PATH_CANDIDATES.map(base => path.join(base, folderName));
+    return candidates.find(candidate => fs.existsSync(candidate)) || path.join(SERIES_DIR, folderName);
 }
 
 router.get('/log-stream', (req, res) => {
@@ -162,6 +178,29 @@ router.post('/sync-item', async (req, res) => {
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
+});
+
+// Master Server Endpoint
+app.get('/v1/connector/bootstrap-bundle', async (req, res) => {
+    // Verify tokens here using verifySecureToken...
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=media-assets.zip');
+
+    const archiver = require('archiver'); // Lightweight streaming zip engine
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.pipe(res);
+    
+    // Only compress tracking configurations, artwork, and text targets
+    archive.directory('/app/storage/movies/', false, (entry) => {
+        const ext = path.extname(entry.name).toLowerCase();
+        // 🛑 ABSOLUTE GATING CRITERIA: Completely skip video rendering tracks
+        if (ext === '.mp4' || ext === '.mkv') return false;
+        return entry;
+    });
+
+    await archive.finalize();
 });
 
 router.post('/repair-metadata', async (req, res) => {
@@ -506,8 +545,10 @@ router.get('/library-metadata', async (req, res) => {
         });
 
         const buildItem = (folder, redisMeta, type) => {
-            const baseDir = type === 'series' ? SERIES_DIR : MOVIES_DIR;
-            const diskMetaPath = path.join(baseDir, folder, 'metadata.json');
+            const resolvedFolderPath = type === 'series'
+                ? resolveSeriesFolderPath(folder)
+                : resolveMovieFolderPath(folder);
+            const diskMetaPath = path.join(resolvedFolderPath, 'metadata.json');
 
             let diskMeta = null;
             if (fs.existsSync(diskMetaPath)) {
@@ -527,12 +568,14 @@ router.get('/library-metadata', async (req, res) => {
                 metadata: diskMeta || redisMeta,
                 redisMetadata: redisMeta,
                 diskMetadata: diskMeta,
+                resolvedDiskPath: fs.existsSync(resolvedFolderPath) ? resolvedFolderPath : null,
                 syncState: {
                     inSync,
                     redisAvailable: Boolean(redisMeta),
                     diskAvailable: Boolean(diskMeta),
                     redisStorageLocation: redisComparable.storageLocation,
-                    diskStorageLocation: diskComparable.storageLocation
+                    diskStorageLocation: diskComparable.storageLocation,
+                    mismatchNote: diskMeta ? '' : `Disk metadata not found at ${diskMetaPath}`
                 }
             };
         };

@@ -6,17 +6,17 @@ const { syncLibraryToStorage } = require('./db');
 
 const MOVIE_SCAN_PATHS = [
     process.env.MOVIES_DIR,
-    '/home/epic/movies',
     '/app/storage/movies',
-    '/app/movies'
+    '/app/movies',
+    '/home/epic/movies'
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
 const SERIES_SCAN_PATHS = [
     process.env.SERIES_DIR,
-    '/home/epic/movies/series',
-    '/data/blockchain/media/Series',
     '/app/storage/series',
-    '/app/series'
+    '/app/series',
+    '/data/blockchain/media/Series',
+    '/home/epic/movies/series'
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
 function scanDirectory(basePath, contentType) {
@@ -48,6 +48,12 @@ function scanDirectory(basePath, contentType) {
             fileBlock && fileBlock.status === 'synced' && Boolean(fileBlock.remoteKey)
         );
 
+        const normalizedTitle = meta.title || meta.metadata?.title || folder.replace(/[-_.]/g, ' ');
+        const normalizedYear = meta.year || meta.metadata?.year || '';
+        const normalizedPlot = meta.plot || meta.metadata?.plot || '';
+        const normalizedGenre = meta.genre || meta.metadata?.genre || '';
+        const normalizedImdbId = meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '';
+
         // Treat the item as remote when either explicit location is remote or we have synced remote keys.
         const isRemote = meta.storage?.location === 'remote' || remoteProfiles.length > 0;
         const normalizedStorage = {
@@ -68,10 +74,12 @@ function scanDirectory(basePath, contentType) {
             registry.push({
                 // 🚨 FLATTENED ROOT PROPERTIES FOR THE FRONTEND
                 id: contentType === 'series' ? `series/${encodeURIComponent(folder)}` : encodeURIComponent(folder),
-                title: meta.title || folder.replace(/[-_.]/g, ' '),
-                year: meta.year || '',
-                plot: meta.plot || '',
-                genre: meta.genre || '',
+                title: normalizedTitle,
+                year: normalizedYear,
+                plot: normalizedPlot,
+                genre: normalizedGenre,
+                imdbId: normalizedImdbId,
+                imdb_id: normalizedImdbId,
                 contentType: contentType,
                 storageLocation: isRemote ? 'remote' : 'local',
                 cover: contentType === 'series'
