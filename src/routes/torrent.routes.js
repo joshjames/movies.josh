@@ -56,6 +56,39 @@ function looksLikeSeasonPack(title) {
     return /(season\s*pack|\bcomplete\b|s\d{1,2}\s*complete|seasons?\s*\d+\s*-\s*\d+|\[pack\]|\bpack\b)/i.test(String(title || ''));
 }
 
+function normalizeQueueContext(queueContext, magnetUrl) {
+    const incoming = (queueContext && typeof queueContext === 'object') ? queueContext : {};
+    let magnetName = '';
+    try {
+        magnetName = new URL(magnetUrl).searchParams.get('dn') || '';
+    } catch (_err) {
+        magnetName = '';
+    }
+
+    const parsedFromName = parseSeasonEpisodeFromTitle(magnetName);
+    const seasonFromIncoming = parseInt(incoming.season, 10);
+    const episodeFromIncoming = parseInt(incoming.episode, 10);
+
+    const season = Number.isFinite(seasonFromIncoming) && seasonFromIncoming > 0
+        ? seasonFromIncoming
+        : (Number.isFinite(parsedFromName.season) && parsedFromName.season > 0 ? parsedFromName.season : null);
+    const episode = Number.isFinite(episodeFromIncoming) && episodeFromIncoming > 0
+        ? episodeFromIncoming
+        : (Number.isFinite(parsedFromName.episode) && parsedFromName.episode > 0 ? parsedFromName.episode : null);
+
+    const sourceType = String(incoming.sourceType || '').toLowerCase();
+    const normalizedSourceType = sourceType === 'pack' || sourceType === 'episode'
+        ? sourceType
+        : (episode ? 'episode' : (season ? 'pack' : null));
+
+    return {
+        imdbId: incoming.imdbId || null,
+        season,
+        episode,
+        sourceType: normalizedSourceType
+    };
+}
+
 function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
     const all = rawTorrents || [];
     const deduped = [];
@@ -463,7 +496,7 @@ router.get('/eztv/browse', async (req, res) => {
 
 // POST: /api/downloader/add
 router.post('/downloader/add', async (req, res) => {
-    const { magnetUrl, category, imdbId } = req.body; 
+    const { magnetUrl, category, imdbId, queueContext } = req.body; 
 
     if (!magnetUrl) {
         return res.status(400).json({ error: "Missing target magnet payload." });
@@ -471,6 +504,7 @@ router.post('/downloader/add', async (req, res) => {
 
     try {
         const targetCategory = category || 'series-streamer';
+        const normalizedQueueContext = normalizeQueueContext(queueContext, magnetUrl);
         await TorrentService.addMagnet(magnetUrl, targetCategory, imdbId);
         
         // Create a placeholder queue job to track intent while download is in progress.
@@ -496,7 +530,8 @@ router.post('/downloader/add', async (req, res) => {
                 cleanPath: null,
                 videoFile: null,
                 magnetUrl,
-                imdbId: imdbId || null
+                imdbId: imdbId || null,
+                queueContext: normalizedQueueContext
             }
         });
         
@@ -508,10 +543,11 @@ router.post('/downloader/add', async (req, res) => {
 
 // POST: /api/yts/add (Legacy alias layout router mapping)
 router.post('/yts/add', async (req, res) => {
-    const { magnetUrl, imdbId } = req.body;
+    const { magnetUrl, imdbId, queueContext } = req.body;
     if (!magnetUrl) return res.status(400).json({ error: "Missing target magnet payload." });
 
     try {
+        const normalizedQueueContext = normalizeQueueContext(queueContext, magnetUrl);
         await TorrentService.addMagnet(magnetUrl, 'movie-streamer', imdbId);
         
         // Create a placeholder queue job to track intent while download is in progress.
@@ -537,7 +573,8 @@ router.post('/yts/add', async (req, res) => {
                 cleanPath: null,
                 videoFile: null,
                 magnetUrl,
-                imdbId: imdbId || null
+                imdbId: imdbId || null,
+                queueContext: normalizedQueueContext
             }
         });
         

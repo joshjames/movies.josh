@@ -16,6 +16,12 @@ const { initRedis } = require('./src/services/PipelineQueueService');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+//allow webhook requests from Square to reach our server without CORS issues
+//or authentication, since they are coming from Square's servers
+const webhookRouter = require('./src/routes/webhook.routes');
+
+app.use('/api/webhooks', webhookRouter);
+
 // 🚨 CONTAINER MOUNT DIRECTORY MAPS
 const MOVIES_STORAGE_DIR = '/app/storage/movies';
 const SERIES_STORAGE_DIR = '/app/storage/series';
@@ -89,6 +95,8 @@ const torrentRouter = require('./src/routes/torrent.routes');
 const profileRouter = require('./src/routes/profile.routes');
 const subtitleRouter = require('./src/routes/subtitle.routes');
 const accountRouter = require('./src/routes/account.routes');
+
+
 
 
 app.use('/api/account', accountRouter);

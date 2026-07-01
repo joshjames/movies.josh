@@ -29,6 +29,53 @@ function inferContentType(tagStr) {
     return tagStr.includes('series-streamer') ? 'series' : 'movie';
 }
 
+function parseSeasonEpisodeFromName(name) {
+    const raw = String(name || '');
+    const sxe = raw.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+    if (sxe) {
+        return {
+            season: parseInt(sxe[1], 10),
+            episode: parseInt(sxe[2], 10)
+        };
+    }
+
+    const seasonOnly = raw.match(/season\s*(\d{1,2})/i) || raw.match(/s(\d{1,2})(?!\d)/i);
+    if (seasonOnly) {
+        return {
+            season: parseInt(seasonOnly[1], 10),
+            episode: null
+        };
+    }
+
+    return { season: null, episode: null };
+}
+
+function normalizeQueueContext(existingContext, torrentName, imdbId) {
+    const context = (existingContext && typeof existingContext === 'object') ? existingContext : {};
+    const parsed = parseSeasonEpisodeFromName(torrentName);
+    const seasonRaw = parseInt(context.season, 10);
+    const episodeRaw = parseInt(context.episode, 10);
+
+    const season = Number.isFinite(seasonRaw) && seasonRaw > 0
+        ? seasonRaw
+        : (Number.isFinite(parsed.season) && parsed.season > 0 ? parsed.season : null);
+    const episode = Number.isFinite(episodeRaw) && episodeRaw > 0
+        ? episodeRaw
+        : (Number.isFinite(parsed.episode) && parsed.episode > 0 ? parsed.episode : null);
+
+    const sourceTypeRaw = String(context.sourceType || '').toLowerCase();
+    const sourceType = sourceTypeRaw === 'pack' || sourceTypeRaw === 'episode'
+        ? sourceTypeRaw
+        : (episode ? 'episode' : (season ? 'pack' : null));
+
+    return {
+        imdbId: context.imdbId || imdbId || null,
+        season,
+        episode,
+        sourceType
+    };
+}
+
 function resolveTorrentDownloadPath(torrent) {
     const contentPath = String(torrent.content_path || '').trim();
     const savePath = String(torrent.save_path || '').trim();
@@ -191,6 +238,7 @@ async function enqueueCompletedTorrent(torrent) {
     const imdbId = TorrentService.getImdbIdByHash(torrent.hash);
     const rawPath = resolveTorrentDownloadPath(torrent);
     const resolvedFolderName = rawPath ? path.basename(rawPath) : (torrent.name || null);
+    const torrentQueueContext = normalizeQueueContext(null, resolvedFolderName || torrent.name, imdbId || null);
 
     const pendingJob = findPendingDownloadJob(torrent);
     if (pendingJob) {
@@ -203,7 +251,12 @@ async function enqueueCompletedTorrent(torrent) {
                 torrentName: torrent.name || pendingJob.payload?.torrentName || pendingJob.id,
                 rawPath: rawPath || pendingJob.payload?.rawPath || null,
                 cleanPath: null,
-                videoFile: null
+                videoFile: null,
+                queueContext: normalizeQueueContext(
+                    pendingJob.payload?.queueContext,
+                    torrent.name || pendingJob.payload?.torrentName,
+                    pendingJob.imdbId || imdbId || null
+                )
             },
             error: null
         });
@@ -227,7 +280,12 @@ async function enqueueCompletedTorrent(torrent) {
                 ...existingJob.payload,
                 torrentHash: torrent.hash || existingJob.payload?.torrentHash || null,
                 torrentName: torrent.name || existingJob.payload?.torrentName || existingJob.id,
-                rawPath: rawPath || existingJob.payload?.rawPath || null
+                rawPath: rawPath || existingJob.payload?.rawPath || null,
+                queueContext: normalizeQueueContext(
+                    existingJob.payload?.queueContext,
+                    torrent.name || existingJob.payload?.torrentName,
+                    existingJob.imdbId || imdbId || null
+                )
             },
             error: null
         });
@@ -243,7 +301,8 @@ async function enqueueCompletedTorrent(torrent) {
             torrentName: torrent.name,
             rawPath: rawPath,
             cleanPath: null,
-            videoFile: null
+            videoFile: null,
+            queueContext: torrentQueueContext
         }
     });
 
@@ -273,7 +332,9 @@ async function processNextJob(job) {
             payload: {
                 folderPath: job.payload?.rawPath || job.payload?.cleanPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (path.basename(job.payload?.rawPath || '') || job.payload?.torrentName || job.id),
-                contentType: job.contentType || 'movie'
+                contentType: job.contentType || 'movie',
+                imdbId: job.imdbId || job.payload?.queueContext?.imdbId || null,
+                queueContext: job.payload?.queueContext || null
             }
         },
         METADATA: {

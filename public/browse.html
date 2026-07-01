@@ -321,7 +321,7 @@
                         </td>
                         <td>${escapeHtml(row.size || 'N/A')}</td>
                         <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
-                        <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}')">Ingest Episode</button></td>
+                        <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${parseInt(row.season, 10) || 0}, ${parseInt(row.episode, 10) || 0}, 'episode')">Ingest Episode</button></td>
                     </tr>
                 `;
             }).join('');
@@ -345,7 +345,7 @@
                                     </td>
                                     <td>${escapeHtml(row.size || 'N/A')}</td>
                                     <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
-                                    <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}')">Ingest Season</button></td>
+                                    <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${parseInt(row.season, 10) || 0}, 0, 'pack')">Ingest Season</button></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -552,7 +552,7 @@
             `;
         }
 
-        async function addMediaAsset(btn, base64Magnet, targetCategory, imdbId = '') {
+        async function addMediaAsset(btn, base64Magnet, targetCategory, imdbId = '', season = 0, episode = 0, sourceType = '') {
             const magnetUrl = atob(base64Magnet);
             btn.disabled = true;
             btn.style.background = '#475569';
@@ -561,10 +561,21 @@
             const apiRoute = targetCategory === 'series-streamer' ? '/api/downloader/add' : '/api/yts/add';
 
             try {
+                const parsedSeason = parseInt(season, 10);
+                const parsedEpisode = parseInt(episode, 10);
+                const queueContext = targetCategory === 'series-streamer'
+                    ? {
+                        imdbId: imdbId || '',
+                        season: Number.isFinite(parsedSeason) && parsedSeason > 0 ? parsedSeason : null,
+                        episode: Number.isFinite(parsedEpisode) && parsedEpisode > 0 ? parsedEpisode : null,
+                        sourceType: sourceType || null
+                    }
+                    : null;
+
                 const response = await fetch(apiRoute, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ magnetUrl, category: targetCategory, imdbId })
+                    body: JSON.stringify({ magnetUrl, category: targetCategory, imdbId, queueContext })
                 });
 
                 if (!response.ok) throw new Error('Request failed');
