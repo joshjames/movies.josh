@@ -14,7 +14,7 @@ const MOVIES_DIR = '/app/storage/movies';
 const SERIES_DIR = '/app/storage/series';
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.mpeg', '.nfo', '.ogg', '.ogv', '.json', '.jpg', '.jpeg', '.png', '.ts'];
 const OMDB_API_KEY = process.env.OMDB_API_KEY || '84196d01';
-
+    
 // =========================================================================
 // 🧹 UTILITY REGEX PATTERNS AND FILTERS
 // =========================================================================

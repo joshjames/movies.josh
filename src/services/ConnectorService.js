@@ -1,5 +1,6 @@
 // src/services/ConnectorService.js (Shared across both systems)
 const crypto = require('crypto');
+const redisClient = require('../utils/redisClient'); // Assuming a Redis client is set up in utils
 
 function generateSecureToken(payload, sharedSecret) {
     // Generate a short-lived timestamp baseline to prevent replay attacks
@@ -11,6 +12,16 @@ function generateSecureToken(payload, sharedSecret) {
                        .digest('hex');
                        
     return { hmac, timestamp };
+}
+
+// Master Endpoint: Export data matrices
+async function exportRedisKeys() {
+    const keys = await redisClient.keys('*');
+    const pipelineData = {};
+    for (const key of keys) {
+        pipelineData[key] = await redisClient.get(key);
+    }
+    return pipelineData;
 }
 
 function verifySecureToken(payload, incomingHmac, timestamp, sharedSecret) {
