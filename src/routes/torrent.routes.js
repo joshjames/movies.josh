@@ -19,6 +19,9 @@ const {
 } = require('../services/PipelineQueueService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
+const FALLBACK_COVER_DATA_URI =
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="#020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#475569">No Cover</text></svg>');
 
 function normalizeText(value) {
     return String(value || '')
@@ -261,9 +264,7 @@ router.get('/eztv/browse', async (req, res) => {
         const allTorrents = eztvFetch.torrents;
 
         const posterUrl = typeof omdbMeta?.Poster === 'string' ? omdbMeta.Poster.trim() : '';
-        const cover = posterUrl && posterUrl !== 'N/A'
-            ? posterUrl
-            : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>';
+        const cover = posterUrl && posterUrl !== 'N/A' ? posterUrl : FALLBACK_COVER_DATA_URI;
         const { items, packsFallbackUsed } = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
 
         return res.json({
