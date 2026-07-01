@@ -11,10 +11,27 @@ const app = express();
 app.use(express.json());
 
 // 🚨 CONTAINER MOUNT DIRECTORY MAPS
-const MOVIES_DIR = '/app/storage/movies';
-const SERIES_DIR = '/app/storage/series';
+const MOVIES_DIR = process.env.MOVIES_DIR || '/app/storage/movies';
+const SERIES_DIR = process.env.SERIES_DIR || '/app/storage/series';
+const SERIES_DOWNLOAD_DIR = process.env.SERIES_DOWNLOAD_DIR || '/series-media/Series';
+const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || process.env.QBIT_DOWNLOAD_DIR || '/downloads';
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.mpeg', '.nfo', '.ogg', '.ogv', '.json', '.jpg', '.jpeg', '.png', '.ts'];
 const OMDB_API_KEY = process.env.OMDB_API_KEY || '84196d01';
+
+const PROTECTED_ROOTS = new Set(
+    [
+        '/app/storage',
+        MOVIES_DIR,
+        SERIES_DIR,
+        DOWNLOADS_DIR,
+        SERIES_DOWNLOAD_DIR,
+        '/series-media',
+        '/series-media/Series'
+    ]
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .map(value => path.resolve(value))
+);
     
 // =========================================================================
 // 🧹 UTILITY REGEX PATTERNS AND FILTERS
@@ -148,6 +165,19 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
     return null;
 }
 
+function deriveSeriesTitleFromEpisodeName(fileName, fallbackTitle) {
+    const base = path.basename(String(fileName || ''), path.extname(String(fileName || '')));
+    let candidate = base
+        .replace(/[._-]/g, ' ')
+        .replace(/\bS\d{1,2}\s*E\d{1,2}\b.*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!candidate) candidate = fallbackTitle || '';
+    const cleaned = cleanReleaseName(candidate).title;
+    return cleaned || fallbackTitle || 'Unknown.Series';
+}
+
 function flattenSingleChildMovieFolder(folderPath) {
     if (!fs.existsSync(folderPath)) return { flattened: false, moved: 0 };
 
@@ -227,13 +257,21 @@ function mergeMovieFolderContents(sourcePath, targetPath) {
     return { moved, removed };
 }
 
-function safeDirectoryCandidate(candidatePath) {
+function safePathCandidate(candidatePath) {
     if (!candidatePath) return null;
     try {
         if (!fs.existsSync(candidatePath)) return null;
         const stat = fs.lstatSync(candidatePath);
-        if (stat.isDirectory()) return candidatePath;
-        if (stat.isFile()) return path.dirname(candidatePath);
+        if (stat.isDirectory()) {
+            return { path: candidatePath, inputType: 'directory' };
+        }
+        if (stat.isFile()) {
+            return {
+                path: candidatePath,
+                inputType: 'file',
+                name: path.basename(candidatePath)
+            };
+        }
     } catch (_err) {
         return null;
     }
@@ -246,18 +284,19 @@ function normalizeNameKey(name) {
         .replace(/[^a-z0-9]/g, '');
 }
 
+function isProtectedRootPath(targetPath) {
+    if (!targetPath) return false;
+    try {
+        return PROTECTED_ROOTS.has(path.resolve(targetPath));
+    } catch (_err) {
+        return false;
+    }
+}
+
 function resolveInputFolderContext(folderPath, folderName, contentType) {
     const rawPath = String(folderPath || '').trim();
     const rawName = String(folderName || '').trim();
     const baseName = rawName ? path.basename(rawName) : '';
-
-    if (baseName) {
-        const primaryRoot = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
-        const topLevelPath = safeDirectoryCandidate(path.join(primaryRoot, baseName));
-        if (topLevelPath) {
-            return { path: topLevelPath, name: path.basename(topLevelPath), source: `library-top-level:${primaryRoot}` };
-        }
-    }
 
     const directCandidates = [];
     if (rawPath) {
@@ -269,9 +308,27 @@ function resolveInputFolderContext(folderPath, folderName, contentType) {
     }
 
     for (const candidate of directCandidates) {
-        const resolved = safeDirectoryCandidate(candidate);
+        const resolved = safePathCandidate(candidate);
         if (resolved) {
-            return { path: resolved, name: path.basename(resolved), source: `direct:${candidate}` };
+            return {
+                path: resolved.path,
+                name: resolved.name || path.basename(resolved.path),
+                source: `direct:${candidate}`,
+                inputType: resolved.inputType || 'directory'
+            };
+        }
+    }
+
+    if (baseName) {
+        const primaryRoot = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        const topLevelPath = safePathCandidate(path.join(primaryRoot, baseName));
+        if (topLevelPath) {
+            return {
+                path: topLevelPath.path,
+                name: topLevelPath.name || path.basename(topLevelPath.path),
+                source: `library-top-level:${primaryRoot}`,
+                inputType: topLevelPath.inputType || 'directory'
+            };
         }
     }
 
@@ -281,19 +338,28 @@ function resolveInputFolderContext(folderPath, folderName, contentType) {
 
     const configuredDownloadRoot = process.env.QBIT_DOWNLOAD_DIR || process.env.DOWNLOADS_DIR || process.env.MOVIES_DIR || null;
     const searchRoots = [
+        contentType === 'series' ? process.env.SERIES_DOWNLOAD_DIR : null,
+        contentType === 'series' ? SERIES_DOWNLOAD_DIR : null,
         configuredDownloadRoot,
         contentType === 'series' ? SERIES_DIR : MOVIES_DIR,
         '/app/downloads',
         '/downloads',
+        '/series-media',
+        '/series-media/Series',
         '/app/storage/movies',
         '/home/epic/movies'
     ].filter(Boolean);
 
     // Try exact folder-name match under known roots first.
     for (const root of searchRoots) {
-        const exact = safeDirectoryCandidate(path.join(root, baseName));
+        const exact = safePathCandidate(path.join(root, baseName));
         if (exact) {
-            return { path: exact, name: path.basename(exact), source: `root-exact:${root}` };
+            return {
+                path: exact.path,
+                name: exact.name || path.basename(exact.path),
+                source: `root-exact:${root}`,
+                inputType: exact.inputType || 'directory'
+            };
         }
     }
 
@@ -315,11 +381,11 @@ function resolveInputFolderContext(folderPath, folderName, contentType) {
 
         if (match) {
             const resolved = path.join(root, match.name);
-            return { path: resolved, name: match.name, source: `root-fuzzy:${root}` };
+            return { path: resolved, name: match.name, source: `root-fuzzy:${root}`, inputType: 'directory' };
         }
     }
 
-    return { path: null, name: null, source: 'unresolved:not-found' };
+    return { path: null, name: null, source: 'unresolved:not-found', inputType: null };
 }
 
 // =========================================================================
@@ -350,8 +416,35 @@ app.post('/process', async (req, res) => {
             return res.status(400).json({ success: false, error: `Could not resolve ingest folder from provided context (${resolved.source}).` });
         }
 
-        const workingFolderPath = resolved.path;
-        const workingFolderName = resolved.name || folderName;
+        let workingFolderPath = resolved.path;
+        let workingFolderName = resolved.name || folderName;
+        const isSingleFileInput = resolved.inputType === 'file';
+
+        if (isProtectedRootPath(workingFolderPath)) {
+            logger.error(`🛑 [Ingest] Refusing to process protected root path: ${workingFolderPath}`);
+            return res.status(400).json({ success: false, error: `Refusing to process protected root path: ${workingFolderPath}` });
+        }
+
+        if (isSingleFileInput) {
+            const sourceFilePath = workingFolderPath;
+            const sourceDir = path.dirname(sourceFilePath);
+            const sourceExt = path.extname(sourceFilePath);
+            const baseNameNoExt = path.basename(sourceFilePath, sourceExt);
+            const stageFolder = path.join(sourceDir, `${baseNameNoExt}.ingest`);
+            const stagedFilePath = path.join(stageFolder, path.basename(sourceFilePath));
+
+            if (!fs.existsSync(stageFolder)) {
+                fs.mkdirSync(stageFolder, { recursive: true });
+            }
+
+            if (!fs.existsSync(stagedFilePath)) {
+                fs.renameSync(sourceFilePath, stagedFilePath);
+            }
+
+            workingFolderPath = stageFolder;
+            workingFolderName = path.basename(stageFolder);
+            logger.debug(`📦 [Ingest] Staged single-file input into working directory: ${workingFolderPath}`);
+        }
 
         logger.debug(`🧭 [Ingest] Resolved folder input | folderName=${workingFolderName} | folderPath=${workingFolderPath} | source=${resolved.source}`);
 
@@ -404,9 +497,14 @@ app.post('/process', async (req, res) => {
             if (analysis.isSeasonPack) {
                 logger.debug(`🧠 [Smart Ingest] Detected multi-file TV Season Pack inside: [${targetFolderName}]`);
 
-                let showFolder = findExistingShowFolder(cleanTitle, SERIES_DIR);
+                const titleFromEpisode = analysis.detectedEpisodes.length
+                    ? deriveSeriesTitleFromEpisodeName(analysis.detectedEpisodes[0].fileName, cleanTitle)
+                    : cleanTitle;
+                const showDotTitle = titleFromEpisode.replace(/\s+/g, '.');
+
+                let showFolder = findExistingShowFolder(titleFromEpisode, SERIES_DIR);
                 if (!showFolder) {
-                    showFolder = dotNotationTitle;
+                    showFolder = showDotTitle;
                     fs.mkdirSync(path.join(SERIES_DIR, showFolder), { recursive: true });
                     logger.debug(`📁 [Smart Ingest] Established brand new show root entry: ${showFolder}`);
                 } else {
@@ -462,7 +560,11 @@ app.post('/process', async (req, res) => {
                 fs.writeFileSync(showMetadataPath, JSON.stringify(showMeta, null, 4), 'utf-8');
 
                 logger.debug(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
-                deleteFolderRecursive(finalPath);
+                if (isProtectedRootPath(finalPath) || path.resolve(finalPath) === path.resolve(showRootPath)) {
+                    logger.warn(`⚠️ [Ingest] Skip cleanup for protected path: ${finalPath}`);
+                } else {
+                    deleteFolderRecursive(finalPath);
+                }
 
                 return res.json({
                     success: true,

@@ -23,8 +23,8 @@ const webhookRouter = require('./src/routes/webhook.routes');
 app.use('/api/webhooks', webhookRouter);
 
 // 🚨 CONTAINER MOUNT DIRECTORY MAPS
-const MOVIES_STORAGE_DIR = '/app/storage/movies';
-const SERIES_STORAGE_DIR = '/app/storage/series';
+const MOVIES_STORAGE_DIR = process.env.MOVIES_DIR || '/app/storage/movies';
+const SERIES_STORAGE_DIR = process.env.SERIES_DIR || '/app/storage/series';
 
 // Alias global and process-level flags for legacy module backward compatibility
 global.MOVIES_DIR = MOVIES_STORAGE_DIR;
