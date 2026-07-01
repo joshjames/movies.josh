@@ -57,11 +57,10 @@ function looksLikeSeasonPack(title) {
 }
 
 function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
-    const seeded = (rawTorrents || []).filter(t => (parseInt(t.seeds, 10) || 0) > 0);
-
+    const all = rawTorrents || [];
     const deduped = [];
     const seen = new Set();
-    for (const t of seeded) {
+    for (const t of all) {
         const titleNorm = normalizeText(t.filename || t.title);
         const key = [String(t.hash || '').toLowerCase(), titleNorm].join('|');
         if (seen.has(key)) continue;
@@ -69,53 +68,90 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
         deduped.push(t);
     }
 
-    const packReduced = deduped.filter(t => looksLikeSeasonPack(t.title || t.filename));
-    const reduced = packsOnly ? (packReduced.length > 0 ? packReduced : deduped) : deduped;
-    const packsFallbackUsed = packsOnly && packReduced.length === 0;
+    const normalized = deduped
+        .map(t => {
+            const title = String(t.title || t.filename || '').trim();
+            const parsed = parseSeasonEpisodeFromTitle(title);
+            const seasonRaw = parseInt(t.season, 10);
+            const episodeRaw = parseInt(t.episode, 10);
+            const season = Number.isFinite(seasonRaw) ? seasonRaw : parsed.season;
+            const episode = Number.isFinite(episodeRaw) ? episodeRaw : parsed.episode;
+            if (!Number.isFinite(season) || season <= 0) return null;
 
-    const bySeason = new Map();
-    for (const t of reduced) {
-        const title = String(t.title || t.filename || '').trim();
-        const parsed = parseSeasonEpisodeFromTitle(title);
-        const seasonFromPayload = parseInt(t.season, 10);
-        const episodeFromPayload = parseInt(t.episode, 10);
+            const seeds = parseInt(t.seeds, 10) || 0;
+            const peers = parseInt(t.peers, 10) || 0;
+            const released = parseInt(t.date_released_unix, 10) || 0;
+            const isPack = looksLikeSeasonPack(title);
 
-        const season = Number.isFinite(seasonFromPayload) ? seasonFromPayload : parsed.season;
-        const episode = Number.isFinite(episodeFromPayload) ? episodeFromPayload : parsed.episode;
-
-        if (!Number.isFinite(season) || season <= 0) continue;
-
-        const seeds = parseInt(t.seeds, 10) || 0;
-        const peers = parseInt(t.peers, 10) || 0;
-        const hasPackSignal = looksLikeSeasonPack(title);
-        // When packsOnly is enabled, we already filtered to packs. When disabled,
-        // avoid hard bias so checkbox state actually changes what gets selected.
-        const score = seeds * 100 + peers + (packsOnly && hasPackSignal ? 1000 : 0);
-
-        const existing = bySeason.get(season);
-        if (!existing || score > existing.score) {
-            bySeason.set(season, {
-                score,
+            return {
                 title,
                 season,
-                episode,
+                episode: Number.isFinite(episode) ? episode : null,
                 seeds,
                 peers,
-                isPack: hasPackSignal,
+                released,
+                isPack,
                 sizeBytes: parseFloat(t.size_bytes) || 0,
                 magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(title)}`,
                 imdbId: targetImdbId,
                 cover
-            });
+            };
+        })
+        .filter(Boolean);
+
+    const packCandidates = normalized.filter(t => t.isPack);
+    const seededPackCandidates = packCandidates.filter(t => t.seeds > 0);
+    const seededAll = normalized.filter(t => t.seeds > 0);
+
+    const pickBest = (items, scoreFn) => {
+        if (!items.length) return null;
+        return items.reduce((best, cur) => (scoreFn(cur) > scoreFn(best) ? cur : best));
+    };
+
+    const scorePack = (t) => (t.seeds * 100) + t.peers + (t.released / 1000000);
+    const scoreEpisode = (t) => ((t.episode || 0) * 100000) + (t.seeds * 100) + t.peers + (t.released / 1000000);
+
+    const seasons = Array.from(new Set(normalized.map(t => t.season))).sort((a, b) => a - b);
+    const selected = [];
+
+    if (packsOnly) {
+        // Strictly show real season packs. If none are seeded, allow unseeded packs as a fallback.
+        const source = seededPackCandidates.length ? seededPackCandidates : packCandidates;
+        for (const season of seasons) {
+            const perSeason = source.filter(t => t.season === season);
+            const best = pickBest(perSeason, scorePack);
+            if (best) {
+                selected.push({ ...best, sourceType: 'pack' });
+            }
+        }
+    } else {
+        // Prefer complete season packs per season; otherwise use best available representative episode.
+        for (const season of seasons) {
+            const seasonPackSeeded = seededPackCandidates.filter(t => t.season === season);
+            const seasonPackAny = packCandidates.filter(t => t.season === season);
+            const packPick = pickBest(seasonPackSeeded, scorePack) || pickBest(seasonPackAny, scorePack);
+
+            if (packPick) {
+                selected.push({ ...packPick, sourceType: 'pack' });
+                continue;
+            }
+
+            const seasonEpisodes = seededAll.filter(t => t.season === season && !t.isPack);
+            const episodePick = pickBest(seasonEpisodes, scoreEpisode);
+            if (episodePick) {
+                selected.push({ ...episodePick, sourceType: 'episode' });
+            }
         }
     }
 
-    const items = Array.from(bySeason.values())
+    const items = selected
         .sort((a, b) => a.season - b.season)
         .map(item => ({
-            title: `Season ${item.season} complete`,
+            title: item.sourceType === 'pack'
+                ? `Season ${item.season} complete`
+                : `S${String(item.season).padStart(2, '0')}E${String(item.episode || 1).padStart(2, '0')} best available`,
             originalTitle: item.title,
-            sourceType: item.isPack ? 'pack' : 'episode',
+            sourceType: item.sourceType,
             size: item.sizeBytes > 0 ? `${(item.sizeBytes / (1024 ** 3)).toFixed(2)} GB` : 'N/A',
             seeds: item.seeds,
             peers: item.peers,
@@ -128,7 +164,9 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
 
     return {
         items,
-        packsFallbackUsed
+        packsFallbackUsed: packsOnly && seededPackCandidates.length === 0 && packCandidates.length > 0,
+        packRows: items.filter(i => i.sourceType === 'pack').length,
+        episodeRows: items.filter(i => i.sourceType === 'episode').length
     };
 }
 
@@ -265,13 +303,15 @@ router.get('/eztv/browse', async (req, res) => {
 
         const posterUrl = typeof omdbMeta?.Poster === 'string' ? omdbMeta.Poster.trim() : '';
         const cover = posterUrl && posterUrl !== 'N/A' ? posterUrl : FALLBACK_COVER_DATA_URI;
-        const { items, packsFallbackUsed } = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
+        const { items, packsFallbackUsed, packRows, episodeRows } = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
 
         return res.json({
             success: true,
             torrents: items,
             packsOnlyRequested: packsOnly,
             packsFallbackUsed,
+            packRows,
+            episodeRows,
             upstreamWarnings: eztvFetch.upstreamWarnings,
             scannedPages: eztvFetch.scannedPages,
             rawCount: allTorrents.length
