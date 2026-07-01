@@ -51,35 +51,107 @@
             transform: scale(1.05);
         }
 
-        /* Center Section: Session Meta Information Module */
-        .profile-controls {
+        .left-actions {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 10px;
+            min-width: 0;
         }
 
-        .welcome-msg {
-            color: #94a3b8; 
-            font-size: 0.85rem; 
-            font-weight: 500;
+        .right-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .logout-btn {
-            background: rgba(229, 9, 20, 0.1); 
-            border: 1px solid rgba(229, 9, 20, 0.3); 
-            color: #f87171; 
-            text-decoration: none; 
-            padding: 6px 12px; 
+        .admin-mini-btn {
+            display: none;
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            text-decoration: none;
+            align-items: center;
+            justify-content: center;
+            background: #7e22ce;
+            border: 1px solid #9333ea;
+            color: #ffffff;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+        }
+
+        .admin-mini-btn:hover {
+            background: #9333ea;
+        }
+
+        .avatar-wrap {
+            position: relative;
+        }
+
+        .avatar-btn {
+            width: 64px;
+            height: 64px;
+            border-radius: 999px;
+            border: 1px solid #334155;
+            background: #0b1220;
+            padding: 0;
+            cursor: pointer;
+            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .avatar-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .avatar-menu {
+            position: absolute;
+            right: 0;
+            top: 72px;
+            min-width: 180px;
+            background: #0b1220;
+            border: 1px solid #334155;
             border-radius: 6px; 
-            font-size: 0.8rem; 
-            font-weight: 600; 
-            transition: all 0.2s;
-            white-space: nowrap;
+            padding: 6px;
+            display: none;
+            z-index: 50;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
         }
 
-        .logout-btn:hover {
-            background: rgba(229, 9, 20, 0.2);
-            border-color: rgba(229, 9, 20, 0.5);
+        .avatar-menu.show {
+            display: block;
+        }
+
+        .avatar-menu-header {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            padding: 6px 10px;
+            border-bottom: 1px solid #1e293b;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .avatar-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: #e2e8f0;
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .avatar-item:hover {
+            background: #1e293b;
         }
 
         /* Right Section: Navigation Controls */
@@ -289,10 +361,38 @@
             body { padding: 20px; }
             .main-header { padding: 20px 0; }
             .logo-wrapper { width: 220px; } 
-            .welcome-msg { font-size: 0.9rem; }
             .browse-nav-btn { padding: 12px 24px; font-size: 0.95rem; }
             .movie-slider { padding-left: 56px; padding-right: 56px; }
             .slider-card { flex-basis: 180px; }
+        }
+
+        @media(max-width: 760px) {
+            .header-content {
+                display: grid;
+                grid-template-columns: auto 1fr auto;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .left-actions,
+            .right-actions {
+                min-width: 0;
+            }
+
+            .browse-nav-btn {
+                padding: 8px 10px;
+                font-size: 0.78rem;
+            }
+
+            .avatar-btn {
+                width: 52px;
+                height: 52px;
+            }
+
+            .logo-wrapper {
+                width: 150px;
+                justify-self: center;
+            }
         }
     </style>
 </head>
@@ -302,12 +402,11 @@
         <div class="header-content">
            
 
-            <div class="profile-controls">
-    <a href="/admin.html" id="admin-action-btn" style="display: none; background: #9333ea; color: white; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; transition: all 0.2s; white-space: nowrap;">🛠️ Admin Desk</a>
-    
-    <span id="welcome-user" class="welcome-msg">Cinema Active</span>
-    <a href="/api/auth/logout" class="logout-btn">Switch Profile ⎋</a>
-</div><div class="logo-wrapper" onclick="window.location.href='/';">
+            <div class="left-actions">
+                <a href="/admin.html" id="admin-action-btn" class="admin-mini-btn" aria-label="Admin Desk" title="Admin Desk">🛠️</a>
+            </div>
+
+            <div class="logo-wrapper" onclick="window.location.href='/';">
     <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
         <defs>
             <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
@@ -343,8 +442,18 @@
     </svg>
 </div>
 
-            <div class="nav-actions">
+            <div class="right-actions">
                 <a href="/browse.html" class="browse-nav-btn">🔍 Browse Catalog</a>
+                <div class="avatar-wrap">
+                    <button type="button" class="avatar-btn" id="avatar-btn" aria-label="Open account menu">
+                        <img src="/images/avatar.png" alt="User avatar">
+                    </button>
+                    <div class="avatar-menu" id="avatar-menu">
+                        <div class="avatar-menu-header" id="avatar-menu-user">Signed in</div>
+                        <a href="/account.html" class="avatar-item">Account</a>
+                        <a href="/api/auth/logout" class="avatar-item">Logout</a>
+                    </div>
+                </div>
             </div>
         </div>
     </header>
@@ -536,19 +645,40 @@
                 if (data.loggedIn) {
                     const cleanUsername = data.username.toLowerCase().trim();
                     const formattedName = data.username.charAt(0).toUpperCase() + data.username.slice(1);
-                    document.getElementById('welcome-user').innerText = `🍿 Operator: ${formattedName}`;
+                    const displayName = data.config?.username || formattedName;
+                    const menuUser = document.getElementById('avatar-menu-user');
+                    if (menuUser) {
+                        menuUser.textContent = displayName;
+                    }
                     
                     // 🛡️ IDENTITY GATING: Expose admin configurations explicitly for 'josh'
                     if (cleanUsername === 'josh') {
                         const adminBtn = document.getElementById('admin-action-btn');
                         if (adminBtn) {
-                            adminBtn.style.display = 'inline-block';
+                            adminBtn.style.display = 'inline-flex';
                         }
                     }
                 }
             } catch (e) {
                 console.error("Profile name tracking sync lost.");
             }
+        }
+
+        function initAvatarMenu() {
+            const btn = document.getElementById('avatar-btn');
+            const menu = document.getElementById('avatar-menu');
+            if (!btn || !menu) return;
+
+            btn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                menu.classList.toggle('show');
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!event.target.closest('.avatar-wrap')) {
+                    menu.classList.remove('show');
+                }
+            });
         }
 
         async function loadMovies(page = 1) {
@@ -669,6 +799,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            initAvatarMenu();
             hydrateUserProfileHeader();
             loadMovies(1);
             setInterval(updatePipelineStatus, 5000);

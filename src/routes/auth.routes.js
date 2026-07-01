@@ -124,6 +124,76 @@ router.get('/me', async (req, res) => {
     }
 });
 
+// POST: /api/auth/account
+router.post('/account', async (req, res) => {
+    const activeUser = req.cookies?.user_profile;
+    if (!activeUser) {
+        return res.status(401).json({ success: false, error: 'Unauthorized.' });
+    }
+
+    try {
+        const { displayName, email } = req.body || {};
+        const config = await ProfileService.readData(activeUser, 'config', {});
+
+        const nextDisplay = String(displayName || '').trim() || activeUser;
+        const nextEmail = String(email || '').trim();
+        if (!nextEmail || !nextEmail.includes('@')) {
+            return res.status(400).json({ success: false, error: 'A valid email is required.' });
+        }
+
+        const updated = {
+            ...config,
+            username: nextDisplay,
+            email: nextEmail,
+            updatedAt: Date.now()
+        };
+
+        await ProfileService.writeData(activeUser, 'config', updated);
+        return res.json({ success: true, config: updated });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/auth/change-password
+router.post('/change-password', async (req, res) => {
+    const activeUser = req.cookies?.user_profile;
+    if (!activeUser) {
+        return res.status(401).json({ success: false, error: 'Unauthorized.' });
+    }
+
+    try {
+        const { currentPassword, newPassword } = req.body || {};
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ success: false, error: 'Current and new passwords are required.' });
+        }
+        if (String(newPassword).length < 6) {
+            return res.status(400).json({ success: false, error: 'New password must be at least 6 characters.' });
+        }
+
+        const authResult = await ProfileService.authenticateUser(activeUser, currentPassword);
+        if (!authResult.success) {
+            return res.status(403).json({ success: false, error: 'Current password is incorrect.' });
+        }
+
+        const fs = require('fs').promises;
+        const rosterPath = '/app/metadata/users/roster.json';
+        const rosterRaw = await fs.readFile(rosterPath, 'utf-8');
+        const rosterJson = JSON.parse(rosterRaw);
+        if (!rosterJson[activeUser]) {
+            return res.status(404).json({ success: false, error: 'User account not found in roster.' });
+        }
+
+        rosterJson[activeUser].password = String(newPassword);
+        rosterJson[activeUser].updatedAt = Date.now();
+        await fs.writeFile(rosterPath, JSON.stringify(rosterJson, null, 4), 'utf-8');
+
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/auth/logout
 router.get('/logout', (req, res) => {
     res.clearCookie('user_profile', { path: '/' });

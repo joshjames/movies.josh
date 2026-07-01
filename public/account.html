@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account | AnyMovie</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0b1220;
+            color: #e2e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .page {
+            max-width: 980px;
+            margin: 0 auto;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .topbar a {
+            text-decoration: none;
+            color: #bfdbfe;
+            background: #1d4ed8;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            color: #f8fafc;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+        }
+
+        .card {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .card h2 {
+            margin: 0 0 12px 0;
+            font-size: 1rem;
+            color: #93c5fd;
+            border-bottom: 1px solid #1f2937;
+            padding-bottom: 8px;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        @media(min-width: 720px) {
+            .row.two {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        label {
+            display: block;
+            font-size: 0.76rem;
+            color: #94a3b8;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        input {
+            width: 100%;
+            background: #020617;
+            border: 1px solid #475569;
+            color: #f8fafc;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.94rem;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #3b82f6;
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 0.86rem;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: #ffffff;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: #ffffff;
+        }
+
+        .muted {
+            color: #94a3b8;
+            font-size: 0.86rem;
+        }
+
+        .status {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            min-height: 18px;
+        }
+
+        .status.ok { color: #34d399; }
+        .status.err { color: #f87171; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="topbar">
+            <h1>Account</h1>
+            <a href="/">Back to Home</a>
+        </div>
+
+        <div class="grid">
+            <section class="card">
+                <h2>Profile</h2>
+                <div class="row two">
+                    <div>
+                        <label for="displayName">Name</label>
+                        <input id="displayName" type="text" placeholder="Display name">
+                    </div>
+                    <div>
+                        <label for="email">Email Address</label>
+                        <input id="email" type="email" placeholder="Email address">
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="saveProfileBtn">Save Profile</button>
+                <div class="status" id="profileStatus"></div>
+            </section>
+
+            <section class="card">
+                <h2>Settings</h2>
+                <p class="muted">More account settings can be added here over time.</p>
+            </section>
+
+            <section class="card">
+                <h2>Change Password</h2>
+                <div class="row two">
+                    <div>
+                        <label for="currentPassword">Current Password</label>
+                        <input id="currentPassword" type="password" autocomplete="current-password">
+                    </div>
+                    <div>
+                        <label for="newPassword">New Password</label>
+                        <input id="newPassword" type="password" autocomplete="new-password">
+                    </div>
+                </div>
+                <button class="btn btn-danger" id="changePasswordBtn">Update Password</button>
+                <div class="status" id="passwordStatus"></div>
+            </section>
+
+            <section class="card">
+                <h2>Billing</h2>
+                <p class="muted">Billing management will appear here soon.</p>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        function setStatus(id, message, ok = true) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = message || '';
+            el.className = ok ? 'status ok' : 'status err';
+        }
+
+        async function loadAccount() {
+            try {
+                const res = await fetch('/api/auth/me', { credentials: 'include' });
+                const data = await res.json();
+                if (!data.loggedIn) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                const name = data.config?.username || data.username || '';
+                const email = data.config?.email || '';
+                document.getElementById('displayName').value = name;
+                document.getElementById('email').value = email;
+            } catch (_err) {
+                setStatus('profileStatus', 'Could not load account data.', false);
+            }
+        }
+
+        async function saveProfile() {
+            const displayName = document.getElementById('displayName').value.trim();
+            const email = document.getElementById('email').value.trim();
+
+            try {
+                const res = await fetch('/api/auth/account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ displayName, email })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    setStatus('profileStatus', data.error || 'Profile update failed.', false);
+                    return;
+                }
+
+                setStatus('profileStatus', 'Profile updated.');
+            } catch (_err) {
+                setStatus('profileStatus', 'Profile update request failed.', false);
+            }
+        }
+
+        async function changePassword() {
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+
+            try {
+                const res = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ currentPassword, newPassword })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    setStatus('passwordStatus', data.error || 'Password update failed.', false);
+                    return;
+                }
+
+                document.getElementById('currentPassword').value = '';
+                document.getElementById('newPassword').value = '';
+                setStatus('passwordStatus', 'Password updated.');
+            } catch (_err) {
+                setStatus('passwordStatus', 'Password update request failed.', false);
+            }
+        }
+
+        document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
+        document.getElementById('changePasswordBtn').addEventListener('click', changePassword);
+        loadAccount();
+    </script>
+</body>
+</html>
