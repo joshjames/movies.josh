@@ -8,6 +8,7 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
+const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 
 const MediaService = require('../services/MediaService');
 const MOVIES_DIR = process.env.MOVIES_DIR
@@ -263,18 +264,24 @@ router.get('/series/:showFolder', async (req, res) => {
         const seriesFile = path.join(showPath, 'series.json');
 
         try {
-            await Promise.all([fsPromises.access(metaFile), fsPromises.access(seriesFile)]);
+            await fsPromises.access(metaFile);
         } catch {
             return res.status(404).json({ error: "Serialized map targets are currently missing for this show cluster destination." });
         }
 
-        const [rawMeta, rawSeries] = await Promise.all([
-            fsPromises.readFile(metaFile, 'utf-8'),
-            fsPromises.readFile(seriesFile, 'utf-8')
-        ]);
-
+        const rawMeta = await fsPromises.readFile(metaFile, 'utf-8');
         const metaData = JSON.parse(rawMeta);
-        const seriesData = JSON.parse(rawSeries);
+        let seriesData = null;
+
+        try {
+            seriesData = rebuildSeriesManifest(showPath, {
+                showFolderName: showFolder,
+                write: true
+            });
+        } catch (_err) {
+            const rawSeries = await fsPromises.readFile(seriesFile, 'utf-8');
+            seriesData = JSON.parse(rawSeries);
+        }
 
         res.json({
             id: `series/${showFolder}`,

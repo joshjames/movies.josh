@@ -5,6 +5,7 @@ const path = require('path');
 const fsp = require('fs').promises;
 const axios = require('axios');
 const logger = require('../logger');
+const { rebuildSeriesManifest } = require('../SeriesIndexService');
 
 const app = express();
 app.use(express.json());
@@ -429,13 +430,49 @@ app.post('/process', async (req, res) => {
                     }
                 }
 
+                const showRootPath = path.join(SERIES_DIR, showFolder);
+                rebuildSeriesManifest(showRootPath, {
+                    showFolderName: showFolder,
+                    write: true
+                });
+
+                const showMetadataPath = path.join(showRootPath, 'metadata.json');
+                let showMeta = {
+                    title: cleanTitle,
+                    year: parsedYear || '',
+                    plot: '',
+                    genre: '',
+                    contentType: 'series'
+                };
+                if (fs.existsSync(showMetadataPath)) {
+                    try {
+                        showMeta = JSON.parse(fs.readFileSync(showMetadataPath, 'utf-8'));
+                    } catch (_err) {
+                        // preserve safe defaults
+                    }
+                }
+
+                showMeta.title = showMeta.title || cleanTitle;
+                showMeta.contentType = 'series';
+                showMeta.pipelineState = {
+                    currentStep: 'COMPLETED',
+                    lastUpdated: new Date().toISOString(),
+                    error: null
+                };
+                fs.writeFileSync(showMetadataPath, JSON.stringify(showMeta, null, 4), 'utf-8');
+
                 logger.debug(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
                 deleteFolderRecursive(finalPath);
 
                 return res.json({
                     success: true,
                     message: "Season pack dispersed and merged into library successfully.",
-                    patchData: { pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() } }
+                    patchData: {
+                        folderPath: showRootPath,
+                        folderName: showFolder,
+                        contentType: 'series',
+                        pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() }
+                    }
                 });
             }
 
