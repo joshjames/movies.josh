@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feed Diagnostics</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0b1220;
+            color: #e2e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .top a,
+        .top button {
+            text-decoration: none;
+            border: 0;
+            background: #1d4ed8;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.84rem;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        .card {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.35rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .tile {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .label {
+            color: #93c5fd;
+            font-size: 0.74rem;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .value {
+            margin-top: 4px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+
+        .ok { color: #34d399; }
+        .bad { color: #f87171; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.84rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #1f2937;
+            vertical-align: top;
+        }
+
+        th { color: #93c5fd; }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            color: #cbd5e1;
+            word-break: break-all;
+            font-size: 0.75rem;
+        }
+
+        #status {
+            min-height: 20px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="top">
+            <h1>Home Feed Diagnostics</h1>
+            <div>
+                <button id="refreshBtn" type="button">Refresh</button>
+                <a href="/admin.html">Back to Admin</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div id="status">Loading diagnostics...</div>
+            <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-top:0; font-size:1rem; color:#bfdbfe;">Collections</h2>
+            <div id="collections"></div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-top:0; font-size:1rem; color:#bfdbfe;">Missing from Home Feed</h2>
+            <div id="missing"></div>
+        </div>
+    </div>
+
+    <script>
+        function renderStats(data) {
+            const stats = document.getElementById('stats');
+            const coverage = data.libraryCounts.total > 0
+                ? ((data.feedCounts.uniqueItems / data.libraryCounts.total) * 100).toFixed(1)
+                : '0.0';
+
+            stats.innerHTML = `
+                <div class="tile"><div class="label">Library Movies</div><div class="value">${data.libraryCounts.movies}</div></div>
+                <div class="tile"><div class="label">Library Shows</div><div class="value">${data.libraryCounts.shows}</div></div>
+                <div class="tile"><div class="label">Library Total</div><div class="value">${data.libraryCounts.total}</div></div>
+                <div class="tile"><div class="label">Feed Unique Items</div><div class="value">${data.feedCounts.uniqueItems}</div></div>
+                <div class="tile"><div class="label">Feed Collections</div><div class="value">${data.feedCounts.collections}</div></div>
+                <div class="tile"><div class="label">Coverage</div><div class="value ${data.missingCount === 0 ? 'ok' : 'bad'}">${coverage}%</div></div>
+            `;
+        }
+
+        function renderCollections(data) {
+            const root = document.getElementById('collections');
+            const rows = data.collectionSummary || [];
+            if (!rows.length) {
+                root.innerHTML = '<div>No collections found.</div>';
+                return;
+            }
+
+            root.innerHTML = `
+                <table>
+                    <thead><tr><th>ID</th><th>Title</th><th>Cards</th></tr></thead>
+                    <tbody>
+                        ${rows.map(r => `<tr><td class="mono">${r.id}</td><td>${r.title || ''}</td><td>${r.cards}</td></tr>`).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function renderMissing(data) {
+            const root = document.getElementById('missing');
+            const rows = data.missing || [];
+            if (!rows.length) {
+                root.innerHTML = '<div class="ok">No missing items. Feed coverage is complete.</div>';
+                return;
+            }
+
+            root.innerHTML = `
+                <div style="margin-bottom:8px;" class="bad">${rows.length} item(s) are present in Redis library but not represented in home feed.</div>
+                <table>
+                    <thead><tr><th>Title</th><th>Type</th><th>ID</th><th>Storage</th><th>Source Path</th></tr></thead>
+                    <tbody>
+                        ${rows.map(r => `
+                            <tr>
+                                <td>${r.title || ''}</td>
+                                <td>${r.contentType || ''}</td>
+                                <td class="mono">${r.id || ''}</td>
+                                <td>${r.storageLocation || ''}</td>
+                                <td class="mono">${r.sourcePath || ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        async function loadDiagnostics() {
+            const status = document.getElementById('status');
+            status.textContent = 'Loading diagnostics...';
+            try {
+                const res = await fetch('/api/admin/feed-diagnostics', { credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) {
+                    status.textContent = `Diagnostics failed: ${data.error || 'Unknown error'}`;
+                    status.className = 'bad';
+                    return;
+                }
+
+                status.textContent = `Generated ${new Date(data.generatedAt).toLocaleString()}`;
+                status.className = '';
+                renderStats(data);
+                renderCollections(data);
+                renderMissing(data);
+            } catch (_err) {
+                status.textContent = 'Diagnostics request failed.';
+                status.className = 'bad';
+            }
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadDiagnostics);
+        loadDiagnostics();
+    </script>
+</body>
+</html>

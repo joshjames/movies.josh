@@ -54,6 +54,10 @@ function buildRecentCollection(mediaList = []) {
 }
 
 function buildCollections(mediaList = []) {
+    const dedupedMedia = Array.from(
+        new Map((mediaList || []).map(item => [String(item.id || ''), item])).values()
+    ).filter(item => item && item.id);
+
     const topRated = [...mediaList]
         .filter(media => getScore(media) !== null && getScore(media) >= 8)
         .sort((a, b) => (getScore(b) || 0) - (getScore(a) || 0));
@@ -69,6 +73,14 @@ function buildCollections(mediaList = []) {
     });
 
     const collections = [
+        {
+            id: 'all-titles-row',
+            title: 'All Titles',
+            subtitle: `${dedupedMedia.length} items in library`,
+            cards: [...dedupedMedia]
+                .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')))
+                .map(normalizeCard)
+        },
         {
             id: 'top-rated-row',
             title: 'Top Rated',

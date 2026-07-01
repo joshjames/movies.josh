@@ -14,7 +14,7 @@ const logger = require('../utils/logger');
 const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
 const LibraryScanner = require('../services/LibraryScanner'); 
-const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed } = require('../services/HomeFeedService');
+const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed, loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 
 // Route map to local worker microservices ports running in the container
 const WORKER_PORTS = {
@@ -339,6 +339,63 @@ router.post('/regenerate-home-feed', async (req, res) => {
             generatedAt: feed.generatedAt,
             totalItems: feed.totalItems,
             collections: feed.collections.length
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/feed-diagnostics', async (req, res) => {
+    try {
+        const library = await getLibrary();
+        const feed = loadHomeFeedWithFallback();
+
+        const allLibrary = [...(library.movies || []), ...(library.shows || [])];
+        const libraryMap = new Map();
+        allLibrary.forEach(item => {
+            const id = String(item?.id || '');
+            if (id) libraryMap.set(id, item);
+        });
+
+        const feedIds = new Set();
+        const collections = Array.isArray(feed?.collections) ? feed.collections : [];
+        collections.forEach(collection => {
+            (collection.cards || []).forEach(card => {
+                const id = String(card?.id || '');
+                if (id) feedIds.add(id);
+            });
+        });
+
+        const missing = [];
+        libraryMap.forEach((item, id) => {
+            if (!feedIds.has(id)) {
+                missing.push({
+                    id,
+                    title: item.title || id,
+                    contentType: item.contentType || (String(id).startsWith('series/') ? 'series' : 'movie'),
+                    storageLocation: item.storageLocation || item.storage?.location || 'unknown',
+                    sourcePath: item.sourcePath || ''
+                });
+            }
+        });
+
+        missing.sort((a, b) => a.title.localeCompare(b.title));
+
+        return res.json({
+            success: true,
+            generatedAt: new Date().toISOString(),
+            libraryCounts: {
+                movies: (library.movies || []).length,
+                shows: (library.shows || []).length,
+                total: libraryMap.size
+            },
+            feedCounts: {
+                collections: collections.length,
+                uniqueItems: feedIds.size
+            },
+            missingCount: missing.length,
+            missing,
+            collectionSummary: collections.map(c => ({ id: c.id, title: c.title, cards: (c.cards || []).length }))
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
