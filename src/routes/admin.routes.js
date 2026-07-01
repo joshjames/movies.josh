@@ -181,7 +181,7 @@ router.post('/sync-item', async (req, res) => {
 });
 
 // Master Server Endpoint
-app.get('/v1/connector/bootstrap-bundle', async (req, res) => {
+router.get('/v1/connector/bootstrap-bundle', async (req, res) => {
     // Verify tokens here using verifySecureToken...
 
     res.setHeader('Content-Type', 'application/zip');
