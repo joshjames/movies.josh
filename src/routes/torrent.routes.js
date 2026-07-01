@@ -260,8 +260,9 @@ router.get('/eztv/browse', async (req, res) => {
         const eztvFetch = await fetchEztvPages(targetImdbId, 5);
         const allTorrents = eztvFetch.torrents;
 
-        const cover = omdbMeta?.Poster !== 'N/A'
-            ? omdbMeta.Poster
+        const posterUrl = typeof omdbMeta?.Poster === 'string' ? omdbMeta.Poster.trim() : '';
+        const cover = posterUrl && posterUrl !== 'N/A'
+            ? posterUrl
             : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>';
         const { items, packsFallbackUsed } = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
 
