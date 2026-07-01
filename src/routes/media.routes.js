@@ -6,6 +6,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
+const axios = require('axios');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
@@ -25,6 +26,23 @@ const MOVIE_PATH_CANDIDATES = [
     '/app/storage/movies',
     '/app/movies'
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
+
+function formatImdbId(imdbId) {
+    const raw = String(imdbId || '').trim();
+    if (!raw) return '';
+    return raw.startsWith('tt') ? raw : `tt${raw}`;
+}
+
+function withCover(item) {
+    const formattedId = formatImdbId(item.imdbId || '');
+    return {
+        ...item,
+        imdbId: formattedId,
+        cover: formattedId ? `/api/tv-shows/${encodeURIComponent(formattedId)}/cover` : ''
+    };
+}
 
 function resolveMovieFolderPath(movieId) {
     const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, movieId));
@@ -63,7 +81,7 @@ router.get('/tv-shows/search', (req, res) => {
         const query = String(req.query.q || req.query.query || '').trim();
         const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 40, 100));
         const index = loadIndex();
-        const items = searchIndex(query, limit);
+        const items = searchIndex(query, limit).map(withCover);
 
         return res.json({
             success: true,
@@ -84,9 +102,44 @@ router.get('/tv-shows/:imdbId', (req, res) => {
         if (!item) {
             return res.status(404).json({ success: false, error: 'Series not found in local index.' });
         }
-        return res.json({ success: true, item });
+        return res.json({ success: true, item: withCover(item) });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-shows/:imdbId/cover', async (req, res) => {
+    try {
+        const imdbId = formatImdbId(req.params.imdbId);
+        if (!imdbId) {
+            return res.status(400).send('Invalid IMDb ID');
+        }
+
+        const coverPath = path.join(TV_COVER_DIR, `${imdbId}.jpg`);
+        if (fs.existsSync(coverPath)) {
+            return res.sendFile(coverPath);
+        }
+
+        fs.mkdirSync(TV_COVER_DIR, { recursive: true });
+
+        const apiKey = process.env.OMDB_API_KEY || '84196d01';
+        const omdbRes = await axios.get(`http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(imdbId)}`, {
+            timeout: 8000
+        });
+        const posterUrl = omdbRes.data?.Poster;
+
+        if (!posterUrl || posterUrl === 'N/A') {
+            return res.status(404).send('No cover found');
+        }
+
+        const imageRes = await axios.get(posterUrl, {
+            responseType: 'arraybuffer',
+            timeout: 12000
+        });
+        await fsPromises.writeFile(coverPath, Buffer.from(imageRes.data));
+        return res.sendFile(coverPath);
+    } catch (_err) {
+        return res.status(404).send('No cover found');
     }
 });
 

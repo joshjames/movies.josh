@@ -125,322 +125,288 @@
                     <input type="checkbox" id="packsOnlyIn" checked> Show Whole Seasons Only
                 </label>
 
-                <button onclick="triggerNewSearch()">Search</button>
-            </div>
+                <script>
+                    let currentMode = 'movies';
+                    let currentBrowsePage = 1;
 
-            <div class="manual-input-box">
-                <input type="text" id="manualMagnetIn" placeholder="Paste external custom magnet link layout directly here (e.g., magnet:?xt=...)">
-                <button class="manual-btn" onclick="addManualMagnet(this)">Ingest Link</button>
-            </div>
-        </div>
+                    function switchMode(mode) {
+                        currentMode = mode;
+                        document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
+                        document.getElementById('tab-shows').classList.toggle('active', mode === 'shows');
 
-        <div class="grid" id="catalog-grid"></div>
-        
-        <div id="pagination-wrapper"></div>
-    </div>
+                        const isMovie = mode === 'movies';
+                        document.getElementById('genreIn').style.display = isMovie ? 'inline-block' : 'none';
+                        document.getElementById('ratingIn').style.display = isMovie ? 'inline-block' : 'none';
+                        document.getElementById('sortIn').style.display = isMovie ? 'inline-block' : 'none';
+                        document.getElementById('packsWrapper').style.display = isMovie ? 'none' : 'flex';
 
-    <div class="toast" id="toastNotice"></div>
+                        document.getElementById('searchIn').placeholder = isMovie
+                            ? 'Search title, actor, or genre...'
+                            : 'Search TV series from local IMDb index...';
 
-    <script>
-let currentMode = 'movies'; // 'movies' or 'shows'
-let currentBrowsePage = 1;
+                        triggerNewSearch();
+                    }
 
-function switchMode(mode) {
-    currentMode = mode;
-    document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
-    document.getElementById('tab-shows').classList.toggle('active', mode === 'shows');
-    
-    // Toggle element groups inside the dashboard layout controls
-    const isMovie = mode === 'movies';
-    document.getElementById('genreIn').style.display = isMovie ? 'inline-block' : 'none';
-    document.getElementById('ratingIn').style.display = isMovie ? 'inline-block' : 'none';
-    document.getElementById('sortIn').style.display = isMovie ? 'inline-block' : 'none';
-    document.getElementById('packsWrapper').style.display = isMovie ? 'none' : 'flex';
-    
-    document.getElementById('searchIn').placeholder = isMovie 
-        ? "Search title, actor, or genre..." 
-        : "Search TV series from the local IMDb index...";
-        
-    triggerNewSearch();
-}
+                    function triggerNewSearch() {
+                        if (currentMode === 'movies') {
+                            fetchMovieCatalog(1);
+                        } else {
+                            fetchShowCatalog();
+                        }
+                    }
 
-function triggerNewSearch() {
-    if (currentMode === 'movies') {
-        fetchMovieCatalog(1, false);
-    } else {
-        fetchShowCatalog();
-    }
-}
+                    document.getElementById('genreIn').addEventListener('change', triggerNewSearch);
+                    document.getElementById('ratingIn').addEventListener('change', triggerNewSearch);
+                    document.getElementById('sortIn').addEventListener('change', triggerNewSearch);
+                    document.getElementById('packsOnlyIn').addEventListener('change', () => {
+                        if (currentMode === 'shows') {
+                            fetchShowCatalog();
+                        }
+                    });
+                    document.getElementById('searchIn').addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') triggerNewSearch();
+                    });
 
-// Global UI input listeners
-document.getElementById('genreIn').addEventListener('change', triggerNewSearch);
-document.getElementById('ratingIn').addEventListener('change', triggerNewSearch);
-document.getElementById('sortIn').addEventListener('change', triggerNewSearch);
-document.getElementById('packsOnlyIn').addEventListener('change', triggerNewSearch);
-document.getElementById('searchIn').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') triggerNewSearch();
-});
+                    async function fetchMovieCatalog(page = 1) {
+                        currentBrowsePage = page;
+                        const query = document.getElementById('searchIn').value.trim();
+                        const genre = document.getElementById('genreIn').value;
+                        const rating = document.getElementById('ratingIn').value;
+                        const sortBy = document.getElementById('sortIn').value;
+                        const grid = document.getElementById('catalog-grid');
+                        const paginationWrapper = document.getElementById('pagination-wrapper');
 
-// =========================================================================
-// 🎬 MOVIE ENGINE PIPELINE FETCHING
-// =========================================================================
-async function fetchMovieCatalog(pageUpdate = 1, appendMode = false) {
-    currentBrowsePage = pageUpdate;
-    const query = document.getElementById('searchIn').value.trim();
-    const genre = document.getElementById('genreIn').value;
-    const rating = document.getElementById('ratingIn').value;
-    const sortBy = document.getElementById('sortIn').value;
-    
-    const grid = document.getElementById('catalog-grid');
-    const paginationWrapper = document.getElementById('pagination-wrapper');
-    
-    if (!appendMode) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying movie index structures...</div>';
-        paginationWrapper.innerHTML = ''; 
-    }
+                        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Querying movie index structures...</div>';
+                        paginationWrapper.innerHTML = '';
 
-    try {
-        let apiTarget = `/api/yts/browse?page=${currentBrowsePage}`;
-        if (query) apiTarget += `&query_term=${encodeURIComponent(query)}`;
-        if (genre && genre !== 'All') apiTarget += `&genre=${genre}`;
-        if (rating && rating !== '0') apiTarget += `&minimum_rating=${rating}`;
-        if (sortBy) apiTarget += `&sort_by=${sortBy}`;
+                        try {
+                            let apiTarget = `/api/yts/browse?page=${currentBrowsePage}`;
+                            if (query) apiTarget += `&query_term=${encodeURIComponent(query)}`;
+                            if (genre && genre !== 'All') apiTarget += `&genre=${genre}`;
+                            if (rating && rating !== '0') apiTarget += `&minimum_rating=${rating}`;
+                            if (sortBy) apiTarget += `&sort_by=${sortBy}`;
 
-        const res = await fetch(apiTarget);
-        const resData = await res.json();
+                            const res = await fetch(apiTarget);
+                            const resData = await res.json();
 
-        if (resData.status !== 'ok' || !resData.data.movies || resData.data.movies.length === 0) {
-            if (!appendMode) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching movie indexes found.</div>';
-                paginationWrapper.innerHTML = '';
-            }
-            return;
-        }
+                            if (resData.status !== 'ok' || !resData.data.movies || resData.data.movies.length === 0) {
+                                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching movie indexes found.</div>';
+                                return;
+                            }
 
-        const cardsHtml = resData.data.movies.map(movie => {
-            const targetTorrent = movie.torrents.find(t => t.quality === '1080p') || movie.torrents[0];
-            if (!targetTorrent) return '';
+                            const cardsHtml = resData.data.movies.map(movie => {
+                                const targetTorrent = movie.torrents.find(t => t.quality === '1080p') || movie.torrents[0];
+                                if (!targetTorrent) return '';
 
-            const trackers = [
-                'udp://tracker.opentrackr.org:1337/announce',
-                'udp://tracker.torrent.eu.org:451/announce',
-                'udp://open.stealth.si:80/announce'
-            ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
+                                const trackers = [
+                                    'udp://tracker.opentrackr.org:1337/announce',
+                                    'udp://tracker.torrent.eu.org:451/announce',
+                                    'udp://open.stealth.si:80/announce'
+                                ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
 
-            const cleanHash = targetTorrent.hash.toUpperCase().trim();
-            const baseMagnet = `magnet:?xt=urn:btih:${cleanHash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
+                                const cleanHash = targetTorrent.hash.toUpperCase().trim();
+                                const baseMagnet = `magnet:?xt=urn:btih:${cleanHash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
 
-            return `
-                <div class="card">
-                    <div class="cover-frame">
-                        <img src="${movie.medium_cover_image}" alt="${movie.title}">
-                        <div class="badge-row">
-                            <span class="rating-badge">⭐ ${movie.rating.toFixed(1)}</span>
-                        </div>
-                    </div>
-                    <div class="card-info">
-                        <div>
-                            <div class="title">${movie.title}</div>
-                            <div class="meta">${movie.year} • ${movie.runtime} min</div>
-                        </div>
-                        <button class="add-btn" onclick="addMediaAsset(this, '${btoa(baseMagnet)}', 'movie-streamer', '${movie.imdb_code || ''}')">Add to Library</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
+                                return `
+                                    <div class="card">
+                                        <div class="cover-frame">
+                                            <img src="${movie.medium_cover_image}" alt="${movie.title}">
+                                            <div class="badge-row">
+                                                <span class="rating-badge">⭐ ${movie.rating.toFixed(1)}</span>
+                                            </div>
+                                        </div>
+                                        <div class="card-info">
+                                            <div>
+                                                <div class="title">${movie.title}</div>
+                                                <div class="meta">${movie.year} • ${movie.runtime} min</div>
+                                            </div>
+                                            <button class="add-btn" onclick="addMediaAsset(this, '${btoa(baseMagnet)}', 'movie-streamer', '${movie.imdb_code || ''}')">Add to Library</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
 
-        if (appendMode) grid.innerHTML += cardsHtml; else grid.innerHTML = cardsHtml;
-        renderPaginationControls(resData.data.movie_count, resData.data.limit);
+                            grid.innerHTML = cardsHtml;
+                            renderPaginationControls(resData.data.movie_count, resData.data.limit);
+                        } catch (_err) {
+                            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing movie catalog requests.</div>';
+                        }
+                    }
 
-    } catch (err) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing network catalog array requests.</div>';
-    }
-}
+                    async function fetchShowCatalog() {
+                        const query = document.getElementById('searchIn').value.trim();
+                        const grid = document.getElementById('catalog-grid');
+                        const paginationWrapper = document.getElementById('pagination-wrapper');
+                        const limit = query ? 40 : 50;
 
-// =========================================================================
-// 📺 TV SHOW ENGINE PIPELINE FETCHING
-// =========================================================================
-async function fetchShowCatalog() {
-    const query = document.getElementById('searchIn').value.trim();
-    const packsOnly = document.getElementById('packsOnlyIn').checked;
-    const grid = document.getElementById('catalog-grid');
-    const paginationWrapper = document.getElementById('pagination-wrapper');
-    
-    paginationWrapper.innerHTML = '';
+                        paginationWrapper.innerHTML = '';
+                        grid.innerHTML = query
+                            ? '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Searching TV index...</div>'
+                            : '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading top TV shows...</div>';
 
-    if (!query) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Search the local IMDb TV index to pick a show.</div>';
-        return;
-    }
-    
-    grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Searching local IMDb series index...</div>';
+                        try {
+                            const res = await fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+                            const data = await res.json();
 
-    try {
-        const res = await fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=40`);
-        const data = await res.json();
+                            if (!data.success || !data.items || data.items.length === 0) {
+                                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching TV series found.</div>';
+                                return;
+                            }
 
-        if (!data.success || !data.items || data.items.length === 0) {
-            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching TV series found in the local index.</div>';
-            return;
-        }
+                            grid.innerHTML = data.items.map(show => {
+                                const yearLabel = show.endYear && show.endYear !== '\\N'
+                                    ? `${show.startYear || '?'}-${show.endYear}`
+                                    : (show.startYear || 'Year unknown');
+                                const votes = Number(show.numVotes || 0).toLocaleString();
+                                const rating = Number(show.averageRating || 0).toFixed(1);
+                                const safeTitle = String(show.title || '').replace(/'/g, "\\'");
 
-        grid.innerHTML = data.items.map(show => {
-            const yearText = [show.startYear || '', show.endYear && show.endYear !== '\\N' ? `-${show.endYear}` : ''].join('');
-            const genreText = show.genres || 'Unknown genres';
-            const votesText = Number(show.numVotes || 0).toLocaleString();
-            const ratingText = Number(show.averageRating || 0).toFixed(1);
-            return `
-                <div class="card">
-                    <div class="cover-frame">
-                        <img src="${show.cover || 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'}">
-                        <div class="badge-row">
-                            <span class="rating-badge">⭐ ${ratingText}</span>
-                            <span class="size-badge">${votesText} votes</span>
-                        </div>
-                    </div>
-                    <div class="card-info">
-                        <div>
-                            <div class="title" title="${show.title}">${show.title}</div>
-                            <div class="meta">${yearText || 'Year unknown'} • ${genreText}</div>
-                        </div>
-                        <button class="add-btn" style="background:#10b981;" onclick="loadShowTorrents('${show.imdbId}', '${show.title.replace(/'/g, "\\'")}')">Find Episodes</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
+                                return `
+                                    <div class="card">
+                                        <div class="cover-frame">
+                                            <img src="${show.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
+                                            <div class="badge-row">
+                                                <span class="rating-badge">⭐ ${rating}</span>
+                                                <span class="size-badge">${votes} votes</span>
+                                            </div>
+                                        </div>
+                                        <div class="card-info">
+                                            <div>
+                                                <div class="title" title="${show.title}">${show.title}</div>
+                                                <div class="meta">${yearLabel} • ${show.genres || 'Unknown genres'}</div>
+                                            </div>
+                                            <button class="add-btn" style="background:#10b981;" onclick="loadShowTorrents('${show.imdbId}', '${safeTitle}')">Browse Episodes</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
+                        } catch (_err) {
+                            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading TV index.</div>';
+                        }
+                    }
 
-    } catch (err) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading local TV index.</div>';
-    }
-}
+                    async function loadShowTorrents(imdbId, showTitle) {
+                        const grid = document.getElementById('catalog-grid');
+                        const packsOnly = document.getElementById('packsOnlyIn').checked;
+                        const paginationWrapper = document.getElementById('pagination-wrapper');
 
-async function loadShowTorrents(imdbId, showTitle) {
-    const grid = document.getElementById('catalog-grid');
-    const packsOnly = document.getElementById('packsOnlyIn').checked;
-    const paginationWrapper = document.getElementById('pagination-wrapper');
-    paginationWrapper.innerHTML = '';
+                        paginationWrapper.innerHTML = '';
+                        grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading releases for ${showTitle}...</div>`;
 
-    grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading episodes for ${showTitle}...</div>`;
+                        try {
+                            const res = await fetch(`/api/eztv/browse?imdbId=${encodeURIComponent(imdbId)}&packsOnly=${packsOnly}`);
+                            const data = await res.json();
 
-    try {
-        const res = await fetch(`/api/eztv/browse?imdbId=${encodeURIComponent(imdbId)}&packsOnly=${packsOnly}`);
-        const data = await res.json();
+                            if (!data.success || !data.torrents || data.torrents.length === 0) {
+                                grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No releases found for ${showTitle}.</div>`;
+                                return;
+                            }
 
-        if (!data.success || !data.torrents || data.torrents.length === 0) {
-            grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No torrents found for ${showTitle}.</div>`;
-            return;
-        }
+                            grid.innerHTML = `
+                                <div style="grid-column: 1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:4px;">
+                                    <div>
+                                        <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
+                                        <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} results</div>
+                                    </div>
+                                    <button class="page-btn" style="background:#334155;" onclick="fetchShowCatalog()">Back to Shows</button>
+                                </div>
+                                ${data.torrents.map(torrent => `
+                                    <div class="card">
+                                        <div class="cover-frame">
+                                            <img src="${torrent.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
+                                            <div class="badge-row">
+                                                <span class="seeds-badge">▲ ${torrent.seeds}</span>
+                                                <span class="size-badge">💾 ${torrent.size}</span>
+                                            </div>
+                                        </div>
+                                        <div class="card-info">
+                                            <div>
+                                                <div class="title" title="${torrent.title}">${torrent.title}</div>
+                                                <div class="meta">S${torrent.season || '?'}E${torrent.episode || '?'} • IMDb ${torrent.imdbId}</div>
+                                            </div>
+                                            <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer', '${torrent.imdbId || ''}')">Ingest Release</button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            `;
+                        } catch (_err) {
+                            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading releases for this show.</div>';
+                        }
+                    }
 
-        grid.innerHTML = `
-            <div style="grid-column: 1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:4px;">
-                <div>
-                    <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
-                    <div style="color:#94a3b8; font-size:0.85rem;">IMDb ID ${imdbId} • ${data.torrents.length} episodes / packs</div>
-                </div>
-                <button class="page-btn" style="background:#334155;" onclick="fetchShowCatalog()">Back to Show Search</button>
-            </div>
-            ${data.torrents.map(torrent => `
-                <div class="card">
-                    <div class="cover-frame">
-                        <img src="${torrent.cover}">
-                        <div class="badge-row">
-                            <span class="seeds-badge">▲ ${torrent.seeds}</span>
-                            <span class="size-badge">💾 ${torrent.size}</span>
-                        </div>
-                    </div>
-                    <div class="card-info">
-                        <div>
-                            <div class="title" title="${torrent.title}">${torrent.title}</div>
-                            <div class="meta">S${torrent.season || '?'}E${torrent.episode || '?'} • IMDb ${torrent.imdbId}</div>
-                        </div>
-                        <button class="add-btn" style="background:#10b981;" onclick="addMediaAsset(this, '${btoa(torrent.magnet)}', 'series-streamer', '${torrent.imdbId || ''}')">Ingest Episode</button>
-                    </div>
-                </div>
-            `).join('')}
-        `;
-    } catch (err) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading EZTV torrents.</div>';
-    }
-}
+                    function renderPaginationControls(totalMovies, pageLimit) {
+                        const paginationWrapper = document.getElementById('pagination-wrapper');
+                        if (!totalMovies || !pageLimit) return;
 
-function renderPaginationControls(totalMovies, pageLimit) {
-    const paginationWrapper = document.getElementById('pagination-wrapper');
-    if (!totalMovies || !pageLimit) return;
+                        const totalPages = Math.ceil(totalMovies / pageLimit);
+                        if (totalPages <= 1) return;
 
-    const totalPages = Math.ceil(totalMovies / pageLimit);
-    if (totalPages <= 1) return;
+                        paginationWrapper.innerHTML = `
+                            <div class="pagination-container">
+                                <button class="page-btn" ${currentBrowsePage === 1 ? 'disabled' : ''} onclick="fetchMovieCatalog(${currentBrowsePage - 1})">◀ Previous</button>
+                                <div class="page-indicator">Page ${currentBrowsePage} / ${totalPages}</div>
+                                <button class="page-btn" ${currentBrowsePage === totalPages ? 'disabled' : ''} onclick="fetchMovieCatalog(${currentBrowsePage + 1})">Next ▶</button>
+                            </div>
+                        `;
+                    }
 
-    paginationWrapper.innerHTML = `
-        <div class="pagination-container">
-            <button class="page-btn" id="prevPageBtn" ${currentBrowsePage === 1 ? 'disabled' : ''} onclick="fetchMovieCatalog(${currentBrowsePage - 1}, false)">◀ Previous</button>
-            <div class="page-indicator">Page ${currentBrowsePage} / ${totalPages}</div>
-            <button class="page-btn" id="nextPageBtn" ${currentBrowsePage === totalPages ? 'disabled' : ''} onclick="fetchMovieCatalog(${currentBrowsePage + 1}, false)">Next ▶</button>
-        </div>
-    `;
-}
+                    async function addMediaAsset(btn, base64Magnet, targetCategory, imdbId = '') {
+                        const magnetUrl = atob(base64Magnet);
+                        btn.disabled = true;
+                        btn.style.background = '#475569';
+                        btn.innerText = 'Queuing...';
 
-// Unified route dispatcher pushing directly downstream 
-async function addMediaAsset(btn, base64Magnet, targetCategory, imdbId = '') {
-    const magnetUrl = atob(base64Magnet);
-    btn.disabled = true;
-    btn.style.background = '#475569';
-    btn.innerText = 'Queuing...';
+                        const apiRoute = targetCategory === 'series-streamer' ? '/api/downloader/add' : '/api/yts/add';
 
-    const apiRoute = targetCategory === 'series-streamer' ? '/api/downloader/add' : '/api/yts/add';
+                        try {
+                            const response = await fetch(apiRoute, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ magnetUrl, category: targetCategory, imdbId })
+                            });
 
-    try {
-        const response = await fetch(apiRoute, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ magnetUrl, category: targetCategory, imdbId })
-        });
+                            if (!response.ok) throw new Error('Request failed');
 
-        if (response.ok) {
-            showToast(targetCategory === 'series-streamer' 
-                ? "🚀 Show package pushed to qBittorrent series queue!" 
-                : "🎬 Added to queue! Ingestion will resume once download finishes."
-            );
-            btn.innerText = '✓ Queued';
-            btn.style.background = '#059669';
-        } else {
-            throw new Error();
-        }
-    } catch(e) {
-        showToast("❌ Core pipeline rejected tracker linkage.");
-        btn.disabled = false;
-        btn.style.background = '#10b981';
-        btn.innerText = targetCategory === 'series-streamer' ? 'Ingest Series Pack' : 'Add to Library';
-    }
-}
+                            showToast(targetCategory === 'series-streamer'
+                                ? '🚀 Release pushed to series queue.'
+                                : '🎬 Added to movie queue.'
+                            );
+                            btn.innerText = '✓ Queued';
+                            btn.style.background = '#059669';
+                        } catch (_err) {
+                            showToast('❌ Core pipeline rejected tracker linkage.');
+                            btn.disabled = false;
+                            btn.style.background = '#10b981';
+                            btn.innerText = targetCategory === 'series-streamer' ? 'Ingest Release' : 'Add to Library';
+                        }
+                    }
 
-function addManualMagnet(buttonObj) {
-    const inputEl = document.getElementById('manualMagnetIn');
-    const rawMagnet = inputEl.value.trim();
+                    function addManualMagnet(buttonObj) {
+                        const inputEl = document.getElementById('manualMagnetIn');
+                        const rawMagnet = inputEl.value.trim();
 
-    if (!rawMagnet || !rawMagnet.toLowerCase().startsWith('magnet:?xt=')) {
-        showToast("⚠️ Invalid link format. Missing magnet header structure.");
-        return;
-    }
+                        if (!rawMagnet || !rawMagnet.toLowerCase().startsWith('magnet:?xt=')) {
+                            showToast('⚠️ Invalid link format. Missing magnet header structure.');
+                            return;
+                        }
 
-    buttonObj.disabled = true;
-    buttonObj.innerText = 'Processing...';
+                        buttonObj.disabled = true;
+                        buttonObj.innerText = 'Processing...';
 
-    // Manual additions fallback gracefully to movie-streamer profiles
-    addMediaAsset(buttonObj, btoa(rawMagnet), currentMode === 'movies' ? 'movie-streamer' : 'series-streamer', '');
-    inputEl.value = '';
-    buttonObj.disabled = false;
-    buttonObj.innerText = 'Ingest Link';
-}
+                        addMediaAsset(buttonObj, btoa(rawMagnet), currentMode === 'movies' ? 'movie-streamer' : 'series-streamer', '');
+                        inputEl.value = '';
+                        buttonObj.disabled = false;
+                        buttonObj.innerText = 'Ingest Link';
+                    }
 
-function showToast(msg) {
-    const toast = document.getElementById('toastNotice');
-    toast.innerText = msg;
-    toast.style.display = 'block';
-    setTimeout(() => { toast.style.display = 'none'; }, 6000);
-}
+                    function showToast(msg) {
+                        const toast = document.getElementById('toastNotice');
+                        toast.innerText = msg;
+                        toast.style.display = 'block';
+                        setTimeout(() => { toast.style.display = 'none'; }, 5000);
+                    }
 
-// Inital view execution load sequence
-fetchMovieCatalog(1, false);
-    </script>
+                    fetchMovieCatalog(1);
+                </script>
 </body>
 </html>

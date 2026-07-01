@@ -50,11 +50,33 @@ function searchIndex(query, limit = 40) {
 
     const queryTerms = cleanQuery.split(' ').filter(Boolean);
     return index.items
-        .filter(item => {
+        .map(item => {
             const haystack = item.searchText || buildSearchText(item);
-            return queryTerms.every(term => haystack.includes(term));
+            const titleNorm = normalizeTerm(item.title || item.originalTitle || '');
+
+            let score = 0;
+            for (const term of queryTerms) {
+                if (titleNorm === term) score += 8;
+                else if (titleNorm.startsWith(term)) score += 5;
+                else if (titleNorm.includes(term)) score += 3;
+                else if (haystack.includes(term)) score += 1;
+                else return null;
+            }
+
+            return {
+                item,
+                score
+            };
         })
-        .slice(0, cappedLimit);
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            if ((b.item.numVotes || 0) !== (a.item.numVotes || 0)) return (b.item.numVotes || 0) - (a.item.numVotes || 0);
+            if ((b.item.averageRating || 0) !== (a.item.averageRating || 0)) return (b.item.averageRating || 0) - (a.item.averageRating || 0);
+            return String(a.item.title || '').localeCompare(String(b.item.title || ''));
+        })
+        .slice(0, cappedLimit)
+        .map(row => row.item);
 }
 
 function getSeriesByImdbId(imdbId) {
