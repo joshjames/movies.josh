@@ -615,6 +615,117 @@ router.post('/manual-worker-run', async (req, res) => {
     }
 });
 
+router.post('/generate-streaming-profiles', async (req, res) => {
+    try {
+        const { folder, contentType } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        if (!fs.existsSync(folderPath)) {
+            return res.status(404).json({ success: false, error: 'Target folder not found.' });
+        }
+
+        const metaFilePath = path.join(folderPath, 'metadata.json');
+        let metadata = {};
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            } catch (_err) {
+                metadata = {};
+            }
+        }
+
+        const filesOnDisk = fs.readdirSync(folderPath);
+        const hasWeb1080 = filesOnDisk.some(file => file.endsWith('.web.mp4'));
+
+        // Ensure the 1080p master exists first; low-res worker requires it.
+        if (!hasWeb1080) {
+            const baseResponse = await axios.post('http://127.0.0.1:5003/process', {
+                folderPath,
+                folderName: folder
+            }, { timeout: 1800000 });
+
+            if (baseResponse?.data?.success === false) {
+                return res.status(422).json({
+                    success: false,
+                    error: baseResponse.data.error || 'Base transcoding failed before profile generation.'
+                });
+            }
+        }
+
+        const lowResResponse = await axios.post('http://127.0.0.1:5003/process-low-res', {
+            folderPath,
+            folderName: folder
+        }, { timeout: 1800000 });
+
+        if (lowResResponse?.data?.success === false) {
+            return res.status(422).json({
+                success: false,
+                error: lowResResponse.data.error || 'Low-resolution profile generation failed.'
+            });
+        }
+
+        const refreshedFiles = fs.readdirSync(folderPath);
+        const profile720 = refreshedFiles.find(file => /\.720p\.mp4$/i.test(file)) || null;
+        const profile480 = refreshedFiles.find(file => /\.480p\.mp4$/i.test(file)) || null;
+        const profile1080 = refreshedFiles.find(file => /\.web\.mp4$/i.test(file)) || null;
+
+        metadata.storage = metadata.storage || { location: 'local', files: {} };
+        metadata.storage.files = metadata.storage.files || {};
+
+        if (profile1080) {
+            metadata.storage.files['1080p'] = {
+                ...(metadata.storage.files['1080p'] || {}),
+                status: metadata.storage.files['1080p']?.status || 'synced',
+                localPath: profile1080,
+                remoteKey: metadata.storage.files['1080p']?.remoteKey || null
+            };
+        }
+        if (profile720) {
+            metadata.storage.files['720p'] = {
+                ...(metadata.storage.files['720p'] || {}),
+                status: 'pending',
+                localPath: profile720,
+                remoteKey: null
+            };
+        }
+        if (profile480) {
+            metadata.storage.files['480p'] = {
+                ...(metadata.storage.files['480p'] || {}),
+                status: 'pending',
+                localPath: profile480,
+                remoteKey: null
+            };
+        }
+
+        metadata.pipelineState = {
+            ...(metadata.pipelineState || {}),
+            lastUpdated: new Date().toISOString(),
+            currentStep: metadata.pipelineState?.currentStep || 'COMPLETED',
+            error: null
+        };
+
+        fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            folder,
+            generated: {
+                profile1080,
+                profile720,
+                profile480
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.response?.data?.error || err.message });
+    }
+});
+
 router.post('/rename-media', async (req, res) => {
     try {
         const { folder, contentType, newFolderName, newFileName } = req.body || {};

@@ -631,6 +631,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'refetch')">Refresh Metadata from OMDb</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'sync')">Sync Item to Redis Snapshot</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
@@ -685,6 +686,7 @@
             if (action === 'refetch') return refetchMetadata(folder, type);
             if (action === 'sync') return syncItemNow(folder, type);
             if (action === 'repair') return repairMetadataNow(folder, type);
+            if (action === 'profiles') return generateStreamingProfilesNow(folder, type);
             if (action === 'worker') return runWorkerNow(folder, type);
             if (action === 'rename') return renameMediaNow(folder, type);
             if (action === 'archive') return archiveLocalMediaNow(folder, type);
@@ -768,6 +770,34 @@
                 fetchLibraryData();
             } catch (_err) {
                 showToast('Repair request failed.', 'error', 4200);
+            }
+        }
+
+        async function generateStreamingProfilesNow(folder, type) {
+            if (!confirm(`Generate 720p/480p profiles for ${folder}?\n\nThis will use FFmpeg and may take some time.`)) {
+                return;
+            }
+
+            try {
+                showToast(`Generating streaming profiles for ${folder}...`, 'info', 3000);
+                const res = await fetch('/api/admin/generate-streaming-profiles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type })
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    showToast('Profile generation failed: ' + (data.error || 'Unknown error'), 'error', 4800);
+                    return;
+                }
+
+                const generated = data.generated || {};
+                const created = [generated.profile1080, generated.profile720, generated.profile480].filter(Boolean).length;
+                showToast(`Profile generation complete (${created} profile file(s) available).`, 'success', 4200);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Profile generation request failed.', 'error', 4200);
             }
         }
 
