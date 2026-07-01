@@ -771,7 +771,7 @@
         }
 
         async function archiveLocalMediaNow(folder, type) {
-            if (!confirm(`Archive local media files for ${folder}?\n\nThis moves local video/subtitle files to quarantine storage after cloud verification.`)) {
+            if (!confirm(`Archive local media files for ${folder}?\n\nThis moves only local .mp4 video files to quarantine storage after cloud verification.`)) {
                 return;
             }
 

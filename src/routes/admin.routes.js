@@ -133,7 +133,7 @@ function ensurePathInside(parentDir, targetPath) {
 }
 
 function gatherArchiveCandidates(folderPath, metadata) {
-    const allowedExt = new Set(['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.ass', '.ssa', '.sub']);
+    const allowedExt = new Set(['.mp4']);
     const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
 
     const fromStorage = Object.values(metadata?.storage?.files || {})
