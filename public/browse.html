@@ -192,6 +192,23 @@
             }, 220);
         });
 
+        async function parseJsonOrThrow(response) {
+            const raw = await response.text();
+            let parsed;
+            try {
+                parsed = raw ? JSON.parse(raw) : {};
+            } catch (_err) {
+                throw new Error(`HTTP ${response.status}: non-JSON response`);
+            }
+
+            if (!response.ok) {
+                const msg = parsed && parsed.error ? parsed.error : `HTTP ${response.status}`;
+                throw new Error(msg);
+            }
+
+            return parsed;
+        }
+
         function renderTvCards(items) {
             return items.map(show => {
                 const yearLabel = show.endYear && show.endYear !== '\\N'
@@ -305,12 +322,12 @@
 
             try {
                 const res = await fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-                const data = await res.json();
+                const data = await parseJsonOrThrow(res);
 
                 if (!data.success || !data.items || data.items.length === 0) {
                     if (query) {
                         const topRes = await fetch('/api/tv-shows/search?limit=50');
-                        const topData = await topRes.json();
+                        const topData = await parseJsonOrThrow(topRes);
                         if (topData.success && Array.isArray(topData.items) && topData.items.length > 0) {
                             grid.innerHTML = topData.items.map(show => show).length
                                 ? `<div style="grid-column: 1/-1; text-align:center; padding:10px 8px 18px; color:#94a3b8;">No matches for "${query}". Showing top TV shows instead.</div>${renderTvCards(topData.items)}`
@@ -340,7 +357,7 @@
 
             try {
                 const res = await fetch(`/api/eztv/browse?imdbId=${encodeURIComponent(imdbId)}&packsOnly=${packsOnly}`);
-                const data = await res.json();
+                const data = await parseJsonOrThrow(res);
 
                 if (!data.success || !data.torrents || data.torrents.length === 0) {
                     grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No releases found for ${showTitle}.</div>`;
@@ -353,6 +370,7 @@
                             <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
                             <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} seasons • Whole seasons only: ${packsOnly ? 'ON' : 'OFF'}</div>
                             ${data.packsFallbackUsed ? '<div style="color:#f59e0b; font-size:0.8rem; margin-top:4px;">No explicit season-pack tags found on EZTV; showing best seeded season releases.</div>' : ''}
+                            ${Array.isArray(data.upstreamWarnings) && data.upstreamWarnings.length ? `<div style="color:#f97316; font-size:0.8rem; margin-top:4px;">${data.upstreamWarnings[0]}</div>` : ''}
                         </div>
                         <button class="page-btn" style="background:#334155;" onclick="fetchShowCatalog()">Back to Shows</button>
                     </div>
@@ -375,8 +393,8 @@
                         </div>
                     `).join('')}
                 `;
-            } catch (_err) {
-                grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading releases for this show.</div>';
+            } catch (err) {
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading releases for this show. ${err && err.message ? err.message : ''}</div>`;
             }
         }
 

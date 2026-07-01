@@ -129,6 +129,57 @@ function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
     };
 }
 
+async function fetchEztvPages(imdbId, maxPages = 5) {
+    const endpointCandidates = [
+        'https://eztv.wf/api/get-torrents',
+        'https://eztv.re/api/get-torrents'
+    ];
+
+    const collected = [];
+    const upstreamWarnings = [];
+    let scannedPages = 0;
+
+    for (let page = 1; page <= maxPages; page++) {
+        scannedPages += 1;
+        let pageData = null;
+        let lastError = null;
+
+        for (const endpoint of endpointCandidates) {
+            try {
+                const response = await axios.get(`${endpoint}?imdb_id=${imdbId}&limit=100&page=${page}`, {
+                    timeout: 10000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (MovieStreamer/1.0)',
+                        'Accept': 'application/json,text/plain,*/*'
+                    }
+                });
+
+                if (Array.isArray(response.data?.torrents)) {
+                    pageData = response.data.torrents;
+                    break;
+                }
+                lastError = new Error(`Invalid payload from ${endpoint}`);
+            } catch (err) {
+                lastError = err;
+            }
+        }
+
+        if (!pageData) {
+            upstreamWarnings.push(`Page ${page} unavailable: ${lastError ? lastError.message : 'unknown upstream error'}`);
+            break;
+        }
+
+        collected.push(...pageData);
+        if (pageData.length < 100) break;
+    }
+
+    return {
+        torrents: collected,
+        scannedPages,
+        upstreamWarnings
+    };
+}
+
 // =========================================================================
 // 🔍 FIXED YTS BROWSE PROXY ENDPOINT
 // =========================================================================
@@ -206,20 +257,8 @@ router.get('/eztv/browse', async (req, res) => {
 
         if (!targetImdbId) return res.json({ success: true, torrents: [] });
 
-        let allTorrents = [];
-        let currentPage = 1;
-        let keepScanning = true;
-
-        while (keepScanning && currentPage <= 5) { 
-            const eztvRes = await axios.get(`https://eztv.wf/api/get-torrents?imdb_id=${targetImdbId}&limit=100&page=${currentPage}`, { timeout: 5000 });
-            if (eztvRes.data?.torrents?.length > 0) {
-                allTorrents = allTorrents.concat(eztvRes.data.torrents);
-                if (eztvRes.data.torrents.length < 100) keepScanning = false;
-                else currentPage++;
-            } else {
-                keepScanning = false;
-            }
-        }
+        const eztvFetch = await fetchEztvPages(targetImdbId, 5);
+        const allTorrents = eztvFetch.torrents;
 
         const cover = omdbMeta?.Poster !== 'N/A'
             ? omdbMeta.Poster
@@ -230,7 +269,10 @@ router.get('/eztv/browse', async (req, res) => {
             success: true,
             torrents: items,
             packsOnlyRequested: packsOnly,
-            packsFallbackUsed
+            packsFallbackUsed,
+            upstreamWarnings: eztvFetch.upstreamWarnings,
+            scannedPages: eztvFetch.scannedPages,
+            rawCount: allTorrents.length
         });
     } catch (err) {
         logger.error(`EZTV proxy route failure: ${err.message}`);
