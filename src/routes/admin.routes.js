@@ -13,7 +13,7 @@ const logger = require('../utils/logger');
 const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
 const LibraryScanner = require('../services/LibraryScanner'); 
-const { buildHomeFeed, saveHomeFeed } = require('../services/HomeFeedService');
+const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed } = require('../services/HomeFeedService');
 
 // Route map to local worker microservices ports running in the container
 const WORKER_PORTS = {
@@ -211,11 +211,14 @@ router.post('/regenerate-home-feed', async (req, res) => {
 
         const library = await getLibrary();
         const feed = buildHomeFeed(library);
+        const recentFeed = buildRecentFeed(library);
         const feedPath = saveHomeFeed(feed);
+        const recentFeedPath = saveRecentFeed(recentFeed);
 
         return res.json({
             success: true,
             feedPath,
+            recentFeedPath,
             generatedAt: feed.generatedAt,
             totalItems: feed.totalItems,
             collections: feed.collections.length

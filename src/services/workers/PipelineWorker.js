@@ -5,6 +5,8 @@ const path = require('path');
 const logger = require('../../utils/logger');
 const TorrentService = require('../TorrentService');
 const LibraryScanner = require('../LibraryScanner');
+const { getLibrary } = require('../db');
+const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
 const {
     createJob,
     getAllJobs,
@@ -121,6 +123,12 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
             error: null
         }
     };
+
+    if (!existing.addedAt && nextStep === 'COMPLETE') {
+        merged.addedAt = new Date().toISOString();
+    } else if (existing.addedAt) {
+        merged.addedAt = existing.addedAt;
+    }
 
     if (patchData.storage || existing.storage) {
         merged.storage = mergeStorage(existing.storage, patchData.storage || {});
@@ -369,6 +377,23 @@ async function processNextJob(job) {
             try {
                 await LibraryScanner.runLibraryScanSweep();
                 logger.debug(`♻️ [Queue] Library snapshot refreshed after ${job.currentStep} for job ${updated.id}`);
+
+                if (updated.currentStep === 'COMPLETE' || updated.status === 'COMPLETE') {
+                    const library = await getLibrary();
+                    const folderName = path.basename(updated.payload?.cleanPath || updated.payload?.rawPath || updated.payload?.torrentName || '');
+                    const itemId = updated.contentType === 'series' ? `series/${encodeURIComponent(folderName)}` : encodeURIComponent(folderName);
+                    const libraryItem = updated.contentType === 'series'
+                        ? (library.shows || []).find(item => item.id === itemId)
+                        : (library.movies || []).find(item => item.id === itemId);
+
+                    if (libraryItem) {
+                        upsertRecentCard(normalizeCard({
+                            ...libraryItem,
+                            addedAt: libraryItem.addedAt || new Date().toISOString()
+                        }));
+                        logger.debug(`🆕 [Queue] Recent feed updated for ${folderName}`);
+                    }
+                }
             } catch (scanErr) {
                 logger.warn(`⚠️ [Queue] Library refresh failed after ${job.currentStep}: ${scanErr.message}`);
             }
