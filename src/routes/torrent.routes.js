@@ -20,6 +20,104 @@ const {
 
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
 
+function normalizeText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function parseSeasonEpisodeFromTitle(title) {
+    const raw = String(title || '');
+    const sxe = raw.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+    if (sxe) {
+        return {
+            season: parseInt(sxe[1], 10),
+            episode: parseInt(sxe[2], 10)
+        };
+    }
+
+    const seasonOnly = raw.match(/season\s*(\d{1,2})/i) || raw.match(/s(\d{1,2})(?!\d)/i);
+    if (seasonOnly) {
+        return {
+            season: parseInt(seasonOnly[1], 10),
+            episode: null
+        };
+    }
+
+    return { season: null, episode: null };
+}
+
+function looksLikeSeasonPack(title) {
+    return /(season\s*pack|\bcomplete\b|s\d{1,2}\s*complete|seasons?\s*\d+\s*-\s*\d+|\[pack\]|\bpack\b)/i.test(String(title || ''));
+}
+
+function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
+    const seeded = (rawTorrents || []).filter(t => (parseInt(t.seeds, 10) || 0) > 0);
+
+    const deduped = [];
+    const seen = new Set();
+    for (const t of seeded) {
+        const titleNorm = normalizeText(t.filename || t.title);
+        const key = [String(t.hash || '').toLowerCase(), titleNorm].join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(t);
+    }
+
+    const reduced = packsOnly ? deduped.filter(t => looksLikeSeasonPack(t.title || t.filename)) : deduped;
+
+    const bySeason = new Map();
+    for (const t of reduced) {
+        const title = String(t.title || t.filename || '').trim();
+        const parsed = parseSeasonEpisodeFromTitle(title);
+        const seasonFromPayload = parseInt(t.season, 10);
+        const episodeFromPayload = parseInt(t.episode, 10);
+
+        const season = Number.isFinite(seasonFromPayload) ? seasonFromPayload : parsed.season;
+        const episode = Number.isFinite(episodeFromPayload) ? episodeFromPayload : parsed.episode;
+
+        if (!Number.isFinite(season) || season <= 0) continue;
+
+        const seeds = parseInt(t.seeds, 10) || 0;
+        const peers = parseInt(t.peers, 10) || 0;
+        const hasPackSignal = looksLikeSeasonPack(title);
+        const score = (hasPackSignal ? 100000 : 0) + seeds * 100 + peers;
+
+        const existing = bySeason.get(season);
+        if (!existing || score > existing.score) {
+            bySeason.set(season, {
+                score,
+                title,
+                season,
+                episode,
+                seeds,
+                peers,
+                sizeBytes: parseFloat(t.size_bytes) || 0,
+                magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(title)}`,
+                imdbId: targetImdbId,
+                cover
+            });
+        }
+    }
+
+    return Array.from(bySeason.values())
+        .sort((a, b) => a.season - b.season)
+        .map(item => ({
+            title: `Season ${item.season} complete`,
+            originalTitle: item.title,
+            size: item.sizeBytes > 0 ? `${(item.sizeBytes / (1024 ** 3)).toFixed(2)} GB` : 'N/A',
+            seeds: item.seeds,
+            peers: item.peers,
+            magnet: item.magnet,
+            imdbId: item.imdbId,
+            season: item.season,
+            episode: item.episode || '',
+            cover: item.cover
+        }));
+}
+
 // =========================================================================
 // 🔍 FIXED YTS BROWSE PROXY ENDPOINT
 // =========================================================================
@@ -112,31 +210,10 @@ router.get('/eztv/browse', async (req, res) => {
             }
         }
 
-        if (packsOnly) {
-            const packRegex = /(season\s*pack|complete|s\d{2}\s*complete|seasons?\s*\d+\s*-\s*\d+|t[-_.]?pack|\[pack\])/i;
-            allTorrents = allTorrents.filter(t => packRegex.test(t.title));
-        }
-
-        const deduped = [];
-        const seen = new Set();
-        allTorrents.forEach(t => {
-            const key = [t.hash || '', String(t.filename || t.title || '').replace(/[^a-z0-9]+/gi, ' ').toLowerCase().trim()].join('|');
-            if (seen.has(key)) return;
-            seen.add(key);
-            deduped.push(t);
-        });
-
-        const results = deduped.map(t => ({
-            title: t.title,
-            size: t.size_bytes ? (parseFloat(t.size_bytes) / (1024 ** 3)).toFixed(2) + ' GB' : 'N/A',
-            seeds: parseInt(t.seeds, 10) || 0,
-            peers: parseInt(t.peers, 10) || 0,
-            magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title)}`,
-            imdbId: targetImdbId,
-            season: t.season || '',
-            episode: t.episode || '',
-            cover: omdbMeta?.Poster !== "N/A" ? omdbMeta.Poster : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>'
-        }));
+        const cover = omdbMeta?.Poster !== 'N/A'
+            ? omdbMeta.Poster
+            : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>';
+        const results = simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly);
 
         return res.json({ success: true, torrents: results });
     } catch (err) {
