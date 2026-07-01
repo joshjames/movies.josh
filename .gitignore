@@ -1,2 +1,7 @@
 .env
 .secret
+.data/
+node_modules/
+*.log
+*.gz
+npm-debug.log

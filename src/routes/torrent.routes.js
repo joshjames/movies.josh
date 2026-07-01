@@ -75,21 +75,24 @@ router.get('/yts/browse', async (req, res) => {
 router.get('/eztv/browse', async (req, res) => {
     try {
         const queryTerm = req.query.query ? req.query.query.trim() : '';
+        const directImdbId = req.query.imdbId ? String(req.query.imdbId).trim() : '';
         const packsOnly = req.query.packsOnly === 'true';
-        let targetImdbId = '';
+        let targetImdbId = directImdbId ? directImdbId.replace(/^tt/i, '') : '';
         let omdbMeta = null;
 
-        if (!queryTerm) return res.json({ success: true, torrents: [] });
+        if (!queryTerm && !targetImdbId) return res.json({ success: true, torrents: [] });
 
-        const omdbRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&s=${encodeURIComponent(queryTerm)}&type=series`);
-        
-        if (omdbRes.data?.Search?.length > 0) {
-            const match = omdbRes.data.Search[0];
-            targetImdbId = match.imdbID.replace('tt', ''); 
-            const detailRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&i=${match.imdbID}`);
-            omdbMeta = detailRes.data;
-        } else {
-            targetImdbId = queryTerm.startsWith('tt') ? queryTerm.replace('tt', '') : '';
+        if (!targetImdbId) {
+            const omdbRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&s=${encodeURIComponent(queryTerm)}&type=series`);
+            
+            if (omdbRes.data?.Search?.length > 0) {
+                const match = omdbRes.data.Search[0];
+                targetImdbId = match.imdbID.replace('tt', ''); 
+                const detailRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&i=${match.imdbID}`);
+                omdbMeta = detailRes.data;
+            } else {
+                targetImdbId = queryTerm.startsWith('tt') ? queryTerm.replace('tt', '') : '';
+            }
         }
 
         if (!targetImdbId) return res.json({ success: true, torrents: [] });
@@ -114,12 +117,24 @@ router.get('/eztv/browse', async (req, res) => {
             allTorrents = allTorrents.filter(t => packRegex.test(t.title));
         }
 
-        const results = allTorrents.map(t => ({
+        const deduped = [];
+        const seen = new Set();
+        allTorrents.forEach(t => {
+            const key = [t.hash || '', String(t.filename || t.title || '').replace(/[^a-z0-9]+/gi, ' ').toLowerCase().trim()].join('|');
+            if (seen.has(key)) return;
+            seen.add(key);
+            deduped.push(t);
+        });
+
+        const results = deduped.map(t => ({
             title: t.title,
             size: t.size_bytes ? (parseFloat(t.size_bytes) / (1024 ** 3)).toFixed(2) + ' GB' : 'N/A',
             seeds: parseInt(t.seeds, 10) || 0,
             peers: parseInt(t.peers, 10) || 0,
             magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title)}`,
+            imdbId: targetImdbId,
+            season: t.season || '',
+            episode: t.episode || '',
             cover: omdbMeta?.Poster !== "N/A" ? omdbMeta.Poster : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>'
         }));
 

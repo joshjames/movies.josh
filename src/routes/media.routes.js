@@ -9,6 +9,7 @@ const fsPromises = require('fs').promises;
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
+const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
 
 const MediaService = require('../services/MediaService');
 const MOVIES_DIR = process.env.MOVIES_DIR
@@ -55,6 +56,38 @@ router.get('/home-feed', (req, res) => {
     }
 
     return res.json({ success: true, feed: homeFeed });
+});
+
+router.get('/tv-shows/search', (req, res) => {
+    try {
+        const query = String(req.query.q || req.query.query || '').trim();
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 40, 100));
+        const index = loadIndex();
+        const items = searchIndex(query, limit);
+
+        return res.json({
+            success: true,
+            updatedAt: index.updatedAt,
+            totalItems: index.totalItems,
+            count: items.length,
+            items,
+            missingBasics: index.totalItems === 0 && items.length === 0
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-shows/:imdbId', (req, res) => {
+    try {
+        const item = getSeriesByImdbId(req.params.imdbId);
+        if (!item) {
+            return res.status(404).json({ success: false, error: 'Series not found in local index.' });
+        }
+        return res.json({ success: true, item });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET: /api/movies (High-Performance Paginated Catalog Discovery utilizing Redis lookups)
