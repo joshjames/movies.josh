@@ -120,6 +120,11 @@
             cursor: pointer;
         }
         .action-item:hover { background: #1e293b; }
+        .action-item:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            background: transparent;
+        }
 
         .admin-drop-zone { width: 140px; height: 210px; border: 2px dashed #475569; border-radius: 6px; background: #020617; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .admin-drop-zone.dragover { border-color: #38bdf8; background: #0f172a; }
@@ -402,6 +407,19 @@
             }, timeoutMs);
         }
 
+        function formatBytes(bytes) {
+            const value = Number(bytes || 0);
+            if (!Number.isFinite(value) || value <= 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let idx = 0;
+            let current = value;
+            while (current >= 1024 && idx < units.length - 1) {
+                current /= 1024;
+                idx += 1;
+            }
+            return `${current.toFixed(current >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+        }
+
         function updateSyncProgressBar(folder, mbSent) {
             const bar = document.getElementById(`progress-bar-${folder}`);
             const txt = document.getElementById(`progress-txt-${folder}`);
@@ -506,6 +524,11 @@
                 const cloudStatusStr = profiles.length > 0 
                     ? profiles.map(p => `${p}: ${storageMeta.files[p].status}`).join(' | ')
                     : 'Unprovisioned Local Store Block';
+                const localArchiveState = (item.metadata && item.metadata.localArchive && item.metadata.localArchive.state) || '';
+                const localArchivePurgeAfter = (item.metadata && item.metadata.localArchive && item.metadata.localArchive.purgeAfter) || '';
+                const hasQuarantinedArchive = localArchiveState === 'quarantined';
+                const hasAnyLocalPath = profiles.some(p => storageMeta.files[p] && storageMeta.files[p].localPath);
+                const canArchive = storageLoc === 'remote' && !hasQuarantinedArchive && hasAnyLocalPath;
 
                 return `
                 <div class="show-row" id="row-${item.folder}">
@@ -534,6 +557,9 @@
                                 ${storageLoc === 'remote' 
                                     ? '<span class="badge cloud-badge">☁️ Cloud Storage (B2/R2)</span>' 
                                     : '<span class="badge local-badge">💾 NVMe Array Local</span>'}
+                                ${hasQuarantinedArchive
+                                    ? '<span class="badge" style="background:#1e3a8a;color:#bfdbfe;border:1px solid #1d4ed8;">📦 Local Archived</span>'
+                                    : ''}
                             </div>
                         </div>
                         
@@ -606,11 +632,15 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'purge')" ${hasQuarantinedArchive ? '' : 'disabled'}>Permanently Purge Archive</button>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="ops-inline-row">
+                                ${hasQuarantinedArchive ? `<span style="font-size:0.78rem;color:#bfdbfe;background:#0b1220;border:1px solid #1d4ed8;border-radius:6px;padding:6px 8px;">Archive retained until: ${localArchivePurgeAfter || 'unknown'}</span>` : ''}
                                 <select id="worker-${item.folder}" style="min-width:180px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:6px 8px;">
                                     <option value="INGEST">INGEST</option>
                                     <option value="METADATA">METADATA</option>
@@ -656,6 +686,9 @@
             if (action === 'repair') return repairMetadataNow(folder, type);
             if (action === 'worker') return runWorkerNow(folder, type);
             if (action === 'rename') return renameMediaNow(folder, type);
+            if (action === 'archive') return archiveLocalMediaNow(folder, type);
+            if (action === 'restore') return restoreArchivedMediaNow(folder, type);
+            if (action === 'purge') return purgeArchivedMediaNow(folder, type);
         }
 
         document.addEventListener('click', (event) => {
@@ -734,6 +767,79 @@
                 fetchLibraryData();
             } catch (_err) {
                 showToast('Repair request failed.', 'error', 4200);
+            }
+        }
+
+        async function archiveLocalMediaNow(folder, type) {
+            if (!confirm(`Archive local media files for ${folder}?\n\nThis moves local video/subtitle files to quarantine storage after cloud verification.`)) {
+                return;
+            }
+
+            try {
+                showToast(`Verifying cloud copy for ${folder}...`, 'info', 2600);
+                const res = await fetch('/api/admin/archive-local-media', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Archive blocked: ' + (data.error || 'Unknown error'), 'error', 4600);
+                    return;
+                }
+
+                showToast(`Archived ${data.movedCount} files (${formatBytes(data.reclaimedBytes)} reclaimed).`, 'success', 4600);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Archive request failed.', 'error', 4200);
+            }
+        }
+
+        async function restoreArchivedMediaNow(folder, type) {
+            if (!confirm(`Restore archived local files for ${folder}?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/admin/restore-local-media', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Restore blocked: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                showToast(`Restored ${data.restoredCount} files.`, 'success', 4200);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Restore request failed.', 'error', 4200);
+            }
+        }
+
+        async function purgeArchivedMediaNow(folder, type) {
+            if (!confirm(`Permanently purge archived quarantine for ${folder}?\n\nThis cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/admin/purge-archived-media', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Purge blocked: ' + (data.error || 'Unknown error'), 'error', 4600);
+                    return;
+                }
+
+                showToast('Archived media purged permanently.', 'success', 4200);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Purge request failed.', 'error', 4200);
             }
         }
 

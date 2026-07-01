@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
+const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { exec } = require('child_process'); // Restored explicit missing shell execution utility
 const logger = require('../utils/logger');
 //const logger = require('../services/logger'); 
@@ -51,6 +52,25 @@ const SERIES_PATH_CANDIDATES = [
     '/app/series'
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
+const ARCHIVE_DIR = process.env.ARCHIVE_DIR || '/app/archive';
+const ARCHIVE_RETENTION_DAYS = Number(process.env.ARCHIVE_RETENTION_DAYS || 10);
+
+const B2_ENDPOINT = process.env.B2_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com';
+let archiveS3Client = null;
+
+function getArchiveS3Client() {
+    if (archiveS3Client) return archiveS3Client;
+    archiveS3Client = new S3Client({
+        endpoint: B2_ENDPOINT,
+        region: process.env.B2_REGION || 'us-west-004',
+        credentials: {
+            accessKeyId: process.env.BBkeyID,
+            secretAccessKey: process.env.BBapplicationKey
+        }
+    });
+    return archiveS3Client;
+}
+
 function resolveMovieFolderPath(folderName) {
     const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, folderName));
     return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, folderName);
@@ -69,16 +89,113 @@ function normalizeTagList(value, fallback = []) {
     return [...new Set(source.map(tag => String(tag).trim()).filter(Boolean))].sort();
 }
 
+function normalizeScalar(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+
+    const lowered = raw.toLowerCase();
+    if (lowered === 'n/a' || lowered === 'na' || lowered === 'unknown' || lowered === 'null' || lowered === 'undefined') {
+        return '';
+    }
+    return raw;
+}
+
 function normalizeEnrichment(meta = {}) {
     const rootTags = normalizeTagList(meta.tags || meta.enrichment?.tags || meta.metadata?.tags || meta.genre || meta.metadata?.genre);
     return {
-        genre: meta.genre || meta.enrichment?.genre || meta.metadata?.genre || '',
+        genre: normalizeScalar(meta.genre || meta.enrichment?.genre || meta.metadata?.genre || ''),
         tags: rootTags,
-        imdbScore: meta.imdbScore || meta.imdbRating || meta.rating || meta.enrichment?.imdbScore || meta.metadata?.imdbScore || meta.metadata?.imdbRating || meta.metadata?.rating || '',
-        parentalRating: meta.parentalRating || meta.rated || meta.enrichment?.parentalRating || meta.metadata?.parentalRating || meta.metadata?.rated || '',
-        popularity: meta.popularity || meta.enrichment?.popularity || meta.metadata?.popularity || '',
-        popularitySource: meta.enrichment?.popularitySource || meta.metadata?.enrichment?.popularitySource || ''
+        imdbScore: normalizeScalar(meta.imdbScore || meta.imdbRating || meta.rating || meta.enrichment?.imdbScore || meta.metadata?.imdbScore || meta.metadata?.imdbRating || meta.metadata?.rating || ''),
+        parentalRating: normalizeScalar(meta.parentalRating || meta.rated || meta.enrichment?.parentalRating || meta.metadata?.parentalRating || meta.metadata?.rated || ''),
+        popularity: normalizeScalar(meta.popularity || meta.enrichment?.popularity || meta.metadata?.popularity || ''),
+        popularitySource: normalizeScalar(meta.enrichment?.popularitySource || meta.metadata?.enrichment?.popularitySource || '')
     };
+}
+
+function cleanRemoteKey(key = '') {
+    return String(key || '').replace(/\\+/g, '/').replace(/\/+/g, '/').replace(/^\//, '').trim();
+}
+
+function sanitizeArchiveName(name = '') {
+    return String(name || '')
+        .trim()
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 180) || 'unknown_item';
+}
+
+function ensurePathInside(parentDir, targetPath) {
+    const normalizedParent = path.resolve(parentDir);
+    const normalizedTarget = path.resolve(targetPath);
+    const relative = path.relative(normalizedParent, normalizedTarget);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function gatherArchiveCandidates(folderPath, metadata) {
+    const allowedExt = new Set(['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.ass', '.ssa', '.sub']);
+    const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
+
+    const fromStorage = Object.values(metadata?.storage?.files || {})
+        .map(block => block?.localPath)
+        .filter(Boolean)
+        .filter(fileName => filesOnDisk.includes(fileName));
+
+    const sidecars = filesOnDisk.filter(fileName => {
+        const ext = path.extname(fileName).toLowerCase();
+        if (!allowedExt.has(ext)) return false;
+        const lower = fileName.toLowerCase();
+        return lower !== 'metadata.json' && lower !== 'cover.jpg';
+    });
+
+    return [...new Set([...fromStorage, ...sidecars])];
+}
+
+async function verifyRemoteCloudCopy(metadata) {
+    const storage = metadata?.storage || {};
+    const files = storage.files || {};
+    const requiredProfiles = Object.keys(files);
+
+    if (storage.location !== 'remote') {
+        return { ok: false, reason: 'Storage location is not set to remote.' };
+    }
+
+    if (requiredProfiles.length === 0) {
+        return { ok: false, reason: 'No storage profiles available to verify.' };
+    }
+
+    if (!process.env.BBkeyID || !process.env.BBapplicationKey) {
+        return { ok: false, reason: 'Cloud credentials are not available in environment.' };
+    }
+
+    const bucket = storage.bucket || process.env.B2_BUCKET || 'joshflixmedia';
+    const s3Client = getArchiveS3Client();
+    const verified = [];
+
+    for (const profile of requiredProfiles) {
+        const block = files[profile] || {};
+        const remoteKey = cleanRemoteKey(block.remoteKey || '');
+
+        if (block.status !== 'synced' || !remoteKey) {
+            return { ok: false, reason: `Profile ${profile} is not confirmed synced with remote key.` };
+        }
+
+        try {
+            await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: remoteKey }));
+            verified.push({ profile, remoteKey });
+        } catch (err) {
+            return {
+                ok: false,
+                reason: `Cloud object check failed for ${profile} (${remoteKey}): ${err.name || err.message}`
+            };
+        }
+    }
+
+    return { ok: true, bucket, verified };
+}
+
+async function persistMetadataFile(metaPath, metadata) {
+    await fsPromises.writeFile(metaPath, JSON.stringify(metadata, null, 4), 'utf-8');
 }
 
 router.get('/log-stream', (req, res) => {
@@ -512,6 +629,230 @@ router.post('/rename-media', async (req, res) => {
 
         await LibraryScanner.runLibraryScanSweep();
         return res.json({ success: true, folder: currentFolderName });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/archive-local-media', async (req, res) => {
+    try {
+        const { folder, contentType, retentionDays = ARCHIVE_RETENTION_DAYS } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+
+        if (!fs.existsSync(folderPath) || !fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'Target metadata folder not found.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        if ((metadata.localArchive?.state || '') === 'quarantined') {
+            return res.status(409).json({ success: false, error: 'Item is already quarantined in archive.' });
+        }
+
+        const remoteCheck = await verifyRemoteCloudCopy(metadata);
+        if (!remoteCheck.ok) {
+            return res.status(409).json({ success: false, error: remoteCheck.reason });
+        }
+
+        const candidates = gatherArchiveCandidates(folderPath, metadata);
+        if (candidates.length === 0) {
+            return res.status(409).json({ success: false, error: 'No local media files found to archive.' });
+        }
+
+        const safeFolder = sanitizeArchiveName(folder);
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const archiveRoot = path.join(ARCHIVE_DIR, contentType === 'series' ? 'series' : 'movies', `${safeFolder}_${stamp}`);
+
+        await fsPromises.mkdir(archiveRoot, { recursive: true });
+
+        const movedFiles = [];
+        let reclaimedBytes = 0;
+        for (const fileName of candidates) {
+            const sourcePath = path.join(folderPath, fileName);
+            if (!fs.existsSync(sourcePath)) continue;
+
+            const destPath = path.join(archiveRoot, fileName);
+            if (!ensurePathInside(archiveRoot, destPath)) {
+                return res.status(400).json({ success: false, error: `Unsafe archive target blocked for ${fileName}` });
+            }
+
+            const stat = fs.statSync(sourcePath);
+            reclaimedBytes += stat.size;
+            await fsPromises.rename(sourcePath, destPath);
+            movedFiles.push({
+                fileName,
+                size: stat.size,
+                archivedPath: destPath
+            });
+
+            Object.keys(metadata.storage?.files || {}).forEach(profile => {
+                const profileBlock = metadata.storage.files[profile] || {};
+                if (profileBlock.localPath === fileName) {
+                    metadata.storage.files[profile] = {
+                        ...profileBlock,
+                        localPath: null
+                    };
+                }
+            });
+        }
+
+        const archivedAt = new Date().toISOString();
+        const purgeAfter = new Date(Date.now() + Math.max(1, Number(retentionDays)) * 86400000).toISOString();
+        metadata.localArchive = {
+            state: 'quarantined',
+            archivedAt,
+            purgeAfter,
+            archiveRoot,
+            files: movedFiles,
+            cloudVerifiedAt: archivedAt,
+            cloudVerification: {
+                bucket: remoteCheck.bucket,
+                verified: remoteCheck.verified
+            }
+        };
+
+        await persistMetadataFile(metaPath, metadata);
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            folder,
+            archiveRoot,
+            movedCount: movedFiles.length,
+            reclaimedBytes,
+            purgeAfter
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/restore-local-media', async (req, res) => {
+    try {
+        const { folder, contentType } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+        if (!fs.existsSync(folderPath) || !fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'Target metadata folder not found.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const localArchive = metadata.localArchive || {};
+        if (localArchive.state !== 'quarantined' || !localArchive.archiveRoot) {
+            return res.status(409).json({ success: false, error: 'No quarantined archive state found for this item.' });
+        }
+        if (!fs.existsSync(localArchive.archiveRoot)) {
+            return res.status(404).json({ success: false, error: 'Archive directory missing for restore.' });
+        }
+
+        const restored = [];
+        for (const fileRec of localArchive.files || []) {
+            const fileName = fileRec.fileName;
+            const sourcePath = path.join(localArchive.archiveRoot, fileName);
+            const targetPath = path.join(folderPath, fileName);
+            if (!fs.existsSync(sourcePath)) continue;
+            if (fs.existsSync(targetPath)) {
+                return res.status(409).json({ success: false, error: `Target file already exists: ${fileName}` });
+            }
+
+            await fsPromises.rename(sourcePath, targetPath);
+            restored.push(fileName);
+
+            Object.keys(metadata.storage?.files || {}).forEach(profile => {
+                const block = metadata.storage.files[profile] || {};
+                const profileName = String(profile || '').toLowerCase();
+                const lowerFile = fileName.toLowerCase();
+                if (block.localPath || !lowerFile.endsWith('.mp4')) return;
+                if (profileName === '1080p' && (lowerFile.includes('1080') || lowerFile.includes('.web.'))) {
+                    metadata.storage.files[profile] = { ...block, localPath: fileName };
+                } else if (profileName === '720p' && lowerFile.includes('720')) {
+                    metadata.storage.files[profile] = { ...block, localPath: fileName };
+                } else if (profileName === '480p' && lowerFile.includes('480')) {
+                    metadata.storage.files[profile] = { ...block, localPath: fileName };
+                }
+            });
+        }
+
+        metadata.localArchive = {
+            ...localArchive,
+            state: 'restored',
+            restoredAt: new Date().toISOString()
+        };
+
+        try {
+            const left = fs.readdirSync(localArchive.archiveRoot);
+            if (left.length === 0) {
+                await fsPromises.rmdir(localArchive.archiveRoot);
+            }
+        } catch (_err) {
+            // keep best-effort cleanup non-fatal
+        }
+
+        await persistMetadataFile(metaPath, metadata);
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({ success: true, folder, restoredCount: restored.length });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/purge-archived-media', async (req, res) => {
+    try {
+        const { folder, contentType, force = false } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+        if (!fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'metadata.json not found for purge target.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const localArchive = metadata.localArchive || {};
+        if (!localArchive.archiveRoot || localArchive.state !== 'quarantined') {
+            return res.status(409).json({ success: false, error: 'No quarantined archive exists to purge.' });
+        }
+
+        const purgeAfter = Date.parse(localArchive.purgeAfter || '');
+        const eligible = Number.isFinite(purgeAfter) ? Date.now() >= purgeAfter : false;
+        if (!force && !eligible) {
+            return res.status(409).json({
+                success: false,
+                error: `Archive retention window still active until ${localArchive.purgeAfter || 'unknown date'}.`
+            });
+        }
+
+        if (fs.existsSync(localArchive.archiveRoot)) {
+            await fsPromises.rm(localArchive.archiveRoot, { recursive: true, force: true });
+        }
+
+        metadata.localArchive = {
+            ...localArchive,
+            state: 'purged',
+            purgedAt: new Date().toISOString()
+        };
+
+        await persistMetadataFile(metaPath, metadata);
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({ success: true, folder, purged: true });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
