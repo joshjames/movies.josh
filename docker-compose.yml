@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # --- 🍿 THE CORE APPLICATION CONTAINER ENGINE ---
+  movie-streamer:
+    container_name: movie-streamer-v2-prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    cpus: "2.0"
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+      - "5004:5004"
+    volumes:
+      - /home/epic/movies:/app/storage/movies
+      - /data/blockchain/media/Series:/app/storage/series
+      - /home/epic/movie-streamer-data:/app/metadata
+      - /home/epic/tobedel:/app/archive
+      - /home/epic/.config/subliminal:/root/.config/subliminal:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_started
+    networks:
+      - needmonero_needmonero
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # --- 🧠 HIGH-PERFORMANCE MEMORY DATA ENGINE ---
+  redis:
+    image: redis:7-alpine
+    container_name: anymovie-redis-cache
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - /home/epic/redis/data:/data
+    networks:
+      - needmonero_needmonero
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- 📥 SYSTEM DOWNSTREAM INGESTION ENGINE ---
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: anymovie-qbittorrent
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=8080
+    ports:
+      - "6881:6881"
+      - "6881:6881/udp"
+      # Note: 8080/tcp is available directly inside the 'needmonero_needmonero' network 
+      # for your node API pipeline requests. No public port exposure needed if proxied.
+    volumes:
+      - /home/epic/qbittorrent/config:/config
+      - /home/epic/movies:/downloads
+      - /data/blockchain/media:/series-media
+    networks:
+      - needmonero_needmonero
+
+networks:
+  needmonero_needmonero:
+    external: true # Tells Compose this custom backend network layer is already up and running on the host

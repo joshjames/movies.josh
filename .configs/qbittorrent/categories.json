@@ -1,0 +1,34 @@
+{
+    "movie-streamer": {
+        "download_path": null,
+        "inactive_seeding_time_limit": -2,
+        "ratio_limit": -2,
+        "save_path": "/downloads",
+        "seeding_time_limit": -2,
+        "share_limit_action": "Default"
+    },
+    "movies": {
+        "download_path": null,
+        "inactive_seeding_time_limit": -2,
+        "ratio_limit": -2,
+        "save_path": "/downloads",
+        "seeding_time_limit": -2,
+        "share_limit_action": "Default"
+    },
+    "series": {
+        "download_path": null,
+        "inactive_seeding_time_limit": -2,
+        "ratio_limit": -2,
+        "save_path": "/downloads/series",
+        "seeding_time_limit": -2,
+        "share_limit_action": "Default"
+    },
+    "series-streamer": {
+        "download_path": null,
+        "inactive_seeding_time_limit": -2,
+        "ratio_limit": -2,
+        "save_path": "/series-media/Series",
+        "seeding_time_limit": -2,
+        "share_limit_action": "Default"
+    }
+}
