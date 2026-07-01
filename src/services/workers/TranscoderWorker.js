@@ -41,7 +41,8 @@ function generate1080pProfile(inputPath, outputPath) {
  */
 function generate720pProfile(inputPath, outputPath) {
     logger.debug(`⏳ Running 720p Mid-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
-    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:720" -c:v libx264 -preset medium -crf 23 -c:a aac -ac 2 -b:a 128k -movflags +faststart -y "${outputPath}"`;
+    // Added a maxrate cap of 2.5M and a matching buffer size to prevent bloated encodes
+    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:720:sws_flags=lanczos" -c:v libx264 -preset medium -crf 25 -maxrate 2500k -bufsize 5000k -c:a aac -ac 2 -b:a 128k -movflags +faststart -y "${outputPath}"`;
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
 
@@ -50,7 +51,8 @@ function generate720pProfile(inputPath, outputPath) {
  */
 function generate480pProfile(inputPath, outputPath) {
     logger.debug(`📱 Running 480p Low-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
-    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:480" -c:v libx264 -preset fast -crf 24 -c:a aac -ac 2 -b:a 96k -movflags +faststart -y "${outputPath}"`;
+    // Added a maxrate cap of 1.2M
+    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:480:sws_flags=lanczos" -c:v libx264 -preset fast -crf 27 -maxrate 1200k -bufsize 2400k -c:a aac -ac 2 -b:a 96k -movflags +faststart -y "${outputPath}"`;
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
 
@@ -194,6 +196,10 @@ app.post('/process-low-res', async (req, res) => {
     const { folderPath } = req.body;
     
     try {
+        if (!folderPath || !fs.existsSync(folderPath)) {
+            return res.status(400).json({ success: false, error: "Missing or invalid folderPath." });
+        }
+
         const list = fs.readdirSync(folderPath);
         const core1080p = list.find(file => file.endsWith('.web.mp4'));
 
@@ -207,15 +213,104 @@ app.post('/process-low-res', async (req, res) => {
         const output720Path = path.join(folderPath, `${baseName}.720p.mp4`);
         const output480Path = path.join(folderPath, `${baseName}.480p.mp4`);
 
-        if (!fs.existsSync(output720Path)) generate720pProfile(sourcePath, output720Path);
-        if (!fs.existsSync(output480Path)) generate480pProfile(sourcePath, output480Path);
+        const generated = {
+            profile1080: core1080p,
+            profile720: fs.existsSync(output720Path) ? path.basename(output720Path) : null,
+            profile480: fs.existsSync(output480Path) ? path.basename(output480Path) : null
+        };
+        const errors = [];
+
+        if (!generated.profile720) {
+            try {
+                generate720pProfile(sourcePath, output720Path);
+                if (fs.existsSync(output720Path)) {
+                    generated.profile720 = path.basename(output720Path);
+                }
+            } catch (err720) {
+                const msg = `720p generation failed: ${err720.message}`;
+                logger.error(msg);
+                errors.push(msg);
+            }
+        }
+
+        if (!generated.profile480) {
+            try {
+                generate480pProfile(sourcePath, output480Path);
+                if (fs.existsSync(output480Path)) {
+                    generated.profile480 = path.basename(output480Path);
+                }
+            } catch (err480) {
+                const msg = `480p generation failed: ${err480.message}`;
+                logger.error(msg);
+                errors.push(msg);
+            }
+        }
+
+        const metaFilePath = path.join(folderPath, 'metadata.json');
+        let metadata = {};
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            } catch (_err) {
+                metadata = {};
+            }
+        }
+
+        metadata.storage = metadata.storage || { location: 'local', files: {} };
+        metadata.storage.files = metadata.storage.files || {};
+
+        metadata.storage.files['1080p'] = {
+            ...(metadata.storage.files['1080p'] || {}),
+            status: metadata.storage.files['1080p']?.status || 'synced',
+            localPath: generated.profile1080 || metadata.storage.files['1080p']?.localPath || null,
+            remoteKey: metadata.storage.files['1080p']?.remoteKey || null
+        };
+
+        if (generated.profile720) {
+            metadata.storage.files['720p'] = {
+                ...(metadata.storage.files['720p'] || {}),
+                status: 'pending',
+                localPath: generated.profile720,
+                remoteKey: null
+            };
+        }
+
+        if (generated.profile480) {
+            metadata.storage.files['480p'] = {
+                ...(metadata.storage.files['480p'] || {}),
+                status: 'pending',
+                localPath: generated.profile480,
+                remoteKey: null
+            };
+        }
+
+        metadata.pipelineState = {
+            ...(metadata.pipelineState || {}),
+            currentStep: metadata.pipelineState?.currentStep || 'COMPLETED',
+            lastUpdated: new Date().toISOString(),
+            error: errors.length ? errors.join(' | ') : null
+        };
+
+        fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+
+        const hasAtLeastOneProfile = Boolean(generated.profile720 || generated.profile480);
+        if (!hasAtLeastOneProfile) {
+            return res.status(500).json({
+                success: false,
+                error: errors.join(' | ') || 'Failed to generate 720p/480p profiles.',
+                generated
+            });
+        }
 
         return res.json({
             success: true,
+            partial: errors.length > 0,
+            errors,
             patchData: {
-                "720p": { status: "pending", localPath: path.basename(output720Path), remoteKey: null },
-                "480p": { status: "pending", localPath: path.basename(output480Path), remoteKey: null }
-            }
+                "720p": generated.profile720 ? { status: "pending", localPath: generated.profile720, remoteKey: null } : null,
+                "480p": generated.profile480 ? { status: "pending", localPath: generated.profile480, remoteKey: null } : null
+            },
+            generated
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
