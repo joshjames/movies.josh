@@ -89,6 +89,11 @@ function cleanJunkFiles(dirPath) {
 }
 
 function deleteFolderRecursive(directoryPath) {
+    if (isProtectedRootPath(directoryPath)) {
+        logger.warn(`⚠️ [Ingest] Refusing recursive delete on protected root: ${directoryPath}`);
+        return;
+    }
+
     if (fs.existsSync(directoryPath)) {
         fs.readdirSync(directoryPath).forEach((file) => {
             const curPath = path.join(directoryPath, file);
@@ -291,6 +296,46 @@ function isProtectedRootPath(targetPath) {
     } catch (_err) {
         return false;
     }
+}
+
+function isPathInside(parentPath, targetPath) {
+    try {
+        const resolvedParent = path.resolve(parentPath);
+        const resolvedTarget = path.resolve(targetPath);
+        const relative = path.relative(resolvedParent, resolvedTarget);
+        return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+    } catch (_err) {
+        return false;
+    }
+}
+
+function isSafeTransientCleanupPath(targetPath, contentType) {
+    if (!targetPath) return false;
+
+    const resolvedTarget = path.resolve(targetPath);
+    const transientRoots = [
+        DOWNLOADS_DIR,
+        '/downloads',
+        '/app/downloads',
+        SERIES_DOWNLOAD_DIR,
+        '/series-media',
+        '/series-media/Series'
+    ].filter(Boolean);
+
+    const livesInTransientRoot = transientRoots.some(root => isPathInside(root, resolvedTarget));
+    if (!livesInTransientRoot) return false;
+
+    const libraryRoots = [MOVIES_DIR, SERIES_DIR].filter(Boolean);
+    const insideLibraryRoot = libraryRoots.some(root => isPathInside(root, resolvedTarget));
+    if (insideLibraryRoot) return false;
+
+    if (isProtectedRootPath(resolvedTarget)) return false;
+
+    if (contentType === 'series' && isPathInside(SERIES_DIR, resolvedTarget)) {
+        return false;
+    }
+
+    return true;
 }
 
 function resolveInputFolderContext(folderPath, folderName, contentType) {
@@ -560,10 +605,12 @@ app.post('/process', async (req, res) => {
                 fs.writeFileSync(showMetadataPath, JSON.stringify(showMeta, null, 4), 'utf-8');
 
                 logger.debug(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
-                if (isProtectedRootPath(finalPath) || path.resolve(finalPath) === path.resolve(showRootPath)) {
-                    logger.warn(`⚠️ [Ingest] Skip cleanup for protected path: ${finalPath}`);
-                } else {
+                if (path.resolve(finalPath) === path.resolve(showRootPath)) {
+                    logger.warn(`⚠️ [Ingest] Skip cleanup for show root path: ${finalPath}`);
+                } else if (isSafeTransientCleanupPath(finalPath, contentType)) {
                     deleteFolderRecursive(finalPath);
+                } else {
+                    logger.warn(`⚠️ [Ingest] Skip cleanup for non-transient path: ${finalPath}`);
                 }
 
                 return res.json({

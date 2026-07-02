@@ -29,6 +29,7 @@ const WORKER_PORTS = {
 const pipelineOrchestrator = require('../../Orchestrator');
 const Orchestrator = require('../../Orchestrator'); // Adjust this path to point to your Orchestrator.js
 const metadataService = require('../services/MetadataService');
+const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR
     || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
@@ -79,6 +80,169 @@ function resolveMovieFolderPath(folderName) {
 function resolveSeriesFolderPath(folderName) {
     const candidates = SERIES_PATH_CANDIDATES.map(base => path.join(base, folderName));
     return candidates.find(candidate => fs.existsSync(candidate)) || path.join(SERIES_DIR, folderName);
+}
+
+function sanitizeSeriesFolderName(folderName = '') {
+    const clean = String(folderName || '').trim();
+    if (!clean) return '';
+    if (clean.includes('/') || clean.includes('\\') || clean.includes('..')) return '';
+    return clean;
+}
+
+function normalizeEpisodeToken(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\.[a-z0-9]{2,4}$/i, '')
+        .replace(/[._-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/[^a-z0-9 ]/g, '')
+        .trim();
+}
+
+function parseSeasonEpisodeFromName(name = '') {
+    const match = String(name || '').match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
+    if (!match) return null;
+    return {
+        season: parseInt(match[1], 10),
+        episode: parseInt(match[2], 10)
+    };
+}
+
+async function buildEpisodeLookupByImdb(imdbId) {
+    const cleanImdb = String(imdbId || '').trim();
+    if (!cleanImdb) return new Map();
+
+    const apiKey = process.env.OMDB_API_KEY || '84196d01';
+    const showRes = await axios.get(
+        `http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(cleanImdb)}&type=series`,
+        { timeout: 10000 }
+    );
+
+    if (!showRes.data || showRes.data.Response !== 'True') {
+        return new Map();
+    }
+
+    const totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 0;
+    const lookup = new Map();
+
+    for (let season = 1; season <= totalSeasons; season += 1) {
+        try {
+            const seasonRes = await axios.get(
+                `http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(cleanImdb)}&Season=${season}`,
+                { timeout: 10000 }
+            );
+
+            const episodes = Array.isArray(seasonRes.data?.Episodes) ? seasonRes.data.Episodes : [];
+            episodes.forEach(ep => {
+                const epNum = parseInt(ep.Episode, 10);
+                if (!Number.isFinite(epNum) || epNum <= 0) return;
+
+                const key = normalizeEpisodeToken(ep.Title || '');
+                if (!key) return;
+
+                const rec = {
+                    season,
+                    episode: epNum,
+                    title: ep.Title || `Episode ${epNum}`
+                };
+
+                if (!lookup.has(key)) {
+                    lookup.set(key, [rec]);
+                } else {
+                    lookup.get(key).push(rec);
+                }
+            });
+        } catch (_err) {
+            // Keep scan resilient if one season lookup fails.
+        }
+    }
+
+    return lookup;
+}
+
+function findEpisodeMatchForFile(fileName, lookup) {
+    const parsed = parseSeasonEpisodeFromName(fileName);
+    if (parsed) {
+        return {
+            season: parsed.season,
+            episode: parsed.episode,
+            title: null,
+            strategy: 'sxe'
+        };
+    }
+
+    const stem = normalizeEpisodeToken(path.basename(fileName, path.extname(fileName)));
+    if (!stem || !lookup || lookup.size === 0) return null;
+
+    const exact = lookup.get(stem);
+    if (exact && exact.length === 1) {
+        return { ...exact[0], strategy: 'exact-title' };
+    }
+
+    const partialHits = [];
+    lookup.forEach((records, key) => {
+        if (stem.includes(key) || key.includes(stem)) {
+            records.forEach(record => partialHits.push(record));
+        }
+    });
+
+    if (partialHits.length === 1) {
+        return { ...partialHits[0], strategy: 'partial-title' };
+    }
+
+    return null;
+}
+
+async function organizeRootEpisodesIntoSeasonFolders(showPath, showFolderName, imdbId) {
+    const videoPattern = /\.(mp4|mkv|m4v|avi|mov)$/i;
+    const entries = fs.readdirSync(showPath, { withFileTypes: true });
+    const rootVideoFiles = entries
+        .filter(entry => entry.isFile() && videoPattern.test(entry.name))
+        .map(entry => entry.name);
+
+    if (rootVideoFiles.length === 0) {
+        return { moved: 0, skipped: 0, details: [] };
+    }
+
+    const episodeLookup = imdbId ? await buildEpisodeLookupByImdb(imdbId) : new Map();
+    const details = [];
+    let moved = 0;
+    let skipped = 0;
+
+    for (const fileName of rootVideoFiles) {
+        const match = findEpisodeMatchForFile(fileName, episodeLookup);
+        if (!match || !Number.isFinite(match.season) || !Number.isFinite(match.episode)) {
+            skipped += 1;
+            details.push({ fileName, moved: false, reason: 'No reliable season/episode match.' });
+            continue;
+        }
+
+        const seasonFolder = `Season.${String(match.season).padStart(2, '0')}`;
+        const seasonPath = path.join(showPath, seasonFolder);
+        fs.mkdirSync(seasonPath, { recursive: true });
+
+        const ext = path.extname(fileName).toLowerCase();
+        const normalizedName = `${showFolderName}.S${String(match.season).padStart(2, '0')}E${String(match.episode).padStart(2, '0')}${ext}`;
+        const sourcePath = path.join(showPath, fileName);
+        const destinationPath = path.join(seasonPath, normalizedName);
+
+        if (fs.existsSync(destinationPath)) {
+            skipped += 1;
+            details.push({ fileName, moved: false, reason: `Destination exists (${normalizedName}).` });
+            continue;
+        }
+
+        await fsPromises.rename(sourcePath, destinationPath);
+        moved += 1;
+        details.push({
+            fileName,
+            moved: true,
+            strategy: match.strategy,
+            destination: path.join(seasonFolder, normalizedName)
+        });
+    }
+
+    return { moved, skipped, details };
 }
 
 function normalizeTagList(value, fallback = []) {
@@ -312,6 +476,144 @@ router.post('/sync-item', async (req, res) => {
             message: 'Library snapshot refreshed from disk.',
             summary,
             itemFound
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/series/manual-scan', async (req, res) => {
+    try {
+        const { folder = null, rebuildManifests = true } = req.body || {};
+        const targetFolder = sanitizeSeriesFolderName(folder || '');
+
+        const showFolders = [];
+        if (targetFolder) {
+            const showPath = resolveSeriesFolderPath(targetFolder);
+            if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
+                return res.status(404).json({ success: false, error: 'Series folder not found.' });
+            }
+            showFolders.push({ name: targetFolder, path: showPath });
+        } else if (fs.existsSync(SERIES_DIR)) {
+            fs.readdirSync(SERIES_DIR, { withFileTypes: true })
+                .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+                .forEach(entry => {
+                    showFolders.push({ name: entry.name, path: path.join(SERIES_DIR, entry.name) });
+                });
+        }
+
+        let rebuiltCount = 0;
+        const rebuildErrors = [];
+
+        if (rebuildManifests) {
+            for (const show of showFolders) {
+                try {
+                    rebuildSeriesManifest(show.path, { showFolderName: show.name, write: true });
+                    rebuiltCount += 1;
+                } catch (err) {
+                    rebuildErrors.push({ folder: show.name, error: err.message });
+                }
+            }
+        }
+
+        const summary = await LibraryScanner.runLibraryScanSweep();
+        return res.json({
+            success: true,
+            message: 'TV library scan complete.',
+            targetFolder: targetFolder || null,
+            scannedShows: showFolders.length,
+            rebuiltCount,
+            rebuildErrors,
+            summary
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/series/manual-add', async (req, res) => {
+    try {
+        const { folder, imdbId, attemptEpisodeReorg = true } = req.body || {};
+        const cleanFolder = sanitizeSeriesFolderName(folder || '');
+        const cleanImdbId = String(imdbId || '').trim();
+
+        if (!cleanFolder) {
+            return res.status(400).json({ success: false, error: 'Missing or invalid series folder name.' });
+        }
+        if (!cleanImdbId) {
+            return res.status(400).json({ success: false, error: 'IMDb ID is required.' });
+        }
+
+        const showPath = resolveSeriesFolderPath(cleanFolder);
+        if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
+            return res.status(404).json({ success: false, error: 'Series folder not found.' });
+        }
+
+        let metadata = {};
+        const metadataPath = path.join(showPath, 'metadata.json');
+        if (fs.existsSync(metadataPath)) {
+            try {
+                metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+            } catch (_err) {
+                metadata = {};
+            }
+        }
+
+        let omdbData = null;
+        try {
+            const apiKey = process.env.OMDB_API_KEY || '84196d01';
+            const omdbRes = await axios.get(
+                `http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(cleanImdbId)}&type=series`,
+                { timeout: 10000 }
+            );
+            if (omdbRes.data?.Response === 'True') {
+                omdbData = omdbRes.data;
+            }
+        } catch (_err) {
+            omdbData = null;
+        }
+
+        const mergedMeta = {
+            ...metadata,
+            title: omdbData?.Title || metadata.title || cleanFolder.replace(/[._-]/g, ' '),
+            year: omdbData?.Year || metadata.year || '',
+            plot: omdbData?.Plot || metadata.plot || '',
+            genre: omdbData?.Genre || metadata.genre || '',
+            imdbId: cleanImdbId,
+            imdb_id: cleanImdbId,
+            contentType: 'series',
+            folderName: cleanFolder,
+            folderPath: showPath,
+            pipelineState: {
+                ...(metadata.pipelineState || {}),
+                currentStep: 'COMPLETED',
+                lastUpdated: new Date().toISOString(),
+                error: null
+            }
+        };
+
+        await fsPromises.writeFile(metadataPath, JSON.stringify(mergedMeta, null, 4), 'utf-8');
+
+        let reorgSummary = { moved: 0, skipped: 0, details: [] };
+        if (attemptEpisodeReorg) {
+            reorgSummary = await organizeRootEpisodesIntoSeasonFolders(showPath, cleanFolder, cleanImdbId);
+        }
+
+        const seriesManifest = rebuildSeriesManifest(showPath, {
+            showFolderName: cleanFolder,
+            write: true
+        });
+
+        const scanSummary = await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            folder: cleanFolder,
+            imdbId: cleanImdbId,
+            metadataUpdated: true,
+            reorgSummary,
+            totalSeasons: seriesManifest.totalSeasons,
+            scanSummary
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

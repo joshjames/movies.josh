@@ -85,6 +85,39 @@
         
         .controls { display: flex; gap: 12px; margin-bottom: 20px; }
 
+        .tv-manual-panel {
+            background: #0b1220;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 14px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+        .tv-manual-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .tv-manual-row input {
+            min-height: 36px;
+            min-width: 180px;
+            flex: 1;
+        }
+        .tv-manual-result {
+            font-size: 0.78rem;
+            color: #cbd5e1;
+            background: #020617;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
         .ops-toolbar { display: flex; gap: 10px; align-items: center; justify-content: flex-end; grid-column: 1 / -1; margin-top: 4px; }
         .ops-inline-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; grid-column: 1 / -1; margin-top: 4px; }
         .ops-inline-row input,
@@ -496,12 +529,31 @@
             const container = document.getElementById('catalog-list');
             const collection = currentTabMode === 'movies' ? fullLibraryCache.movies : fullLibraryCache.shows;
 
+            const seriesTools = currentTabMode === 'series' ? `
+                <div class="tv-manual-panel">
+                    <div class="tv-manual-row">
+                        <button type="button" style="background:#0284c7;" onclick="runTvManualScan()">Run TV Manual Scan</button>
+                        <span style="font-size:0.78rem;color:#93c5fd;">Rebuilds TV manifests and refreshes library snapshot safely.</span>
+                    </div>
+                    <div class="tv-manual-row">
+                        <input type="text" id="tv-folder-input" placeholder="Show folder (e.g. Rick.and.Morty)">
+                        <input type="text" id="tv-imdb-input" placeholder="IMDb ID (e.g. tt2861424)">
+                        <button type="button" style="background:#0ea5e9;" onclick="manualAddSeries()">Add/Update Show</button>
+                    </div>
+                    <div class="tv-manual-row">
+                        <input type="text" id="tv-episode-query" placeholder="Search episode name (e.g. Air Force Wong)">
+                        <button type="button" style="background:#4f46e5;" onclick="searchEpisodeNames()">Search Episodes</button>
+                    </div>
+                    <div id="tv-manual-result" class="tv-manual-result">TV manual tools ready.</div>
+                </div>
+            ` : '';
+
             if (!collection || collection.length === 0) {
-                container.innerHTML = `<p>No active folders found for context category type: "${currentTabMode}"</p>`;
+                container.innerHTML = `${seriesTools}<p>No active folders found for context category type: "${currentTabMode}"</p>`;
                 return;
             }
 
-            container.innerHTML = collection.map(item => {
+            container.innerHTML = `${seriesTools}${collection.map(item => {
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
                 const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
                 const syncState = item.syncState || {};
@@ -659,7 +711,110 @@
                         </div>
                     </div>
                 </div>
-            `}).join('');
+            `}).join('')}`;
+        }
+
+        function setTvManualResult(message) {
+            const target = document.getElementById('tv-manual-result');
+            if (target) {
+                target.textContent = message;
+            }
+        }
+
+        async function runTvManualScan() {
+            try {
+                setTvManualResult('Running TV manual scan...');
+                const res = await fetch('/api/admin/series/manual-scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rebuildManifests: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    setTvManualResult('Scan failed: ' + (data.error || 'Unknown error'));
+                    showToast('TV manual scan failed.', 'error', 4200);
+                    return;
+                }
+
+                setTvManualResult(
+                    `TV scan complete. Scanned shows: ${data.scannedShows}, rebuilt manifests: ${data.rebuiltCount}.`
+                );
+                showToast('TV manual scan complete.', 'success');
+                fetchLibraryData();
+            } catch (_err) {
+                setTvManualResult('Scan request failed.');
+                showToast('TV manual scan request failed.', 'error', 4200);
+            }
+        }
+
+        async function manualAddSeries() {
+            const folder = (document.getElementById('tv-folder-input')?.value || '').trim();
+            const imdbId = (document.getElementById('tv-imdb-input')?.value || '').trim();
+
+            if (!folder || !imdbId) {
+                setTvManualResult('Please enter both show folder and IMDb ID.');
+                return;
+            }
+
+            try {
+                setTvManualResult(`Adding/updating show ${folder}...`);
+                const res = await fetch('/api/admin/series/manual-add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, imdbId, attemptEpisodeReorg: true })
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    setTvManualResult('Add/update failed: ' + (data.error || 'Unknown error'));
+                    showToast('Show add/update failed.', 'error', 4200);
+                    return;
+                }
+
+                const moved = data.reorgSummary?.moved || 0;
+                const skipped = data.reorgSummary?.skipped || 0;
+                setTvManualResult(
+                    `Show updated: ${data.folder}. Episode reorg moved ${moved} file(s), skipped ${skipped}.`
+                );
+                showToast('Show add/update completed.', 'success', 3600);
+                fetchLibraryData();
+            } catch (_err) {
+                setTvManualResult('Add/update request failed.');
+                showToast('Show add/update request failed.', 'error', 4200);
+            }
+        }
+
+        async function searchEpisodeNames() {
+            const query = (document.getElementById('tv-episode-query')?.value || '').trim();
+            if (!query) {
+                setTvManualResult('Enter an episode name to search.');
+                return;
+            }
+
+            try {
+                setTvManualResult(`Searching episodes for "${query}"...`);
+                const res = await fetch(`/api/series/episodes/search?q=${encodeURIComponent(query)}&limit=60`);
+                const data = await res.json();
+
+                if (!data.success) {
+                    setTvManualResult('Search failed: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                if (!Array.isArray(data.items) || data.items.length === 0) {
+                    setTvManualResult(`No episodes found for "${query}".`);
+                    return;
+                }
+
+                const lines = data.items.slice(0, 30).map(item => {
+                    const pathPart = item.localRelativePath || 'no-local-path';
+                    return `${item.showTitle} | S${String(item.seasonNumber).padStart(2, '0')}E${String(item.episodeNumber).padStart(2, '0')} | ${item.episodeTitle} | ${pathPart}`;
+                });
+
+                setTvManualResult(`Found ${data.count} episode match(es):\n${lines.join('\n')}`);
+            } catch (_err) {
+                setTvManualResult('Episode search request failed.');
+            }
         }
 
         function closeAllActionMenus(exceptFolder = null) {

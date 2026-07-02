@@ -49,6 +49,26 @@ function resolveMovieFolderPath(movieId) {
     return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, movieId);
 }
 
+function normalizeEpisodeSearchToken(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[._-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/[^a-z0-9 ]/g, '')
+        .trim();
+}
+
+function readShowMetadataTitle(showPath, fallbackTitle) {
+    const metaPath = path.join(showPath, 'metadata.json');
+    if (!fs.existsSync(metaPath)) return fallbackTitle;
+    try {
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        return metadata.title || fallbackTitle;
+    } catch (_err) {
+        return fallbackTitle;
+    }
+}
+
 // =========================================================================
 // ENDPOINTS
 // =========================================================================
@@ -418,6 +438,97 @@ router.get('/series/:showFolder', async (req, res) => {
     } catch (err) {
         console.error("❌ Unified Series router failure:", err);
         res.status(500).json({ error: "Failed assembling compiled local series data arrays." });
+    }
+});
+
+// GET: /api/series/episodes/search?q=air force wong&showFolder=Rick.and.Morty
+router.get('/series/episodes/search', async (req, res) => {
+    try {
+        const query = String(req.query.q || '').trim();
+        const showFolderFilter = String(req.query.showFolder || '').trim();
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 100, 500));
+
+        if (!query) {
+            return res.status(400).json({ success: false, error: 'Missing search query.' });
+        }
+
+        const normalizedQuery = normalizeEpisodeSearchToken(query);
+        const showFolders = [];
+
+        if (showFolderFilter) {
+            const showPath = path.join(SERIES_DIR, showFolderFilter);
+            if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
+                return res.status(404).json({ success: false, error: 'Show folder not found.' });
+            }
+            showFolders.push(showFolderFilter);
+        } else if (fs.existsSync(SERIES_DIR)) {
+            fs.readdirSync(SERIES_DIR, { withFileTypes: true })
+                .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+                .forEach(entry => showFolders.push(entry.name));
+        }
+
+        const results = [];
+        for (const showFolder of showFolders) {
+            const showPath = path.join(SERIES_DIR, showFolder);
+            let seriesData;
+
+            try {
+                seriesData = rebuildSeriesManifest(showPath, {
+                    showFolderName: showFolder,
+                    write: false
+                });
+            } catch (_err) {
+                continue;
+            }
+
+            const showTitle = readShowMetadataTitle(showPath, showFolder.replace(/[._-]/g, ' '));
+            const seasons = seriesData.seasons || {};
+
+            Object.keys(seasons).forEach(seasonKey => {
+                const episodes = Array.isArray(seasons[seasonKey]?.episodes) ? seasons[seasonKey].episodes : [];
+                episodes.forEach(ep => {
+                    const episodeTitle = ep.title || '';
+                    const localRelativePath = ep.localRelativePath || '';
+                    const fileName = localRelativePath ? path.basename(localRelativePath) : '';
+
+                    const haystack = normalizeEpisodeSearchToken([
+                        episodeTitle,
+                        fileName,
+                        `season ${seasonKey}`,
+                        `episode ${ep.episodeNumber}`
+                    ].filter(Boolean).join(' '));
+
+                    if (!haystack.includes(normalizedQuery)) return;
+
+                    results.push({
+                        showFolder,
+                        showTitle,
+                        seasonNumber: Number(seasonKey),
+                        episodeNumber: Number(ep.episodeNumber),
+                        episodeTitle: episodeTitle || `Episode ${ep.episodeNumber}`,
+                        available: Boolean(ep.available),
+                        localRelativePath: localRelativePath || null
+                    });
+                });
+            });
+
+            if (results.length >= limit) break;
+        }
+
+        results.sort((a, b) => {
+            if (a.showTitle !== b.showTitle) return a.showTitle.localeCompare(b.showTitle);
+            if (a.seasonNumber !== b.seasonNumber) return a.seasonNumber - b.seasonNumber;
+            return a.episodeNumber - b.episodeNumber;
+        });
+
+        return res.json({
+            success: true,
+            query,
+            count: Math.min(results.length, limit),
+            items: results.slice(0, limit)
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
