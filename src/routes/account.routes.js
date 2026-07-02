@@ -10,7 +10,7 @@ const { config: squareConfig } = require('../config/square');
  * Handle initial registration payload from signup.html
  */
 router.post('/signup/subscribe', requireAuth, async (req, res) => {
-  const { name, email, cardNonce } = req.body;
+  const { name, email, cardNonce, planTierId } = req.body;
   const userKey = getActiveUser(req);
 
   if (!cardNonce) {
@@ -18,10 +18,10 @@ router.post('/signup/subscribe', requireAuth, async (req, res) => {
   }
 
   try {
-    const result = await AccountService.initializeSubscription(userKey, { name, email, cardNonce });
+    const result = await AccountService.initializeSubscription(userKey, { name, email, cardNonce, planTierId });
     return res.status(200).json(result);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -40,11 +40,47 @@ router.get('/square-config', requireAuth, (req, res) => {
 router.get('/status', requireAuth, async (req, res) => {
   try {
     const userKey = getActiveUser(req);
-    const config = await ProfileService.readData(userKey, 'config', {});
+    let config = await ProfileService.readData(userKey, 'config', {});
+
+    // Webhook-free mode: reconcile status directly from Square on each status check.
+    if (config.squareSubscriptionId) {
+      const syncResult = await AccountService.reconcileSubscriptionState(userKey);
+      if (syncResult.success && syncResult.config) {
+        config = syncResult.config;
+      }
+    }
+    const now = Date.now();
+    const trialEndsMs = config.trialEndsAt ? new Date(config.trialEndsAt).getTime() : 0;
+    const graceEndsMs = config.gracePeriodEndsAt ? new Date(config.gracePeriodEndsAt).getTime() : 0;
+    const inTrial = trialEndsMs > now;
+    const inGrace = graceEndsMs > now;
     
     // Default guest metadata contract
     if (!config || config.subscriptionStatus !== 'ACTIVE') {
-      return res.status(200).json({ success: true, subscriptionStatus: 'GUEST' });
+      if (inTrial) {
+        return res.status(200).json({
+          success: true,
+          subscriptionStatus: 'TRIAL',
+          trialEndsAt: config.trialEndsAt,
+          trialDays: Number(config.trialDays || 0)
+        });
+      }
+
+      if (inGrace) {
+        return res.status(200).json({
+          success: true,
+          subscriptionStatus: 'GRACE',
+          gracePeriodEndsAt: config.gracePeriodEndsAt,
+          gracePeriodDays: Number(config.gracePeriodDays || 0)
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        subscriptionStatus: config.subscriptionStatus || 'GUEST',
+        trialEndsAt: config.trialEndsAt || null,
+        gracePeriodEndsAt: config.gracePeriodEndsAt || null
+      });
     }
 
     // Process dates cleanly from stored Unix stamps or ISO strings
@@ -56,7 +92,10 @@ router.get('/status', requireAuth, async (req, res) => {
       success: true,
       subscriptionStatus: config.subscriptionStatus,
       cancelAtPeriodEnd: config.cancelAtPeriodEnd || false,
-      nextBillingCycle: cycleDate
+      nextBillingCycle: cycleDate,
+      subscribedAt: config.subscribedAt || null,
+      trialEndsAt: config.trialEndsAt || null,
+      gracePeriodEndsAt: config.gracePeriodEndsAt || null
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Database tracking synchronization drop.' });
@@ -77,9 +116,10 @@ router.post('/billing/cancel', requireAuth, async (req, res) => {
     }
 
     await AccountService.requestCancellation(userKey, config.squareSubscriptionId);
+    await AccountService.reconcileSubscriptionState(userKey);
     return res.status(200).json({ success: true, message: 'Subscription set to expire at period end successfully.' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

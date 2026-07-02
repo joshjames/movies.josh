@@ -656,6 +656,28 @@
                         `;
                         document.getElementById('cancelSubBtn').addEventListener('click', executionCancellationCall);
                     }
+                } else if (data.success && data.subscriptionStatus === 'TRIAL') {
+                    container.innerHTML = `
+                        <div class="billing-details" style="border-color: #3b82f6;">
+                            <strong>Status:</strong> Free Trial<br>
+                            <strong>Trial Ends:</strong> ${data.trialEndsAt ? new Date(data.trialEndsAt).toLocaleDateString('en-US', { dateStyle: 'long' }) : 'N/A'}
+                        </div>
+                        <button class="btn btn-success" id="subscribeBtn">Upgrade Now</button>
+                    `;
+                    document.getElementById('subscribeBtn').addEventListener('click', () => {
+                        window.location.href = '/subscribe.html';
+                    });
+                } else if (data.success && data.subscriptionStatus === 'GRACE') {
+                    container.innerHTML = `
+                        <div class="billing-details" style="border-color: #f59e0b;">
+                            <strong>Status:</strong> Grace Period<br>
+                            <strong>Grace Ends:</strong> ${data.gracePeriodEndsAt ? new Date(data.gracePeriodEndsAt).toLocaleDateString('en-US', { dateStyle: 'long' }) : 'N/A'}
+                        </div>
+                        <button class="btn btn-success" id="subscribeBtn">Reactivate Subscription</button>
+                    `;
+                    document.getElementById('subscribeBtn').addEventListener('click', () => {
+                        window.location.href = '/subscribe.html';
+                    });
                 } else {
                     // Fallback baseline layout mapping for guest levels (Attach redirect route helper)
                     document.getElementById('subscribeBtn').addEventListener('click', () => {

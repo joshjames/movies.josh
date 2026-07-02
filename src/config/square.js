@@ -4,10 +4,26 @@ const { SquareClient, SquareEnvironment } = require('square');
 // Determine execution environment mode
 const isProduction = process.env.NODE_ENV === 'production';
 
+function firstDefined(...values) {
+  for (const value of values) {
+    const clean = String(value || '').trim();
+    if (clean) return clean;
+  }
+  return null;
+}
+
 // Safely map the right tokens based on the environment state matrix
 const accessToken = isProduction 
-  ? process.env.SQUARE_PROD_ACCESS_TOKEN 
-  : process.env.SQUARE_SANDBOX_ACCESS_TOKEN;
+  ? firstDefined(process.env.SQUARE_PROD_ACCESS_TOKEN)
+  : firstDefined(process.env.SQUARE_SANDBOX_ACCESS_TOKEN);
+
+const applicationId = isProduction
+  ? firstDefined(process.env.SQUARE_PROD_APPLICATION_ID, process.env.SQUAREPAY_PRODUCTION)
+  : firstDefined(process.env.SQUARE_SANDBOX_APPLICATION_ID, process.env.SQUAREPAY_SANDBOX);
+
+const locationId = isProduction
+  ? firstDefined(process.env.SQUARE_PROD_LOCATION_ID, process.env.SQUARE_LOCATION_ID)
+  : firstDefined(process.env.SQUARE_LOCATION_ID, process.env.SQUARE_SANDBOX_LOCATION_ID);
 
 const environment = isProduction 
   ? SquareEnvironment.Production 
@@ -27,8 +43,8 @@ const squareInstance = new SquareClient({
 module.exports = {
   square: squareInstance,
   config: {
-    applicationId: isProduction ? process.env.SQUARE_PROD_APPLICATION_ID : process.env.SQUARE_SANDBOX_APPLICATION_ID,
-    locationId: process.env.SQUARE_LOCATION_ID, // Ensure this is added to your .env
+    applicationId,
+    locationId,
     isProduction
   }
 };

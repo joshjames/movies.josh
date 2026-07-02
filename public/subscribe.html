@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AnyMovie - Choose Your Plan</title>
-    <script src="https://sandbox.web.squarecdn.com/v1/square.js"></script>
     <style>
         body {
             background: #020617;
@@ -284,8 +283,37 @@
         const squareRuntime = {
             applicationId: null,
             locationId: null,
-            hasRuntime: false
+            hasRuntime: false,
+            isProduction: false
         };
+        let paymentHandlerBound = false;
+
+        function loadSquareSdk(isProduction) {
+            return new Promise((resolve, reject) => {
+                if (window.Square && typeof window.Square.payments === 'function') {
+                    resolve(window.Square);
+                    return;
+                }
+
+                const existing = document.querySelector('script[data-square-sdk="true"]');
+                if (existing) {
+                    existing.addEventListener('load', () => resolve(window.Square));
+                    existing.addEventListener('error', () => reject(new Error('Unable to load Square SDK runtime.')));
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = isProduction
+                    ? 'https://web.squarecdn.com/v1/square.js'
+                    : 'https://sandbox.web.squarecdn.com/v1/square.js';
+                script.async = true;
+                script.defer = true;
+                script.dataset.squareSdk = 'true';
+                script.onload = () => resolve(window.Square);
+                script.onerror = () => reject(new Error('Unable to load Square SDK runtime.'));
+                document.head.appendChild(script);
+            });
+        }
 
         async function hydrateCheckoutContext() {
             const meRes = await fetch('/api/auth/me', { credentials: 'include' });
@@ -307,6 +335,7 @@
             squareRuntime.applicationId = squareData.applicationId;
             squareRuntime.locationId = squareData.locationId;
             squareRuntime.hasRuntime = squareData.hasRuntime;
+            squareRuntime.isProduction = Boolean(squareData.isProduction);
             return true;
         }
 
@@ -316,7 +345,12 @@
                 const hydrated = await hydrateCheckoutContext();
                 if (!hydrated) return;
 
-                const payments = Square.payments(squareRuntime.applicationId, squareRuntime.locationId);
+                await loadSquareSdk(squareRuntime.isProduction);
+                if (!window.Square || typeof window.Square.payments !== 'function') {
+                    throw new Error('Square Payments runtime is unavailable after loading SDK.');
+                }
+
+                const payments = window.Square.payments(squareRuntime.applicationId, squareRuntime.locationId);
                 cardEngine = await payments.card({
                     style: {
                         input: { backgroundColor: '#020617', color: '#ffffff' },
@@ -347,7 +381,10 @@
                 await cardEngine.attach('#card-container');
                 
                 // Bind click engine trigger directly to Square's asynchronous tokenizer evaluation
-                document.getElementById('card-button').addEventListener('click', handlePaymentExecution);
+                if (!paymentHandlerBound) {
+                    document.getElementById('card-button').addEventListener('click', handlePaymentExecution);
+                    paymentHandlerBound = true;
+                }
             }
 
             // Toggle active state classes down the panel tree
@@ -397,6 +434,7 @@
                 const response = await fetch('/api/account/signup/subscribe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify(payload)
                 });
 

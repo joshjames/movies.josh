@@ -34,6 +34,12 @@ function defaultDisplayNameFromEmail(emailOrUser) {
     return cleaned || raw;
 }
 
+function resolvePositiveInt(value, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return fallback;
+    return Math.floor(n);
+}
+
 function normalizeAvatarFileName(value, fallback = 'avatar_001.png') {
     const raw = String(value || '').trim();
     const match = /^avatar_(\d{3})\.png$/i.exec(raw);
@@ -152,6 +158,10 @@ const ProfileService = {
         const cleanEmail = normalizeIdentity(email);
         const cleanDisplayName = String(displayName || '').trim() || defaultDisplayNameFromEmail(cleanEmail || cleanName);
         const roster = await readRoster();
+        const now = Date.now();
+        const nowIso = new Date(now).toISOString();
+        const trialDays = resolvePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7);
+        const trialEndsAt = new Date(now + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
         if (roster[cleanName]) {
             return { success: false, error: "Account already exists for this email." };
@@ -166,8 +176,8 @@ const ProfileService = {
             password: password,
             email: cleanEmail,
             displayName: cleanDisplayName,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
+            createdAt: now,
+            updatedAt: now
         };
         await writeRoster(roster);
 
@@ -184,6 +194,12 @@ const ProfileService = {
             verificationToken: token,
             verificationExpires: expires,
             avatar: 'avatar_001.png',
+            signupDate: nowIso,
+            trialDays,
+            trialEndsAt,
+            freeAccessActive: trialDays > 0,
+            gracePeriodDays: resolvePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3),
+            gracePeriodEndsAt: null,
             preferences: { autoplay: true, UITheme: "dark" }
         };
         

@@ -2,12 +2,20 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const AccountService = require('../services/AccountService');
+const logger = require('../services/logger');
 
 // CRITICAL: This endpoint needs the raw request body to verify the signature
 router.post('/subscription_payload', express.raw({ type: 'application/json' }), async (req, res) => {
-  const signature = req.headers['x-square-signature'];
-  const webhookSignatureKey = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY; // From your Square Dashboard
-  const notificationUrl = process.env.SUBSCRIPTION_NOTIFICATION_URL;
+  const signature = String(req.headers['x-square-signature'] || '');
+  const webhookSignatureKey = String(process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || '').trim();
+  const fallbackUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  const notificationUrl = String(process.env.SUBSCRIPTION_NOTIFICATION_URL || fallbackUrl).trim();
+
+  if (!webhookSignatureKey) {
+    logger.error('[SQUARE WEBHOOK] Missing SQUARE_WEBHOOK_SIGNATURE_KEY.');
+    return res.status(500).send('Webhook signature key missing');
+  }
 
   // 1. Verify the signature to ensure it's actually Square calling, not a hacker
   const body = req.body.toString('utf8');
@@ -16,23 +24,36 @@ router.post('/subscription_payload', express.raw({ type: 'application/json' }), 
   hmac.update(stringToSign);
   const expectedSignature = hmac.digest('base64');
 
-  if (signature !== expectedSignature) {
+  const signatureMatches = (() => {
+    const lhs = Buffer.from(signature);
+    const rhs = Buffer.from(expectedSignature);
+    if (lhs.length !== rhs.length) return false;
+    return crypto.timingSafeEqual(lhs, rhs);
+  })();
+
+  if (!signatureMatches) {
+    logger.warn('[SQUARE WEBHOOK] Signature mismatch.');
     return res.status(401).send('Invalid signature handshake');
   }
 
   // 2. Process the event payload safely
-  const event = JSON.parse(body);
-  
-  if (event.type === 'subscription.updated') {
-    const subscription = event.data.object;
-    
-    if (subscription.status === 'DEACTIVATED' || subscription.status === 'CANCELED') {
-      // Sync your local DB state to drop their access tier
-      await db.users.update({ squareCustomerId: subscription.customer_id }, {
-        subscriptionStatus: 'INACTIVE',
-        billingTier: 'guest'
-      });
+  let event;
+  try {
+    event = JSON.parse(body);
+  } catch (_err) {
+    return res.status(400).send('Invalid JSON payload');
+  }
+
+  try {
+    const result = await AccountService.applyWebhookEvent(event);
+    if (!result.handled) {
+      logger.info(`[SQUARE WEBHOOK] Ignored event type=${event.type || 'unknown'} reason=${result.reason || 'n/a'}`);
+    } else {
+      logger.info(`[SQUARE WEBHOOK] Synced user=${result.userKey} status=${result.subscriptionStatus}`);
     }
+  } catch (err) {
+    logger.error(`[SQUARE WEBHOOK] Failed applying event: ${err.message}`);
+    return res.status(500).send('Webhook processing failed');
   }
 
   // 3. Always respond with a 200 OK within 10 seconds or Square will retry
