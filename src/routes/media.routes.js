@@ -179,6 +179,182 @@ function subtitleToWebVtt(rawContent, extname) {
         .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
 }
 
+function preferredSubtitleLanguages() {
+    const raw = String(process.env.SUBTITLE_PREFERRED_LANGS || 'en,eng,english').trim();
+    return raw.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
+}
+
+function normalizeSubtitleToken(value = '') {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function parseEmbeddedSubtitleFileMeta(fileName) {
+    const parsed = String(fileName || '').match(/\.sub\.(\d+)\.([a-z]{2,3})\.(srt|vtt)$/i);
+    if (!parsed) return null;
+    return {
+        streamIndex: parseInt(parsed[1], 10),
+        lang: String(parsed[2] || '').toLowerCase(),
+        ext: String(parsed[3] || '').toLowerCase()
+    };
+}
+
+function probeSubtitleStreams(videoPath) {
+    const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'stream=index,codec_type,codec_name:stream_tags=language,title:stream_disposition=default,forced,hearing_impaired',
+        '-of', 'json',
+        videoPath
+    ], { encoding: 'utf8' });
+
+    if (probe.status !== 0) return [];
+
+    let parsed;
+    try {
+        parsed = JSON.parse(probe.stdout || '{}');
+    } catch (_err) {
+        return [];
+    }
+
+    return Array.isArray(parsed.streams)
+        ? parsed.streams.filter(s => s.codec_type === 'subtitle')
+        : [];
+}
+
+function extractEmbeddedSubtitleStream(videoPath, stream, baseName) {
+    const streamIndex = stream?.index;
+    if (!Number.isFinite(streamIndex)) return null;
+
+    const dir = path.dirname(videoPath);
+    const lang = String(stream?.tags?.language || 'und').toLowerCase().slice(0, 3);
+    const outSrt = path.join(dir, `${baseName}.sub.${streamIndex}.${lang}.srt`);
+    const outVtt = path.join(dir, `${baseName}.sub.${streamIndex}.${lang}.vtt`);
+
+    if (fs.existsSync(outSrt)) return outSrt;
+    if (fs.existsSync(outVtt)) return outVtt;
+
+    const srtExtract = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'srt',
+        outSrt
+    ], { encoding: 'utf8' });
+
+    if (srtExtract.status === 0 && fs.existsSync(outSrt)) return outSrt;
+
+    const vttExtract = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'webvtt',
+        outVtt
+    ], { encoding: 'utf8' });
+
+    if (vttExtract.status === 0 && fs.existsSync(outVtt)) return outVtt;
+    return null;
+}
+
+function extractEmbeddedSubtitleSet(videoPath, maxTracks = 8) {
+    const streams = probeSubtitleStreams(videoPath).slice(0, maxTracks);
+    const baseName = path.parse(videoPath).name;
+    const extracted = [];
+
+    for (const stream of streams) {
+        const outPath = extractEmbeddedSubtitleStream(videoPath, stream, baseName);
+        if (outPath) extracted.push(outPath);
+    }
+
+    return extracted;
+}
+
+function listSubtitleCandidatesForVideo(videoPath, options = {}) {
+    const dir = path.dirname(videoPath);
+    const base = path.parse(videoPath).name;
+    const includeEmbedded = options.includeEmbedded !== false;
+
+    if (includeEmbedded) {
+        extractEmbeddedSubtitleSet(videoPath, parseInt(process.env.SUBTITLE_MAX_TRACKS || '8', 10) || 8);
+    }
+
+    const files = fs.readdirSync(dir).filter(file => /\.(srt|vtt)$/i.test(file));
+    const candidates = [];
+
+    for (const file of files) {
+        const filePath = path.join(dir, file);
+        const fileToken = normalizeSubtitleToken(file);
+        const looksRelatedToVideo = file.startsWith(`${base}.`) || file === 'English.srt' || file === 'English.vtt' || fileToken.includes(normalizeSubtitleToken(base));
+        if (!looksRelatedToVideo) continue;
+
+        const embeddedMeta = parseEmbeddedSubtitleFileMeta(file);
+        const langHint = embeddedMeta?.lang || (() => {
+            if (/\beng(lish)?\b/i.test(file)) return 'eng';
+            if (/\bhin(di)?\b/i.test(file)) return 'hin';
+            if (/\bspa(nish)?\b/i.test(file)) return 'spa';
+            return 'und';
+        })();
+
+        candidates.push({
+            file,
+            filePath,
+            ext: path.extname(file).toLowerCase(),
+            langHint,
+            streamIndex: embeddedMeta?.streamIndex ?? null,
+            token: fileToken
+        });
+    }
+
+    const seen = new Set();
+    return candidates.filter(item => {
+        if (seen.has(item.filePath)) return false;
+        seen.add(item.filePath);
+        return true;
+    });
+}
+
+function scoreSubtitleCandidate(candidate) {
+    const langs = preferredSubtitleLanguages();
+    let score = 0;
+    if (langs.includes(String(candidate.langHint || '').toLowerCase())) score += 80;
+    if (/\beng(lish)?\b/.test(candidate.token)) score += 50;
+    if (/\b(default)\b/.test(candidate.token)) score += 20;
+    if (/\b(forced|signs|songs|commentary|sdh|hi)\b/.test(candidate.token)) score -= 35;
+    if (candidate.streamIndex !== null) score += 60;
+    if (candidate.streamIndex === null && /(^|\.)english\.(srt|vtt)$/i.test(String(candidate.file || ''))) score -= 15;
+    return score;
+}
+
+function pickSubtitleCandidate(candidates, query = {}) {
+    if (!candidates.length) return null;
+
+    const requestedTrack = parseInt(query.track, 10);
+    if (Number.isFinite(requestedTrack)) {
+        const byStreamIndex = candidates.find(item => item.streamIndex === requestedTrack);
+        if (byStreamIndex) return byStreamIndex;
+        const byArrayIndex = candidates[requestedTrack];
+        if (byArrayIndex) return byArrayIndex;
+    }
+
+    const requestedLang = String(query.lang || '').trim().toLowerCase();
+    if (requestedLang) {
+        const byLang = candidates.find(item => String(item.langHint || '').toLowerCase() === requestedLang || item.token.includes(requestedLang));
+        if (byLang) return byLang;
+    }
+
+    return [...candidates].sort((a, b) => scoreSubtitleCandidate(b) - scoreSubtitleCandidate(a))[0];
+}
+
+function resolveVideoPathForSubtitleRequest(mediaId, season, episode) {
+    if (mediaId.startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode)) {
+        const showFolder = mediaId.replace(/^series\//, '');
+        return resolveSeriesEpisodeVideoPath(showFolder, season, episode);
+    }
+
+    const folderPath = resolveMovieFolderPath(mediaId);
+    if (!fs.existsSync(folderPath)) return null;
+    const sourceVideo = findSourceVideoInFolder(folderPath);
+    return sourceVideo ? path.join(folderPath, sourceVideo) : null;
+}
+
 function normalizeEpisodeSearchToken(value = '') {
     return String(value || '')
         .toLowerCase()
@@ -722,30 +898,48 @@ router.get('/raw-file/:id', async (req, res) => {
 });
 
 // GET: /api/subtitles/:id (Dynamic SRT-to-WebVTT Structural Sanitizer Engine)
+router.get('/subtitles/:id/tracks', async (req, res) => {
+    try {
+        const mediaId = decodeURIComponent(req.params.id);
+        const season = parseInt(req.query.season, 10);
+        const episode = parseInt(req.query.episode, 10);
+        const videoPath = resolveVideoPathForSubtitleRequest(mediaId, season, episode);
+
+        if (!videoPath || !fs.existsSync(videoPath)) {
+            return res.status(404).json({ success: false, error: 'No playable video target found for subtitle inspection.' });
+        }
+
+        const candidates = listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: true });
+        return res.json({
+            success: true,
+            count: candidates.length,
+            tracks: candidates.map((item, idx) => ({
+                id: idx,
+                streamIndex: item.streamIndex,
+                lang: item.langHint,
+                file: item.file,
+                label: `${item.langHint.toUpperCase()}${item.streamIndex !== null ? ` (stream ${item.streamIndex})` : ''} - ${item.file}`
+            }))
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.get('/subtitles/:id', async (req, res) => {
     try {
         const mediaId = decodeURIComponent(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
 
-        let subtitlePath = null;
-
-        if (mediaId.startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode)) {
-            const showFolder = mediaId.replace(/^series\//, '');
-            const episodeVideoPath = resolveSeriesEpisodeVideoPath(showFolder, season, episode);
-            if (episodeVideoPath) {
-                subtitlePath = findSidecarSubtitleForVideo(episodeVideoPath) || extractEmbeddedSubtitle(episodeVideoPath);
-            }
-        } else {
-            const folderPath = resolveMovieFolderPath(mediaId);
-            await fsPromises.access(folderPath);
-
-            const sourceVideo = findSourceVideoInFolder(folderPath);
-            if (sourceVideo) {
-                const sourceVideoPath = path.join(folderPath, sourceVideo);
-                subtitlePath = findSidecarSubtitleForVideo(sourceVideoPath) || extractEmbeddedSubtitle(sourceVideoPath);
-            }
+        const videoPath = resolveVideoPathForSubtitleRequest(mediaId, season, episode);
+        if (!videoPath || !fs.existsSync(videoPath)) {
+            return res.status(404).send('No video target found for subtitles.');
         }
+
+        const candidates = listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: true });
+        const selected = pickSubtitleCandidate(candidates, req.query || {});
+        const subtitlePath = selected?.filePath || null;
 
         if (!subtitlePath || !fs.existsSync(subtitlePath)) {
             return res.status(404).send('No subtitles found.');
@@ -756,6 +950,8 @@ router.get('/subtitles/:id', async (req, res) => {
 
         res.setHeader('Content-Type', 'text/vtt');
         res.setHeader('Access-Control-Allow-Origin', '*');
+        if (selected?.file) res.setHeader('X-Subtitle-File', selected.file);
+        if (selected?.langHint) res.setHeader('X-Subtitle-Lang', selected.langHint);
         res.status(200).send(vttContent);
     } catch (err) {
         console.error("💣 Subtitle engine failure:", err);

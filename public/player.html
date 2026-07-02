@@ -110,6 +110,20 @@
             background: rgba(15, 23, 42, 0.9);
             transform: translateX(2px);
         }
+
+        .subtitle-track-select {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.75);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            max-width: 44vw;
+        }
     </style>
 </head>
 <body>
@@ -117,6 +131,10 @@
     <div class="player-container" id="stage">
         <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
         <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
+        <select class="subtitle-track-select" id="subtitleTrackSelect" title="Subtitle track selector">
+            <option value="auto">Subtitles: Auto</option>
+            <option value="off">Subtitles: Off</option>
+        </select>
         
         <div class="quality-badge" id="qualityTag">DETECTING...</div>
         <video id="cinemaVideo" controls autoplay playsinline></video>
@@ -136,7 +154,9 @@
         const qualityTag = document.getElementById('qualityTag');
         const backBtn = document.getElementById('backBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const subtitleTrackSelect = document.getElementById('subtitleTrackSelect');
         const stage = document.getElementById('stage');
+        let subtitleTracks = [];
 
         // RESUME ENGINE CORE STATES
         let currentMediaId = movieId; // Fallback to raw ID for movies
@@ -152,23 +172,61 @@
             backBtn.innerText = "⏮ Back to Show";
         }
 
+        function subtitleQueryBase() {
+            return (seasonParam && episodeParam)
+                ? `season=${encodeURIComponent(seasonParam)}&episode=${encodeURIComponent(episodeParam)}`
+                : '';
+        }
+
+        async function refreshSubtitleTracks() {
+            subtitleTracks = [];
+            subtitleTrackSelect.innerHTML = '<option value="auto">Subtitles: Auto</option><option value="off">Subtitles: Off</option>';
+
+            try {
+                const baseQuery = subtitleQueryBase();
+                const res = await fetch(`/api/subtitles/${encodeURIComponent(movieId)}/tracks${baseQuery ? `?${baseQuery}` : ''}`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                if (!data.success || !Array.isArray(data.tracks)) return;
+
+                subtitleTracks = data.tracks;
+                data.tracks.forEach(track => {
+                    const option = document.createElement('option');
+                    option.value = String(track.id);
+                    option.textContent = track.label || `Track ${track.id}`;
+                    subtitleTrackSelect.appendChild(option);
+                });
+            } catch (_err) {
+                // Keep player resilient if subtitle manifest fetch fails.
+            }
+        }
+
         // --- Subtitle Ingestion Function ---
         function loadSubtitles() {
             const existingTracks = videoEl.querySelectorAll('track');
             existingTracks.forEach(track => track.remove());
 
+            if (subtitleTrackSelect.value === 'off') return;
+
             const track = document.createElement('track');
             track.kind = 'subtitles';
             track.label = 'English';
             track.srclang = 'en';
-            const subtitleQuery = (seasonParam && episodeParam)
-                ? `?season=${encodeURIComponent(seasonParam)}&episode=${encodeURIComponent(episodeParam)}`
-                : '';
-            track.src = `/api/subtitles/${encodeURIComponent(movieId)}${subtitleQuery}`;
+            const params = new URLSearchParams(subtitleQueryBase());
+            if (subtitleTrackSelect.value !== 'auto') {
+                params.set('track', subtitleTrackSelect.value);
+            }
+            const subtitleQuery = params.toString();
+            track.src = `/api/subtitles/${encodeURIComponent(movieId)}${subtitleQuery ? `?${subtitleQuery}` : ''}`;
             track.default = true; 
             
             videoEl.appendChild(track);
         }
+
+        subtitleTrackSelect.addEventListener('change', () => {
+            loadSubtitles();
+        });
 
         // --- Playback Sync Loop Functions ---
         async function applyResumeMarker() {
@@ -285,6 +343,7 @@
                     }
 
                     videoEl.src = targetStreamUrl;
+                    await refreshSubtitleTracks();
                     loadSubtitles();
                     videoEl.play().catch(() => {});
                 } catch (err) {
@@ -330,7 +389,7 @@
             applyResumeMarker();
 
             // Reload subtitle track for the selected episode
-            loadSubtitles();
+            refreshSubtitleTracks().then(() => loadSubtitles());
 
             videoEl.play().catch(() => {});
         }
