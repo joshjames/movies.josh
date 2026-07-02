@@ -36,6 +36,23 @@ function normalizeSquareSubscriptionStatus(status) {
 }
 
 class AccountService {
+  async resolveCurrencyCode() {
+    const envCurrency = String(process.env.SQUARE_CURRENCY || '').trim().toUpperCase();
+    if (envCurrency) return envCurrency;
+
+    const locationId = String(config.locationId || '').trim();
+    if (!locationId) return 'USD';
+
+    try {
+      const locationResponse = await square.locations.get({ locationId });
+      const locationCurrency = String(locationResponse?.location?.currency || '').trim().toUpperCase();
+      return locationCurrency || 'USD';
+    } catch (err) {
+      logger.warn(`[SQUARE] Could not resolve location currency for ${locationId}: ${err.message}`);
+      return 'USD';
+    }
+  }
+
   async getStaticMonthlyPlanVariationId() {
     // 1) If the caller already configured a fixed-price variation id, prefer it.
     const configured = String(
@@ -63,7 +80,7 @@ class AccountService {
     }
 
     const monthlyPriceCents = resolvePositiveInt(process.env.SQUARE_SUBSCRIPTION_PRICE_CENTS, 999);
-    const currency = String(process.env.SQUARE_CURRENCY || 'USD').trim().toUpperCase();
+    const currency = await this.resolveCurrencyCode();
     const variationName = String(
       process.env.SQUARE_SUBSCRIPTION_VARIATION_NAME ||
       process.env.SQUARE_SUBSCRIPTION_NAME_SANDBOX ||
