@@ -122,6 +122,25 @@
             cursor: pointer;
         }
 
+        .utility-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: -8px;
+            margin-bottom: 8px;
+            font-size: 0.82rem;
+        }
+
+        .utility-link {
+            color: #38bdf8;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .utility-link:hover {
+            text-decoration: underline;
+        }
+
         .banner {
             padding: 12px;
             border-radius: 6px;
@@ -190,8 +209,8 @@
 
         <form id="authForm" onsubmit="handleFormSubmit(event)">
             <div class="form-group">
-                <label for="usernameIn">Email Address</label>
-                <input type="email" id="usernameIn" required autocomplete="username">
+                <label for="usernameIn" id="usernameLabel">Email Address</label>
+                <input type="text" id="usernameIn" required autocomplete="username">
             </div>
 
             <div class="form-group" id="nameFieldGroup">
@@ -202,6 +221,16 @@
             <div class="form-group">
                 <label for="passwordIn">Password</label>
                 <input type="password" id="passwordIn" required autocomplete="current-password">
+            </div>
+
+            <div class="form-group" id="confirmPasswordGroup" style="display:none;">
+                <label for="confirmPasswordIn">Confirm New Password</label>
+                <input type="password" id="confirmPasswordIn" autocomplete="new-password">
+            </div>
+
+            <div class="utility-row" id="utilityRow">
+                <span class="utility-link" id="forgotPasswordLink" onclick="enterResetRequestMode()">Forgot password?</span>
+                <span class="utility-link" id="backToLoginLink" onclick="exitResetMode()" style="display:none;">Back to login</span>
             </div>
 
             <button type="submit" class="submit-btn" id="submitBtn">Login</button>
@@ -215,13 +244,141 @@
 
     <script>
         let isLoginMode = true;
+        let isResetRequestMode = false;
+        let resetToken = '';
+        let resetUser = '';
+
+        function isResetConfirmMode() {
+            return Boolean(resetToken && resetUser);
+        }
+
+        function updateModeUI() {
+            const title = document.getElementById('form-title');
+            const subtitle = document.getElementById('form-subtitle');
+            const submitBtn = document.getElementById('submitBtn');
+            const toggleText = document.getElementById('toggleText');
+            const toggleLink = document.getElementById('toggleLink');
+            const nameGroup = document.getElementById('nameFieldGroup');
+            const nameInput = document.getElementById('nameIn');
+            const userInput = document.getElementById('usernameIn');
+            const usernameLabel = document.getElementById('usernameLabel');
+            const passwordInput = document.getElementById('passwordIn');
+            const confirmGroup = document.getElementById('confirmPasswordGroup');
+            const confirmInput = document.getElementById('confirmPasswordIn');
+            const utilityRow = document.getElementById('utilityRow');
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+            const backToLoginLink = document.getElementById('backToLoginLink');
+            const toggleBox = document.querySelector('.toggle-box');
+
+            if (isResetConfirmMode()) {
+                title.innerText = 'Set a New Password';
+                subtitle.innerText = 'Enter your new password below.';
+                submitBtn.innerText = 'Update Password';
+
+                nameGroup.style.display = 'none';
+                nameInput.removeAttribute('required');
+
+                usernameLabel.innerText = 'Email Address';
+                userInput.setAttribute('type', 'text');
+                userInput.value = resetUser;
+                userInput.setAttribute('readonly', 'true');
+
+                passwordInput.value = '';
+                passwordInput.setAttribute('required', 'true');
+                passwordInput.setAttribute('autocomplete', 'new-password');
+                document.querySelector('label[for="passwordIn"]').innerText = 'New Password';
+
+                confirmGroup.style.display = 'flex';
+                confirmInput.setAttribute('required', 'true');
+
+                utilityRow.style.display = 'none';
+                toggleBox.style.display = 'none';
+                return;
+            }
+
+            userInput.removeAttribute('readonly');
+            userInput.value = userInput.value || '';
+            userInput.setAttribute('type', 'text');
+            passwordInput.setAttribute('autocomplete', isResetRequestMode ? 'off' : (isLoginMode ? 'current-password' : 'new-password'));
+            document.querySelector('label[for="passwordIn"]').innerText = 'Password';
+
+            confirmGroup.style.display = 'none';
+            confirmInput.removeAttribute('required');
+            confirmInput.value = '';
+
+            toggleBox.style.display = 'block';
+            utilityRow.style.display = 'flex';
+
+            if (isResetRequestMode) {
+                title.innerText = 'Reset Password';
+                subtitle.innerText = 'Enter your email and we will send you a reset link.';
+                submitBtn.innerText = 'Send Reset Email';
+                usernameLabel.innerText = 'Email Address';
+
+                nameGroup.style.display = 'none';
+                nameInput.removeAttribute('required');
+
+                passwordInput.removeAttribute('required');
+                passwordInput.value = '';
+                passwordInput.parentElement.style.display = 'none';
+
+                toggleText.innerText = 'Remembered your password?';
+                toggleLink.innerText = 'Sign in here';
+
+                forgotPasswordLink.style.display = 'none';
+                backToLoginLink.style.display = 'inline';
+                return;
+            }
+
+            passwordInput.parentElement.style.display = 'flex';
+            passwordInput.setAttribute('required', 'true');
+            forgotPasswordLink.style.display = isLoginMode ? 'inline' : 'none';
+            backToLoginLink.style.display = 'none';
+
+            if (isLoginMode) {
+                title.innerText = 'Welcome Back';
+                subtitle.innerText = 'Enter your details to start streaming';
+                submitBtn.innerText = 'Login to Anymovie';
+                usernameLabel.innerText = 'Email or Username';
+                toggleText.innerText = 'New to Anymovie?';
+                toggleLink.innerText = 'Create a profile';
+
+                nameGroup.style.display = 'none';
+                nameInput.removeAttribute('required');
+            } else {
+                title.innerText = 'Provision Profile';
+                subtitle.innerText = 'Setup your new profile';
+                submitBtn.innerText = 'Register your account';
+                usernameLabel.innerText = 'Email Address';
+                toggleText.innerText = 'Already registered?';
+                toggleLink.innerText = 'Sign in here';
+
+                nameGroup.style.display = 'flex';
+                nameInput.setAttribute('required', 'true');
+            }
+        }
 
         // Auto-check on initialization to look for verification query returns
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('verified') === 'true') {
-                showAlert("Account activated successfully! You can now log in below.", "success");
+            resetToken = String(params.get('token') || '').trim();
+            resetUser = String(params.get('user') || '').trim().toLowerCase();
+
+            if (params.get('reset') === 'true' && (!resetToken || !resetUser)) {
+                showAlert('Reset link is missing required parameters. Request a new one.', 'error');
             }
+
+            if (params.get('reset') === 'true' && resetToken && resetUser) {
+                isResetRequestMode = false;
+                isLoginMode = true;
+                updateModeUI();
+            }
+
+            if (params.get('verified') === 'true') {
+                showAlert('Account activated successfully! You can now log in below.', 'success');
+            }
+
+            updateModeUI();
         });
 
         function showAlert(message, type) {
@@ -231,48 +388,118 @@
             block.style.display = 'block';
         }
 
-        function toggleAuthMode() {
-            isLoginMode = !isLoginMode;
-            
-            const title = document.getElementById('form-title');
-            const subtitle = document.getElementById('form-subtitle');
-            const submitBtn = document.getElementById('submitBtn');
-            const toggleText = document.getElementById('toggleText');
-            const toggleLink = document.getElementById('toggleLink');
-            const nameGroup = document.getElementById('nameFieldGroup');
-            const nameInput = document.getElementById('nameIn');
-            
-            document.getElementById('alertBlock').style.display = 'none';
+        function isValidEmail(value) {
+            const raw = String(value || '').trim();
+            return raw.includes('@') && raw.includes('.');
+        }
 
-            if (isLoginMode) {
-                title.innerText = "Welcome Back";
-                subtitle.innerText = "Enter your details to start streaming";
-                submitBtn.innerText = "Login to Anymovie";
-                toggleText.innerText = "New to Anymovie?";
-                toggleLink.innerText = "Create a profile";
-                
-                nameGroup.style.display = 'none';
-                nameInput.removeAttribute('required');
-            } else {
-                title.innerText = "Provision Profile";
-                subtitle.innerText = "Setup your new profile";
-                submitBtn.innerText = "Register your account";
-                toggleText.innerText = "Already registered?";
-                toggleLink.innerText = "Sign in here";
-                
-                nameGroup.style.display = 'flex';
-                nameInput.setAttribute('required', 'true');
-            }
+        function toggleAuthMode() {
+            if (isResetConfirmMode()) return;
+
+            isLoginMode = !isLoginMode;
+            isResetRequestMode = false;
+            document.getElementById('alertBlock').style.display = 'none';
+            updateModeUI();
+        }
+
+        function enterResetRequestMode() {
+            if (isResetConfirmMode()) return;
+            isResetRequestMode = true;
+            isLoginMode = true;
+            document.getElementById('alertBlock').style.display = 'none';
+            updateModeUI();
+        }
+
+        function exitResetMode() {
+            if (isResetConfirmMode()) return;
+            isResetRequestMode = false;
+            isLoginMode = true;
+            document.getElementById('alertBlock').style.display = 'none';
+            updateModeUI();
         }
 
         async function handleFormSubmit(e) {
             e.preventDefault();
             document.getElementById('alertBlock').style.display = 'none';
 
-            const username = document.getElementById('usernameIn').value;
+            const username = document.getElementById('usernameIn').value.trim();
             const password = document.getElementById('passwordIn').value;
+            const confirmPassword = document.getElementById('confirmPasswordIn').value;
+
+            if (isResetConfirmMode()) {
+                if (!password || password.length < 6) {
+                    showAlert('Please choose a password with at least 6 characters.', 'error');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    showAlert('New password and confirmation do not match.', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/auth/password-reset/confirm', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user: resetUser,
+                            token: resetToken,
+                            newPassword: password
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (response.ok && data.success) {
+                        showAlert('Password updated successfully. Please log in with your new password.', 'success');
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('reset');
+                        url.searchParams.delete('token');
+                        url.searchParams.delete('user');
+                        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+                        resetToken = '';
+                        resetUser = '';
+                        isLoginMode = true;
+                        isResetRequestMode = false;
+                        document.getElementById('authForm').reset();
+                        updateModeUI();
+                    } else {
+                        showAlert(data.error || 'Unable to reset password.', 'error');
+                    }
+                } catch (_err) {
+                    showAlert('Network loop transmission exception dropped.', 'error');
+                }
+                return;
+            }
+
+            if (isResetRequestMode) {
+                if (!isValidEmail(username)) {
+                    showAlert('Please enter a valid email address.', 'error');
+                    return;
+                }
+                try {
+                    const response = await fetch('/api/auth/password-reset/request', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: username, username })
+                    });
+
+                    const data = await response.json();
+                    if (response.ok && data.success) {
+                        showAlert(data.message || 'If that email is registered, a reset link has been sent.', 'success');
+                    } else {
+                        showAlert(data.error || 'Unable to process password reset request.', 'error');
+                    }
+                } catch (_err) {
+                    showAlert('Network loop transmission exception dropped.', 'error');
+                }
+                return;
+            }
             
             const payload = { email: username, username, password };
+
+            if (!isLoginMode && !isValidEmail(username)) {
+                showAlert('Please enter a valid email address.', 'error');
+                return;
+            }
             
             if (!isLoginMode) {
                 payload.name = document.getElementById('nameIn').value;

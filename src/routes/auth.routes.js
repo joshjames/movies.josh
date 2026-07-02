@@ -33,7 +33,9 @@ router.post('/register', async (req, res) => {
 
             // Dispatch your real mailer tracking sequence if it exposes sendVerificationEmail
             if (typeof MailerService.sendVerificationEmail === 'function') {
-                MailerService.sendVerificationEmail(cleanEmail, displayName || cleanEmail, verificationToken);
+                MailerService.sendVerificationEmail(cleanEmail, cleanEmail, verificationToken, {
+                    displayName: displayName || cleanEmail
+                });
             } else {
                 console.log(`ℹ️ MailerService loaded. Verification Token for ${cleanEmail}: ${verificationToken}`);
             }
@@ -200,19 +202,66 @@ router.post('/change-password', async (req, res) => {
             return res.status(403).json({ success: false, error: 'Current password is incorrect.' });
         }
 
-        const fs = require('fs').promises;
-        const rosterPath = '/app/metadata/users/roster.json';
-        const rosterRaw = await fs.readFile(rosterPath, 'utf-8');
-        const rosterJson = JSON.parse(rosterRaw);
-        if (!rosterJson[activeUser]) {
-            return res.status(404).json({ success: false, error: 'User account not found in roster.' });
+        const updateResult = await ProfileService.setPassword(activeUser, newPassword);
+        if (!updateResult.success) {
+            return res.status(404).json({ success: false, error: updateResult.error || 'User account not found.' });
         }
 
-        rosterJson[activeUser].password = String(newPassword);
-        rosterJson[activeUser].updatedAt = Date.now();
-        await fs.writeFile(rosterPath, JSON.stringify(rosterJson, null, 4), 'utf-8');
-
         return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/auth/password-reset/request
+router.post('/password-reset/request', async (req, res) => {
+    try {
+        const { email, username } = req.body || {};
+        const identifier = String(email || username || '').trim().toLowerCase();
+        if (!identifier || !identifier.includes('@')) {
+            return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+        }
+
+        const issueResult = await ProfileService.issuePasswordResetToken(identifier);
+        if (issueResult.success && typeof MailerService.sendPasswordResetEmail === 'function') {
+            await MailerService.sendPasswordResetEmail(
+                issueResult.email,
+                issueResult.userKey,
+                issueResult.token,
+                { displayName: issueResult.displayName }
+            );
+        }
+
+        return res.json({
+            success: true,
+            message: 'If that email is registered, a password reset link has been sent.'
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/auth/password-reset/confirm
+router.post('/password-reset/confirm', async (req, res) => {
+    try {
+        const { user, token, newPassword } = req.body || {};
+        const cleanUser = String(user || '').trim().toLowerCase();
+        const cleanToken = String(token || '').trim();
+
+        if (!cleanUser || !cleanToken || !newPassword) {
+            return res.status(400).json({ success: false, error: 'Missing reset token, user, or new password.' });
+        }
+
+        if (String(newPassword).length < 6) {
+            return res.status(400).json({ success: false, error: 'New password must be at least 6 characters.' });
+        }
+
+        const resetResult = await ProfileService.resetPasswordWithToken(cleanUser, cleanToken, newPassword);
+        if (!resetResult.success) {
+            return res.status(400).json({ success: false, error: resetResult.error || 'Unable to reset password.' });
+        }
+
+        return res.json({ success: true, message: 'Password reset successful. You can now log in.' });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

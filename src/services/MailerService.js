@@ -49,6 +49,43 @@ function renderTemplate(templateName, variables = {}) {
     });
 }
 
+function renderTemplateRaw(templateName, variables = {}, rawKeys = []) {
+    const sentinelMap = new Map();
+    const prepared = { ...variables };
+
+    rawKeys.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(prepared, key)) return;
+        const sentinel = `__RAW_SLOT_${key.toUpperCase()}_${Math.random().toString(36).slice(2)}__`;
+        sentinelMap.set(sentinel, String(prepared[key] ?? ''));
+        prepared[key] = sentinel;
+    });
+
+    let rendered = renderTemplate(templateName, prepared);
+    sentinelMap.forEach((rawValue, sentinel) => {
+        rendered = rendered.replace(sentinel, rawValue);
+    });
+
+    return rendered;
+}
+
+function buildLayoutHtml(contentTemplateName, variables = {}, options = {}) {
+    const bodyContent = renderTemplate(contentTemplateName, variables);
+    const layoutName = options.layoutName || 'base-email.html';
+
+    return renderTemplateRaw(
+        layoutName,
+        {
+            bodyContent,
+            supportEmail: variables.supportEmail,
+            appUrl: variables.appUrl,
+            senderName: variables.senderName,
+            preheader: variables.preheader || '',
+            title: variables.title || ''
+        },
+        ['bodyContent']
+    );
+}
+
 async function sendEmail({ toEmail, toName, subject, htmlContent }) {
     if (!toEmail || !subject || !htmlContent) {
         throw new Error('Missing required email payload fields.');
@@ -81,21 +118,24 @@ async function sendEmail({ toEmail, toName, subject, htmlContent }) {
 }
 
 async function sendTemplateEmail({ toEmail, toName, subject, templateName, variables = {} }) {
-    const htmlContent = renderTemplate(templateName, variables);
+    const htmlContent = buildLayoutHtml(templateName, variables);
     return sendEmail({ toEmail, toName, subject, htmlContent });
 }
 
-async function sendVerificationEmail(email, username, token, options = {}) {
-    const verificationUrl = `https://anymovie.online/api/auth/verify?token=${encodeURIComponent(token)}&user=${encodeURIComponent(username)}`;
+async function sendVerificationEmail(email, userKey, token, options = {}) {
+    const verificationUrl = `${process.env.APP_URL || 'https://anymovie.online'}/api/auth/verify?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
+    const displayName = options.displayName || userKey;
     const subject = options.subject || process.env.VERIFICATION_EMAIL_SUBJECT || 'Activate Your AnyMovie Profile';
 
     return sendTemplateEmail({
         toEmail: email,
-        toName: username,
+        toName: displayName,
         subject,
         templateName: options.templateName || 'verification-email.html',
         variables: {
-            username,
+            title: 'Activate Your AnyMovie Profile',
+            preheader: 'Verify your account to finish setup.',
+            username: displayName,
             verificationUrl,
             supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
             appUrl: process.env.APP_URL || 'https://anymovie.online',
@@ -104,4 +144,27 @@ async function sendVerificationEmail(email, username, token, options = {}) {
     });
 }
 
-module.exports = { sendVerificationEmail, sendTemplateEmail };
+async function sendPasswordResetEmail(email, userKey, token, options = {}) {
+    const appUrl = process.env.APP_URL || 'https://anymovie.online';
+    const resetUrl = `${appUrl}/login.html?reset=true&token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
+    const displayName = options.displayName || userKey;
+    const subject = options.subject || process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'Reset your AnyMovie password';
+
+    return sendTemplateEmail({
+        toEmail: email,
+        toName: displayName,
+        subject,
+        templateName: options.templateName || 'password-reset-email.html',
+        variables: {
+            title: 'Reset Your AnyMovie Password',
+            preheader: 'Use this secure link to set a new password.',
+            username: displayName,
+            resetUrl,
+            supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
+            appUrl,
+            senderName: process.env.SENDER_NAME || 'AnyMovie Admin'
+        }
+    });
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendTemplateEmail };

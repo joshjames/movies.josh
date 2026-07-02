@@ -198,6 +198,82 @@ const ProfileService = {
         return { success: true, userKey: cleanName };
     },
 
+    async setPassword(userKey, nextPassword) {
+        const cleanKey = await this.resolveUserKey(userKey);
+        if (!cleanKey) {
+            return { success: false, error: 'Account not found.' };
+        }
+
+        const roster = await readRoster();
+        if (!roster[cleanKey]) {
+            return { success: false, error: 'Account not found.' };
+        }
+
+        roster[cleanKey].password = String(nextPassword);
+        roster[cleanKey].updatedAt = Date.now();
+        await writeRoster(roster);
+
+        return { success: true, userKey: cleanKey };
+    },
+
+    async issuePasswordResetToken(identifier, ttlMs = 60 * 60 * 1000) {
+        const cleanKey = await this.resolveUserKey(identifier);
+        if (!cleanKey) {
+            return { success: false, error: 'Account not found.' };
+        }
+
+        const config = await this.readData(cleanKey, 'config', {});
+        const token = require('crypto').randomBytes(32).toString('hex');
+        const expires = Date.now() + Math.max(5 * 60 * 1000, Number(ttlMs) || 0);
+
+        config.passwordResetToken = token;
+        config.passwordResetExpires = expires;
+        config.updatedAt = Date.now();
+
+        await this.writeData(cleanKey, 'config', config);
+
+        return {
+            success: true,
+            userKey: cleanKey,
+            token,
+            expires,
+            email: config.email || cleanKey,
+            displayName: config.displayName || config.name || config.username || cleanKey
+        };
+    },
+
+    async resetPasswordWithToken(identifier, token, nextPassword) {
+        const cleanKey = await this.resolveUserKey(identifier);
+        if (!cleanKey) {
+            return { success: false, error: 'Invalid reset request.' };
+        }
+
+        const config = await this.readData(cleanKey, 'config', {});
+        if (!config.passwordResetToken || !config.passwordResetExpires) {
+            return { success: false, error: 'Reset token is invalid or already used.' };
+        }
+
+        if (config.passwordResetToken !== String(token)) {
+            return { success: false, error: 'Reset token is invalid or already used.' };
+        }
+
+        if (Date.now() > Number(config.passwordResetExpires)) {
+            return { success: false, error: 'Reset token has expired. Request a new reset email.' };
+        }
+
+        const updateResult = await this.setPassword(cleanKey, nextPassword);
+        if (!updateResult.success) {
+            return updateResult;
+        }
+
+        delete config.passwordResetToken;
+        delete config.passwordResetExpires;
+        config.updatedAt = Date.now();
+        await this.writeData(cleanKey, 'config', config);
+
+        return { success: true, userKey: cleanKey };
+    },
+
     async updateAccountProfile(userKey, payload = {}) {
         const cleanKey = normalizeIdentity(userKey);
         const roster = await readRoster();
