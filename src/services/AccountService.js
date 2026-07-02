@@ -71,7 +71,7 @@ class AccountService {
       'AnyMovie Monthly Subscription'
     ).trim();
 
-    const upsertResponse = await square.catalog.upsertCatalogObject({
+    const upsertResponse = await square.catalog.object.upsert({
       idempotencyKey: `anymovie-static-variation-${planId}-${monthlyPriceCents}`,
       object: {
         type: 'SUBSCRIPTION_PLAN_VARIATION',
