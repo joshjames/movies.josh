@@ -36,6 +36,22 @@ function normalizeSquareSubscriptionStatus(status) {
 }
 
 class AccountService {
+  normalizeCatalogVariationPhases(variation) {
+    const rawPhases = variation?.subscriptionPlanVariationData?.phases || [];
+    return rawPhases
+      .map((phase) => {
+        const ordinal = Number(phase?.ordinal);
+        if (!Number.isFinite(ordinal)) return null;
+
+        const normalized = { ordinal: BigInt(Math.max(0, Math.floor(ordinal))) };
+        if (phase?.orderTemplateId) {
+          normalized.orderTemplateId = String(phase.orderTemplateId);
+        }
+        return normalized;
+      })
+      .filter(Boolean);
+  }
+
   async findMonthlyPlanVariationIdFromCatalog() {
     const targetPlanName = String(
       process.env.SQUARE_SUBSCRIPTION_PLAN_NAME ||
@@ -78,6 +94,17 @@ class AccountService {
     } while (cursor);
 
     return null;
+  }
+
+  async getCatalogPlanVariationDetails(planVariationId) {
+    if (!planVariationId) return null;
+
+    const response = await square.catalog.batchGet({
+      objectIds: [planVariationId]
+    });
+
+    const objects = Array.isArray(response.objects) ? response.objects : [];
+    return objects.find((obj) => obj?.id === planVariationId) || null;
   }
 
   resolvePlanVariationId(planTierId) {
@@ -130,6 +157,16 @@ class AccountService {
         throw new Error('Square plan variation ID is missing. Set SQUARE_SANDBOX_PLAN_VARIATION_ID or SQUARE_PROD_PLAN_VARIATION_ID, or define SQUARE_SUBSCRIPTION_PLAN_NAME/SQUARE_SUBSCRIPTION_NAME_* to auto-discover.');
       }
 
+      let planVariationDetails = null;
+      try {
+        planVariationDetails = await this.getCatalogPlanVariationDetails(planVariationId);
+      } catch (catalogErr) {
+        logger.warn(`[SQUARE] Plan variation lookup by id failed: ${catalogErr.message}`);
+      }
+
+      const createPhases = this.normalizeCatalogVariationPhases(planVariationDetails);
+      const pricingType = String(planVariationDetails?.subscriptionPlanVariationData?.phases?.[0]?.pricing?.type || '').toUpperCase().trim();
+
       const nowIso = new Date().toISOString();
       const signupIso = toIso(activeConfig.signupDate || activeConfig.createdAt || nowIso);
       const trialDays = resolvePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7);
@@ -176,7 +213,10 @@ class AccountService {
         planVariationId,
         customerId: squareCustomerId,
         cardId: squareCardId,
-        startDate: toDateOnlyIso(nowIso)
+        startDate: toDateOnlyIso(nowIso),
+        timezone: process.env.SQUARE_TIMEZONE || 'UTC',
+        source: { name: 'AnyMovie' },
+        ...(createPhases.length > 0 ? { phases: createPhases } : {})
       });
 
       const subscription = subscriptionResponse.subscription || {};
@@ -195,6 +235,7 @@ class AccountService {
         subscriptionStatus: normalizedStatus,
         billingTier: planTierId || 'premium-monthly',
         subscriptionPlanVariationId: planVariationId,
+        subscriptionPlanPricingType: pricingType || null,
         cancelAtPeriodEnd: false,
         cancellationRequestedAt: null,
         gracePeriodDays: resolvePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3),
