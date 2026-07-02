@@ -2,86 +2,66 @@
 // Transactional outbound SMTP email generation using Brevo Rest API Engine.
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const logger = require('./logger');
 
-async function sendVerificationEmail(email, username, token) {
-    const verificationUrl = `https://anymovie.online/api/auth/verify?token=${encodeURIComponent(token)}&user=${encodeURIComponent(username)}`;
-    
+const TEMPLATE_DIR = path.join(__dirname, '../templates');
+const templateCache = new Map();
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function loadTemplate(templateName) {
+    const safeName = String(templateName || '').trim();
+    if (!safeName) throw new Error('Template name is required.');
+    if (safeName.includes('..') || safeName.includes('/') || safeName.includes('\\')) {
+        throw new Error('Invalid template name.');
+    }
+
+    if (templateCache.has(safeName)) {
+        return templateCache.get(safeName);
+    }
+
+    const filePath = path.join(TEMPLATE_DIR, safeName);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Template not found: ${safeName}`);
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    templateCache.set(safeName, raw);
+    return raw;
+}
+
+function renderTemplate(templateName, variables = {}) {
+    const raw = loadTemplate(templateName);
+    return raw.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
+        if (Object.prototype.hasOwnProperty.call(variables, key)) {
+            return escapeHtml(variables[key]);
+        }
+        return '';
+    });
+}
+
+async function sendEmail({ toEmail, toName, subject, htmlContent }) {
+    if (!toEmail || !subject || !htmlContent) {
+        throw new Error('Missing required email payload fields.');
+    }
+
     const payload = {
         sender: { 
             name: process.env.SENDER_NAME || "AnyMovie Admin", 
             email: process.env.SENDER_EMAIL || "admin@anymovie.online" 
         },
-        to: [{ email: email, name: username }],
-        subject: "🎬 Activate Your AnyMovie Profile",
-        htmlContent: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <style>
-                body { background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 30px; margin: 0; }
-                .email-container { max-width: 600px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; text-align: center; }
-                .logo-container { width: 220px; margin: 0 auto 24px auto; }
-                h2 { color: #f1f5f9; font-size: 1.5rem; margin-top: 0; }
-                p { color: #cbd5e1; font-size: 1rem; line-height: 1.6; text-align: left; }
-                .btn-verify { display: inline-block; background-color: #e50914; color: #ffffff !important; padding: 14px 28px; font-weight: bold; text-decoration: none; border-radius: 6px; margin: 20px 0; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; }
-                .footer { border-top: 1px solid #334155; margin-top: 28px; padding-top: 20px; font-size: 0.85rem; color: #94a3b8; text-align: left; line-height: 1.5; }
-                .footer a { color: #38bdf8; text-decoration: none; }
-            </style>
-        </head>
-        <body>
-            <div class="email-container">
-                <div class="logo-wrapper">
-                    <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
-                    
-                    <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
-                        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
-                    </filter>
-                </defs>
-
-                <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                    font-size="52" 
-                    font-weight="900" 
-                    letter-spacing="5" 
-                    fill="#e50914" 
-                    filter="url(#cinematicGlow)">
-                    <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
-                        ANYMOVIE
-                    </textPath>
-                </text>
-
-                <text x="50%" 
-                    y="118" 
-                    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                    font-size="16" 
-                    font-weight="700" 
-                    letter-spacing="14" 
-                    fill="#ffffff" 
-                    text-anchor="middle"
-                    opacity="0.9">
-                    ONLINE
-                </text>
-            </svg>
-            </div>
-                <h2>Welcome to AnyMovie, ${username}!</h2>
-                <p>Please follow this link to activate your account and secure your access:</p>
-                <a href="${verificationUrl}" class="btn-verify">Activate Account</a>
-                <p>Enjoy a more personalized media experience. Be sure to check out the library or browse the extended media browser once authenticated.</p>
-                <div class="footer">
-                    Please feel free to reach out if you have any feedback or issues directly to me at 
-                    <a href="mailto:josh@joshjames.site">josh@joshjames.site</a>.<br><br>
-                    Thanks,<br>
-                    <strong>AnyMovie Admin</strong><br>
-                    <a href="https://anymovie.online">Anymovie.online</a>
-                </div>
-            </div>
-        </body>
-        </html>
-        `
+        to: [{ email: toEmail, name: toName || '' }],
+        subject,
+        htmlContent
     };
 
     try {
@@ -92,7 +72,7 @@ async function sendVerificationEmail(email, username, token) {
                 'content-type': 'application/json'
             }
         });
-        logger.info(`✉️ [MAILER] Verification successfully sent to ${email}. MessageId: ${response.data.messageId}`);
+        logger.info(`✉️ [MAILER] Email sent to ${toEmail}. MessageId: ${response.data.messageId}`);
         return { success: true };
     } catch (error) {
         logger.error(`❌ [MAILER ERROR] Transactional relay dropped execution: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
@@ -100,4 +80,28 @@ async function sendVerificationEmail(email, username, token) {
     }
 }
 
-module.exports = { sendVerificationEmail };
+async function sendTemplateEmail({ toEmail, toName, subject, templateName, variables = {} }) {
+    const htmlContent = renderTemplate(templateName, variables);
+    return sendEmail({ toEmail, toName, subject, htmlContent });
+}
+
+async function sendVerificationEmail(email, username, token, options = {}) {
+    const verificationUrl = `https://anymovie.online/api/auth/verify?token=${encodeURIComponent(token)}&user=${encodeURIComponent(username)}`;
+    const subject = options.subject || process.env.VERIFICATION_EMAIL_SUBJECT || 'Activate Your AnyMovie Profile';
+
+    return sendTemplateEmail({
+        toEmail: email,
+        toName: username,
+        subject,
+        templateName: options.templateName || 'verification-email.html',
+        variables: {
+            username,
+            verificationUrl,
+            supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
+            appUrl: process.env.APP_URL || 'https://anymovie.online',
+            senderName: process.env.SENDER_NAME || 'AnyMovie Admin'
+        }
+    });
+}
+
+module.exports = { sendVerificationEmail, sendTemplateEmail };
