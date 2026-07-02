@@ -1,5 +1,6 @@
 // src/services/AccountService.js
 const { square, config } = require('../config/square');
+const { randomUUID } = require('crypto');
 const ProfileService = require('./ProfileService');
 const logger = require('./logger');
 
@@ -87,9 +88,10 @@ class AccountService {
       process.env.SQUARE_SUBSCRIPTION_NAME ||
       'AnyMovie Monthly Subscription'
     ).trim();
+    const variationNameFingerprint = Buffer.from(variationName).toString('hex').slice(0, 24) || 'default';
 
     const upsertResponse = await square.catalog.object.upsert({
-      idempotencyKey: `anymovie-static-variation-${planId}-${monthlyPriceCents}`,
+      idempotencyKey: `anymovie-static-variation-${planId}-${monthlyPriceCents}-${currency}-${variationNameFingerprint}`,
       object: {
         type: 'SUBSCRIPTION_PLAN_VARIATION',
         id: '#anymovie-monthly-static',
@@ -289,7 +291,7 @@ class AccountService {
 
       // 2. Attach the secure card token safely to their Customer profile
       const cardResponse = await square.cards.create({
-        idempotencyKey: `card-${userKey}-${Date.now()}`,
+        idempotencyKey: `card-${userKey}-${randomUUID()}`,
         card: {
           customerId: squareCustomerId,
           referenceId: userKey.toString()
@@ -300,7 +302,7 @@ class AccountService {
 
       // 3. Bind the customer profile to your subscription plan
       const subscriptionResponse = await square.subscriptions.create({
-        idempotencyKey: `sub-${userKey}-${Date.now()}`,
+        idempotencyKey: `sub-${userKey}-${randomUUID()}`,
         locationId: config.locationId,
         planVariationId,
         customerId: squareCustomerId,
