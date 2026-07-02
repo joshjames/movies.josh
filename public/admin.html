@@ -106,6 +106,55 @@
             min-width: 180px;
             flex: 1;
         }
+        .tv-live-search-wrap {
+            position: relative;
+            display: grid;
+            gap: 8px;
+        }
+        .tv-live-search-results {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: #020617;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+            z-index: 40;
+            overflow: hidden;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+        .tv-live-search-results.show { display: block; }
+        .tv-live-search-item {
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            color: #e2e8f0;
+            border: none;
+            border-bottom: 1px solid #0f172a;
+            padding: 10px 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .tv-live-search-item:hover { background: #0f172a; }
+        .tv-live-search-item:last-child { border-bottom: none; }
+        .tv-live-search-main { display: grid; gap: 2px; }
+        .tv-live-search-title { font-weight: 700; color: #f8fafc; }
+        .tv-live-search-meta { font-size: 0.75rem; color: #94a3b8; }
+        .tv-live-search-tag {
+            font-size: 0.7rem;
+            color: #93c5fd;
+            border: 1px solid #1d4ed8;
+            background: #0b1220;
+            border-radius: 999px;
+            padding: 2px 8px;
+            align-self: center;
+            white-space: nowrap;
+        }
         .tv-manual-result {
             font-size: 0.78rem;
             color: #cbd5e1;
@@ -535,10 +584,11 @@
                         <button type="button" style="background:#0284c7;" onclick="runTvManualScan()">Run TV Manual Scan</button>
                         <span style="font-size:0.78rem;color:#93c5fd;">Rebuilds TV manifests and refreshes library snapshot safely.</span>
                     </div>
-                    <div class="tv-manual-row">
+                    <div class="tv-manual-row tv-live-search-wrap">
                         <input type="text" id="tv-folder-input" placeholder="Show folder (e.g. Rick.and.Morty)">
                         <input type="text" id="tv-imdb-input" placeholder="IMDb ID (e.g. tt2861424)">
                         <button type="button" style="background:#0ea5e9;" onclick="manualAddSeries()">Add/Update Show</button>
+                        <div id="tv-live-search-results" class="tv-live-search-results"></div>
                     </div>
                     <div class="tv-manual-row">
                         <input type="text" id="tv-episode-query" placeholder="Search episode name (e.g. Air Force Wong)">
@@ -721,6 +771,99 @@
             }
         }
 
+        function setTvLiveSearchResults(items = []) {
+            const box = document.getElementById('tv-live-search-results');
+            if (!box) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                box.classList.remove('show');
+                box.innerHTML = '';
+                return;
+            }
+
+            const escapeHtml = (value) => String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
+            box.innerHTML = items.map(item => {
+                const folderValue = (item.title || item.originalTitle || '').replace(/\s+/g, '.');
+                const yearValue = item.startYear ? ` (${item.startYear}${item.endYear ? `-${item.endYear}` : ''})` : '';
+                const metaValue = [item.imdbId, item.genres ? item.genres : '', item.episodeCount ? `${item.episodeCount} eps` : '']
+                    .filter(Boolean)
+                    .join(' • ');
+
+                return `
+                    <button type="button" class="tv-live-search-item" data-folder="${escapeHtml(folderValue)}" data-imdb="${escapeHtml(item.imdbId || '')}" data-title="${escapeHtml(item.title || '')}" data-year="${escapeHtml(item.startYear || '')}">
+                        <span class="tv-live-search-main">
+                            <span class="tv-live-search-title">${escapeHtml(item.title || 'Untitled')}${escapeHtml(yearValue)}</span>
+                            <span class="tv-live-search-meta">${escapeHtml(metaValue)}</span>
+                        </span>
+                        <span class="tv-live-search-tag">Local</span>
+                    </button>
+                `;
+            }).join('');
+
+            box.classList.add('show');
+        }
+
+        function hideTvLiveSearchResults() {
+            const box = document.getElementById('tv-live-search-results');
+            if (!box) return;
+            box.classList.remove('show');
+            box.innerHTML = '';
+        }
+
+        function applyTvSearchPick(payload) {
+            const folderInput = document.getElementById('tv-folder-input');
+            const imdbInput = document.getElementById('tv-imdb-input');
+
+            if (folderInput && payload.folderValue) {
+                folderInput.value = payload.folderValue;
+            }
+            if (imdbInput && payload.imdbId) {
+                imdbInput.value = payload.imdbId;
+            }
+
+            setTvManualResult(`Selected ${payload.title || payload.imdbId || 'show'} from local TV index.`);
+            hideTvLiveSearchResults();
+        }
+
+        function debounce(fn, delayMs = 220) {
+            let timer = null;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn(...args), delayMs);
+            };
+        }
+
+        const searchLocalTvIndex = debounce(async () => {
+            const folderQuery = (document.getElementById('tv-folder-input')?.value || '').trim();
+            const imdbQuery = (document.getElementById('tv-imdb-input')?.value || '').trim();
+            const query = folderQuery || imdbQuery;
+
+            if (!query) {
+                hideTvLiveSearchResults();
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=8&localOnly=1`);
+                const data = await res.json();
+
+                if (!data.success || !Array.isArray(data.items)) {
+                    hideTvLiveSearchResults();
+                    return;
+                }
+
+                setTvLiveSearchResults(data.items.slice(0, 8));
+            } catch (_err) {
+                hideTvLiveSearchResults();
+            }
+        }, 220);
+
         async function runTvManualScan() {
             try {
                 setTvManualResult('Running TV manual scan...');
@@ -816,6 +959,33 @@
                 setTvManualResult('Episode search request failed.');
             }
         }
+
+        document.addEventListener('input', (event) => {
+            const target = event.target;
+            if (!target) return;
+            if (target.id === 'tv-folder-input' || target.id === 'tv-imdb-input') {
+                searchLocalTvIndex();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            const box = document.getElementById('tv-live-search-results');
+            if (!box) return;
+            const picked = event.target.closest('#tv-live-search-results .tv-live-search-item');
+            if (picked) {
+                applyTvSearchPick({
+                    folderValue: picked.dataset.folder || '',
+                    imdbId: picked.dataset.imdb || '',
+                    title: picked.dataset.title || '',
+                    year: picked.dataset.year || ''
+                });
+                return;
+            }
+
+            if (!event.target.closest('#tv-live-search-results') && !event.target.closest('#tv-folder-input') && !event.target.closest('#tv-imdb-input')) {
+                hideTvLiveSearchResults();
+            }
+        });
 
         function closeAllActionMenus(exceptFolder = null) {
             const menus = document.querySelectorAll('.action-menu');

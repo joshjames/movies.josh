@@ -100,13 +100,14 @@ router.get('/tv-shows/search', async (req, res) => {
     try {
         const query = String(req.query.q || req.query.query || '').trim();
         const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 40, 100));
+        const localOnly = ['1', 'true', 'yes', 'local'].includes(String(req.query.localOnly || req.query.source || '').toLowerCase());
         const index = loadIndex();
         let items = searchIndex(query, limit).map(withCover);
         let source = 'local-index';
 
         // Container deployments may not have the generated local index file.
         // For non-empty queries, fall back to OMDb search so TV browse still works.
-        if (items.length === 0 && query) {
+        if (!localOnly && items.length === 0 && query) {
             const apiKey = process.env.OMDB_API_KEY || '84196d01';
             const omdbRes = await axios.get(
                 `http://www.omdbapi.com/?apikey=${apiKey}&s=${encodeURIComponent(query)}&type=series`,
