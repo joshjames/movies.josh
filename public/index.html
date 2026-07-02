@@ -446,7 +446,7 @@
                 <a href="/browse.html" class="browse-nav-btn">🔍 Browse Catalog</a>
                 <div class="avatar-wrap">
                     <button type="button" class="avatar-btn" id="avatar-btn" aria-label="Open account menu">
-                        <img src="/images/avatar.png" alt="User avatar">
+                        <img src="/images/avatar.png" alt="User avatar" id="header-avatar-image">
                     </button>
                     <div class="avatar-menu" id="avatar-menu">
                         <div class="avatar-menu-header" id="avatar-menu-user">Signed in</div>
@@ -638,6 +638,19 @@
             });
         }
 
+        function resolveAvatarPath(avatarFileName) {
+            const raw = String(avatarFileName || '').trim();
+            const match = /^avatar_(\d{3})\.png$/i.exec(raw);
+            if (!match) return '/images/avatar.png';
+
+            const numeric = Number(match[1]);
+            if (!Number.isFinite(numeric) || numeric < 1 || numeric > 136) {
+                return '/images/avatar.png';
+            }
+
+            return `/images/avatars/avatar_${String(numeric).padStart(3, '0')}.png`;
+        }
+
         async function hydrateUserProfileHeader() {
             try {
                 const res = await fetch('/api/auth/me');
@@ -647,9 +660,15 @@
                     const fallbackName = String(data.email || data.username || '').split('@')[0] || data.username || '';
                     const formattedName = fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
                     const displayName = data.displayName || data.config?.displayName || data.config?.name || data.config?.username || formattedName;
+                    const avatarPath = resolveAvatarPath(data.config?.avatar);
                     const menuUser = document.getElementById('avatar-menu-user');
                     if (menuUser) {
                         menuUser.textContent = displayName;
+                    }
+
+                    const avatarImage = document.getElementById('header-avatar-image');
+                    if (avatarImage) {
+                        avatarImage.src = avatarPath;
                     }
                     
                     // 🛡️ IDENTITY GATING: Expose admin configurations explicitly for 'josh'

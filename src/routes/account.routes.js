@@ -94,6 +94,7 @@ router.get('/profile', requireAuth, async (req, res) => {
         email: config.email || userKey,
         displayName: config.displayName || config.name || config.username || userKey,
         name: config.name || config.displayName || config.username || userKey,
+        avatar: config.avatar || 'avatar_001.png',
         subscriptionStatus: config.subscriptionStatus || 'GUEST'
       }
     });

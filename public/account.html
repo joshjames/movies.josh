@@ -154,6 +154,103 @@
             font-size: 0.9rem;
             line-height: 1.5;
         }
+
+        .profile-head {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 14px;
+            padding: 12px;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            background: #0b1220;
+        }
+
+        .profile-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 999px;
+            object-fit: cover;
+            border: 2px solid #334155;
+            background: #020617;
+        }
+
+        .profile-meta {
+            min-width: 0;
+        }
+
+        .profile-meta .name {
+            font-size: 1rem;
+            color: #f8fafc;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .profile-meta .email {
+            font-size: 0.82rem;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .avatar-grid-wrap {
+            background: #020617;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .avatar-grid-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .avatar-grid-header span {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .avatar-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        @media(min-width: 720px) {
+            .avatar-grid {
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+            }
+        }
+
+        .avatar-option {
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 3px;
+            background: #0b1220;
+            cursor: pointer;
+        }
+
+        .avatar-option img {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 8px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .avatar-option.selected {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 1px #3b82f6 inset;
+        }
     </style>
 </head>
 <body>
@@ -166,6 +263,14 @@
         <div class="grid">
             <section class="card">
                 <h2>Profile</h2>
+                <div class="profile-head">
+                    <img id="profileAvatarPreview" class="profile-avatar" src="/images/avatars/avatar_001.png" alt="Profile avatar">
+                    <div class="profile-meta">
+                        <div class="name" id="profileSummaryName">Your Profile</div>
+                        <div class="email" id="profileSummaryEmail">-</div>
+                    </div>
+                </div>
+
                 <div class="row two">
                     <div>
                         <label for="displayName">Name</label>
@@ -176,6 +281,15 @@
                         <input id="email" type="email" placeholder="Email address">
                     </div>
                 </div>
+
+                <div class="avatar-grid-wrap">
+                    <div class="avatar-grid-header">
+                        <span>Select Avatar</span>
+                        <button class="btn btn-primary" type="button" id="shuffleAvatarsBtn">Shuffle</button>
+                    </div>
+                    <div class="avatar-grid" id="avatarGrid"></div>
+                </div>
+
                 <button class="btn btn-primary" id="saveProfileBtn">Save Profile</button>
                 <div class="status" id="profileStatus"></div>
             </section>
@@ -213,11 +327,91 @@
     </div>
 
     <script>
+        const TOTAL_AVATARS = 136;
+        const AVATAR_GRID_SIZE = 12;
+        let selectedAvatar = 'avatar_001.png';
+
         function setStatus(id, message, ok = true) {
             const el = document.getElementById(id);
             if (!el) return;
             el.textContent = message || '';
             el.className = ok ? 'status ok' : 'status err';
+        }
+
+        function avatarFilenameFromNumber(number) {
+            return `avatar_${String(number).padStart(3, '0')}.png`;
+        }
+
+        function avatarPath(fileName) {
+            return `/images/avatars/${fileName}`;
+        }
+
+        function sanitizeAvatar(fileName) {
+            const raw = String(fileName || '').trim();
+            const match = /^avatar_(\d{3})\.png$/i.exec(raw);
+            if (!match) return 'avatar_001.png';
+            const numeric = Number(match[1]);
+            if (!Number.isFinite(numeric) || numeric < 1 || numeric > TOTAL_AVATARS) {
+                return 'avatar_001.png';
+            }
+            return avatarFilenameFromNumber(numeric);
+        }
+
+        function randomAvatarChoices(count = AVATAR_GRID_SIZE) {
+            const picks = new Set();
+            while (picks.size < count) {
+                const n = Math.floor(Math.random() * TOTAL_AVATARS) + 1;
+                picks.add(avatarFilenameFromNumber(n));
+            }
+
+            if (!picks.has(selectedAvatar)) {
+                const asArray = Array.from(picks);
+                asArray[asArray.length - 1] = selectedAvatar;
+                return asArray;
+            }
+
+            return Array.from(picks);
+        }
+
+        function updateAvatarPreview() {
+            const preview = document.getElementById('profileAvatarPreview');
+            if (preview) {
+                preview.src = avatarPath(selectedAvatar);
+            }
+        }
+
+        function renderAvatarGrid() {
+            const grid = document.getElementById('avatarGrid');
+            if (!grid) return;
+
+            const options = randomAvatarChoices(AVATAR_GRID_SIZE);
+            grid.innerHTML = options.map((fileName) => `
+                <button
+                    type="button"
+                    class="avatar-option${fileName === selectedAvatar ? ' selected' : ''}"
+                    data-avatar="${fileName}"
+                    aria-label="Choose ${fileName}">
+                    <img src="${avatarPath(fileName)}" alt="${fileName}">
+                </button>
+            `).join('');
+
+            grid.querySelectorAll('.avatar-option').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    selectedAvatar = sanitizeAvatar(btn.dataset.avatar);
+                    updateAvatarPreview();
+                    renderAvatarGrid();
+                });
+            });
+        }
+
+        function updateProfileSummary(name, email) {
+            const safeName = String(name || 'Your Profile').trim() || 'Your Profile';
+            const safeEmail = String(email || '').trim() || '-';
+
+            const nameEl = document.getElementById('profileSummaryName');
+            const emailEl = document.getElementById('profileSummaryEmail');
+            if (nameEl) nameEl.textContent = safeName;
+            if (emailEl) emailEl.textContent = safeEmail;
         }
 
         async function loadAccount() {
@@ -233,6 +427,10 @@
                 const email = data.user.email || '';
                 document.getElementById('displayName').value = name;
                 document.getElementById('email').value = email;
+                selectedAvatar = sanitizeAvatar(data.user.avatar);
+                updateAvatarPreview();
+                updateProfileSummary(name, email);
+                renderAvatarGrid();
 
                 // Sync billing states after profile contexts are assigned
                 await checkSubscriptionStatus();
@@ -315,7 +513,7 @@
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
-                    body: JSON.stringify({ displayName, name: displayName, email })
+                    body: JSON.stringify({ displayName, name: displayName, email, avatar: selectedAvatar })
                 });
                 const data = await res.json();
                 if (!data.success) {
@@ -323,6 +521,7 @@
                     return;
                 }
 
+                updateProfileSummary(displayName, email);
                 setStatus('profileStatus', 'Profile updated.');
             } catch (_err) {
                 setStatus('profileStatus', 'Profile update request failed.', false);
@@ -356,6 +555,7 @@
 
         document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
         document.getElementById('changePasswordBtn').addEventListener('click', changePassword);
+        document.getElementById('shuffleAvatarsBtn').addEventListener('click', renderAvatarGrid);
         loadAccount();
     </script>
 </body>

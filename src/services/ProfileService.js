@@ -34,6 +34,19 @@ function defaultDisplayNameFromEmail(emailOrUser) {
     return cleaned || raw;
 }
 
+function normalizeAvatarFileName(value, fallback = 'avatar_001.png') {
+    const raw = String(value || '').trim();
+    const match = /^avatar_(\d{3})\.png$/i.exec(raw);
+    if (!match) return fallback;
+
+    const numeric = Number(match[1]);
+    if (!Number.isFinite(numeric) || numeric < 1 || numeric > 136) {
+        return fallback;
+    }
+
+    return `avatar_${String(numeric).padStart(3, '0')}.png`;
+}
+
 // ====== PRIVATE DATA UTILITIES ======
 async function ensureUserDir(username) {
     const userDir = path.join(USER_BASE_DIR, username);
@@ -170,7 +183,7 @@ const ProfileService = {
             isVerified: false,
             verificationToken: token,
             verificationExpires: expires,
-            avatar: "default.png",
+            avatar: 'avatar_001.png',
             preferences: { autoplay: true, UITheme: "dark" }
         };
         
@@ -284,6 +297,7 @@ const ProfileService = {
         const currentConfig = await this.readData(cleanKey, 'config', {});
         const nextDisplayName = String(payload.displayName || payload.name || '').trim() || currentConfig.displayName || currentConfig.username || defaultDisplayNameFromEmail(cleanKey);
         const nextEmail = normalizeIdentity(payload.email || currentConfig.email || cleanKey);
+        const nextAvatar = normalizeAvatarFileName(payload.avatar, normalizeAvatarFileName(currentConfig.avatar, 'avatar_001.png'));
 
         let finalUserKey = cleanKey;
         if (nextEmail && nextEmail !== cleanKey) {
@@ -316,6 +330,7 @@ const ProfileService = {
             name: nextDisplayName,
             email: nextEmail,
             loginKey: finalUserKey,
+            avatar: nextAvatar,
             updatedAt: Date.now()
         };
 
