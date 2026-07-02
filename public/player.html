@@ -161,7 +161,10 @@
             track.kind = 'subtitles';
             track.label = 'English';
             track.srclang = 'en';
-            track.src = `/api/subtitles/${encodeURIComponent(movieId)}`;
+            const subtitleQuery = (seasonParam && episodeParam)
+                ? `?season=${encodeURIComponent(seasonParam)}&episode=${encodeURIComponent(episodeParam)}`
+                : '';
+            track.src = `/api/subtitles/${encodeURIComponent(movieId)}${subtitleQuery}`;
             track.default = true; 
             
             videoEl.appendChild(track);
@@ -325,6 +328,9 @@
 
             // Fire an explicit lookup payload fetch immediately for the new episode target profile
             applyResumeMarker();
+
+            // Reload subtitle track for the selected episode
+            loadSubtitles();
 
             videoEl.play().catch(() => {});
         }

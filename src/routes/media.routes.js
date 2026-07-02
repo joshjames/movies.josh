@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
+const { spawnSync } = require('child_process');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
@@ -47,6 +48,135 @@ function withCover(item) {
 function resolveMovieFolderPath(movieId) {
     const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, movieId));
     return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, movieId);
+}
+
+function resolveSeriesEpisodeVideoPath(showFolder, seasonNumber, episodeNumber) {
+    const showPath = path.join(SERIES_DIR, showFolder);
+    if (!fs.existsSync(showPath)) return null;
+
+    let seriesData;
+    try {
+        seriesData = rebuildSeriesManifest(showPath, {
+            showFolderName: showFolder,
+            write: false
+        });
+    } catch (_err) {
+        return null;
+    }
+
+    const seasons = seriesData.seasons || {};
+    const seasonEntry = seasons[String(seasonNumber)] || null;
+    const episodes = Array.isArray(seasonEntry?.episodes) ? seasonEntry.episodes : [];
+    const target = episodes.find(ep => Number(ep.episodeNumber) === Number(episodeNumber) && ep.localRelativePath);
+    if (!target?.localRelativePath) return null;
+
+    const relativeUnderSeries = String(target.localRelativePath).replace(/^series[\\/]/i, '');
+    const absolutePath = path.join(SERIES_DIR, relativeUnderSeries);
+    return fs.existsSync(absolutePath) ? absolutePath : null;
+}
+
+function findSourceVideoInFolder(folderPath) {
+    const candidates = fs.readdirSync(folderPath).filter(file => /\.(mkv|mp4|m4v|avi|mov|wmv)$/i.test(file));
+    if (!candidates.length) return null;
+
+    const preferred = candidates.find(file => /\.web\.mp4$/i.test(file));
+    return preferred || candidates[0];
+}
+
+function findSidecarSubtitleForVideo(videoPath) {
+    const dir = path.dirname(videoPath);
+    const base = path.parse(videoPath).name;
+    const preferred = [
+        `${base}.English.srt`,
+        `${base}.en.srt`,
+        `${base}.srt`,
+        `${base}.English.vtt`,
+        `${base}.en.vtt`,
+        `${base}.vtt`,
+        'English.srt',
+        'English.vtt'
+    ];
+
+    for (const name of preferred) {
+        const candidate = path.join(dir, name);
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    const anySubtitle = fs.readdirSync(dir).find(file => /\.(srt|vtt)$/i.test(file));
+    return anySubtitle ? path.join(dir, anySubtitle) : null;
+}
+
+function extractEmbeddedSubtitle(videoPath) {
+    const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'stream=index,codec_type:stream_tags=language,title',
+        '-of', 'json',
+        videoPath
+    ], { encoding: 'utf8' });
+
+    if (probe.status !== 0) return null;
+
+    let parsed;
+    try {
+        parsed = JSON.parse(probe.stdout || '{}');
+    } catch (_err) {
+        return null;
+    }
+
+    const subtitleStreams = Array.isArray(parsed.streams)
+        ? parsed.streams.filter(s => s.codec_type === 'subtitle')
+        : [];
+    if (!subtitleStreams.length) return null;
+
+    const english = subtitleStreams.find(s => {
+        const lang = String(s.tags?.language || '').toLowerCase();
+        return lang === 'en' || lang === 'eng';
+    });
+    const selected = english || subtitleStreams[0];
+    const streamIndex = selected?.index;
+    if (!Number.isFinite(streamIndex)) return null;
+
+    const dir = path.dirname(videoPath);
+    const base = path.parse(videoPath).name;
+    const srtPath = path.join(dir, `${base}.English.srt`);
+
+    const extractSrt = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'srt',
+        srtPath
+    ], { encoding: 'utf8' });
+
+    if (extractSrt.status === 0 && fs.existsSync(srtPath)) {
+        return srtPath;
+    }
+
+    const vttPath = path.join(dir, `${base}.English.vtt`);
+    const extractVtt = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'webvtt',
+        vttPath
+    ], { encoding: 'utf8' });
+
+    if (extractVtt.status === 0 && fs.existsSync(vttPath)) {
+        return vttPath;
+    }
+
+    return null;
+}
+
+function subtitleToWebVtt(rawContent, extname) {
+    if (String(extname || '').toLowerCase() === '.vtt') {
+        return rawContent.startsWith('WEBVTT') ? rawContent : `WEBVTT\n\n${rawContent}`;
+    }
+
+    return "WEBVTT\n\n" + rawContent
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
 }
 
 function normalizeEpisodeSearchToken(value = '') {
@@ -594,28 +724,35 @@ router.get('/raw-file/:id', async (req, res) => {
 // GET: /api/subtitles/:id (Dynamic SRT-to-WebVTT Structural Sanitizer Engine)
 router.get('/subtitles/:id', async (req, res) => {
     try {
-        const movieId = decodeURIComponent(req.params.id);
-        const folderPath = resolveMovieFolderPath(movieId);
+        const mediaId = decodeURIComponent(req.params.id);
+        const season = parseInt(req.query.season, 10);
+        const episode = parseInt(req.query.episode, 10);
 
-        try {
+        let subtitlePath = null;
+
+        if (mediaId.startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode)) {
+            const showFolder = mediaId.replace(/^series\//, '');
+            const episodeVideoPath = resolveSeriesEpisodeVideoPath(showFolder, season, episode);
+            if (episodeVideoPath) {
+                subtitlePath = findSidecarSubtitleForVideo(episodeVideoPath) || extractEmbeddedSubtitle(episodeVideoPath);
+            }
+        } else {
+            const folderPath = resolveMovieFolderPath(mediaId);
             await fsPromises.access(folderPath);
-        } catch {
-            return res.status(404).send('Movie folder not found.');
+
+            const sourceVideo = findSourceVideoInFolder(folderPath);
+            if (sourceVideo) {
+                const sourceVideoPath = path.join(folderPath, sourceVideo);
+                subtitlePath = findSidecarSubtitleForVideo(sourceVideoPath) || extractEmbeddedSubtitle(sourceVideoPath);
+            }
         }
 
-        const files = await fsPromises.readdir(folderPath);
-        const srtFile = files.find(f => f.endsWith('.srt'));
-
-        if (!srtFile) {
+        if (!subtitlePath || !fs.existsSync(subtitlePath)) {
             return res.status(404).send('No subtitles found.');
         }
 
-        const srtContent = await fsPromises.readFile(path.join(folderPath, srtFile), 'utf-8');
-
-        let vttContent = "WEBVTT\n\n" + srtContent
-            .replace(/\r\n/g, '\n')
-            .replace(/\r/g, '\n')
-            .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+        const subtitleContent = await fsPromises.readFile(subtitlePath, 'utf-8');
+        const vttContent = subtitleToWebVtt(subtitleContent, path.extname(subtitlePath));
 
         res.setHeader('Content-Type', 'text/vtt');
         res.setHeader('Access-Control-Allow-Origin', '*');

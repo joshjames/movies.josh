@@ -5,7 +5,7 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, spawnSync } = require('child_process');
 const AdmZip = require('adm-zip');
 const logger = require('../logger');
 
@@ -200,6 +200,135 @@ function fetchSubliminalFallback(imdbId, folderPath) {
     });
 }
 
+function walkVideoFiles(rootPath) {
+    const queue = [rootPath];
+    const videos = [];
+    const allowed = /\.(mkv|mp4|m4v|avi|mov|wmv)$/i;
+
+    while (queue.length) {
+        const current = queue.shift();
+        if (!fs.existsSync(current)) continue;
+
+        let entries = [];
+        try {
+            entries = fs.readdirSync(current, { withFileTypes: true });
+        } catch (_err) {
+            continue;
+        }
+
+        for (const entry of entries) {
+            const next = path.join(current, entry.name);
+            if (entry.isDirectory()) {
+                queue.push(next);
+                continue;
+            }
+            if (allowed.test(entry.name)) videos.push(next);
+        }
+    }
+
+    return videos;
+}
+
+function hasSidecarSubtitle(videoPath) {
+    const dir = path.dirname(videoPath);
+    const base = path.parse(videoPath).name;
+    const candidates = [
+        `${base}.English.srt`,
+        `${base}.en.srt`,
+        `${base}.srt`,
+        `${base}.English.vtt`,
+        `${base}.en.vtt`,
+        `${base}.vtt`,
+        'English.srt',
+        'English.vtt'
+    ];
+
+    return candidates.some(name => fs.existsSync(path.join(dir, name)));
+}
+
+function extractEmbeddedSubtitleForVideo(videoPath) {
+    const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'stream=index,codec_type:stream_tags=language,title',
+        '-of', 'json',
+        videoPath
+    ], { encoding: 'utf8' });
+
+    if (probe.status !== 0) return null;
+
+    let payload;
+    try {
+        payload = JSON.parse(probe.stdout || '{}');
+    } catch (_err) {
+        return null;
+    }
+
+    const streams = Array.isArray(payload.streams)
+        ? payload.streams.filter(s => s.codec_type === 'subtitle')
+        : [];
+    if (!streams.length) return null;
+
+    const english = streams.find(s => {
+        const lang = String(s.tags?.language || '').toLowerCase();
+        return lang === 'en' || lang === 'eng';
+    });
+    const selected = english || streams[0];
+    const streamIndex = selected?.index;
+    if (!Number.isFinite(streamIndex)) return null;
+
+    const dir = path.dirname(videoPath);
+    const base = path.parse(videoPath).name;
+    const srtPath = path.join(dir, `${base}.English.srt`);
+
+    const extractSrt = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'srt',
+        srtPath
+    ], { encoding: 'utf8' });
+
+    if (extractSrt.status === 0 && fs.existsSync(srtPath)) {
+        return { language: 'eng', relativePath: path.relative(path.dirname(videoPath), srtPath), source: 'embedded-mkv' };
+    }
+
+    const vttPath = path.join(dir, `${base}.English.vtt`);
+    const extractVtt = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'webvtt',
+        vttPath
+    ], { encoding: 'utf8' });
+
+    if (extractVtt.status === 0 && fs.existsSync(vttPath)) {
+        return { language: 'eng', relativePath: path.relative(path.dirname(videoPath), vttPath), source: 'embedded-mkv' };
+    }
+
+    return null;
+}
+
+function extractEmbeddedSubtitles(folderPath, contentType) {
+    const candidates = contentType === 'series'
+        ? walkVideoFiles(folderPath)
+        : (walkVideoFiles(folderPath).slice(0, 1));
+    const records = [];
+
+    for (const video of candidates) {
+        if (hasSidecarSubtitle(video)) continue;
+        const extracted = extractEmbeddedSubtitleForVideo(video);
+        if (extracted) {
+            records.push({
+                language: extracted.language,
+                relativePath: path.relative(folderPath, path.join(path.dirname(video), extracted.relativePath)),
+                source: extracted.source
+            });
+        }
+    }
+
+    return records;
+}
+
 // =========================================================================
 // 📥 PROCESS API ENDPOINT ROUTING
 // =========================================================================
@@ -214,6 +343,19 @@ app.post('/process', async (req, res) => {
     try {
         const resolvedImdbId = await resolveImdbFallback({ imdbId, folderName, folderPath, contentType });
 
+        const embeddedRecords = extractEmbeddedSubtitles(folderPath, contentType);
+        if (embeddedRecords.length > 0) {
+            logger.debug(`🧩 [SUBTITLES] Extracted ${embeddedRecords.length} embedded subtitle track(s) from container files.`);
+            return res.json({
+                success: true,
+                message: 'Embedded subtitle tracks extracted from local media containers.',
+                patchData: {
+                    subtitles: embeddedRecords,
+                    ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                }
+            });
+        }
+
         // ✨ FAST PASS SYSTEM CHECK: Scan files for ANY common subtitle tracks to bypass APIs entirely
         const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
         const subtitleExists = filesOnDisk.some(f => 
@@ -225,7 +367,10 @@ app.post('/process', async (req, res) => {
             return res.json({
                 success: true,
                 message: "Subtitle track verified instantly via local storage check.",
-                patchData: { subtitles: [{ language: 'eng', relativePath: 'English.srt', source: 'local-cached' }] }
+                patchData: {
+                    subtitles: [{ language: 'eng', relativePath: 'English.srt', source: 'local-cached' }],
+                    ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                }
             });
         }
 
@@ -235,7 +380,10 @@ app.post('/process', async (req, res) => {
             return res.json({
                 success: true,
                 message: 'Subtitle lookup skipped because no IMDb ID could be resolved.',
-                patchData: { subtitles: [] }
+                patchData: {
+                    subtitles: [],
+                    ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                }
             });
         }
 
@@ -252,7 +400,10 @@ app.post('/process', async (req, res) => {
         return res.json({
             success: true,
             message: records.length > 0 ? "Subtitle profiles resolved successfully." : "Subtitle sweeps completed with empty records.",
-            patchData: { subtitles: records }
+            patchData: {
+                subtitles: records,
+                ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+            }
         });
 
     } catch (err) {

@@ -598,7 +598,7 @@ app.post('/process', async (req, res) => {
                 showMeta.title = showMeta.title || cleanTitle;
                 showMeta.contentType = 'series';
                 showMeta.pipelineState = {
-                    currentStep: 'COMPLETED',
+                    currentStep: 'METADATA',
                     lastUpdated: new Date().toISOString(),
                     error: null
                 };
@@ -620,7 +620,7 @@ app.post('/process', async (req, res) => {
                         folderPath: showRootPath,
                         folderName: showFolder,
                         contentType: 'series',
-                        pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() }
+                        pipelineState: { currentStep: 'METADATA', lastUpdated: new Date().toISOString() }
                     }
                 });
             }
@@ -696,9 +696,9 @@ app.post('/process', async (req, res) => {
             if (fs.existsSync(finalPath)) {
                 fs.writeFileSync(path.join(finalPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
                 const metaFilePath = path.join(finalPath, 'metadata.json');
-                mainMeta.pipelineState = { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() };
+                mainMeta.pipelineState = { currentStep: 'METADATA', lastUpdated: new Date().toISOString() };
                 fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
-                logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and marked pipeline COMPLETED.`);
+                logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and advanced pipeline to METADATA.`);
             }
 
             return res.json({
@@ -706,7 +706,7 @@ app.post('/process', async (req, res) => {
                 patchData: {
                     folderPath: finalPath,
                     folderName: targetFolderName,
-                    pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() }
+                    pipelineState: { currentStep: 'METADATA', lastUpdated: new Date().toISOString() }
                 }
             });
         }
