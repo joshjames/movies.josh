@@ -36,6 +36,50 @@ function normalizeSquareSubscriptionStatus(status) {
 }
 
 class AccountService {
+  async findMonthlyPlanVariationIdFromCatalog() {
+    const targetPlanName = String(
+      process.env.SQUARE_SUBSCRIPTION_PLAN_NAME ||
+      process.env.SQUARE_SUBSCRIPTION_NAME_SANDBOX ||
+      process.env.SQUARE_SUBSCRIPTION_NAME ||
+      'Anymovie.Online Streaming Access'
+    ).trim().toLowerCase();
+
+    let cursor;
+    do {
+      const response = await square.catalog.search({
+        objectTypes: ['SUBSCRIPTION_PLAN', 'SUBSCRIPTION_PLAN_VARIATION'],
+        cursor,
+        limit: 100
+      });
+
+      const objects = Array.isArray(response.objects) ? response.objects : [];
+      const variations = objects.filter((obj) => obj?.type === 'SUBSCRIPTION_PLAN_VARIATION');
+
+      // 1) Prefer variation tied to configured plan name and monthly cadence.
+      const preferred = variations.find((variation) => {
+        const vData = variation.subscriptionPlanVariationData || {};
+        const planObj = objects.find((obj) => obj?.id === vData.subscriptionPlanId && obj?.type === 'SUBSCRIPTION_PLAN');
+        const planName = String(planObj?.subscriptionPlanData?.name || '').trim().toLowerCase();
+        const phase = (vData.phases || [])[0] || {};
+        const cadence = String(phase?.cadence || '').toUpperCase().trim();
+        return planName && planName.includes(targetPlanName) && cadence === 'MONTHLY';
+      });
+      if (preferred?.id) return preferred.id;
+
+      // 2) Fallback to any monthly variation.
+      const monthlyAny = variations.find((variation) => {
+        const phase = (variation.subscriptionPlanVariationData?.phases || [])[0] || {};
+        const cadence = String(phase?.cadence || '').toUpperCase().trim();
+        return cadence === 'MONTHLY';
+      });
+      if (monthlyAny?.id) return monthlyAny.id;
+
+      cursor = response.cursor;
+    } while (cursor);
+
+    return null;
+  }
+
   resolvePlanVariationId(planTierId) {
     const requested = String(planTierId || '').trim();
     const generic = String(process.env.SQUARE_PLAN_VARIATION_ID || '').trim();
@@ -69,13 +113,21 @@ class AccountService {
       const activeConfig = await ProfileService.readData(userKey, 'config', {});
       const resolvedEmail = String(email || activeConfig.email || userKey).trim().toLowerCase();
       const resolvedName = String(name || activeConfig.displayName || activeConfig.name || activeConfig.username || resolvedEmail).trim();
-      const planVariationId = this.resolvePlanVariationId(planTierId);
+      let planVariationId = this.resolvePlanVariationId(planTierId);
+
+      if (!planVariationId) {
+        try {
+          planVariationId = await this.findMonthlyPlanVariationIdFromCatalog();
+        } catch (catalogErr) {
+          logger.warn(`[SQUARE] Catalog plan variation lookup failed: ${catalogErr.message}`);
+        }
+      }
 
       if (!config.locationId) {
         throw new Error('Square location ID is missing for current environment.');
       }
       if (!planVariationId) {
-        throw new Error('Square plan variation ID is missing. Set SQUARE_SANDBOX_PLAN_VARIATION_ID or SQUARE_PROD_PLAN_VARIATION_ID.');
+        throw new Error('Square plan variation ID is missing. Set SQUARE_SANDBOX_PLAN_VARIATION_ID or SQUARE_PROD_PLAN_VARIATION_ID, or define SQUARE_SUBSCRIPTION_PLAN_NAME/SQUARE_SUBSCRIPTION_NAME_* to auto-discover.');
       }
 
       const nowIso = new Date().toISOString();
@@ -159,6 +211,7 @@ class AccountService {
       return {
         success: true,
         subscriptionId: subscription.id,
+        planVariationId,
         squareCustomerId,
         squareCardId,
         config: nextConfig
