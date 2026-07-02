@@ -166,13 +166,90 @@
             background: #0b1220;
         }
 
+        .avatar-control {
+            position: relative;
+            flex: 0 0 auto;
+        }
+
+        .avatar-trigger {
+            border: none;
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .profile-avatar {
-            width: 64px;
-            height: 64px;
+            width: 52px;
+            height: 52px;
             border-radius: 999px;
             object-fit: cover;
             border: 2px solid #334155;
             background: #020617;
+        }
+
+        .avatar-change-badge {
+            position: absolute;
+            right: -2px;
+            bottom: -2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            border: 1px solid #2563eb;
+            background: #1d4ed8;
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .avatar-change-hint {
+            margin-top: 4px;
+            font-size: 0.7rem;
+            color: #93c5fd;
+            text-align: center;
+            letter-spacing: 0.2px;
+        }
+
+        .avatar-action-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            min-width: 132px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #020617;
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+            padding: 6px;
+            display: none;
+            z-index: 40;
+        }
+
+        .avatar-action-menu.show {
+            display: block;
+        }
+
+        .avatar-action-btn {
+            width: 100%;
+            border: none;
+            background: transparent;
+            color: #e2e8f0;
+            text-align: left;
+            border-radius: 6px;
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .avatar-action-btn:hover {
+            background: #1e293b;
         }
 
         .profile-meta {
@@ -196,27 +273,83 @@
             text-overflow: ellipsis;
         }
 
-        .avatar-grid-wrap {
-            background: #020617;
-            border: 1px solid #1e293b;
-            border-radius: 10px;
-            padding: 12px;
-            margin-top: 10px;
+        .avatar-picker-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.75);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 60;
         }
 
-        .avatar-grid-header {
+        .avatar-picker-backdrop.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .avatar-picker-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: min(420px, 92vw);
+            height: 100vh;
+            background: #0b1220;
+            border-left: 1px solid #334155;
+            box-shadow: -18px 0 30px rgba(0, 0, 0, 0.35);
+            transform: translateX(102%);
+            transition: transform 0.24s ease;
+            display: flex;
+            flex-direction: column;
+            z-index: 70;
+        }
+
+        .avatar-picker-panel.show {
+            transform: translateX(0);
+        }
+
+        @media(max-width: 720px) {
+            .avatar-picker-panel {
+                width: 100%;
+                height: 72vh;
+                top: auto;
+                bottom: 0;
+                border-left: none;
+                border-top: 1px solid #334155;
+                border-top-left-radius: 14px;
+                border-top-right-radius: 14px;
+                transform: translateY(102%);
+            }
+
+            .avatar-picker-panel.show {
+                transform: translateY(0);
+            }
+        }
+
+        .avatar-picker-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 10px;
-            margin-bottom: 10px;
+            padding: 14px 14px 10px 14px;
+            border-bottom: 1px solid #1e293b;
         }
 
-        .avatar-grid-header span {
-            font-size: 0.78rem;
+        .avatar-picker-title {
+            font-size: 0.92rem;
+            color: #f8fafc;
+            font-weight: 700;
+        }
+
+        .avatar-picker-sub {
+            font-size: 0.75rem;
             color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
+            margin-top: 2px;
+        }
+
+        .avatar-picker-grid-wrap {
+            padding: 12px 14px 16px 14px;
+            overflow-y: auto;
         }
 
         .avatar-grid {
@@ -234,7 +367,7 @@
         .avatar-option {
             border: 1px solid #334155;
             border-radius: 10px;
-            padding: 3px;
+            padding: 2px;
             background: #0b1220;
             cursor: pointer;
         }
@@ -245,6 +378,7 @@
             border-radius: 8px;
             object-fit: cover;
             display: block;
+            image-rendering: auto;
         }
 
         .avatar-option.selected {
@@ -264,7 +398,16 @@
             <section class="card">
                 <h2>Profile</h2>
                 <div class="profile-head">
-                    <img id="profileAvatarPreview" class="profile-avatar" src="/images/avatars/avatar_001.png" alt="Profile avatar">
+                    <div class="avatar-control">
+                        <button type="button" class="avatar-trigger" id="profileAvatarTrigger" aria-label="Open avatar options">
+                            <img id="profileAvatarPreview" class="profile-avatar" src="/images/avatars/avatar_001.png" alt="Profile avatar">
+                            <span class="avatar-change-badge">+</span>
+                        </button>
+                        <div class="avatar-change-hint">Change</div>
+                        <div class="avatar-action-menu" id="avatarActionMenu">
+                            <button type="button" class="avatar-action-btn" id="openAvatarPickerBtn">Change avatar</button>
+                        </div>
+                    </div>
                     <div class="profile-meta">
                         <div class="name" id="profileSummaryName">Your Profile</div>
                         <div class="email" id="profileSummaryEmail">-</div>
@@ -280,14 +423,6 @@
                         <label for="email">Email Address</label>
                         <input id="email" type="email" placeholder="Email address">
                     </div>
-                </div>
-
-                <div class="avatar-grid-wrap">
-                    <div class="avatar-grid-header">
-                        <span>Select Avatar</span>
-                        <button class="btn btn-primary" type="button" id="shuffleAvatarsBtn">Shuffle</button>
-                    </div>
-                    <div class="avatar-grid" id="avatarGrid"></div>
                 </div>
 
                 <button class="btn btn-primary" id="saveProfileBtn">Save Profile</button>
@@ -325,6 +460,23 @@
             </section>
         </div>
     </div>
+
+    <div class="avatar-picker-backdrop" id="avatarPickerBackdrop" aria-hidden="true"></div>
+    <aside class="avatar-picker-panel" id="avatarPickerPanel" aria-hidden="true">
+        <div class="avatar-picker-header">
+            <div>
+                <div class="avatar-picker-title">Choose an Avatar</div>
+                <div class="avatar-picker-sub">Showing 12 random options from the full set</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-primary" type="button" id="shuffleAvatarsBtn">Shuffle</button>
+                <button class="btn" style="background:#1e293b;color:#e2e8f0;" type="button" id="closeAvatarPickerBtn">Close</button>
+            </div>
+        </div>
+        <div class="avatar-picker-grid-wrap">
+            <div class="avatar-grid" id="avatarGrid"></div>
+        </div>
+    </aside>
 
     <script>
         const TOTAL_AVATARS = 136;
@@ -404,6 +556,41 @@
             });
         }
 
+        function hideAvatarActionMenu() {
+            const actionMenu = document.getElementById('avatarActionMenu');
+            if (actionMenu) actionMenu.classList.remove('show');
+        }
+
+        function toggleAvatarActionMenu() {
+            const actionMenu = document.getElementById('avatarActionMenu');
+            if (!actionMenu) return;
+            actionMenu.classList.toggle('show');
+        }
+
+        function openAvatarPicker() {
+            const backdrop = document.getElementById('avatarPickerBackdrop');
+            const panel = document.getElementById('avatarPickerPanel');
+            if (!backdrop || !panel) return;
+
+            renderAvatarGrid();
+            backdrop.classList.add('show');
+            panel.classList.add('show');
+            backdrop.setAttribute('aria-hidden', 'false');
+            panel.setAttribute('aria-hidden', 'false');
+            hideAvatarActionMenu();
+        }
+
+        function closeAvatarPicker() {
+            const backdrop = document.getElementById('avatarPickerBackdrop');
+            const panel = document.getElementById('avatarPickerPanel');
+            if (!backdrop || !panel) return;
+
+            backdrop.classList.remove('show');
+            panel.classList.remove('show');
+            backdrop.setAttribute('aria-hidden', 'true');
+            panel.setAttribute('aria-hidden', 'true');
+        }
+
         function updateProfileSummary(name, email) {
             const safeName = String(name || 'Your Profile').trim() || 'Your Profile';
             const safeEmail = String(email || '').trim() || '-';
@@ -430,7 +617,6 @@
                 selectedAvatar = sanitizeAvatar(data.user.avatar);
                 updateAvatarPreview();
                 updateProfileSummary(name, email);
-                renderAvatarGrid();
 
                 // Sync billing states after profile contexts are assigned
                 await checkSubscriptionStatus();
@@ -556,6 +742,24 @@
         document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
         document.getElementById('changePasswordBtn').addEventListener('click', changePassword);
         document.getElementById('shuffleAvatarsBtn').addEventListener('click', renderAvatarGrid);
+        document.getElementById('profileAvatarTrigger').addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleAvatarActionMenu();
+        });
+        document.getElementById('openAvatarPickerBtn').addEventListener('click', openAvatarPicker);
+        document.getElementById('closeAvatarPickerBtn').addEventListener('click', closeAvatarPicker);
+        document.getElementById('avatarPickerBackdrop').addEventListener('click', closeAvatarPicker);
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.avatar-control')) {
+                hideAvatarActionMenu();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                hideAvatarActionMenu();
+                closeAvatarPicker();
+            }
+        });
         loadAccount();
     </script>
 </body>
