@@ -36,6 +36,71 @@ function normalizeSquareSubscriptionStatus(status) {
 }
 
 class AccountService {
+  async getStaticMonthlyPlanVariationId() {
+    // 1) If the caller already configured a fixed-price variation id, prefer it.
+    const configured = String(
+      process.env.SQUARE_SANDBOX_PLAN_VARIATION_ID ||
+      process.env.SQUARE_PROD_PLAN_VARIATION_ID ||
+      process.env.SQUARE_PLAN_VARIATION_ID ||
+      ''
+    ).trim();
+    if (configured) {
+      try {
+        const details = await this.getCatalogPlanVariationDetails(configured);
+        const firstPricingType = String(details?.subscriptionPlanVariationData?.phases?.[0]?.pricing?.type || '').toUpperCase().trim();
+        if (firstPricingType === 'STATIC') return configured;
+      } catch (_err) {
+        // fall through to auto-create
+      }
+    }
+
+    // 2) Resolve a plan id from the existing monthly variation / subscription plan.
+    const existingVariationId = await this.findMonthlyPlanVariationIdFromCatalog();
+    const existingVariation = existingVariationId ? await this.getCatalogPlanVariationDetails(existingVariationId) : null;
+    const planId = existingVariation?.subscriptionPlanVariationData?.subscriptionPlanId;
+    if (!planId) {
+      return null;
+    }
+
+    const monthlyPriceCents = resolvePositiveInt(process.env.SQUARE_SUBSCRIPTION_PRICE_CENTS, 999);
+    const currency = String(process.env.SQUARE_CURRENCY || 'USD').trim().toUpperCase();
+    const variationName = String(
+      process.env.SQUARE_SUBSCRIPTION_VARIATION_NAME ||
+      process.env.SQUARE_SUBSCRIPTION_NAME_SANDBOX ||
+      process.env.SQUARE_SUBSCRIPTION_NAME ||
+      'AnyMovie Monthly Subscription'
+    ).trim();
+
+    const upsertResponse = await square.catalog.upsertCatalogObject({
+      idempotencyKey: `anymovie-static-variation-${planId}-${monthlyPriceCents}`,
+      object: {
+        type: 'SUBSCRIPTION_PLAN_VARIATION',
+        id: '#anymovie-monthly-static',
+        subscriptionPlanVariationData: {
+          name: variationName,
+          subscriptionPlanId: planId,
+          phases: [
+            {
+              cadence: 'MONTHLY',
+              ordinal: BigInt(0),
+              pricing: {
+                type: 'STATIC',
+                priceMoney: {
+                  amount: BigInt(monthlyPriceCents),
+                  currency
+                }
+              }
+            }
+          ]
+        }
+      }
+    });
+
+    const createdObject = upsertResponse.catalogObject || upsertResponse.catalog_object || upsertResponse.object || null;
+    const createdId = createdObject?.id || null;
+    return createdId || null;
+  }
+
   normalizeCatalogVariationPhases(variation) {
     const rawPhases = variation?.subscriptionPlanVariationData?.phases || [];
     return rawPhases
@@ -150,18 +215,28 @@ class AccountService {
         }
       }
 
-      if (!config.locationId) {
-        throw new Error('Square location ID is missing for current environment.');
-      }
-      if (!planVariationId) {
-        throw new Error('Square plan variation ID is missing. Set SQUARE_SANDBOX_PLAN_VARIATION_ID or SQUARE_PROD_PLAN_VARIATION_ID, or define SQUARE_SUBSCRIPTION_PLAN_NAME/SQUARE_SUBSCRIPTION_NAME_* to auto-discover.');
-      }
-
+      // If the selected variation is relative-pricing, replace it with a static monthly variation.
       let planVariationDetails = null;
       try {
         planVariationDetails = await this.getCatalogPlanVariationDetails(planVariationId);
       } catch (catalogErr) {
         logger.warn(`[SQUARE] Plan variation lookup by id failed: ${catalogErr.message}`);
+      }
+
+      const selectedPricingType = String(planVariationDetails?.subscriptionPlanVariationData?.phases?.[0]?.pricing?.type || '').toUpperCase().trim();
+      if (selectedPricingType === 'RELATIVE' || !planVariationId) {
+        const staticVariationId = await this.getStaticMonthlyPlanVariationId();
+        if (staticVariationId) {
+          planVariationId = staticVariationId;
+          planVariationDetails = await this.getCatalogPlanVariationDetails(planVariationId).catch(() => planVariationDetails);
+        }
+      }
+
+      if (!config.locationId) {
+        throw new Error('Square location ID is missing for current environment.');
+      }
+      if (!planVariationId) {
+        throw new Error('Square plan variation ID is missing. Set SQUARE_SANDBOX_PLAN_VARIATION_ID or SQUARE_PROD_PLAN_VARIATION_ID, or define SQUARE_SUBSCRIPTION_PLAN_NAME/SQUARE_SUBSCRIPTION_NAME_* to auto-discover.');
       }
 
       const createPhases = this.normalizeCatalogVariationPhases(planVariationDetails);
