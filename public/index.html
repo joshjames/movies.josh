@@ -643,16 +643,17 @@
                 const res = await fetch('/api/auth/me');
                 const data = await res.json();
                 if (data.loggedIn) {
-                    const cleanUsername = data.username.toLowerCase().trim();
-                    const formattedName = data.username.charAt(0).toUpperCase() + data.username.slice(1);
-                    const displayName = data.config?.username || formattedName;
+                    const cleanUsername = String(data.username || '').toLowerCase().trim();
+                    const fallbackName = String(data.email || data.username || '').split('@')[0] || data.username || '';
+                    const formattedName = fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
+                    const displayName = data.displayName || data.config?.displayName || data.config?.name || data.config?.username || formattedName;
                     const menuUser = document.getElementById('avatar-menu-user');
                     if (menuUser) {
                         menuUser.textContent = displayName;
                     }
                     
                     // 🛡️ IDENTITY GATING: Expose admin configurations explicitly for 'josh'
-                    if (cleanUsername === 'josh') {
+                    if (cleanUsername === 'josh' || cleanUsername.startsWith('josh@') || data.config?.isAdmin === true) {
                         const adminBtn = document.getElementById('admin-action-btn');
                         if (adminBtn) {
                             adminBtn.style.display = 'inline-flex';

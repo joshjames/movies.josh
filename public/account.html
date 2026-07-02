@@ -222,15 +222,15 @@
 
         async function loadAccount() {
             try {
-                const res = await fetch('/api/auth/me', { credentials: 'include' });
+                const res = await fetch('/api/account/profile', { credentials: 'include' });
                 const data = await res.json();
-                if (!data.loggedIn) {
+                if (!data.success || !data.user) {
                     window.location.href = '/login.html';
                     return;
                 }
 
-                const name = data.config?.username || data.username || '';
-                const email = data.config?.email || '';
+                const name = data.user.displayName || data.user.name || '';
+                const email = data.user.email || '';
                 document.getElementById('displayName').value = name;
                 document.getElementById('email').value = email;
 
@@ -311,11 +311,11 @@
             const email = document.getElementById('email').value.trim();
 
             try {
-                const res = await fetch('/api/auth/account', {
-                    method: 'POST',
+                const res = await fetch('/api/account/profile', {
+                    method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
-                    body: JSON.stringify({ displayName, email })
+                    body: JSON.stringify({ displayName, name: displayName, email })
                 });
                 const data = await res.json();
                 if (!data.success) {

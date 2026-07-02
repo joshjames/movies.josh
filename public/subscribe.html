@@ -277,17 +277,46 @@
         let selectedPlanId = 'premium-monthly'; // Default fallback matching UI binding
         let cardEngine = null; // Pointer for Square runtime instantiation
 
-        // Injected dynamically by your back-end profile engine view controller
         const userSessionContext = {
-            name: "Joshua Saunders", 
-            email: "joshua.saunders@example.com" 
+            name: '',
+            email: ''
         };
+        const squareRuntime = {
+            applicationId: null,
+            locationId: null,
+            hasRuntime: false
+        };
+
+        async function hydrateCheckoutContext() {
+            const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+            const meData = await meRes.json();
+            if (!meData.loggedIn) {
+                window.location.href = '/login.html';
+                return false;
+            }
+
+            userSessionContext.name = meData.displayName || meData.config?.displayName || meData.config?.name || meData.config?.username || '';
+            userSessionContext.email = meData.email || meData.config?.email || '';
+
+            const squareRes = await fetch('/api/account/square-config', { credentials: 'include' });
+            const squareData = await squareRes.json();
+            if (!squareData.success || !squareData.hasRuntime) {
+                throw new Error('Square runtime config is missing. Set application/location IDs in environment.');
+            }
+
+            squareRuntime.applicationId = squareData.applicationId;
+            squareRuntime.locationId = squareData.locationId;
+            squareRuntime.hasRuntime = squareData.hasRuntime;
+            return true;
+        }
 
         window.addEventListener('DOMContentLoaded', async () => {
             // Pre-initialize the Square SDK instance immediately in the background
             try {
-                // Change to your actual sandbox application id
-                const payments = Square.payments('sandbox-sq0idb-YOUR_APPLICATION_ID_HERE'); 
+                const hydrated = await hydrateCheckoutContext();
+                if (!hydrated) return;
+
+                const payments = Square.payments(squareRuntime.applicationId, squareRuntime.locationId);
                 cardEngine = await payments.card({
                     style: {
                         input: { backgroundColor: '#020617', color: '#ffffff' },
@@ -295,7 +324,7 @@
                     }
                 });
             } catch (err) {
-                showError("Failed to establish handshake link with Square API Gateway assets.");
+                showError(err.message || "Failed to establish handshake link with Square API Gateway assets.");
             }
         });
 

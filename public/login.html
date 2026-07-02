@@ -63,8 +63,7 @@
             margin-bottom: 18px;
         }
 
-        /* Email field injection animations toggle rules */
-        #emailFieldGroup {
+        #nameFieldGroup {
             display: none;
         }
 
@@ -191,13 +190,13 @@
 
         <form id="authForm" onsubmit="handleFormSubmit(event)">
             <div class="form-group">
-                <label for="usernameIn">Username</label>
-                <input type="text" id="usernameIn" required autocomplete="username">
+                <label for="usernameIn">Email Address</label>
+                <input type="email" id="usernameIn" required autocomplete="username">
             </div>
 
-            <div class="form-group" id="emailFieldGroup">
-                <label for="emailIn">Email Address</label>
-                <input type="email" id="emailIn" autocomplete="email">
+            <div class="form-group" id="nameFieldGroup">
+                <label for="nameIn">Full Name</label>
+                <input type="text" id="nameIn" autocomplete="name">
             </div>
 
             <div class="form-group">
@@ -240,8 +239,8 @@
             const submitBtn = document.getElementById('submitBtn');
             const toggleText = document.getElementById('toggleText');
             const toggleLink = document.getElementById('toggleLink');
-            const emailGroup = document.getElementById('emailFieldGroup');
-            const emailInput = document.getElementById('emailIn');
+            const nameGroup = document.getElementById('nameFieldGroup');
+            const nameInput = document.getElementById('nameIn');
             
             document.getElementById('alertBlock').style.display = 'none';
 
@@ -252,8 +251,8 @@
                 toggleText.innerText = "New to Anymovie?";
                 toggleLink.innerText = "Create a profile";
                 
-                emailGroup.style.display = 'none';
-                emailInput.removeAttribute('required');
+                nameGroup.style.display = 'none';
+                nameInput.removeAttribute('required');
             } else {
                 title.innerText = "Provision Profile";
                 subtitle.innerText = "Setup your new profile";
@@ -261,8 +260,8 @@
                 toggleText.innerText = "Already registered?";
                 toggleLink.innerText = "Sign in here";
                 
-                emailGroup.style.display = 'flex';
-                emailInput.setAttribute('required', 'true');
+                nameGroup.style.display = 'flex';
+                nameInput.setAttribute('required', 'true');
             }
         }
 
@@ -273,11 +272,10 @@
             const username = document.getElementById('usernameIn').value;
             const password = document.getElementById('passwordIn').value;
             
-            const payload = { username, password };
+            const payload = { email: username, username, password };
             
-            // Gather email only if the field is active on screen
             if (!isLoginMode) {
-                payload.email = document.getElementById('emailIn').value;
+                payload.name = document.getElementById('nameIn').value;
             }
 
             const targetEndpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';

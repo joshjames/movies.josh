@@ -1,15 +1,20 @@
 // src/services/AccountService.js
 const { square, config } = require('../config/square');
+const ProfileService = require('./ProfileService');
 
 class AccountService {
-  async initializeSubscription(userId, { name, email, cardNonce }) {
+  async initializeSubscription(userKey, { name, email, cardNonce }) {
     try {
+      const activeConfig = await ProfileService.readData(userKey, 'config', {});
+      const resolvedEmail = String(email || activeConfig.email || userKey).trim().toLowerCase();
+      const resolvedName = String(name || activeConfig.displayName || activeConfig.name || activeConfig.username || resolvedEmail).trim();
+
       // 1. Register or find the customer profile inside Square's engine
       const customerResponse = await square.customers.create({
-        givenName: name.split(' ')[0] || name,
-        familyName: name.split(' ')[1] || '',
-        emailAddress: email,
-        referenceId: userId.toString()
+        givenName: resolvedName.split(' ')[0] || resolvedName,
+        familyName: resolvedName.split(' ').slice(1).join(' ') || '',
+        emailAddress: resolvedEmail,
+        referenceId: userKey.toString()
       });
       const squareCustomerId = customerResponse.customer.id;
 
@@ -17,7 +22,7 @@ class AccountService {
       const cardResponse = await square.cards.create({
         card: {
           customerId: squareCustomerId,
-          referenceId: userId.toString()
+          referenceId: userKey.toString()
         },
         sourceId: cardNonce
       });
@@ -32,28 +37,38 @@ class AccountService {
         cardId: squareCardId
       });
 
-      // 4. Commit values smoothly into your local user database
-      const updatedUser = await db.users.update(userId, {
+      const nextConfig = {
+        ...activeConfig,
+        email: resolvedEmail,
+        displayName: resolvedName,
+        name: resolvedName,
         squareCustomerId: squareCustomerId,
         squareSubscriptionId: subscriptionResponse.subscription.id,
         subscriptionStatus: 'ACTIVE',
-        billingTier: 'premium'
-      });
+        billingTier: 'premium',
+        cancelAtPeriodEnd: false,
+        nextBillingDate: subscriptionResponse.subscription?.chargedThroughDate || null,
+        updatedAt: Date.now()
+      };
 
-      return { success: true, user: updatedUser };
+      await ProfileService.writeData(userKey, 'config', nextConfig);
+
+      return { success: true, subscriptionId: subscriptionResponse.subscription.id, config: nextConfig };
     } catch (error) {
       console.error('AccountService Subscription Failure:', error);
       throw new Error(`Billing initialization failed: ${error.message}`);
     }
   }
 
-  async requestCancellation(userId, subscriptionId) {
+  async requestCancellation(userKey, subscriptionId) {
     try {
       await square.subscriptions.cancel({
         subscriptionId: subscriptionId
       });
 
-      await db.users.update(userId, {
+      const activeConfig = await ProfileService.readData(userKey, 'config', {});
+      await ProfileService.writeData(userKey, 'config', {
+        ...activeConfig,
         cancelAtPeriodEnd: true
       });
 

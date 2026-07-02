@@ -10,14 +10,19 @@ const MailerService = require('../services/MailerService');
 
 // POST: /api/auth/register
 router.post('/register', async (req, res) => {
-    const { username, password, email } = req.body;
-    if (!username || !password || !email) {
+    const { email, password, name, username } = req.body || {};
+    const cleanEmail = String(email || '').toLowerCase().trim();
+    const displayName = String(name || username || '').trim();
+
+    if (!cleanEmail || !password) {
         return res.status(400).json({ success: false, error: "Fields cannot be blank." });
+    }
+    if (!cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
     }
 
     try {
-        // Wired to ProfileService instead of ProfileManager
-        const result = await ProfileService.registerUser(username, password, email);
+        const result = await ProfileService.registerUser(cleanEmail, password, cleanEmail, displayName);
         
         if (result.success) {
             const verificationToken = result.token;
@@ -28,9 +33,9 @@ router.post('/register', async (req, res) => {
 
             // Dispatch your real mailer tracking sequence if it exposes sendVerificationEmail
             if (typeof MailerService.sendVerificationEmail === 'function') {
-                MailerService.sendVerificationEmail(email.trim(), username.trim(), verificationToken);
+                MailerService.sendVerificationEmail(cleanEmail, displayName || cleanEmail, verificationToken);
             } else {
-                console.log(`ℹ️ MailerService loaded. Verification Token for ${username}: ${verificationToken}`);
+                console.log(`ℹ️ MailerService loaded. Verification Token for ${cleanEmail}: ${verificationToken}`);
             }
 
             return res.json({ 
@@ -51,7 +56,10 @@ router.get('/verify', async (req, res) => {
         return res.status(400).send('<h3>Missing verification parameters.</h3>');
     }
     
-    const cleanName = user.toLowerCase().trim();
+    const cleanName = await ProfileService.resolveUserKey(String(user || '').toLowerCase().trim());
+    if (!cleanName) {
+        return res.send('<h3>Invalid verification identity.</h3>');
+    }
     
     try {
         const userConfig = await ProfileService.readData(cleanName, 'config', null);
@@ -78,16 +86,19 @@ router.get('/verify', async (req, res) => {
 
 // POST: /api/auth/login
 router.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
+    const { username, email, password } = req.body || {};
+    const identifier = String(email || username || '').trim();
+    if (!identifier || !password) {
         return res.status(400).json({ success: false, error: "Credentials cannot be blank." });
     }
 
-    const cleanName = username.toLowerCase().trim();
-
     try {
-        const result = await ProfileService.authenticateUser(username, password);
+        const result = await ProfileService.authenticateUser(identifier, password);
         if (result.success) {
+            const cleanName = result.userKey || await ProfileService.resolveUserKey(identifier);
+            if (!cleanName) {
+                return res.status(400).json({ success: false, error: 'Unable to resolve account.' });
+            }
             
             const userConfig = await ProfileService.readData(cleanName, 'config', null);
             if (userConfig && userConfig.isVerified === false) {
@@ -103,7 +114,14 @@ router.post('/login', async (req, res) => {
 
             // Assign structural root-path access cookie
             res.cookie('user_profile', cleanName, { maxAge: 31536000000, path: '/' });
-            return res.json({ success: true });
+            return res.json({
+                success: true,
+                profile: {
+                    userKey: cleanName,
+                    email: userConfig?.email || cleanName,
+                    displayName: userConfig?.displayName || userConfig?.name || userConfig?.username || cleanName
+                }
+            });
         }
         res.status(400).json(result);
     } catch (err) {
@@ -118,7 +136,14 @@ router.get('/me', async (req, res) => {
 
     try {
         const config = await ProfileService.readData(activeUser, 'config', {});
-        res.json({ loggedIn: true, username: activeUser, config });
+        res.json({
+            loggedIn: true,
+            username: activeUser,
+            userKey: activeUser,
+            email: config.email || activeUser,
+            displayName: config.displayName || config.name || config.username || activeUser,
+            config
+        });
     } catch (err) {
         res.status(500).json({ loggedIn: false, error: err.message });
     }
@@ -132,24 +157,23 @@ router.post('/account', async (req, res) => {
     }
 
     try {
-        const { displayName, email } = req.body || {};
-        const config = await ProfileService.readData(activeUser, 'config', {});
-
-        const nextDisplay = String(displayName || '').trim() || activeUser;
-        const nextEmail = String(email || '').trim();
+        const { displayName, name, email } = req.body || {};
+        const nextEmail = String(email || '').toLowerCase().trim();
         if (!nextEmail || !nextEmail.includes('@')) {
             return res.status(400).json({ success: false, error: 'A valid email is required.' });
         }
 
-        const updated = {
-            ...config,
-            username: nextDisplay,
-            email: nextEmail,
-            updatedAt: Date.now()
-        };
+        const updated = await ProfileService.updateAccountProfile(activeUser, {
+            displayName: displayName || name,
+            name: name || displayName,
+            email: nextEmail
+        });
 
-        await ProfileService.writeData(activeUser, 'config', updated);
-        return res.json({ success: true, config: updated });
+        if (updated.userKey && updated.userKey !== activeUser) {
+            res.cookie('user_profile', updated.userKey, { maxAge: 31536000000, path: '/' });
+        }
+
+        return res.json({ success: true, userKey: updated.userKey, config: updated.config });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

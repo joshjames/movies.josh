@@ -30,6 +30,7 @@ const pipelineOrchestrator = require('../../Orchestrator');
 const Orchestrator = require('../../Orchestrator'); // Adjust this path to point to your Orchestrator.js
 const metadataService = require('../services/MetadataService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
+const ProfileService = require('../services/ProfileService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR
     || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
@@ -422,11 +423,24 @@ router.get('/log-stream', (req, res) => {
 // =========================================================================
 // 🛡️ ADMIN VERIFICATION INTERCEPTOR LAYER
 // =========================================================================
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
     const activeUser = req.cookies?.user_profile;
-    
-    if (activeUser && activeUser.toLowerCase().trim() === 'josh') {
+
+    const cleanUser = String(activeUser || '').toLowerCase().trim();
+    const allowByIdentity = cleanUser === 'josh' || cleanUser.startsWith('josh@');
+    if (allowByIdentity) {
         return next();
+    }
+
+    if (cleanUser) {
+        try {
+            const config = await ProfileService.readData(cleanUser, 'config', {});
+            if (config?.isAdmin === true) {
+                return next();
+            }
+        } catch (_err) {
+            // Continue to deny path below.
+        }
     }
     
     if (req.path.startsWith('/api/') || req.baseUrl.startsWith('/api/')) {
