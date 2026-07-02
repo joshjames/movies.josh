@@ -5,12 +5,26 @@ const crypto = require('crypto');
 const AccountService = require('../services/AccountService');
 const logger = require('../services/logger');
 
-// CRITICAL: This endpoint needs the raw request body to verify the signature
-router.post('/subscription_payload', express.raw({ type: 'application/json' }), async (req, res) => {
-  const signature = String(req.headers['x-square-signature'] || '');
-  const webhookSignatureKey = String(process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || '').trim();
+function resolveWebhookConfig(req) {
   const fallbackUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-  const notificationUrl = String(process.env.SUBSCRIPTION_NOTIFICATION_URL || fallbackUrl).trim();
+  return {
+    signatureKey: String(
+      process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ||
+      process.env.SQUARE_SIGNATURE_KEY ||
+      process.env.SQUARE_SANDBOX_SIGNATURE_KEY ||
+      ''
+    ).trim(),
+    notificationUrl: String(
+      process.env.SUBSCRIPTION_NOTIFICATION_URL ||
+      process.env.SUBSCRIPTION_SANBOX_WEBHOOK_URL ||
+      fallbackUrl
+    ).trim()
+  };
+}
+
+async function handleSubscriptionWebhook(req, res) {
+  const signature = String(req.headers['x-square-signature'] || '');
+  const { signatureKey: webhookSignatureKey, notificationUrl } = resolveWebhookConfig(req);
 
   if (!webhookSignatureKey) {
     logger.error('[SQUARE WEBHOOK] Missing SQUARE_WEBHOOK_SIGNATURE_KEY.');
@@ -58,6 +72,10 @@ router.post('/subscription_payload', express.raw({ type: 'application/json' }), 
 
   // 3. Always respond with a 200 OK within 10 seconds or Square will retry
   res.status(200).send('ACK');
-});
+}
+
+// Accept both canonical and sandbox-specific webhook paths.
+router.post('/subscription_payload', express.raw({ type: 'application/json' }), handleSubscriptionWebhook);
+router.post('/subscription_payload_sandbox', express.raw({ type: 'application/json' }), handleSubscriptionWebhook);
 
 module.exports = router;

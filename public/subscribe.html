@@ -169,6 +169,14 @@
             cursor: not-allowed;
         }
 
+        .step-status {
+            font-size: 0.82rem;
+            color: #94a3b8;
+            margin-top: 10px;
+            text-align: center;
+            min-height: 1.2em;
+        }
+
         /* --- Banners --- */
         .banner {
             padding: 12px;
@@ -261,6 +269,7 @@
                 </div>
 
                 <button id="card-button" type="button" class="submit-btn">Authorize Subscription</button>
+                <div class="step-status" id="checkoutStatus"></div>
             </form>
         </div>
 
@@ -353,8 +362,8 @@
                 const payments = window.Square.payments(squareRuntime.applicationId, squareRuntime.locationId);
                 cardEngine = await payments.card({
                     style: {
-                        input: { backgroundColor: '#020617', color: '#ffffff' },
-                        'input:focus': { borderColor: '#2563eb' }
+                        input: { backgroundColor: '#020617', color: '#ffffff', fontSize: '16px' },
+                        'input::placeholder': { color: '#64748b' }
                     }
                 });
             } catch (err) {
@@ -378,7 +387,9 @@
                     return;
                 }
                 // Mount the interactive payment iframe elements inside our container
+                document.getElementById('checkoutStatus').innerText = 'Loading secure card fields...';
                 await cardEngine.attach('#card-container');
+                document.getElementById('checkoutStatus').innerText = 'Card fields ready.';
                 
                 // Bind click engine trigger directly to Square's asynchronous tokenizer evaluation
                 if (!paymentHandlerBound) {
@@ -400,6 +411,7 @@
         async function handlePaymentExecution(e) {
             e.preventDefault();
             document.getElementById('card-button').disabled = true;
+            document.getElementById('checkoutStatus').innerText = 'Authorizing subscription...';
             
             try {
                 // 1. Force the client view into Step 3 to hide details during transit
@@ -417,6 +429,7 @@
                 }
             } catch (err) {
                 document.getElementById('card-button').disabled = false;
+                document.getElementById('checkoutStatus').innerText = '';
                 goToStep(2); // Bounce user back safely to retype
                 showError(err.message || "Failed handling transaction authorization arrays.");
             }
