@@ -29,6 +29,22 @@ function cleanFallbackTitle(rawName = '') {
         .trim();
 }
 
+function resolveSubliminalConfigPath() {
+    const preferred = String(process.env.SUBLIMINAL_CONFIG_PATH || '').trim();
+    const candidates = [
+        preferred,
+        '/root/.config/subliminal/subliminal.toml',
+        '/home/epic/.config/subliminal/subliminal.toml'
+    ].filter(Boolean);
+
+    return candidates.find(candidate => fs.existsSync(candidate)) || null;
+}
+
+function sanitizeCliToken(value, fallback = '') {
+    const cleaned = String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    return cleaned || fallback;
+}
+
 function readLocalSubtitleContext(folderPath) {
     try {
         const metadataPath = path.join(folderPath, 'metadata.json');
@@ -175,10 +191,23 @@ async function fetchYifySubtitles(imdbId, folderPath) {
 /**
  * Strategy 2: CLI Subliminal Backup Engine
  */
-function fetchSubliminalFallback(imdbId, folderPath) {
+function fetchSubliminalFallback(imdbId, folderPath, options = {}) {
     return new Promise((resolve) => {
         logger.debug(`⏳ Starting Subliminal verification routines on folder target...`);
-        const cmd = `subliminal download -l en -i ${imdbId} "${folderPath}"`;
+        const language = sanitizeCliToken(process.env.SUBTITLE_LANG || process.env.SUBLIMINAL_LANG || 'en', 'en');
+        const safeImdb = sanitizeCliToken(imdbId, '');
+        const configPath = resolveSubliminalConfigPath();
+        const configArg = configPath ? ` --config "${configPath}"` : '';
+        const imdbArg = safeImdb ? ` -i ${safeImdb}` : '';
+        const singleMode = options.singleMode !== false;
+        const singleArg = singleMode ? ' -s' : '';
+        const cmd = `subliminal${configArg} download -l ${language}${imdbArg}${singleArg} "${folderPath}"`;
+
+        if (configPath) {
+            logger.debug(`🧩 [SUBTITLES] Using Subliminal config: ${configPath}`);
+        } else {
+            logger.warn('⚠️ [SUBTITLES] Subliminal config file not found. Running with default providers.', 'warn');
+        }
 
         exec(cmd, (err) => {
             if (err) {
@@ -186,18 +215,58 @@ function fetchSubliminalFallback(imdbId, folderPath) {
                 return resolve([]);
             }
 
-            const files = fs.readdirSync(folderPath);
-            const srtFile = files.find(f => f.endsWith('.srt') && f.toLowerCase() !== 'english.srt');
-
-            if (srtFile) {
-                const standardizedName = 'English.srt';
-                fs.renameSync(path.join(folderPath, srtFile), path.join(folderPath, standardizedName));
-                return resolve([{ language: 'eng', relativePath: standardizedName, source: 'subliminal' }]);
-            }
-
-            resolve([]);
+            resolve(collectSubtitleRecords(folderPath, 'subliminal'));
         });
     });
+}
+
+function walkFiles(rootPath, matcher) {
+    const queue = [rootPath];
+    const files = [];
+
+    while (queue.length) {
+        const current = queue.shift();
+        if (!fs.existsSync(current)) continue;
+
+        let entries = [];
+        try {
+            entries = fs.readdirSync(current, { withFileTypes: true });
+        } catch (_err) {
+            continue;
+        }
+
+        for (const entry of entries) {
+            const next = path.join(current, entry.name);
+            if (entry.isDirectory()) {
+                queue.push(next);
+                continue;
+            }
+            if (!matcher || matcher(entry.name, next)) files.push(next);
+        }
+    }
+
+    return files;
+}
+
+function collectSubtitleRecords(folderPath, source = 'local-cached') {
+    const subtitleFiles = walkFiles(folderPath, file => /\.(srt|vtt)$/i.test(file));
+    return subtitleFiles.map(filePath => {
+        const file = path.basename(filePath);
+        const normalized = file.toLowerCase();
+        let language = 'und';
+        if (normalized.includes('.en.') || normalized.includes('english')) language = 'eng';
+        if (normalized.includes('hindi') || normalized.includes('.hi.')) language = 'hin';
+
+        return {
+            language,
+            relativePath: path.relative(folderPath, filePath),
+            source
+        };
+    });
+}
+
+function hasSubtitleTrack(folderPath) {
+    return walkFiles(folderPath, file => /\.(srt|vtt)$/i.test(file)).length > 0;
 }
 
 function walkVideoFiles(rootPath) {
@@ -343,6 +412,22 @@ app.post('/process', async (req, res) => {
     try {
         const resolvedImdbId = await resolveImdbFallback({ imdbId, folderName, folderPath, contentType });
 
+        // For TV shows, use Subliminal first (provider scoring + guessit matching), then fallback to embedded extraction.
+        if (contentType === 'series') {
+            const subliminalRecords = await fetchSubliminalFallback(resolvedImdbId, folderPath, { singleMode: false });
+            if (subliminalRecords.length > 0) {
+                logger.debug(`🧩 [SUBTITLES] Subliminal resolved ${subliminalRecords.length} subtitle file(s) for series.`);
+                return res.json({
+                    success: true,
+                    message: 'Series subtitles resolved via Subliminal providers.',
+                    patchData: {
+                        subtitles: subliminalRecords,
+                        pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() }
+                    }
+                });
+            }
+        }
+
         const embeddedRecords = extractEmbeddedSubtitles(folderPath, contentType);
         if (embeddedRecords.length > 0) {
             logger.debug(`🧩 [SUBTITLES] Extracted ${embeddedRecords.length} embedded subtitle track(s) from container files.`);
@@ -356,19 +441,15 @@ app.post('/process', async (req, res) => {
             });
         }
 
-        // ✨ FAST PASS SYSTEM CHECK: Scan files for ANY common subtitle tracks to bypass APIs entirely
-        const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
-        const subtitleExists = filesOnDisk.some(f => 
-            f.toLowerCase() === 'english.srt' || f.toLowerCase().endsWith('.vtt')
-        );
-
-        if (subtitleExists) {
+        // Fast pass: any existing sidecar subtitle file in folder tree.
+        if (hasSubtitleTrack(folderPath)) {
+            const records = collectSubtitleRecords(folderPath, 'local-cached');
             logger.debug(`⏭️ [SUBTITLES] Skipping [${folderName || path.basename(folderPath)}]. Subtitle track already present on disk.`);
             return res.json({
                 success: true,
                 message: "Subtitle track verified instantly via local storage check.",
                 patchData: {
-                    subtitles: [{ language: 'eng', relativePath: 'English.srt', source: 'local-cached' }],
+                    subtitles: records,
                     ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
                 }
             });
@@ -393,7 +474,7 @@ app.post('/process', async (req, res) => {
 
         // Step 2: If YIFY comes up short or hits a wall, execute Subliminal
         if (!records || records.length === 0) {
-            records = await fetchSubliminalFallback(resolvedImdbId, folderPath);
+            records = await fetchSubliminalFallback(resolvedImdbId, folderPath, { singleMode: true });
         }
 
         // Return unified response structures cleanly back to the Orchestrator loop
