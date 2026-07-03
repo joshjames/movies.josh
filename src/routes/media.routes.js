@@ -8,6 +8,7 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
 const { spawnSync } = require('child_process');
+const crypto = require('crypto');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
@@ -140,15 +141,17 @@ function streamLocalVideoFile(req, res, videoPath) {
 }
 
 function getAudioTrackCacheDir(videoPath) {
-    return path.join(path.dirname(videoPath), '.joshflix-audio-cache');
+    const configured = String(process.env.AUDIO_PLAYBACK_CACHE_DIR || '').trim();
+    if (configured) return configured;
+    return path.join('/tmp', 'joshflix-audio-cache');
 }
 
 function getAudioTrackCachePath(videoPath, streamIndex) {
     const stat = fs.statSync(videoPath);
-    const baseName = path.parse(videoPath).name;
-    const safeBase = baseName.replace(/[^a-z0-9._-]+/gi, '_');
-    const stamp = `${stat.size}-${Math.floor(stat.mtimeMs)}`;
-    return path.join(getAudioTrackCacheDir(videoPath), `${safeBase}.a${streamIndex}.${stamp}.mp4`);
+    const cacheKey = crypto.createHash('sha1')
+        .update(`${videoPath}|${streamIndex}|${stat.size}|${Math.floor(stat.mtimeMs)}`)
+        .digest('hex');
+    return path.join(getAudioTrackCacheDir(videoPath), `${cacheKey}.mp4`);
 }
 
 function ensureAudioSelectedPlaybackFile(videoPath, streamIndex) {
@@ -1110,8 +1113,14 @@ router.get('/playback/:id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Requested audio track was not found in this video file.' });
         }
 
-        const cachedPlaybackPath = ensureAudioSelectedPlaybackFile(videoPath, selectedAudio.streamIndex);
-        return streamLocalVideoFile(req, res, cachedPlaybackPath);
+        try {
+            const cachedPlaybackPath = ensureAudioSelectedPlaybackFile(videoPath, selectedAudio.streamIndex);
+            return streamLocalVideoFile(req, res, cachedPlaybackPath);
+        } catch (cacheErr) {
+            console.error('💣 Audio-selected cache creation failed:', cacheErr.message);
+            res.setHeader('X-Audio-Track-Selection-Warning', 'fallback-to-original-file');
+            return streamLocalVideoFile(req, res, videoPath);
+        }
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
