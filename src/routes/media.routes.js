@@ -503,7 +503,35 @@ function pickSubtitleCandidate(candidates, query = {}) {
     return [...candidates].sort((a, b) => scoreSubtitleCandidate(b) - scoreSubtitleCandidate(a))[0];
 }
 
+function decodePossiblyEncodedValue(value) {
+    let output = String(value || '').trim();
+    if (!output) return '';
+
+    for (let i = 0; i < 3; i += 1) {
+        try {
+            const decoded = decodeURIComponent(output);
+            if (decoded === output) break;
+            output = decoded;
+        } catch (_err) {
+            break;
+        }
+    }
+
+    return output.replace(/%2f/ig, '/').trim();
+}
+
+function normalizeMediaIdInput(mediaId) {
+    return decodePossiblyEncodedValue(mediaId).replace(/^\/+/, '');
+}
+
+function normalizeShowFolderInput(showFolder) {
+    const normalized = normalizeMediaIdInput(showFolder);
+    return normalized.replace(/^series\//i, '');
+}
+
 function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile) {
+    mediaId = normalizeMediaIdInput(mediaId);
+
     if (mediaId.startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode)) {
         const showFolder = mediaId.replace(/^series\//, '');
         return resolveSeriesEpisodeVideoPath(showFolder, season, episode);
@@ -871,7 +899,7 @@ router.get('/movies/:id', async (req, res) => {
 // GET: /api/series/:showFolder (Unified Series Hierarchy Aggregator)
 router.get('/series/:showFolder', async (req, res) => {
     try {
-        const showFolder = decodeURIComponent(req.params.showFolder);
+        const showFolder = normalizeShowFolderInput(req.params.showFolder);
         // 🚨 FIX: Updated to find directories inside the new separate SERIES_DIR path
         const showPath = path.join(SERIES_DIR, showFolder);
 
@@ -1065,7 +1093,7 @@ router.get('/raw-file/:id', async (req, res) => {
 
 router.get('/audio-tracks/:id', async (req, res) => {
     try {
-        const mediaId = decodeURIComponent(req.params.id);
+        const mediaId = normalizeMediaIdInput(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
@@ -1092,7 +1120,7 @@ router.get('/audio-tracks/:id', async (req, res) => {
 
 router.get('/playback/:id', async (req, res) => {
     try {
-        const mediaId = decodeURIComponent(req.params.id);
+        const mediaId = normalizeMediaIdInput(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
@@ -1129,7 +1157,7 @@ router.get('/playback/:id', async (req, res) => {
 // GET: /api/subtitles/:id (Dynamic SRT-to-WebVTT Structural Sanitizer Engine)
 router.get('/subtitles/:id/tracks', async (req, res) => {
     try {
-        const mediaId = decodeURIComponent(req.params.id);
+        const mediaId = normalizeMediaIdInput(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
@@ -1158,7 +1186,7 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
 
 router.get('/subtitles/:id', async (req, res) => {
     try {
-        const mediaId = decodeURIComponent(req.params.id);
+        const mediaId = normalizeMediaIdInput(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
