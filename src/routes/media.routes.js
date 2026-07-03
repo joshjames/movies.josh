@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
-const { spawnSync, spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
@@ -137,6 +137,50 @@ function streamLocalVideoFile(req, res, videoPath) {
 
     res.writeHead(200, { ...headers, 'Content-Length': fileSize });
     fs.createReadStream(videoPath).pipe(res);
+}
+
+function getAudioTrackCacheDir(videoPath) {
+    return path.join(path.dirname(videoPath), '.joshflix-audio-cache');
+}
+
+function getAudioTrackCachePath(videoPath, streamIndex) {
+    const stat = fs.statSync(videoPath);
+    const baseName = path.parse(videoPath).name;
+    const safeBase = baseName.replace(/[^a-z0-9._-]+/gi, '_');
+    const stamp = `${stat.size}-${Math.floor(stat.mtimeMs)}`;
+    return path.join(getAudioTrackCacheDir(videoPath), `${safeBase}.a${streamIndex}.${stamp}.mp4`);
+}
+
+function ensureAudioSelectedPlaybackFile(videoPath, streamIndex) {
+    const cacheDir = getAudioTrackCacheDir(videoPath);
+    fs.mkdirSync(cacheDir, { recursive: true });
+
+    const cachePath = getAudioTrackCachePath(videoPath, streamIndex);
+    if (fs.existsSync(cachePath)) {
+        return cachePath;
+    }
+
+    const tempPath = `${cachePath}.tmp-${process.pid}-${Date.now()}`;
+    const ffmpegArgs = [
+        '-y',
+        '-i', videoPath,
+        '-map', '0:v:0',
+        '-map', `0:${streamIndex}`,
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-movflags', '+faststart',
+        tempPath
+    ];
+
+    const result = spawnSync('ffmpeg', ffmpegArgs, { encoding: 'utf8' });
+    if (result.status !== 0 || !fs.existsSync(tempPath)) {
+        const stderr = String(result.stderr || result.stdout || '').trim();
+        throw new Error(stderr || 'Failed to create audio-selected playback cache.');
+    }
+
+    fs.renameSync(tempPath, cachePath);
+    return cachePath;
 }
 
 function findSidecarSubtitleForVideo(videoPath) {
@@ -1066,49 +1110,8 @@ router.get('/playback/:id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Requested audio track was not found in this video file.' });
         }
 
-        const ffmpegArgs = [
-            '-v', 'error',
-            '-i', videoPath,
-            '-map', '0:v:0',
-            '-map', `0:${selectedAudio.streamIndex}`,
-            '-c:v', 'copy',
-            '-c:a', 'aac',
-            '-ac', '2',
-            '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-            '-f', 'mp4',
-            'pipe:1'
-        ];
-
-        const ffmpegProc = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-        let stderr = '';
-
-        ffmpegProc.stderr.on('data', chunk => {
-            if (stderr.length < 4000) stderr += String(chunk || '');
-        });
-
-        req.on('close', () => {
-            if (!ffmpegProc.killed) ffmpegProc.kill('SIGKILL');
-        });
-
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('Content-Type', 'video/mp4');
-
-        ffmpegProc.on('error', err => {
-            if (!res.headersSent) {
-                return res.status(500).json({ success: false, error: err.message });
-            }
-            res.destroy(err);
-        });
-
-        ffmpegProc.on('close', code => {
-            if (code !== 0 && !res.writableEnded) {
-                console.error('💣 Audio stream remux failed:', stderr || `ffmpeg exited with code ${code}`);
-                res.destroy(new Error('ffmpeg remux failed'));
-            }
-        });
-
-        ffmpegProc.stdout.pipe(res);
+        const cachedPlaybackPath = ensureAudioSelectedPlaybackFile(videoPath, selectedAudio.streamIndex);
+        return streamLocalVideoFile(req, res, cachedPlaybackPath);
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
