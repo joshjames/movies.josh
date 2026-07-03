@@ -12,6 +12,58 @@ app.use(express.json());
 
 const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
 
+function probeMediaStreams(filePath) {
+    try {
+        const command = `ffprobe -v error -show_entries stream=index,codec_type,codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default,forced -of json "${filePath}"`;
+        const output = JSON.parse(execSync(command).toString());
+        return Array.isArray(output.streams) ? output.streams : [];
+    } catch (err) {
+        logger.error(`ffprobe stream scan crash on ${path.basename(filePath)}: ${err.message}`);
+        return [];
+    }
+}
+
+function pickAudioStreamCandidates(filePath) {
+    const streams = probeMediaStreams(filePath).filter(stream => stream.codec_type === 'audio');
+    return streams.map((stream, index) => {
+        const lang = String(stream?.tags?.language || '').toLowerCase();
+        const title = String(stream?.tags?.title || '').trim();
+        const codec = String(stream?.codec_name || '').toLowerCase();
+        const defaultFlag = Number(stream?.disposition?.default) === 1;
+
+        return {
+            index,
+            streamIndex: Number(stream?.index),
+            lang,
+            title,
+            codec,
+            channels: Number(stream?.channels) || 0,
+            channelLayout: String(stream?.channel_layout || '').trim(),
+            isDefault: defaultFlag,
+            isEnglish: lang === 'en' || lang === 'eng' || /\beng(lish)?\b/i.test(title)
+        };
+    });
+}
+
+function buildAudioMapArgs(filePath) {
+    const tracks = pickAudioStreamCandidates(filePath);
+    if (!tracks.length) {
+        return { mapArgs: ['-map', '0:v:0'], chosenTrack: null, audioTracks: [] };
+    }
+
+    const preferred = tracks.find(track => track.isDefault && track.isEnglish)
+        || tracks.find(track => track.isEnglish)
+        || tracks.find(track => track.isDefault)
+        || tracks[0];
+
+    const mapArgs = ['-map', '0:v:0'];
+    tracks.forEach(track => {
+        mapArgs.push('-map', `0:${track.streamIndex}`);
+    });
+
+    return { mapArgs, chosenTrack: preferred, audioTracks: tracks };
+}
+
 // =========================================================================
 // 🎥 INDEPENDENT PROFILE RENDERING ENGINES (SWAPPABLE & SCHEDULABLE)
 // =========================================================================
@@ -22,8 +74,18 @@ const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
  */
 function remuxToWebContainer(inputPath, outputPath) {
     logger.debug(`⚡ Running Fast Container Remux Pass [Stream Copy] -> ${path.basename(outputPath)}`);
+    const { mapArgs } = buildAudioMapArgs(inputPath);
     // -c copy strips encoding load entirely; +faststart relocates moov atom for immediate web playback
-    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -c:v copy -c:a copy -movflags +faststart -y "${outputPath}"`;
+    const ffmpegCmd = [
+        'ffmpeg',
+        '-threads', '4',
+        '-i', `"${inputPath}"`,
+        ...mapArgs,
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-movflags', '+faststart',
+        '-y', `"${outputPath}"`
+    ].join(' ');
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
 
@@ -32,7 +94,21 @@ function remuxToWebContainer(inputPath, outputPath) {
  */
 function generate1080pProfile(inputPath, outputPath) {
     logger.debug(`🎬 Running 1080p Core Optimization Line -> ${path.basename(outputPath)}`);
-    const ffmpegCmd = `ffmpeg -threads 6 -i "${inputPath}" -c:v libx264 -preset medium -crf 22 -c:a aac -ac 2 -b:a 192k -movflags +faststart -y "${outputPath}"`;
+    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const ffmpegCmd = [
+        'ffmpeg',
+        '-threads', '6',
+        '-i', `"${inputPath}"`,
+        ...mapArgs,
+        '-c:v', 'libx264',
+        '-preset', 'medium',
+        '-crf', '22',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-ac', '2',
+        '-movflags', '+faststart',
+        '-y', `"${outputPath}"`
+    ].join(' ');
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
 
@@ -42,7 +118,24 @@ function generate1080pProfile(inputPath, outputPath) {
 function generate720pProfile(inputPath, outputPath) {
     logger.debug(`⏳ Running 720p Mid-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // Added a maxrate cap of 2.5M and a matching buffer size to prevent bloated encodes
-    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:720:sws_flags=lanczos" -c:v libx264 -preset medium -crf 25 -maxrate 2500k -bufsize 5000k -c:a aac -ac 2 -b:a 128k -movflags +faststart -y "${outputPath}"`;
+    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const ffmpegCmd = [
+        'ffmpeg',
+        '-threads', '4',
+        '-i', `"${inputPath}"`,
+        ...mapArgs,
+        '-vf', '"scale=-2:720:sws_flags=lanczos"',
+        '-c:v', 'libx264',
+        '-preset', 'medium',
+        '-crf', '25',
+        '-maxrate', '2500k',
+        '-bufsize', '5000k',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '2',
+        '-movflags', '+faststart',
+        '-y', `"${outputPath}"`
+    ].join(' ');
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
 
@@ -52,29 +145,46 @@ function generate720pProfile(inputPath, outputPath) {
 function generate480pProfile(inputPath, outputPath) {
     logger.debug(`📱 Running 480p Low-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // Added a maxrate cap of 1.2M
-    const ffmpegCmd = `ffmpeg -threads 4 -i "${inputPath}" -vf "scale=-2:480:sws_flags=lanczos" -c:v libx264 -preset fast -crf 27 -maxrate 1200k -bufsize 2400k -c:a aac -ac 2 -b:a 96k -movflags +faststart -y "${outputPath}"`;
+    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const ffmpegCmd = [
+        'ffmpeg',
+        '-threads', '4',
+        '-i', `"${inputPath}"`,
+        ...mapArgs,
+        '-vf', '"scale=-2:480:sws_flags=lanczos"',
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '27',
+        '-maxrate', '1200k',
+        '-bufsize', '2400k',
+        '-c:a', 'aac',
+        '-b:a', '96k',
+        '-ac', '2',
+        '-movflags', '+faststart',
+        '-y', `"${outputPath}"`
+    ].join(' ');
     execSync(ffmpegCmd, { stdio: 'pipe' });
 }
 
 function inspectMediaStreams(filePath) {
     try {
-        const command = `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of json "${filePath}"`;
-        const audioCommand = `ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of json "${filePath}"`;
-        
-        const videoOutput = JSON.parse(execSync(command).toString());
-        const audioOutput = JSON.parse(execSync(audioCommand).toString());
-        
-        const videoCodec = videoOutput.streams?.[0]?.codec_name || '';
-        const audioCodec = audioOutput.streams?.[0]?.codec_name || '';
-        
+        const streams = probeMediaStreams(filePath);
+        const videoStream = streams.find(stream => stream.codec_type === 'video') || null;
+        const audioStreams = streams.filter(stream => stream.codec_type === 'audio');
+        const audioCodecs = audioStreams.map(stream => String(stream.codec_name || '').toLowerCase());
+        const videoCodec = String(videoStream?.codec_name || '').toLowerCase();
+        const audioCodec = audioCodecs[0] || '';
+
         return {
             videoCodec,
             audioCodec,
-            isWebNative: (videoCodec === 'h264' || videoCodec === 'hevc') && audioCodec === 'aac'
+            audioTracks: audioStreams.length,
+            hasMultipleAudioTracks: audioStreams.length > 1,
+            isWebNative: (videoCodec === 'h264' || videoCodec === 'hevc') && audioCodecs.every(codec => codec === 'aac' || codec === 'mp3' || codec === 'ac3' || codec === 'eac3')
         };
     } catch (err) {
         logger.error(`ffprobe inspection crash on ${path.basename(filePath)}: ${err.message}`);
-        return { videoCodec: 'unknown', audioCodec: 'unknown', isWebNative: false };
+        return { videoCodec: 'unknown', audioCodec: 'unknown', audioTracks: 0, hasMultipleAudioTracks: false, isWebNative: false };
     }
 }
 
