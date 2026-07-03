@@ -124,6 +124,20 @@
             font-size: 0.8rem;
             max-width: 44vw;
         }
+
+        .audio-track-select {
+            position: absolute;
+            bottom: 72px;
+            left: 24px;
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.75);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            max-width: 44vw;
+        }
     </style>
 </head>
 <body>
@@ -131,6 +145,9 @@
     <div class="player-container" id="stage">
         <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
         <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
+        <select class="audio-track-select" id="audioTrackSelect" title="Audio track selector">
+            <option value="auto">Audio: Auto</option>
+        </select>
         <select class="subtitle-track-select" id="subtitleTrackSelect" title="Subtitle track selector">
             <option value="auto">Subtitles: Auto</option>
             <option value="off">Subtitles: Off</option>
@@ -154,9 +171,13 @@
         const qualityTag = document.getElementById('qualityTag');
         const backBtn = document.getElementById('backBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const audioTrackSelect = document.getElementById('audioTrackSelect');
         const subtitleTrackSelect = document.getElementById('subtitleTrackSelect');
         const stage = document.getElementById('stage');
+        let audioTracks = [];
         let subtitleTracks = [];
+        let currentPlaybackFile = '';
+        let currentRemoteStreamUrl = '';
 
         // RESUME ENGINE CORE STATES
         let currentMediaId = movieId; // Fallback to raw ID for movies
@@ -172,10 +193,90 @@
             backBtn.innerText = "⏮ Back to Show";
         }
 
+        function buildContextQuery() {
+            const query = new URLSearchParams();
+            if (seasonParam && episodeParam) {
+                query.set('season', String(seasonParam));
+                query.set('episode', String(episodeParam));
+            }
+            if (currentPlaybackFile) {
+                query.set('file', currentPlaybackFile);
+            }
+            return query;
+        }
+
         function subtitleQueryBase() {
-            return (seasonParam && episodeParam)
-                ? `season=${encodeURIComponent(seasonParam)}&episode=${encodeURIComponent(episodeParam)}`
-                : '';
+            return buildContextQuery().toString();
+        }
+
+        function buildPlaybackUrl() {
+            const query = buildContextQuery();
+            if (audioTrackSelect.value !== 'auto') {
+                query.set('audioTrack', audioTrackSelect.value);
+            }
+            return `/api/playback/${encodeURIComponent(movieId)}${query.toString() ? `?${query.toString()}` : ''}`;
+        }
+
+        function deriveFileNameFromPath(inputPath = '') {
+            const clean = String(inputPath || '').split('?')[0];
+            const parts = clean.split('/');
+            const last = parts[parts.length - 1] || '';
+            return decodeURIComponent(last);
+        }
+
+        function applyVideoSource(preservePosition = false) {
+            const wasPaused = videoEl.paused;
+            const previousTime = preservePosition ? videoEl.currentTime : 0;
+
+            videoEl.src = currentRemoteStreamUrl || buildPlaybackUrl();
+
+            if (preservePosition) {
+                videoEl.addEventListener('loadedmetadata', () => {
+                    if (Number.isFinite(previousTime) && previousTime > 0) {
+                        videoEl.currentTime = previousTime;
+                    }
+                    if (!wasPaused) {
+                        videoEl.play().catch(() => {});
+                    }
+                }, { once: true });
+            }
+        }
+
+        async function refreshAudioTracks() {
+            audioTracks = [];
+            audioTrackSelect.innerHTML = '<option value="auto">Audio: Auto</option>';
+            audioTrackSelect.disabled = true;
+
+            if (currentRemoteStreamUrl) {
+                return;
+            }
+
+            try {
+                const baseQuery = buildContextQuery().toString();
+                const res = await fetch(`/api/audio-tracks/${encodeURIComponent(movieId)}${baseQuery ? `?${baseQuery}` : ''}`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                if (!data.success || !Array.isArray(data.tracks)) return;
+
+                audioTracks = data.tracks;
+                data.tracks.forEach(track => {
+                    const option = document.createElement('option');
+                    option.value = String(track.streamIndex);
+                    option.textContent = track.label || `Audio ${track.streamIndex}`;
+                    audioTrackSelect.appendChild(option);
+                });
+
+                const selected = String(audioTrackSelect.value || 'auto');
+                const stillExists = selected === 'auto' || data.tracks.some(t => String(t.streamIndex) === selected);
+                if (!stillExists) {
+                    audioTrackSelect.value = 'auto';
+                }
+
+                audioTrackSelect.disabled = data.tracks.length <= 1;
+            } catch (_err) {
+                // Keep playback resilient if audio track discovery fails.
+            }
         }
 
         async function refreshSubtitleTracks() {
@@ -225,6 +326,12 @@
         }
 
         subtitleTrackSelect.addEventListener('change', () => {
+            loadSubtitles();
+        });
+
+        audioTrackSelect.addEventListener('change', () => {
+            if (currentRemoteStreamUrl) return;
+            applyVideoSource(true);
             loadSubtitles();
         });
 
@@ -342,7 +449,18 @@
                         qualityTag.innerText = "FHD 1080P (SOURCE)";
                     }
 
-                    videoEl.src = targetStreamUrl;
+                    if (/^https?:\/\//i.test(targetStreamUrl)) {
+                        currentRemoteStreamUrl = targetStreamUrl;
+                        currentPlaybackFile = '';
+                        audioTrackSelect.value = 'auto';
+                        audioTrackSelect.disabled = true;
+                    } else {
+                        currentRemoteStreamUrl = '';
+                        currentPlaybackFile = deriveFileNameFromPath(targetStreamUrl);
+                    }
+
+                    applyVideoSource(false);
+                    await refreshAudioTracks();
                     await refreshSubtitleTracks();
                     loadSubtitles();
                     videoEl.play().catch(() => {});
@@ -370,12 +488,16 @@
             
             const episode = currentTvPlaylist[index];
             currentTrackIndex = index;
+            episodeParam = String(episode.episodeNumber);
+            currentPlaybackFile = deriveFileNameFromPath(episode.localRelativePath || '');
+            currentRemoteStreamUrl = '';
+            audioTrackSelect.value = 'auto';
 
             // Generate deterministic string for unique TV episode tracking arrays
             const cleanFolder = movieId.replace('series/', '');
             currentMediaId = `${cleanFolder}-S${seasonParam}E${episode.episodeNumber}`;
 
-            videoEl.src = `/movie-assets/${episode.localRelativePath}`;
+            applyVideoSource(false);
             qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
             qualityTag.style.background = "#6366f1"; 
 
@@ -387,6 +509,9 @@
 
             // Fire an explicit lookup payload fetch immediately for the new episode target profile
             applyResumeMarker();
+
+            // Reload audio/subtitle tracks for selected episode
+            refreshAudioTracks();
 
             // Reload subtitle track for the selected episode
             refreshSubtitleTracks().then(() => loadSubtitles());

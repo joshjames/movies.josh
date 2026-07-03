@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
@@ -81,6 +81,62 @@ function findSourceVideoInFolder(folderPath) {
 
     const preferred = candidates.find(file => /\.web\.mp4$/i.test(file));
     return preferred || candidates[0];
+}
+
+function sanitizeVideoFileName(fileName) {
+    const normalized = path.basename(String(fileName || '').trim());
+    if (!normalized) return '';
+    if (normalized.includes('..')) return '';
+    if (!/\.(mkv|mp4|m4v|avi|mov|wmv)$/i.test(normalized)) return '';
+    return normalized;
+}
+
+function detectVideoMime(videoPath) {
+    const ext = path.extname(String(videoPath || '')).toLowerCase();
+    if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
+    if (ext === '.mkv') return 'video/x-matroska';
+    if (ext === '.avi') return 'video/x-msvideo';
+    if (ext === '.mov') return 'video/quicktime';
+    return 'application/octet-stream';
+}
+
+function streamLocalVideoFile(req, res, videoPath) {
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    const contentType = detectVideoMime(videoPath);
+
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Range, Content-Type',
+        'Accept-Ranges': 'bytes',
+        'Content-Type': contentType
+    };
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204, headers);
+        res.end();
+        return;
+    }
+
+    if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = (end - start) + 1;
+
+        res.writeHead(206, {
+            ...headers,
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Content-Length': chunkSize
+        });
+        fs.createReadStream(videoPath, { start, end }).pipe(res);
+        return;
+    }
+
+    res.writeHead(200, { ...headers, 'Content-Length': fileSize });
+    fs.createReadStream(videoPath).pipe(res);
 }
 
 function findSidecarSubtitleForVideo(videoPath) {
@@ -220,6 +276,63 @@ function probeSubtitleStreams(videoPath) {
         : [];
 }
 
+function probeAudioStreams(videoPath) {
+    const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'stream=index,codec_type,codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default,forced,hearing_impaired',
+        '-of', 'json',
+        videoPath
+    ], { encoding: 'utf8' });
+
+    if (probe.status !== 0) return [];
+
+    let parsed;
+    try {
+        parsed = JSON.parse(probe.stdout || '{}');
+    } catch (_err) {
+        return [];
+    }
+
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    return streams.filter(s => s.codec_type === 'audio');
+}
+
+function listAudioTracksForVideo(videoPath) {
+    const streams = probeAudioStreams(videoPath);
+    return streams.map((stream, idx) => {
+        const lang = String(stream?.tags?.language || 'und').toLowerCase();
+        const title = String(stream?.tags?.title || '').trim();
+        const codec = String(stream?.codec_name || 'audio').toUpperCase();
+        const channels = Number(stream?.channels) || 0;
+        const channelLayout = String(stream?.channel_layout || '').trim();
+        const channelLabel = channelLayout || (channels > 0 ? `${channels}ch` : '');
+        const defaultFlag = Number(stream?.disposition?.default) === 1;
+        const forcedFlag = Number(stream?.disposition?.forced) === 1;
+
+        const labelParts = [
+            lang.toUpperCase(),
+            title || null,
+            codec,
+            channelLabel || null,
+            defaultFlag ? 'default' : null,
+            forcedFlag ? 'forced' : null
+        ].filter(Boolean);
+
+        return {
+            id: idx,
+            streamIndex: Number(stream?.index),
+            lang,
+            title,
+            codec,
+            channels,
+            channelLayout,
+            isDefault: defaultFlag,
+            isForced: forcedFlag,
+            label: labelParts.join(' • ')
+        };
+    });
+}
+
 function extractEmbeddedSubtitleStream(videoPath, stream, baseName) {
     const streamIndex = stream?.index;
     if (!Number.isFinite(streamIndex)) return null;
@@ -343,7 +456,7 @@ function pickSubtitleCandidate(candidates, query = {}) {
     return [...candidates].sort((a, b) => scoreSubtitleCandidate(b) - scoreSubtitleCandidate(a))[0];
 }
 
-function resolveVideoPathForSubtitleRequest(mediaId, season, episode) {
+function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile) {
     if (mediaId.startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode)) {
         const showFolder = mediaId.replace(/^series\//, '');
         return resolveSeriesEpisodeVideoPath(showFolder, season, episode);
@@ -351,6 +464,12 @@ function resolveVideoPathForSubtitleRequest(mediaId, season, episode) {
 
     const folderPath = resolveMovieFolderPath(mediaId);
     if (!fs.existsSync(folderPath)) return null;
+    const explicitFile = sanitizeVideoFileName(requestedFile);
+    if (explicitFile) {
+        const explicitPath = path.join(folderPath, explicitFile);
+        if (fs.existsSync(explicitPath)) return explicitPath;
+    }
+
     const sourceVideo = findSourceVideoInFolder(folderPath);
     return sourceVideo ? path.join(folderPath, sourceVideo) : null;
 }
@@ -897,13 +1016,112 @@ router.get('/raw-file/:id', async (req, res) => {
     }
 });
 
+router.get('/audio-tracks/:id', async (req, res) => {
+    try {
+        const mediaId = decodeURIComponent(req.params.id);
+        const season = parseInt(req.query.season, 10);
+        const episode = parseInt(req.query.episode, 10);
+        const requestedFile = String(req.query.file || '');
+
+        const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
+        if (!videoPath || !fs.existsSync(videoPath)) {
+            return res.status(404).json({ success: false, error: 'No playable video target found for audio track inspection.' });
+        }
+
+        const tracks = listAudioTracksForVideo(videoPath);
+        const defaultTrack = tracks.find(t => t.isDefault) || tracks[0] || null;
+
+        return res.json({
+            success: true,
+            count: tracks.length,
+            selectedDefault: defaultTrack?.streamIndex ?? null,
+            videoFile: path.basename(videoPath),
+            tracks
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/playback/:id', async (req, res) => {
+    try {
+        const mediaId = decodeURIComponent(req.params.id);
+        const season = parseInt(req.query.season, 10);
+        const episode = parseInt(req.query.episode, 10);
+        const requestedFile = String(req.query.file || '');
+        const requestedAudioTrack = parseInt(req.query.audioTrack, 10);
+
+        const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
+        if (!videoPath || !fs.existsSync(videoPath)) {
+            return res.status(404).send('No playable video target found.');
+        }
+
+        if (!Number.isFinite(requestedAudioTrack)) {
+            return streamLocalVideoFile(req, res, videoPath);
+        }
+
+        const audioTracks = listAudioTracksForVideo(videoPath);
+        const selectedAudio = audioTracks.find(track => track.streamIndex === requestedAudioTrack);
+        if (!selectedAudio) {
+            return res.status(400).json({ success: false, error: 'Requested audio track was not found in this video file.' });
+        }
+
+        const ffmpegArgs = [
+            '-v', 'error',
+            '-i', videoPath,
+            '-map', '0:v:0',
+            '-map', `0:${selectedAudio.streamIndex}`,
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-ac', '2',
+            '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+            '-f', 'mp4',
+            'pipe:1'
+        ];
+
+        const ffmpegProc = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+
+        ffmpegProc.stderr.on('data', chunk => {
+            if (stderr.length < 4000) stderr += String(chunk || '');
+        });
+
+        req.on('close', () => {
+            if (!ffmpegProc.killed) ffmpegProc.kill('SIGKILL');
+        });
+
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'video/mp4');
+
+        ffmpegProc.on('error', err => {
+            if (!res.headersSent) {
+                return res.status(500).json({ success: false, error: err.message });
+            }
+            res.destroy(err);
+        });
+
+        ffmpegProc.on('close', code => {
+            if (code !== 0 && !res.writableEnded) {
+                console.error('💣 Audio stream remux failed:', stderr || `ffmpeg exited with code ${code}`);
+                res.destroy(new Error('ffmpeg remux failed'));
+            }
+        });
+
+        ffmpegProc.stdout.pipe(res);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/subtitles/:id (Dynamic SRT-to-WebVTT Structural Sanitizer Engine)
 router.get('/subtitles/:id/tracks', async (req, res) => {
     try {
         const mediaId = decodeURIComponent(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
-        const videoPath = resolveVideoPathForSubtitleRequest(mediaId, season, episode);
+        const requestedFile = String(req.query.file || '');
+        const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
 
         if (!videoPath || !fs.existsSync(videoPath)) {
             return res.status(404).json({ success: false, error: 'No playable video target found for subtitle inspection.' });
@@ -931,8 +1149,9 @@ router.get('/subtitles/:id', async (req, res) => {
         const mediaId = decodeURIComponent(req.params.id);
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
+        const requestedFile = String(req.query.file || '');
 
-        const videoPath = resolveVideoPathForSubtitleRequest(mediaId, season, episode);
+        const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
         if (!videoPath || !fs.existsSync(videoPath)) {
             return res.status(404).send('No video target found for subtitles.');
         }
