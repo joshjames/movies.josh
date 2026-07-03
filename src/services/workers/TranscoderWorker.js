@@ -12,6 +12,38 @@ app.use(express.json());
 
 const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
 
+function isVideoCandidate(fileName) {
+    const lower = String(fileName || '').toLowerCase();
+    if (!EXTENSIONS.includes(path.extname(lower))) return false;
+    if (lower.endsWith('.web.mp4')) return false;
+    if (lower.includes('.720p.')) return false;
+    if (lower.includes('.480p.')) return false;
+    return true;
+}
+
+function walkVideoSources(rootFolder) {
+    const discovered = [];
+
+    function visit(currentPath) {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name.startsWith('.')) continue;
+            const absolutePath = path.join(currentPath, entry.name);
+            if (entry.isDirectory()) {
+                visit(absolutePath);
+                continue;
+            }
+
+            if (entry.isFile() && isVideoCandidate(entry.name)) {
+                discovered.push(absolutePath);
+            }
+        }
+    }
+
+    visit(rootFolder);
+    return discovered.sort((a, b) => a.localeCompare(b));
+}
+
 function probeMediaStreams(filePath) {
     try {
         const command = `ffprobe -v error -show_entries stream=index,codec_type,codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default,forced -of json "${filePath}"`;
@@ -188,6 +220,54 @@ function inspectMediaStreams(filePath) {
     }
 }
 
+function processSingleVideoFile(inputPath) {
+    const parsedPath = path.parse(inputPath);
+    const output1080Path = path.join(parsedPath.dir, `${parsedPath.name}.web.mp4`);
+
+    if (fs.existsSync(output1080Path)) {
+        logger.debug(`🎯 [Web Target Confirmed] ${path.basename(inputPath)} already has optimized asset: ${path.basename(output1080Path)}. Skipping.`);
+        return {
+            success: true,
+            skipped: true,
+            output1080Path,
+            inputPath
+        };
+    }
+
+    const media = inspectMediaStreams(inputPath);
+
+    if (media.isWebNative) {
+        logger.debug(`🚀 [Fast Pass Match] Streams match requirements. Wrapping container for ${path.basename(inputPath)}`);
+
+        try {
+            if (inputPath !== output1080Path) {
+                remuxToWebContainer(inputPath, output1080Path);
+                if (fs.existsSync(output1080Path)) {
+                    fs.unlinkSync(inputPath);
+                }
+            }
+        } catch (remuxErr) {
+            logger.error(`⚠️ Remux failed, falling back to full hardware decode loop: ${remuxErr.message}`);
+            generate1080pProfile(inputPath, output1080Path);
+            if (fs.existsSync(output1080Path)) fs.unlinkSync(inputPath);
+        }
+    } else {
+        generate1080pProfile(inputPath, output1080Path);
+
+        if (fs.existsSync(inputPath) && inputPath !== output1080Path) {
+            fs.unlinkSync(inputPath);
+        }
+    }
+
+    return {
+        success: true,
+        skipped: false,
+        output1080Path,
+        inputPath,
+        media
+    };
+}
+
 // =========================================================================
 // 📥 PRIMARY INGESTION WORKER ROUTE
 // =========================================================================
@@ -203,89 +283,37 @@ app.post('/process', async (req, res) => {
             return res.json({ success: false, error: `Directory target does not exist on disk: ${folderPath}` });
         }
 
-        const list = fs.readdirSync(folderPath);
-        const existingWebFile = list.find(file => file.endsWith('.web.mp4'));
-
-        // 🛑 ABSOLUTE SHORT CIRCUIT: If the targeted file format is present, completely freeze further tasks.
-        if (existingWebFile) {
-            logger.debug(`🎯 [Web Target Confirmed] ${folderName} already has optimized asset: ${existingWebFile}. Skipping completely.`);
-            return res.json({
-                success: true,
-                message: "Terminal 1080p web target profile verified instantly.",
-                patchData: {
-                    storage: {
-                        location: "local",
-                        files: {
-                            "1080p": { status: "synced", localPath: existingWebFile, remoteKey: null },
-                            "720p": { status: "waiting", localPath: null, remoteKey: null },
-                            "480p": { status: "waiting", localPath: null, remoteKey: null }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Clean query isolation for source video tracks
-        let sourceVideo = list.find(file => {
-            const ext = path.extname(file).toLowerCase();
-            return EXTENSIONS.includes(ext) && !file.endsWith('.web.mp4') && !file.includes('.720p') && !file.includes('.480p');
-        });
-
-        if (!sourceVideo) {
-            // Fallback for titles that only exist as 720p/480p source files.
-            sourceVideo = list.find(file => {
-                const ext = path.extname(file).toLowerCase();
-                return EXTENSIONS.includes(ext) && !file.endsWith('.web.mp4');
-            });
-        }
-
-        if (!sourceVideo) {
+        const sourceVideos = walkVideoSources(folderPath);
+        if (!sourceVideos.length) {
             return res.json({ success: false, error: "No viable processing source video found." });
         }
 
-        const inputPath = path.join(folderPath, sourceVideo);
-        const parsedPath = path.parse(inputPath);
-        const output1080Path = path.join(parsedPath.dir, `${parsedPath.name}.web.mp4`);
-
-        const media = inspectMediaStreams(inputPath);
-
-        if (media.isWebNative) {
-            logger.debug(`🚀 [Fast Pass Match] Streams match requirements. Wrapping container for ${sourceVideo}`);
-            
-            // Safe execution line check to prevent self-destruction
-            if (inputPath !== output1080Path) {
-                try {
-                    remuxToWebContainer(inputPath, output1080Path);
-                    if (fs.existsSync(output1080Path)) {
-                        fs.unlinkSync(inputPath);
-                    }
-                } catch (remuxErr) {
-                    logger.error(`⚠️ Remux failed, falling back to full hardware decode loop: ${remuxErr.message}`);
-                    generate1080pProfile(inputPath, output1080Path);
-                    if (fs.existsSync(output1080Path)) fs.unlinkSync(inputPath);
-                }
-            } else {
-                // If it is somehow named exactly the same but lacks the target web naming standard
-                const correctedPath = path.join(parsedPath.dir, `${parsedPath.name}.fixed.web.mp4`);
-                remuxToWebContainer(inputPath, correctedPath);
+        const results = [];
+        for (const inputPath of sourceVideos) {
+            try {
+                results.push(processSingleVideoFile(inputPath));
+            } catch (videoErr) {
+                logger.error(`❌ Transcoder Worker failed for ${path.basename(inputPath)}: ${videoErr.message}`);
+                results.push({ success: false, inputPath, error: videoErr.message });
             }
-        } else {
-            // Trigger actual heavy encoding using isolated function blocks
-            generate1080pProfile(inputPath, output1080Path);
-            
-            if (fs.existsSync(inputPath) && inputPath !== output1080Path) {
-                fs.unlinkSync(inputPath);
-            }
+        }
+
+        const failures = results.filter(item => item.success === false);
+        if (failures.length === results.length) {
+            return res.json({ success: false, error: 'No video files could be processed.', results });
         }
 
         return res.json({
             success: true,
-            message: "Primary 1080p streaming track mapped successfully.",
+            message: `Processed ${results.filter(item => item.success !== false).length} video file(s).`,
+            processedCount: results.filter(item => item.success !== false).length,
+            skippedCount: results.filter(item => item.skipped).length,
+            results,
             patchData: {
                 storage: {
                     location: "local",
                     files: {
-                        "1080p": { status: "synced", localPath: path.basename(output1080Path), remoteKey: null },
+                        "1080p": { status: "synced", localPath: null, remoteKey: null },
                         "720p":  { status: "waiting", localPath: null, remoteKey: null },
                         "480p":  { status: "waiting", localPath: null, remoteKey: null }
                     }
@@ -310,50 +338,76 @@ app.post('/process-low-res', async (req, res) => {
             return res.status(400).json({ success: false, error: "Missing or invalid folderPath." });
         }
 
-        const list = fs.readdirSync(folderPath);
-        const core1080p = list.find(file => file.endsWith('.web.mp4'));
+        const webProfiles = walkVideoSources(folderPath)
+            .map(file => file.endsWith('.web.mp4') ? file : null)
+            .filter(Boolean);
 
-        if (!core1080p) {
+        const rootFiles = [];
+        function collectWebProfiles(currentPath) {
+            const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.name.startsWith('.')) continue;
+                const absolutePath = path.join(currentPath, entry.name);
+                if (entry.isDirectory()) {
+                    collectWebProfiles(absolutePath);
+                    continue;
+                }
+                if (entry.isFile() && /\.web\.mp4$/i.test(entry.name)) {
+                    rootFiles.push(absolutePath);
+                }
+            }
+        }
+
+        collectWebProfiles(folderPath);
+
+        if (!rootFiles.length) {
             return res.status(400).json({ success: false, error: "Cannot down-scale without a master 1080p file present." });
         }
 
-        const sourcePath = path.join(folderPath, core1080p);
-        const baseName = core1080p.replace('.web.mp4', '');
-        
-        const output720Path = path.join(folderPath, `${baseName}.720p.mp4`);
-        const output480Path = path.join(folderPath, `${baseName}.480p.mp4`);
-
-        const generated = {
-            profile1080: core1080p,
-            profile720: fs.existsSync(output720Path) ? path.basename(output720Path) : null,
-            profile480: fs.existsSync(output480Path) ? path.basename(output480Path) : null
-        };
+        const generated = [];
         const errors = [];
 
-        if (!generated.profile720) {
-            try {
-                generate720pProfile(sourcePath, output720Path);
-                if (fs.existsSync(output720Path)) {
-                    generated.profile720 = path.basename(output720Path);
-                }
-            } catch (err720) {
-                const msg = `720p generation failed: ${err720.message}`;
-                logger.error(msg);
-                errors.push(msg);
-            }
-        }
+        for (const sourcePath of rootFiles) {
+            const baseName = path.basename(sourcePath).replace(/\.web\.mp4$/i, '');
+            const dirName = path.dirname(sourcePath);
 
-        if (!generated.profile480) {
-            try {
-                generate480pProfile(sourcePath, output480Path);
-                if (fs.existsSync(output480Path)) {
-                    generated.profile480 = path.basename(output480Path);
+            const output720Path = path.join(dirName, `${baseName}.720p.mp4`);
+            const output480Path = path.join(dirName, `${baseName}.480p.mp4`);
+
+            const entry = {
+                profile1080: path.basename(sourcePath),
+                profile720: fs.existsSync(output720Path) ? path.basename(output720Path) : null,
+                profile480: fs.existsSync(output480Path) ? path.basename(output480Path) : null,
+                sourcePath
+            };
+
+            if (!entry.profile720) {
+                try {
+                    generate720pProfile(sourcePath, output720Path);
+                    if (fs.existsSync(output720Path)) {
+                        entry.profile720 = path.basename(output720Path);
+                    }
+                } catch (err720) {
+                    const msg = `720p generation failed for ${path.basename(sourcePath)}: ${err720.message}`;
+                    logger.error(msg);
+                    errors.push(msg);
                 }
-            } catch (err480) {
-                const msg = `480p generation failed: ${err480.message}`;
-                logger.error(msg);
-                errors.push(msg);
             }
+
+            if (!entry.profile480) {
+                try {
+                    generate480pProfile(sourcePath, output480Path);
+                    if (fs.existsSync(output480Path)) {
+                        entry.profile480 = path.basename(output480Path);
+                    }
+                } catch (err480) {
+                    const msg = `480p generation failed for ${path.basename(sourcePath)}: ${err480.message}`;
+                    logger.error(msg);
+                    errors.push(msg);
+                }
+            }
+
+            generated.push(entry);
         }
 
         const metaFilePath = path.join(folderPath, 'metadata.json');
@@ -372,24 +426,24 @@ app.post('/process-low-res', async (req, res) => {
         metadata.storage.files['1080p'] = {
             ...(metadata.storage.files['1080p'] || {}),
             status: metadata.storage.files['1080p']?.status || 'synced',
-            localPath: generated.profile1080 || metadata.storage.files['1080p']?.localPath || null,
+            localPath: generated[0]?.profile1080 || metadata.storage.files['1080p']?.localPath || null,
             remoteKey: metadata.storage.files['1080p']?.remoteKey || null
         };
 
-        if (generated.profile720) {
+        if (generated.some(item => item.profile720)) {
             metadata.storage.files['720p'] = {
                 ...(metadata.storage.files['720p'] || {}),
                 status: 'pending',
-                localPath: generated.profile720,
+                localPath: generated.find(item => item.profile720)?.profile720 || null,
                 remoteKey: null
             };
         }
 
-        if (generated.profile480) {
+        if (generated.some(item => item.profile480)) {
             metadata.storage.files['480p'] = {
                 ...(metadata.storage.files['480p'] || {}),
                 status: 'pending',
-                localPath: generated.profile480,
+                localPath: generated.find(item => item.profile480)?.profile480 || null,
                 remoteKey: null
             };
         }
@@ -403,7 +457,7 @@ app.post('/process-low-res', async (req, res) => {
 
         fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
 
-        const hasAtLeastOneProfile = Boolean(generated.profile720 || generated.profile480);
+        const hasAtLeastOneProfile = generated.some(item => item.profile720 || item.profile480);
         if (!hasAtLeastOneProfile) {
             return res.status(500).json({
                 success: false,
@@ -416,9 +470,10 @@ app.post('/process-low-res', async (req, res) => {
             success: true,
             partial: errors.length > 0,
             errors,
+            generatedCount: generated.length,
             patchData: {
-                "720p": generated.profile720 ? { status: "pending", localPath: generated.profile720, remoteKey: null } : null,
-                "480p": generated.profile480 ? { status: "pending", localPath: generated.profile480, remoteKey: null } : null
+                "720p": generated.some(item => item.profile720) ? { status: "pending", localPath: generated.find(item => item.profile720)?.profile720 || null, remoteKey: null } : null,
+                "480p": generated.some(item => item.profile480) ? { status: "pending", localPath: generated.find(item => item.profile480)?.profile480 || null, remoteKey: null } : null
             },
             generated
         });
