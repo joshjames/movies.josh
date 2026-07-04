@@ -61,6 +61,45 @@ function hasSquareErrorCode(error, code) {
 }
 
 class AccountService {
+  async findExistingStaticMonthlyVariationId(planId, monthlyPriceCents, currency, variationName) {
+    if (!planId) return null;
+
+    let cursor;
+    do {
+      const response = await square.catalog.search({
+        objectTypes: ['SUBSCRIPTION_PLAN_VARIATION'],
+        cursor,
+        limit: 100
+      });
+
+      const objects = Array.isArray(response.objects) ? response.objects : [];
+      const match = objects.find((obj) => {
+        if (obj?.type !== 'SUBSCRIPTION_PLAN_VARIATION') return false;
+        const vData = obj.subscriptionPlanVariationData || {};
+        if (String(vData.subscriptionPlanId || '') !== String(planId)) return false;
+
+        const firstPhase = (vData.phases || [])[0] || {};
+        const cadence = String(firstPhase.cadence || '').toUpperCase().trim();
+        const pricingType = String(firstPhase?.pricing?.type || '').toUpperCase().trim();
+        const phaseCurrency = String(firstPhase?.pricing?.priceMoney?.currency || '').toUpperCase().trim();
+        const phaseAmount = Number(firstPhase?.pricing?.priceMoney?.amount);
+        const currentName = String(vData.name || '').trim();
+
+        if (cadence !== 'MONTHLY' || pricingType !== 'STATIC') return false;
+        if (phaseCurrency !== String(currency || '').toUpperCase()) return false;
+        if (phaseAmount !== Number(monthlyPriceCents)) return false;
+
+        if (!variationName) return true;
+        return currentName.toLowerCase() === String(variationName).toLowerCase().trim();
+      });
+
+      if (match?.id) return match.id;
+      cursor = response.cursor;
+    } while (cursor);
+
+    return null;
+  }
+
   async resolveCurrencyCode() {
     const envCurrency = String(process.env.SQUARE_CURRENCY || '').trim().toUpperCase();
     if (envCurrency) return envCurrency;
@@ -112,6 +151,16 @@ class AccountService {
       process.env.SQUARE_SUBSCRIPTION_NAME ||
       'AnyMovie Monthly Subscription'
     ).trim();
+
+    const existingStaticVariationId = await this.findExistingStaticMonthlyVariationId(
+      planId,
+      monthlyPriceCents,
+      currency,
+      variationName
+    );
+    if (existingStaticVariationId) {
+      return existingStaticVariationId;
+    }
     const upsertObject = {
       type: 'SUBSCRIPTION_PLAN_VARIATION',
       id: '#anymovie-monthly-static',

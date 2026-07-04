@@ -208,6 +208,51 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .success-card {
+            display: none;
+            margin-top: 18px;
+            border: 1px solid #16a34a;
+            border-radius: 10px;
+            background: rgba(22, 163, 74, 0.12);
+            padding: 16px;
+            text-align: center;
+            color: #bbf7d0;
+        }
+
+        .success-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.15rem;
+            color: #dcfce7;
+        }
+
+        .success-card p {
+            margin: 0;
+            font-size: 0.88rem;
+            line-height: 1.45;
+            color: #bbf7d0;
+        }
+
+        .success-actions {
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .success-btn {
+            background: #16a34a;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .success-btn:hover {
+            background: #15803d;
+        }
     </style>
 </head>
 <body>
@@ -278,6 +323,13 @@
             <h1 id="processing-title">Validating Handshake</h1>
             <div class="subtitle" id="processing-subtitle">Synchronizing transaction token arrays with security core...</div>
             <div class="spinner" id="processingSpinner" style="display: block;"></div>
+            <div class="success-card" id="successCard">
+                <h3>Thank You For Subscribing</h3>
+                <p>Welcome to Premium Unlimited Streaming. Your subscription is active and your account now has full access.</p>
+                <div class="success-actions">
+                    <button type="button" class="success-btn" onclick="window.location.href='/'">Continue To Library</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -459,13 +511,15 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    // Update visual success state frames
-                    document.getElementById('processing-title').innerText = "Allocation Verified";
-                    document.getElementById('processing-subtitle').innerText = "Redirecting profile arrays to media catalog...";
+                    // Present explicit success confirmation before redirecting.
+                    document.getElementById('processing-title').innerText = 'Subscription Confirmed';
+                    document.getElementById('processing-subtitle').innerText = 'Thank you for subscribing. Welcome to Premium Unlimited Streaming.';
+                    document.getElementById('processingSpinner').style.display = 'none';
+                    document.getElementById('successCard').style.display = 'block';
                     
                     setTimeout(() => {
                         window.location.href = "/";
-                    }, 2000);
+                    }, 4200);
                 } else {
                     throw new Error(data.error || "Internal backend configuration loop rejected payload.");
                 }

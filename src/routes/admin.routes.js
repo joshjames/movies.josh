@@ -1772,8 +1772,37 @@ router.get('/users', (req, res) => {
 
             const hasHistory = fs.existsSync(path.join(userPath, 'history.json'));
             const hasPlayback = fs.existsSync(path.join(userPath, 'playback.json'));
+            const configPath = path.join(userPath, 'config.json');
+            let config = {};
+
+            if (fs.existsSync(configPath)) {
+                try {
+                    config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) || {};
+                } catch (_err) {
+                    config = {};
+                }
+            }
+
+            const subscriptionStatus = String(config.subscriptionStatus || '').toUpperCase();
+            const hasPremium = ['ACTIVE', 'TRIALING', 'PENDING', 'PAUSED', 'GRACE'].includes(subscriptionStatus)
+                || Boolean(config.squareSubscriptionId)
+                || Boolean(config.freeAccessActive);
             
-            return { username: folder, hasHistory, hasPlayback };
+            return {
+                username: folder,
+                email: config.email || folder,
+                displayName: config.displayName || config.name || config.username || folder,
+                hasHistory,
+                hasPlayback,
+                hasPremium,
+                subscriptionStatus: subscriptionStatus || 'NONE',
+                billingTier: config.billingTier || null,
+                nextBillingDate: config.nextBillingDate || null,
+                trialEndsAt: config.trialEndsAt || null,
+                squareCustomerId: config.squareCustomerId || null,
+                squareSubscriptionId: config.squareSubscriptionId || null,
+                updatedAt: config.updatedAt || null
+            };
         }).filter(Boolean);
 
         res.json({ success: true, users: profiles });

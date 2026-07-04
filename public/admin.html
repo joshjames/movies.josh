@@ -21,6 +21,24 @@
         }
         .panel.fullscreen-log .console-box { flex: 1; height: 100% !important; }
 
+        .panel.fullscreen-users {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            z-index: 9998;
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
+        }
+        .panel.fullscreen-users .users-panel-body {
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+        }
+
         /* Monitor Grid Components */
         .monitor-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 15px; }
         .service-card { background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #64748b; }
@@ -217,6 +235,73 @@
         .user-name { font-weight: bold; color: #f1f5f9; }
         .user-meta-flags { font-size: 0.75rem; color: #64748b; }
 
+        .users-panel-body {
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        .users-table-wrap {
+            border: 1px solid #334155;
+            border-radius: 8px;
+            overflow: auto;
+            background: #020617;
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 880px;
+        }
+
+        .users-table th,
+        .users-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1e293b;
+            text-align: left;
+            font-size: 0.8rem;
+        }
+
+        .users-table th {
+            position: sticky;
+            top: 0;
+            background: #0b1220;
+            color: #93c5fd;
+            font-size: 0.74rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            z-index: 1;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 4px 8px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .pill.premium {
+            background: #052e2b;
+            border-color: #0f766e;
+            color: #5eead4;
+        }
+
+        .pill.free {
+            background: #172554;
+            border-color: #1d4ed8;
+            color: #93c5fd;
+        }
+
+        .pill.status {
+            background: #1e293b;
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+
         .failed-job-row { background: #020617; border: 1px solid #7f1d1d; border-left: 4px solid #ef4444; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
         .failed-job-title { font-weight: 700; color: #f8fafc; font-size: 0.9rem; }
         .failed-job-meta { font-size: 0.75rem; color: #fca5a5; margin-top: 3px; }
@@ -278,9 +363,14 @@
             </div>
 
             <div>
-                <div class="panel">
-                    <h3>👥 Authorized System Profiles</h3>
-                    <div id="users-list">Querying user indexes...</div>
+                <div class="panel" id="users-panel">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                        <h3 style="margin:0; border:none; padding:0;">👥 Authorized System Profiles</h3>
+                        <button onclick="toggleUsersSize()" id="expand-users-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                    </div>
+                    <div class="users-panel-body" id="users-panel-body">
+                        <div id="users-list">Querying user indexes...</div>
+                    </div>
                 </div>
 
                 <div class="panel">
@@ -427,6 +517,16 @@
             
             const consoleTerminal = document.getElementById('terminal-stream');
             setTimeout(() => { consoleTerminal.scrollTop = consoleTerminal.scrollHeight; }, 50);
+        }
+
+        function toggleUsersSize() {
+            const panel = document.getElementById('users-panel');
+            const btn = document.getElementById('expand-users-btn');
+            if (!panel || !btn) return;
+
+            const isFull = panel.classList.toggle('fullscreen-users');
+            btn.textContent = isFull ? 'Collapse Window ↙' : 'Expand Window ⛶';
+            btn.style.background = isFull ? '#b91c1c' : '#334155';
         }
 
         function parseLogForMonitor(logLine) {
@@ -1370,15 +1470,58 @@
                 const container = document.getElementById('users-list');
 
                 if (data.success && data.users.length > 0) {
-                    container.innerHTML = data.users.map(u => `
-                        <div class="user-row">
-                            <span class="user-name">👤 ${u.username.charAt(0).toUpperCase() + u.username.slice(1)}</span>
-                            <div class="user-meta-flags">
-                                ${u.hasHistory ? '📜 History' : ''} 
-                                ${u.hasPlayback ? '⏳ Progress' : ''}
-                            </div>
+                    const fmtDate = (value) => {
+                        if (!value) return '-';
+                        const date = new Date(value);
+                        if (Number.isNaN(date.getTime())) return '-';
+                        return date.toLocaleDateString();
+                    };
+
+                    const escapeHtml = (value) => String(value || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+
+                    container.innerHTML = `
+                        <div class="users-table-wrap">
+                            <table class="users-table">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Email</th>
+                                        <th>Plan</th>
+                                        <th>Status</th>
+                                        <th>Tier</th>
+                                        <th>Next Bill</th>
+                                        <th>Activity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.users.map((u) => {
+                                        const display = u.displayName || u.username || 'Unknown';
+                                        const flags = [u.hasHistory ? 'History' : null, u.hasPlayback ? 'Progress' : null].filter(Boolean);
+                                        const premiumLabel = u.hasPremium ? 'Premium' : 'Free';
+                                        return `
+                                            <tr>
+                                                <td>
+                                                    <div style="font-weight:700;color:#f8fafc;">${escapeHtml(display)}</div>
+                                                    <div style="font-size:0.72rem;color:#94a3b8;">${escapeHtml(u.username || '')}</div>
+                                                </td>
+                                                <td style="color:#cbd5e1;">${escapeHtml(u.email || '-')}</td>
+                                                <td><span class="pill ${u.hasPremium ? 'premium' : 'free'}">${premiumLabel}</span></td>
+                                                <td><span class="pill status">${escapeHtml(u.subscriptionStatus || 'NONE')}</span></td>
+                                                <td style="color:#cbd5e1;">${escapeHtml(u.billingTier || '-')}</td>
+                                                <td style="color:#cbd5e1;">${fmtDate(u.nextBillingDate || u.trialEndsAt)}</td>
+                                                <td style="color:#94a3b8;">${escapeHtml(flags.join(' • ') || '-')}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
                         </div>
-                    `).join('');
+                    `;
                 } else {
                     container.innerHTML = `<p style="color: #64748b; font-size: 0.85rem; text-align: center;">No local records discovered.</p>`;
                 }
