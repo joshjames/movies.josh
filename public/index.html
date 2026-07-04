@@ -13,6 +13,7 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             margin: 0; 
             padding: 10px; 
+            overflow-x: hidden;
         }
 
         /* Layout Alignment Wrapper Engine */
@@ -525,23 +526,44 @@
         @media(max-width: 760px) {
             .header-content {
                 display: grid;
-                grid-template-columns: auto 1fr auto;
+                grid-template-columns: auto 1fr;
+                grid-template-areas:
+                    "logo right"
+                    "search search";
                 align-items: center;
                 gap: 10px;
             }
 
-            .left-actions,
-            .right-actions {
-                min-width: 0;
+            .left-actions {
+                display: none;
             }
 
-            .browse-nav-btn {
+            .right-actions {
+                grid-area: right;
+                min-width: 0;
+                display: grid;
+                grid-template-columns: auto auto;
+                align-items: center;
+                justify-content: end;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .home-search-wrap {
+                grid-area: search;
+                width: 100%;
+                margin-top: 4px;
+            }
+
+            .home-search-input {
+                width: 100%;
+                min-width: 0;
+                flex: 1;
                 padding: 8px 10px;
                 font-size: 0.78rem;
             }
 
-            .home-search-input {
-                width: min(220px, 44vw);
+            .browse-nav-btn {
                 padding: 8px 10px;
                 font-size: 0.78rem;
             }
@@ -568,8 +590,20 @@
             }
 
             .logo-wrapper {
+                grid-area: logo;
                 width: 150px;
-                justify-self: center;
+                justify-self: start;
+            }
+
+            .main-header,
+            .collections,
+            .home-search-panel {
+                overflow-x: clip;
+            }
+
+            .movie-slider {
+                padding-left: 40px;
+                padding-right: 40px;
             }
         }
     </style>
