@@ -551,10 +551,15 @@
             `).join('');
 
             grid.querySelectorAll('.avatar-option').forEach((btn) => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
                     selectedAvatar = sanitizeAvatar(btn.dataset.avatar);
                     updateAvatarPreview();
-                    renderAvatarGrid();
+
+                    grid.querySelectorAll('.avatar-option').forEach((option) => {
+                        option.classList.toggle('selected', option === btn);
+                    });
                 });
             });
         }
