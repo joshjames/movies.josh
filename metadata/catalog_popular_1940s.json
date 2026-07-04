@@ -1,0 +1,167 @@
+[
+  {
+    "id": "tt0034583",
+    "title": "Casablanca",
+    "year": 1942,
+    "rating": 8.5,
+    "votes": 656378,
+    "genres": [
+      "Drama",
+      "Romance",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0038650",
+    "title": "It's a Wonderful Life",
+    "year": 1946,
+    "rating": 8.6,
+    "votes": 555192,
+    "genres": [
+      "Drama",
+      "Family",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0033467",
+    "title": "Citizen Kane",
+    "year": 1941,
+    "rating": 8.2,
+    "votes": 493721,
+    "genres": [
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0032553",
+    "title": "The Great Dictator",
+    "year": 1940,
+    "rating": 8.4,
+    "votes": 258794,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0041959",
+    "title": "The Third Man",
+    "year": 1949,
+    "rating": 8.1,
+    "votes": 196069,
+    "genres": [
+      "Drama",
+      "Film-Noir",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0040522",
+    "title": "Bicycle Thieves",
+    "year": 1948,
+    "rating": 8.2,
+    "votes": 191983,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0036775",
+    "title": "Double Indemnity",
+    "year": 1944,
+    "rating": 8.3,
+    "votes": 181976,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Film-Noir"
+    ]
+  },
+  {
+    "id": "tt0033870",
+    "title": "The Maltese Falcon",
+    "year": 1941,
+    "rating": 7.9,
+    "votes": 174544,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Film-Noir"
+    ]
+  },
+  {
+    "id": "tt0032910",
+    "title": "Pinocchio",
+    "year": 1940,
+    "rating": 7.4,
+    "votes": 173141,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0034492",
+    "title": "Bambi",
+    "year": 1942,
+    "rating": 7.3,
+    "votes": 165738,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0040746",
+    "title": "Rope",
+    "year": 1948,
+    "rating": 7.9,
+    "votes": 165509,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0032976",
+    "title": "Rebecca",
+    "year": 1940,
+    "rating": 8.0,
+    "votes": 161453,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0033563",
+    "title": "Dumbo",
+    "year": 1941,
+    "rating": 7.2,
+    "votes": 150749,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0040897",
+    "title": "The Treasure of the Sierra Madre",
+    "year": 1948,
+    "rating": 8.2,
+    "votes": 141767,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Western"
+    ]
+  }
+]

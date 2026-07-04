@@ -1,0 +1,74 @@
+[
+  {
+    "id": "tt0032138",
+    "title": "The Wizard of Oz",
+    "year": 1939,
+    "rating": 8.1,
+    "votes": 468990,
+    "genres": [
+      "Adventure",
+      "Family",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0031381",
+    "title": "Gone with the Wind",
+    "year": 1939,
+    "rating": 8.2,
+    "votes": 356373,
+    "genres": [
+      "Drama",
+      "Romance",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0027977",
+    "title": "Modern Times",
+    "year": 1936,
+    "rating": 8.5,
+    "votes": 285896,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0029583",
+    "title": "Snow White and the Seven Dwarfs",
+    "year": 1937,
+    "rating": 7.6,
+    "votes": 238461,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt0021749",
+    "title": "City Lights",
+    "year": 1931,
+    "rating": 8.5,
+    "votes": 216911,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0022100",
+    "title": "M",
+    "year": 1931,
+    "rating": 8.3,
+    "votes": 183215,
+    "genres": [
+      "Crime",
+      "Mystery",
+      "Thriller"
+    ]
+  }
+]

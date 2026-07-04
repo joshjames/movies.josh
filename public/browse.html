@@ -27,6 +27,114 @@
 
         .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #cbd5e1; cursor: pointer; white-space: nowrap; user-select: none; }
 
+        .catalogs-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            border-top: 1px solid #334155;
+            border-bottom: 1px solid #334155;
+            padding: 10px 2px;
+        }
+
+        .catalogs-toggle-btn {
+            background: linear-gradient(135deg, #1d4ed8, #2563eb);
+            border: 1px solid #3b82f6;
+            color: #e2e8f0;
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            min-width: 0;
+        }
+
+        .catalogs-toggle-btn:hover {
+            background: linear-gradient(135deg, #1e40af, #1d4ed8);
+        }
+
+        .catalogs-active-label {
+            color: #93c5fd;
+            font-size: 0.78rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .catalogs-drawer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.25s ease;
+        }
+
+        .catalogs-drawer.open {
+            max-height: 340px;
+        }
+
+        .catalogs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+            padding-bottom: 2px;
+        }
+
+        .catalog-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #334155;
+            background: #111827;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+            cursor: pointer;
+            min-width: 0;
+        }
+
+        .catalog-chip:hover {
+            border-color: #3b82f6;
+            background: #0f1b31;
+        }
+
+        .catalog-chip.active {
+            border-color: #2563eb;
+            box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.35);
+            background: #0d1a32;
+        }
+
+        .catalog-chip-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            background: #1e293b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            flex: 0 0 auto;
+        }
+
+        .catalog-chip-text {
+            min-width: 0;
+            display: grid;
+            gap: 2px;
+        }
+
+        .catalog-chip-title {
+            color: #f8fafc;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .catalog-chip-meta {
+            color: #94a3b8;
+            font-size: 0.7rem;
+        }
+
         /* Item 7 Manual Link Wrapper Section */
         .manual-input-box { display: flex; gap: 12px; width: 100%; border-top: 1px solid #334155; padding-top: 14px; margin-top: 2px; }
         .manual-input-box input { background: #090d16; border-color: #334155; }
@@ -36,6 +144,11 @@
         /* Results Matrix Grid Layout */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
         .card { background: #1e293b; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; border: 1px solid #334155; }
+        .card.local-card { border-color: #14532d; box-shadow: 0 0 0 1px rgba(22, 101, 52, 0.45), 0 4px 6px rgba(0,0,0,0.25); }
+        .card.local-card .cover-frame { outline: 2px solid rgba(22, 163, 74, 0.3); outline-offset: -2px; }
+        .section-head { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 8px; background: #111827; border: 1px solid #334155; }
+        .section-head strong { font-size: 0.88rem; color: #f8fafc; }
+        .section-head span { font-size: 0.76rem; color: #94a3b8; }
         .cover-frame { width: 100%; aspect-ratio: 2/3; background: #020617; position: relative; }
         .cover-frame img { width: 100%; height: 100%; object-fit: cover; }
         
@@ -46,11 +159,14 @@
         .size-badge { color: #38bdf8; }
 
         .card-info { padding: 12px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
-        .title { font-size: 0.85rem; font-weight: bold; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #f8fafc; }
+        .title { font-size: 0.85rem; font-weight: bold; line-height: 1.3; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #f8fafc; }
         .meta { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
         
         .add-btn { background: #10b981; border: none; width: 100%; padding: 8px; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
         .add-btn:hover { background: #059669; }
+        .open-btn { background: #2563eb; border: none; width: 100%; padding: 8px; border-radius: 6px; color: white; text-decoration: none; font-weight: bold; cursor: pointer; font-size: 0.85rem; text-align: center; }
+        .open-btn:hover { background: #1d4ed8; }
+        .add-btn.in-library { background: #475569; cursor: not-allowed; }
 
         /* Notification Toast Styling */
         .toast { position: fixed; bottom: 20px; right: 20px; background: #059669; color: white; padding: 16px 24px; border-radius: 8px; font-weight: 500; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); display: none; z-index: 1000; animation: slideIn 0.2s ease-out; }
@@ -144,6 +260,17 @@
                 </label>
             </div>
 
+            <div class="catalogs-toggle-row" id="catalogs-toggle-row">
+                <button type="button" class="catalogs-toggle-btn" id="catalogs-toggle-btn" onclick="toggleCatalogDrawer()">Catalogs ▾</button>
+                <div class="catalogs-active-label" id="catalogs-active-label">Pick a catalog to load curated movies.</div>
+            </div>
+
+            <div class="catalogs-drawer" id="catalogs-drawer">
+                <div id="catalogs-grid" class="catalogs-grid">
+                    <div style="grid-column:1/-1; color:#94a3b8; font-size:0.82rem; padding:8px;">Loading catalogs...</div>
+                </div>
+            </div>
+
             <div class="manual-input-box">
                 <input type="text" id="manualMagnetIn" placeholder="Paste direct magnet link...">
                 <button class="manual-btn" onclick="addManualMagnet(this)">Ingest Link</button>
@@ -158,8 +285,207 @@
     <script>
         let currentMode = 'movies';
         let currentBrowsePage = 1;
+        let currentCatalogPage = 1;
+        let activeCatalogSlug = '';
+        let activeCatalogTitle = '';
+        let catalogDrawerOpen = false;
+        let availableCatalogs = [];
         let tvSearchTimer = null;
         const tvCoverByImdb = Object.create(null);
+
+        function normalizeSearchText(value = '') {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function setCatalogActiveLabel(text) {
+            const el = document.getElementById('catalogs-active-label');
+            if (!el) return;
+            el.textContent = text;
+        }
+
+        function setCatalogDrawerOpen(open) {
+            catalogDrawerOpen = Boolean(open);
+            const drawer = document.getElementById('catalogs-drawer');
+            const toggle = document.getElementById('catalogs-toggle-btn');
+            if (drawer) drawer.classList.toggle('open', catalogDrawerOpen);
+            if (toggle) toggle.textContent = catalogDrawerOpen ? 'Catalogs ▴' : 'Catalogs ▾';
+        }
+
+        function toggleCatalogDrawer() {
+            if (currentMode !== 'movies') return;
+            setCatalogDrawerOpen(!catalogDrawerOpen);
+        }
+
+        function clearActiveCatalogMode() {
+            activeCatalogSlug = '';
+            activeCatalogTitle = '';
+            currentCatalogPage = 1;
+            setCatalogActiveLabel('Pick a catalog to load curated movies.');
+            renderCatalogChips();
+        }
+
+        function renderCatalogChips() {
+            const grid = document.getElementById('catalogs-grid');
+            if (!grid) return;
+
+            if (!availableCatalogs.length) {
+                grid.innerHTML = '<div style="grid-column:1/-1; color:#94a3b8; font-size:0.82rem; padding:8px;">No catalog files discovered.</div>';
+                return;
+            }
+
+            grid.innerHTML = availableCatalogs.map((catalog) => {
+                const activeClass = catalog.slug === activeCatalogSlug ? ' active' : '';
+                return `
+                    <button type="button" class="catalog-chip${activeClass}" onclick="openCatalog('${catalog.slug}', '${encodeURIComponent(catalog.title)}')">
+                        <span class="catalog-chip-icon">${catalog.icon || '📚'}</span>
+                        <span class="catalog-chip-text">
+                            <span class="catalog-chip-title">${escapeHtml(catalog.title || catalog.slug)}</span>
+                            <span class="catalog-chip-meta">${Number(catalog.count || 0).toLocaleString()} titles</span>
+                        </span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        async function loadCatalogList() {
+            const grid = document.getElementById('catalogs-grid');
+            if (!grid) return;
+
+            try {
+                const res = await fetch('/api/catalogs/movies');
+                const data = await parseJsonOrThrow(res);
+                availableCatalogs = Array.isArray(data.catalogs) ? data.catalogs : [];
+                renderCatalogChips();
+            } catch (_err) {
+                grid.innerHTML = '<div style="grid-column:1/-1; color:#f97316; font-size:0.82rem; padding:8px;">Catalog list failed to load.</div>';
+            }
+        }
+
+        function renderCatalogResultCards(items) {
+            return (items || []).map((item) => {
+                const encodedTitle = encodeURIComponent(String(item.title || ''));
+                const watchAction = item.inLibrary && item.localHref
+                    ? `<a class="open-btn" href="${item.localHref}">Watch Now</a>`
+                    : `<button class="add-btn" onclick="queueCatalogItem(this, '${item.imdbId || ''}', '${encodedTitle}', '${item.year || ''}')">Find & Queue</button>`;
+
+                return `
+                    <div class="card ${item.inLibrary ? 'local-card' : ''}">
+                        <div class="cover-frame">
+                            <img src="${sanitizeImageSrc(item.cover || '')}" alt="${escapeHtml(item.title || 'Movie')}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
+                            <div class="badge-row">
+                                <span class="rating-badge">⭐ ${Number(item.rating || 0).toFixed(1)}</span>
+                                ${item.inLibrary ? '<span class="size-badge">In Library</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="card-info">
+                            <div>
+                                <div class="title">${escapeHtml(item.title || 'Unknown')}</div>
+                                <div class="meta">${escapeHtml(String(item.year || ''))}${Array.isArray(item.genres) && item.genres.length ? ` • ${escapeHtml(item.genres.slice(0, 2).join(', '))}` : ''}</div>
+                                <div class="meta">${Number(item.votes || 0).toLocaleString()} votes ${item.imdbId ? `• ${escapeHtml(item.imdbId)}` : ''}</div>
+                            </div>
+                            ${watchAction}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function fetchCatalogPage(page = 1) {
+            if (!activeCatalogSlug) return;
+
+            currentCatalogPage = page;
+            const grid = document.getElementById('catalog-grid');
+            const paginationWrapper = document.getElementById('pagination-wrapper');
+            if (!grid || !paginationWrapper) return;
+
+            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading selected catalog...</div>';
+            paginationWrapper.innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/catalogs/movies/${encodeURIComponent(activeCatalogSlug)}?page=${currentCatalogPage}&limit=24`);
+                const data = await parseJsonOrThrow(res);
+                const items = Array.isArray(data.items) ? data.items : [];
+
+                if (!items.length) {
+                    grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:#94a3b8;">This catalog has no entries.</div>';
+                    return;
+                }
+
+                const inLibraryCount = items.filter(item => item.inLibrary).length;
+                grid.innerHTML = `
+                    <div class="section-head">
+                        <strong>${escapeHtml(data.title || activeCatalogTitle || 'Catalog')}</strong>
+                        <span>${items.length} shown • ${inLibraryCount} already in library</span>
+                    </div>
+                    ${renderCatalogResultCards(items)}
+                `;
+
+                renderCatalogPaginationControls(data.total || 0, data.limit || 24);
+            } catch (_err) {
+                grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:#f43f5e;">Unable to load this catalog.</div>';
+            }
+        }
+
+        function renderCatalogPaginationControls(totalItems, pageLimit) {
+            const paginationWrapper = document.getElementById('pagination-wrapper');
+            if (!paginationWrapper || !totalItems || !pageLimit) return;
+
+            const totalPages = Math.ceil(totalItems / pageLimit);
+            if (totalPages <= 1) {
+                paginationWrapper.innerHTML = '';
+                return;
+            }
+
+            paginationWrapper.innerHTML = `
+                <div class="pagination-container">
+                    <button class="page-btn" ${currentCatalogPage === 1 ? 'disabled' : ''} onclick="fetchCatalogPage(${currentCatalogPage - 1})">◀ Previous</button>
+                    <div class="page-indicator">Page ${currentCatalogPage} / ${totalPages}</div>
+                    <button class="page-btn" ${currentCatalogPage === totalPages ? 'disabled' : ''} onclick="fetchCatalogPage(${currentCatalogPage + 1})">Next ▶</button>
+                </div>
+            `;
+        }
+
+        async function queueCatalogItem(button, imdbId, encodedTitle, year) {
+            const title = decodeURIComponent(String(encodedTitle || ''));
+            const cleanYear = String(year || '').trim();
+            const cleanImdb = String(imdbId || '').trim().toLowerCase();
+
+            button.disabled = true;
+            button.textContent = 'Finding Source...';
+            button.style.background = '#475569';
+
+            try {
+                const res = await fetch(`/api/movies/search/unified?q=${encodeURIComponent(title)}&remoteMode=always&remoteLimit=24&localLimit=0`);
+                const data = await parseJsonOrThrow(res);
+                const remote = Array.isArray(data.remoteResults) ? data.remoteResults : [];
+
+                if (!remote.length) {
+                    throw new Error('No remote matches found.');
+                }
+
+                const normalizedTitle = normalizeSearchText(title);
+                const selected = remote.find(row => String(row.imdbId || '').toLowerCase() === cleanImdb)
+                    || remote.find(row => normalizeSearchText(row.title || '') === normalizedTitle && String(row.year || '') === cleanYear)
+                    || remote.find(row => normalizeSearchText(row.title || '') === normalizedTitle)
+                    || remote[0];
+
+                const magnet = buildMovieMagnet(selected);
+                if (!magnet) {
+                    throw new Error('Matching release has no torrent payload.');
+                }
+
+                await addMediaAsset(button, btoa(magnet), 'movie-streamer', selected.imdbId || cleanImdb);
+            } catch (_err) {
+                button.disabled = false;
+                button.textContent = 'Find & Queue';
+                button.style.background = '#10b981';
+                showToast('Could not queue this title from current remote index.');
+            }
+        }
 
         function switchMode(mode) {
             currentMode = mode;
@@ -171,6 +497,8 @@
             document.getElementById('ratingIn').style.display = isMovie ? 'inline-block' : 'none';
             document.getElementById('sortIn').style.display = isMovie ? 'inline-block' : 'none';
             document.getElementById('packsWrapper').style.display = isMovie ? 'none' : 'flex';
+            document.getElementById('catalogs-toggle-row').style.display = isMovie ? 'flex' : 'none';
+            document.getElementById('catalogs-drawer').style.display = isMovie ? 'block' : 'none';
 
             document.getElementById('searchIn').placeholder = isMovie
                 ? 'Search title, actor, or genre...'
@@ -179,6 +507,9 @@
             if (!isMovie) {
                 // Prevent stale movie query terms from making TV mode look empty.
                 document.getElementById('searchIn').value = '';
+                setCatalogDrawerOpen(false);
+            } else {
+                setCatalogDrawerOpen(catalogDrawerOpen);
             }
 
             triggerNewSearch();
@@ -186,10 +517,22 @@
 
         function triggerNewSearch() {
             if (currentMode === 'movies') {
+                clearActiveCatalogMode();
                 fetchMovieCatalog(1);
             } else {
                 fetchShowCatalog();
             }
+        }
+
+        function openCatalog(slug, encodedTitle) {
+            activeCatalogSlug = String(slug || '').trim();
+            activeCatalogTitle = decodeURIComponent(String(encodedTitle || ''));
+            if (!activeCatalogSlug) return;
+
+            setCatalogActiveLabel(`Selected: ${activeCatalogTitle}`);
+            renderCatalogChips();
+            setCatalogDrawerOpen(false);
+            fetchCatalogPage(1);
         }
 
         document.getElementById('genreIn').addEventListener('change', triggerNewSearch);
@@ -261,6 +604,75 @@
 
         function sanitizeImageSrc(value) {
             return String(value || '').replace(/"/g, '%22').replace(/\s/g, '%20');
+        }
+
+        function buildMovieMagnet(movie) {
+            const torrents = Array.isArray(movie.torrents) ? movie.torrents : [];
+            const targetTorrent = torrents.find(t => t.quality === '1080p') || torrents[0];
+            if (!targetTorrent || !targetTorrent.hash) return null;
+
+            const trackers = [
+                'udp://tracker.opentrackr.org:1337/announce',
+                'udp://tracker.torrent.eu.org:451/announce',
+                'udp://open.stealth.si:80/announce'
+            ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
+
+            const cleanHash = String(targetTorrent.hash).toUpperCase().trim();
+            return `magnet:?xt=urn:btih:${cleanHash}&dn=${encodeURIComponent(movie.title || 'movie')}${trackers}`;
+        }
+
+        function renderLocalMovieCards(localRows) {
+            if (!Array.isArray(localRows) || localRows.length === 0) return '';
+
+            return localRows.map(movie => `
+                <div class="card local-card">
+                    <div class="cover-frame">
+                        <img src="${sanitizeImageSrc(movie.cover || '')}" alt="${escapeHtml(movie.title || 'Local Movie')}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
+                        <div class="badge-row">
+                            <span class="size-badge">In Library</span>
+                        </div>
+                    </div>
+                    <div class="card-info">
+                        <div>
+                            <div class="title">${escapeHtml(movie.title || 'Unknown')}</div>
+                            <div class="meta">${escapeHtml(movie.year || 'Year unknown')} ${movie.imdbId ? `• ${escapeHtml(movie.imdbId)}` : ''}</div>
+                        </div>
+                        <a class="open-btn" href="${movie.href}">Play Now</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderRemoteMovieCards(remoteRows) {
+            if (!Array.isArray(remoteRows) || remoteRows.length === 0) return '';
+
+            return remoteRows.map(movie => {
+                const magnet = buildMovieMagnet(movie);
+                const disabledClass = movie.inLibrary ? ' in-library' : '';
+                const btnText = movie.inLibrary ? 'Already in Library' : 'Add to Library';
+                const onclick = (movie.inLibrary || !magnet)
+                    ? ''
+                    : `onclick="addMediaAsset(this, '${btoa(magnet)}', 'movie-streamer', '${movie.imdbId || ''}')"`;
+
+                return `
+                    <div class="card">
+                        <div class="cover-frame">
+                            <img src="${sanitizeImageSrc(movie.cover || '')}" alt="${escapeHtml(movie.title || 'Movie')}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
+                            <div class="badge-row">
+                                <span class="rating-badge">⭐ ${Number(movie.imdbRating || 0).toFixed(1)}</span>
+                                ${movie.inLibrary ? '<span class="size-badge">Have It</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="card-info">
+                            <div>
+                                <div class="title">${escapeHtml(movie.title || 'Unknown')}</div>
+                                <div class="meta">${escapeHtml(String(movie.year || ''))} ${movie.runtime ? `• ${escapeHtml(String(movie.runtime))} min` : ''}</div>
+                            </div>
+                            <button class="add-btn${disabledClass}" ${onclick} ${movie.inLibrary || !magnet ? 'disabled' : ''}>${btnText}</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function escapeHtml(value) {
@@ -356,6 +768,7 @@
 
         async function fetchMovieCatalog(page = 1) {
             currentBrowsePage = page;
+            if (activeCatalogSlug) return;
             const query = document.getElementById('searchIn').value.trim();
             const genre = document.getElementById('genreIn').value;
             const rating = document.getElementById('ratingIn').value;
@@ -369,54 +782,46 @@
             paginationWrapper.innerHTML = '';
 
             try {
-                let apiTarget = `/api/yts/browse?page=${currentBrowsePage}`;
-                if (query) apiTarget += `&query_term=${encodeURIComponent(query)}`;
+                let apiTarget = `/api/movies/search/unified?page=${currentBrowsePage}&remoteMode=always&remoteLimit=24&localLimit=8`;
+                if (query) apiTarget += `&q=${encodeURIComponent(query)}`;
                 if (genre && genre !== 'All') apiTarget += `&genre=${genre}`;
                 if (rating && rating !== '0') apiTarget += `&minimum_rating=${rating}`;
                 if (sortBy) apiTarget += `&sort_by=${sortBy}`;
 
                 const res = await fetch(apiTarget);
-                const resData = await res.json();
+                const data = await parseJsonOrThrow(res);
 
-                if (resData.status !== 'ok' || !resData.data.movies || resData.data.movies.length === 0) {
+                const localRows = Array.isArray(data.localResults) ? data.localResults : [];
+                const remoteRows = Array.isArray(data.remoteResults) ? data.remoteResults : [];
+
+                if (!localRows.length && !remoteRows.length) {
                     grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching movie indexes found.</div>';
                     return;
                 }
 
-                const cardsHtml = resData.data.movies.map(movie => {
-                    const targetTorrent = movie.torrents.find(t => t.quality === '1080p') || movie.torrents[0];
-                    if (!targetTorrent) return '';
-
-                    const trackers = [
-                        'udp://tracker.opentrackr.org:1337/announce',
-                        'udp://tracker.torrent.eu.org:451/announce',
-                        'udp://open.stealth.si:80/announce'
-                    ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
-
-                    const cleanHash = targetTorrent.hash.toUpperCase().trim();
-                    const baseMagnet = `magnet:?xt=urn:btih:${cleanHash}&dn=${encodeURIComponent(movie.title)}${trackers}`;
-
-                    return `
-                        <div class="card">
-                            <div class="cover-frame">
-                                <img src="${movie.medium_cover_image}" alt="${movie.title}">
-                                <div class="badge-row">
-                                    <span class="rating-badge">⭐ ${movie.rating.toFixed(1)}</span>
-                                </div>
-                            </div>
-                            <div class="card-info">
-                                <div>
-                                    <div class="title">${movie.title}</div>
-                                    <div class="meta">${movie.year} • ${movie.runtime} min</div>
-                                </div>
-                                <button class="add-btn" onclick="addMediaAsset(this, '${btoa(baseMagnet)}', 'movie-streamer', '${movie.imdb_code || ''}')">Add to Library</button>
-                            </div>
+                const parts = [];
+                if (localRows.length) {
+                    parts.push(`
+                        <div class="section-head">
+                            <strong>Already in Your Library</strong>
+                            <span>${localRows.length} match(es)</span>
                         </div>
-                    `;
-                }).join('');
+                    `);
+                    parts.push(renderLocalMovieCards(localRows));
+                }
 
-                grid.innerHTML = cardsHtml;
-                renderPaginationControls(resData.data.movie_count, resData.data.limit);
+                if (remoteRows.length) {
+                    parts.push(`
+                        <div class="section-head">
+                            <strong>Add from Remote Catalog</strong>
+                            <span>${remoteRows.length} result(s)</span>
+                        </div>
+                    `);
+                    parts.push(renderRemoteMovieCards(remoteRows));
+                }
+
+                grid.innerHTML = parts.join('');
+                renderPaginationControls(data.remoteTotal, data.remotePageLimit);
             } catch (_err) {
                 grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error processing movie catalog requests.</div>';
             }
@@ -621,6 +1026,13 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const initialQuery = String(params.get('q') || '').trim();
+            if (initialQuery) {
+                const input = document.getElementById('searchIn');
+                if (input) input.value = initialQuery;
+            }
+            loadCatalogList();
             fetchMovieCatalog(1);
         });
     </script>

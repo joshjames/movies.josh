@@ -30,6 +30,199 @@ const MOVIE_PATH_CANDIDATES = [
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
+const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
+const CATALOG_COVER_DIR = path.join(__dirname, '../../public/images/catalog-covers');
+
+const CATALOG_LABEL_OVERRIDES = {
+    top_100_all_time: 'Top 100 of All Time',
+    critics_choices: 'Critics Choice',
+    master_popular_2000: 'Master Popular 2000',
+    popular_1920s: 'Best of 1920s',
+    popular_1930s: 'Best of 1930s',
+    popular_1940s: 'Best of 1940s',
+    popular_1950s: 'Best of 1950s',
+    popular_1960s: 'Best of 1960s',
+    popular_1970s: 'Best of 1970s',
+    popular_1980s: 'Best of 1980s',
+    popular_1990s: 'Best of 1990s',
+    popular_2000s: 'Best of 2000s',
+    popular_2010s: 'Best of 2010s',
+    popular_2020s: 'Best of 2020s'
+};
+
+function normalizeSearchText(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function titleCaseWords(value = '') {
+    return String(value || '')
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+}
+
+function toCatalogSlug(fileName = '') {
+    const base = String(fileName || '')
+        .replace(/^catalog_/i, '')
+        .replace(/\.json$/i, '')
+        .replace(/_trimmed$/i, '');
+    return base.toLowerCase();
+}
+
+function catalogDisplayName(slug = '') {
+    if (CATALOG_LABEL_OVERRIDES[slug]) return CATALOG_LABEL_OVERRIDES[slug];
+    return titleCaseWords(slug);
+}
+
+function getCatalogSortWeight(slug = '') {
+    if (slug === 'top_100_all_time') return 10;
+    if (slug === 'critics_choices') return 20;
+    if (slug === 'master_popular_2000') return 30;
+    const decade = String(slug).match(/popular_(\d{4})s$/);
+    if (decade) return 100 + parseInt(decade[1], 10);
+    return 1000;
+}
+
+function readCatalogJsonBySlug(slug = '') {
+    const safe = String(slug || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '');
+    if (!safe) return null;
+
+    const preferredTrimmed = path.join(CATALOG_DATA_DIR, `catalog_${safe}_trimmed.json`);
+    const fallbackLegacy = path.join(CATALOG_DATA_DIR, `catalog_${safe}.json`);
+    const filePath = fs.existsSync(preferredTrimmed) ? preferredTrimmed : fallbackLegacy;
+    if (!fs.existsSync(filePath)) return null;
+
+    try {
+        const payload = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        return Array.isArray(payload) ? payload : [];
+    } catch (_err) {
+        return [];
+    }
+}
+
+function getCatalogCoverUrl(imdbId = '') {
+    const normalized = normalizeMovieImdbId(imdbId);
+    if (!normalized) return '';
+    const coverPath = path.join(CATALOG_COVER_DIR, `${normalized}.jpg`);
+    if (fs.existsSync(coverPath)) {
+        return `/images/catalog-covers/${normalized}.jpg`;
+    }
+    return '';
+}
+
+function buildLibraryMovieIndexes(localRows = []) {
+    const byImdb = new Map();
+    const byTitleYear = new Map();
+
+    for (const item of localRows) {
+        const imdb = normalizeMovieImdbId(item.imdbId);
+        if (imdb && !byImdb.has(imdb)) {
+            byImdb.set(imdb, item);
+        }
+
+        const titleKey = normalizeSearchText(item.title || '');
+        const yearKey = String(item.year || '').trim();
+        if (titleKey) {
+            if (!byTitleYear.has(titleKey)) byTitleYear.set(titleKey, item);
+            if (yearKey) {
+                const fullKey = `${titleKey}|${yearKey}`;
+                if (!byTitleYear.has(fullKey)) byTitleYear.set(fullKey, item);
+            }
+        }
+    }
+
+    return { byImdb, byTitleYear };
+}
+
+function firstNonEmptyString(values = []) {
+    for (const value of values) {
+        const clean = String(value || '').trim();
+        if (clean) return clean;
+    }
+    return '';
+}
+
+function pickMovieImdbId(item = {}) {
+    return firstNonEmptyString([
+        item.imdbId,
+        item.imdbID,
+        item.imdb_code,
+        item.metadata?.imdbId,
+        item.enrichment?.imdbId
+    ]);
+}
+
+function normalizeMovieImdbId(value = '') {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    if (raw.startsWith('tt')) return raw;
+    return `tt${raw}`;
+}
+
+function scoreLocalMovieMatch(item, queryNorm) {
+    const titleNorm = normalizeSearchText(item.title || '');
+    const folderNorm = normalizeSearchText(item.id || item.folder || '');
+    const yearText = String(item.year || '').trim();
+    const imdbNorm = normalizeSearchText(item.imdbId || '');
+
+    let score = 0;
+    if (titleNorm === queryNorm) score += 250;
+    if (titleNorm.startsWith(queryNorm)) score += 160;
+    if (titleNorm.includes(queryNorm)) score += 120;
+    if (folderNorm.includes(queryNorm)) score += 70;
+    if (imdbNorm && imdbNorm.includes(queryNorm)) score += 100;
+    if (yearText && queryNorm.includes(String(yearText))) score += 25;
+    return score;
+}
+
+function buildLocalMovieCatalogRows(library) {
+    const movies = Array.isArray(library?.movies) ? library.movies : [];
+    return movies
+        .filter(item => {
+            const id = String(item.id || '').toLowerCase();
+            const type = String(item.contentType || '').toLowerCase();
+            if (type === 'series') return false;
+            if (id.startsWith('series/')) return false;
+            return true;
+        })
+        .map(item => {
+            const imdbId = normalizeMovieImdbId(pickMovieImdbId(item));
+            return {
+                id: item.id,
+                title: item.title || item.id || 'Unknown',
+                year: item.year || '',
+                imdbId,
+                cover: item.cover || '',
+                href: `/player.html?id=${encodeURIComponent(item.id || '')}`,
+                contentType: 'movie',
+                source: 'local-library'
+            };
+        });
+}
+
+function indexLocalMovieKeys(localRows = []) {
+    const imdbSet = new Set();
+    const titleYearSet = new Set();
+
+    localRows.forEach((item) => {
+        const imdb = normalizeMovieImdbId(item.imdbId);
+        if (imdb) imdbSet.add(imdb);
+
+        const titleKey = normalizeSearchText(item.title || '');
+        const yearKey = String(item.year || '').trim();
+        if (titleKey) {
+            titleYearSet.add(titleKey);
+            if (yearKey) titleYearSet.add(`${titleKey}|${yearKey}`);
+        }
+    });
+
+    return { imdbSet, titleYearSet };
+}
 
 function formatImdbId(imdbId) {
     const raw = String(imdbId || '').trim();
@@ -788,6 +981,204 @@ router.get('/movies', async (req, res) => {
     } catch (err) {
         console.error("❌ Unified library catalog processing breakdown:", err);
         res.status(500).json({ success: false, error: "Failed to assemble structured movie matrix blocks." });
+    }
+});
+
+router.get('/movies/search/unified', async (req, res) => {
+    try {
+        const query = String(req.query.q || req.query.query || '').trim();
+        const queryNorm = normalizeSearchText(query);
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const remoteLimit = Math.max(1, Math.min(parseInt(req.query.remoteLimit, 10) || 24, 50));
+        const localLimit = Math.max(1, Math.min(parseInt(req.query.localLimit, 10) || 8, 50));
+        const remoteMode = String(req.query.remoteMode || 'always').toLowerCase();
+
+        const genre = String(req.query.genre || '').trim();
+        const minimumRating = String(req.query.minimum_rating || req.query.minimumRating || '').trim();
+        const sortBy = String(req.query.sort_by || req.query.sortBy || 'date_added').trim();
+
+        const library = await getLibrary();
+        const localRows = buildLocalMovieCatalogRows(library);
+
+        const localMatches = queryNorm
+            ? localRows
+                .map(item => ({ ...item, matchScore: scoreLocalMovieMatch(item, queryNorm) }))
+                .filter(item => item.matchScore > 0)
+                .sort((a, b) => b.matchScore - a.matchScore)
+                .slice(0, localLimit)
+                .map(({ matchScore, ...item }) => item)
+            : [];
+
+        const shouldFetchRemote = remoteMode === 'always'
+            || (remoteMode === 'on_local_empty' && localMatches.length === 0)
+            || (!queryNorm && remoteMode !== 'never');
+
+        let remoteResults = [];
+        let remoteTotal = 0;
+        let remotePageLimit = remoteLimit;
+
+        if (shouldFetchRemote) {
+            const ytsUrl = 'https://movies-api.accel.li/api/v2/list_movies.json';
+            const apiParams = {
+                page,
+                limit: remoteLimit,
+                order_by: 'desc',
+                sort_by: sortBy || 'date_added'
+            };
+
+            if (query) apiParams.query_term = query;
+            if (genre && genre.toLowerCase() !== 'all') apiParams.genre = genre.toLowerCase();
+            if (minimumRating && minimumRating !== '0') apiParams.minimum_rating = minimumRating;
+
+            const ytsRes = await axios.get(ytsUrl, { params: apiParams, timeout: 12000 });
+            const ytsData = ytsRes?.data?.data || {};
+            const remoteRows = Array.isArray(ytsData.movies) ? ytsData.movies : [];
+            remoteTotal = Number(ytsData.movie_count || 0);
+            remotePageLimit = Number(ytsData.limit || remoteLimit) || remoteLimit;
+
+            const localKeys = indexLocalMovieKeys(localRows);
+
+            remoteResults = remoteRows.map((movie) => {
+                const imdbId = normalizeMovieImdbId(movie.imdb_code || movie.imdbId || '');
+                const titleKey = normalizeSearchText(movie.title || '');
+                const yearKey = String(movie.year || '').trim();
+                const inLibrary = Boolean(
+                    (imdbId && localKeys.imdbSet.has(imdbId))
+                    || (titleKey && localKeys.titleYearSet.has(titleKey))
+                    || (titleKey && yearKey && localKeys.titleYearSet.has(`${titleKey}|${yearKey}`))
+                );
+
+                return {
+                    title: movie.title,
+                    year: movie.year,
+                    imdbId,
+                    imdbRating: movie.rating,
+                    runtime: movie.runtime,
+                    cover: movie.medium_cover_image || movie.large_cover_image || '',
+                    torrents: Array.isArray(movie.torrents) ? movie.torrents : [],
+                    inLibrary,
+                    source: 'remote-yts'
+                };
+            });
+        }
+
+        return res.json({
+            success: true,
+            query,
+            localCount: localMatches.length,
+            localResults: localMatches,
+            remoteFetched: shouldFetchRemote,
+            remoteCount: remoteResults.length,
+            remoteTotal,
+            remotePage: page,
+            remotePageLimit,
+            remoteResults
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/catalogs/movies', async (_req, res) => {
+    try {
+        if (!fs.existsSync(CATALOG_DATA_DIR)) {
+            return res.json({ success: true, catalogs: [] });
+        }
+
+        const allCatalogFiles = fs.readdirSync(CATALOG_DATA_DIR)
+            .filter(name => /^catalog_.*\.json$/i.test(name));
+
+        const trimmedFiles = allCatalogFiles.filter(name => /_trimmed\.json$/i.test(name));
+        const files = trimmedFiles.length > 0
+            ? trimmedFiles
+            : allCatalogFiles.filter(name => !/_trimmed\.json$/i.test(name));
+
+        const catalogs = files.map((fileName) => {
+            const slug = toCatalogSlug(fileName);
+            const filePath = path.join(CATALOG_DATA_DIR, fileName);
+            let count = 0;
+
+            try {
+                const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                count = Array.isArray(raw) ? raw.length : 0;
+            } catch (_err) {
+                count = 0;
+            }
+
+            return {
+                slug,
+                title: catalogDisplayName(slug),
+                count,
+                icon: slug.includes('critics') ? '⭐' : (slug.includes('top_100') ? '🏆' : (slug.includes('popular_') ? '🎬' : '📚')),
+                weight: getCatalogSortWeight(slug)
+            };
+        })
+            .sort((a, b) => a.weight - b.weight || a.title.localeCompare(b.title))
+            .map(({ weight, ...item }) => item);
+
+        return res.json({ success: true, catalogs });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/catalogs/movies/:slug', async (req, res) => {
+    try {
+        const slug = String(req.params.slug || '').trim().toLowerCase();
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 24, 100));
+
+        const catalogRows = readCatalogJsonBySlug(slug);
+        if (!catalogRows) {
+            return res.status(404).json({ success: false, error: 'Catalog not found.' });
+        }
+
+        const library = await getLibrary();
+        const localRows = buildLocalMovieCatalogRows(library);
+        const index = buildLibraryMovieIndexes(localRows);
+
+        const mapped = catalogRows.map((item) => {
+            const imdbId = normalizeMovieImdbId(item.id || item.imdbId || '');
+            const title = String(item.title || '').trim();
+            const year = String(item.year || '').trim();
+
+            const titleKey = normalizeSearchText(title);
+            const byImdb = imdbId ? index.byImdb.get(imdbId) : null;
+            const byTitleYear = titleKey && year ? index.byTitleYear.get(`${titleKey}|${year}`) : null;
+            const byTitle = titleKey ? index.byTitleYear.get(titleKey) : null;
+            const localMatch = byImdb || byTitleYear || byTitle || null;
+
+            return {
+                imdbId,
+                title,
+                year: item.year || '',
+                rating: item.rating,
+                votes: item.votes,
+                genres: Array.isArray(item.genres) ? item.genres : [],
+                cover: getCatalogCoverUrl(imdbId),
+                inLibrary: Boolean(localMatch),
+                localId: localMatch?.id || null,
+                localHref: localMatch?.id ? `/player.html?id=${encodeURIComponent(localMatch.id)}` : null
+            };
+        });
+
+        const total = mapped.length;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+        const start = (page - 1) * limit;
+        const items = mapped.slice(start, start + limit);
+
+        return res.json({
+            success: true,
+            slug,
+            title: catalogDisplayName(slug),
+            total,
+            totalPages,
+            page,
+            limit,
+            items
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 

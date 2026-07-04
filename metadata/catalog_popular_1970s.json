@@ -1,0 +1,499 @@
+[
+  {
+    "id": "tt0068646",
+    "title": "The Godfather",
+    "year": 1972,
+    "rating": 9.2,
+    "votes": 2233551,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0076759",
+    "title": "Star Wars: Episode IV - A New Hope",
+    "year": 1977,
+    "rating": 8.6,
+    "votes": 1575169,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0071562",
+    "title": "The Godfather Part II",
+    "year": 1974,
+    "rating": 9.0,
+    "votes": 1499019,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0073486",
+    "title": "One Flew Over the Cuckoo's Nest",
+    "year": 1975,
+    "rating": 8.6,
+    "votes": 1159074,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0078748",
+    "title": "Alien",
+    "year": 1979,
+    "rating": 8.4,
+    "votes": 1067499,
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0075314",
+    "title": "Taxi Driver",
+    "year": 1976,
+    "rating": 8.2,
+    "votes": 1030401,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0066921",
+    "title": "A Clockwork Orange",
+    "year": 1971,
+    "rating": 8.2,
+    "votes": 938183,
+    "genres": [
+      "Crime",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0078788",
+    "title": "Apocalypse Now",
+    "year": 1979,
+    "rating": 8.4,
+    "votes": 772481,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0073195",
+    "title": "Jaws",
+    "year": 1975,
+    "rating": 8.1,
+    "votes": 741011,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0075148",
+    "title": "Rocky",
+    "year": 1976,
+    "rating": 8.1,
+    "votes": 692403,
+    "genres": [
+      "Drama",
+      "Sport"
+    ]
+  },
+  {
+    "id": "tt0071853",
+    "title": "Monty Python and the Holy Grail",
+    "year": 1975,
+    "rating": 8.1,
+    "votes": 604259,
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0070047",
+    "title": "The Exorcist",
+    "year": 1973,
+    "rating": 8.1,
+    "votes": 499594,
+    "genres": [
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0079470",
+    "title": "Monty Python's Life of Brian",
+    "year": 1979,
+    "rating": 8.0,
+    "votes": 434461,
+    "genres": [
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0077416",
+    "title": "The Deer Hunter",
+    "year": 1978,
+    "rating": 8.1,
+    "votes": 386815,
+    "genres": [
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0071315",
+    "title": "Chinatown",
+    "year": 1974,
+    "rating": 8.1,
+    "votes": 377285,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0077651",
+    "title": "Halloween",
+    "year": 1978,
+    "rating": 7.7,
+    "votes": 340164,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0077631",
+    "title": "Grease",
+    "year": 1978,
+    "rating": 7.2,
+    "votes": 327230,
+    "genres": [
+      "Comedy",
+      "Musical",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0070735",
+    "title": "The Sting",
+    "year": 1973,
+    "rating": 8.2,
+    "votes": 302980,
+    "genres": [
+      "Comedy",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0072890",
+    "title": "Dog Day Afternoon",
+    "year": 1975,
+    "rating": 8.0,
+    "votes": 292217,
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0075686",
+    "title": "Annie Hall",
+    "year": 1977,
+    "rating": 7.9,
+    "votes": 291803,
+    "genres": [
+      "Comedy",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0079817",
+    "title": "Rocky II",
+    "year": 1979,
+    "rating": 7.3,
+    "votes": 251003,
+    "genres": [
+      "Drama",
+      "Sport"
+    ]
+  },
+  {
+    "id": "tt0079501",
+    "title": "Mad Max",
+    "year": 1979,
+    "rating": 6.8,
+    "votes": 245523,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0067992",
+    "title": "Willy Wonka & the Chocolate Factory",
+    "year": 1971,
+    "rating": 7.8,
+    "votes": 244864,
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt0075860",
+    "title": "Close Encounters of the Third Kind",
+    "year": 1977,
+    "rating": 7.6,
+    "votes": 236187,
+    "genres": [
+      "Drama",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0074285",
+    "title": "Carrie",
+    "year": 1976,
+    "rating": 7.4,
+    "votes": 229268,
+    "genres": [
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0072271",
+    "title": "The Texas Chain Saw Massacre",
+    "year": 1974,
+    "rating": 7.4,
+    "votes": 213253,
+    "genres": [
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0078346",
+    "title": "Superman",
+    "year": 1978,
+    "rating": 7.4,
+    "votes": 207298,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0072684",
+    "title": "Barry Lyndon",
+    "year": 1975,
+    "rating": 8.1,
+    "votes": 205866,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0074958",
+    "title": "Network",
+    "year": 1976,
+    "rating": 8.1,
+    "votes": 186236,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0073629",
+    "title": "The Rocky Horror Picture Show",
+    "year": 1975,
+    "rating": 7.4,
+    "votes": 184403,
+    "genres": [
+      "Comedy",
+      "Horror",
+      "Musical"
+    ]
+  },
+  {
+    "id": "tt0066999",
+    "title": "Dirty Harry",
+    "year": 1971,
+    "rating": 7.7,
+    "votes": 181580,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0072431",
+    "title": "Young Frankenstein",
+    "year": 1974,
+    "rating": 8.0,
+    "votes": 180627,
+    "genres": [
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0079417",
+    "title": "Kramer vs. Kramer",
+    "year": 1979,
+    "rating": 7.8,
+    "votes": 166894,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0071230",
+    "title": "Blazing Saddles",
+    "year": 1974,
+    "rating": 7.7,
+    "votes": 165363,
+    "genres": [
+      "Comedy",
+      "Western"
+    ]
+  },
+  {
+    "id": "tt0079116",
+    "title": "Escape from Alcatraz",
+    "year": 1979,
+    "rating": 7.5,
+    "votes": 165015,
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0079944",
+    "title": "Stalker",
+    "year": 1979,
+    "rating": 8.0,
+    "votes": 156518,
+    "genres": [
+      "Drama",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0079522",
+    "title": "Manhattan",
+    "year": 1979,
+    "rating": 7.8,
+    "votes": 153017,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0067116",
+    "title": "The French Connection",
+    "year": 1971,
+    "rating": 7.6,
+    "votes": 151069,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0070608",
+    "title": "Robin Hood",
+    "year": 1973,
+    "rating": 7.5,
+    "votes": 150690,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0075005",
+    "title": "The Omen",
+    "year": 1976,
+    "rating": 7.5,
+    "votes": 146681,
+    "genres": [
+      "Horror",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0070666",
+    "title": "Serpico",
+    "year": 1973,
+    "rating": 7.7,
+    "votes": 146179,
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0070511",
+    "title": "Papillon",
+    "year": 1973,
+    "rating": 8.0,
+    "votes": 146075,
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0074486",
+    "title": "Eraserhead",
+    "year": 1977,
+    "rating": 7.2,
+    "votes": 144289,
+    "genres": [
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0074119",
+    "title": "All the President's Men",
+    "year": 1976,
+    "rating": 7.9,
+    "votes": 138240,
+    "genres": [
+      "Drama",
+      "History",
+      "Thriller"
+    ]
+  }
+]
