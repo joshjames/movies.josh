@@ -7,11 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../logger');
 const metadataService = require('../MetadataService');
+const metadataProvider = require('../MetadataProvider');
 
 const app = express();
 app.use(express.json());
-
-const API_KEY = process.env.OMDB_API_KEY || '84196d01';
 
 function normalizeTagList(value, fallback = []) {
     const source = Array.isArray(value)
@@ -52,23 +51,20 @@ app.post('/process', async (req, res) => {
         // Determine whether this target is treated as a movie or series branch
         const targetType = contentType || (folderPath.includes('/series') ? 'series' : 'movie');
 
-        let queryUrl = `http://www.omdbapi.com/?apikey=${API_KEY}&type=${targetType}`;
-        if (manualImdbId) {
-            queryUrl += `&i=${manualImdbId}`;
-        } else {
-            const searchQueryTitle = cleanTitle.replace(/\b(19|20)\d{2}\b.*/g, '').trim();
-            queryUrl += `&t=${encodeURIComponent(searchQueryTitle)}`;
-            if (parsedYear) queryUrl += `&y=${parsedYear}`;
-        }
+        const searchQueryTitle = cleanTitle.replace(/\b(19|20)\d{2}\b.*/g, '').trim();
+        const lookup = await metadataProvider.fetchMetadataWithFallback({
+            imdbId: manualImdbId || '',
+            title: searchQueryTitle,
+            year: parsedYear || '',
+            contentType: targetType
+        });
+        const data = lookup.data;
 
-        const omdbRes = await axios.get(queryUrl);
-        const data = omdbRes.data;
-
-        logger.debug(`🧭 [Metadata] Resolved lookup for ${folderName} | imdbId=${data.imdbID || 'unknown'} | title=${data.Title || cleanTitle} | mode=${targetType}`);
+        logger.debug(`🧭 [Metadata] Resolved lookup for ${folderName} | provider=${lookup.provider} | imdbId=${data?.imdbID || 'unknown'} | title=${data?.Title || cleanTitle} | mode=${targetType}`);
 
         // Fallback profile object if external lookup fails entirely
-        if (data.Response === "False") {
-            logger.debug(`⚠️ OMDb lookup failed for ${folderName}: ${data.Error}. Implementing local asset fallbacks.`, 'warn');
+        if (!data || data.Response === "False") {
+            logger.debug(`⚠️ Metadata lookup failed for ${folderName}. Implementing local asset fallbacks.`, 'warn');
             const fallbackEnrichment = buildEnrichmentBlock(
                 {
                     Genre: 'Media',
@@ -156,11 +152,15 @@ app.post('/process', async (req, res) => {
             for (let s = 1; s <= totalSeasons; s++) {
                 fullSeriesStructure.seasons[s] = { seasonNumber: s.toString(), episodes: [] };
                 try {
-                    const seasonUrl = `http://www.omdbapi.com/?apikey=${API_KEY}&t=${encodeURIComponent(data.Title)}&Season=${s}`;
-                    const seasonRes = await axios.get(seasonUrl);
-                    
-                    if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
-                        for (const ep of seasonRes.data.Episodes) {
+                    const episodes = await metadataProvider.fetchSeasonEpisodesWithFallback({
+                        imdbId: data.imdbID || '',
+                        title: data.Title || cleanTitle,
+                        season: s,
+                        tmdbId: data.tmdbId || null
+                    });
+
+                    if (Array.isArray(episodes) && episodes.length > 0) {
+                        for (const ep of episodes) {
                             const epNum = parseInt(ep.Episode, 10);
                             const isAvailable = !!physicalFileMap[`${s}-${epNum}`];
                             

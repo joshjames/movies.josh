@@ -29,6 +29,7 @@ const WORKER_PORTS = {
 const pipelineOrchestrator = require('../../Orchestrator');
 const Orchestrator = require('../../Orchestrator'); // Adjust this path to point to your Orchestrator.js
 const metadataService = require('../services/MetadataService');
+const metadataProvider = require('../services/MetadataProvider');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
 
@@ -113,27 +114,26 @@ async function buildEpisodeLookupByImdb(imdbId) {
     const cleanImdb = String(imdbId || '').trim();
     if (!cleanImdb) return new Map();
 
-    const apiKey = process.env.OMDB_API_KEY || '84196d01';
-    const showRes = await axios.get(
-        `http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(cleanImdb)}&type=series`,
-        { timeout: 10000 }
-    );
+    const lookupSeed = await metadataProvider.fetchMetadataWithFallback({
+        imdbId: cleanImdb,
+        contentType: 'series'
+    });
 
-    if (!showRes.data || showRes.data.Response !== 'True') {
+    if (!lookupSeed.data || lookupSeed.data.Response !== 'True') {
         return new Map();
     }
 
-    const totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 0;
+    const totalSeasons = parseInt(lookupSeed.data.totalSeasons, 10) || 0;
     const lookup = new Map();
 
     for (let season = 1; season <= totalSeasons; season += 1) {
         try {
-            const seasonRes = await axios.get(
-                `http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(cleanImdb)}&Season=${season}`,
-                { timeout: 10000 }
-            );
-
-            const episodes = Array.isArray(seasonRes.data?.Episodes) ? seasonRes.data.Episodes : [];
+            const episodes = await metadataProvider.fetchSeasonEpisodesWithFallback({
+                imdbId: cleanImdb,
+                title: lookupSeed.data.Title || '',
+                season,
+                tmdbId: lookupSeed.data.tmdbId || null
+            });
             episodes.forEach(ep => {
                 const epNum = parseInt(ep.Episode, 10);
                 if (!Number.isFinite(epNum) || epNum <= 0) return;
@@ -596,19 +596,11 @@ router.post('/series/manual-add', async (req, res) => {
             }
         }
 
-        let omdbData = null;
-        try {
-            const apiKey = process.env.OMDB_API_KEY || '84196d01';
-            const omdbRes = await axios.get(
-                `http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(cleanImdbId)}&type=series`,
-                { timeout: 10000 }
-            );
-            if (omdbRes.data?.Response === 'True') {
-                omdbData = omdbRes.data;
-            }
-        } catch (_err) {
-            omdbData = null;
-        }
+        const metadataLookup = await metadataProvider.fetchMetadataWithFallback({
+            imdbId: cleanImdbId,
+            contentType: 'series'
+        });
+        const omdbData = metadataLookup.data;
 
         const mergedMeta = {
             ...metadata,
@@ -1671,7 +1663,7 @@ router.post('/override-metadata', async (req, res) => {
 });
 
 // =========================================================================
-// 🔄 ENDPOINT 2: REFETCH METADATA (OMDb THIRD-PARTY SYNCHRONIZATION)
+// 🔄 ENDPOINT 2: REFETCH METADATA (OMDb + TMDb FALLBACK SYNCHRONIZATION)
 // =========================================================================
 router.post('/refetch-metadata', async (req, res) => {
     try {
@@ -1686,20 +1678,20 @@ router.post('/refetch-metadata', async (req, res) => {
 
         const metaFilePath = path.join(targetDir, 'metadata.json');
 
-        let queryUrl = `http://www.omdbapi.com/?apikey=84196d01`;
-        if (imdbId && imdbId.trim().startsWith('tt')) {
-            queryUrl += `&i=${encodeURIComponent(imdbId.trim())}`;
-        } else if (title) {
-            queryUrl += `&t=${encodeURIComponent(title.trim())}`;
-        } else {
-            queryUrl += `&t=${encodeURIComponent(folder.replace(/[-_.]/g, ' '))}`;
-        }
+        const requestedImdbId = imdbId && String(imdbId).trim().startsWith('tt')
+            ? String(imdbId).trim()
+            : '';
+        const titleHint = title ? String(title).trim() : folder.replace(/[-_.]/g, ' ');
 
-        const omdbResponse = await axios.get(queryUrl);
-        const data = omdbResponse.data;
+        const metadataLookup = await metadataProvider.fetchMetadataWithFallback({
+            imdbId: requestedImdbId,
+            title: titleHint,
+            contentType
+        });
+        const data = metadataLookup.data;
 
         if (!data || data.Response === "False") {
-            return res.status(404).json({ success: false, error: data.Error || 'No matching titles found inside OMDb library registry.' });
+            return res.status(404).json({ success: false, error: 'No matching metadata found from configured providers.' });
         }
 
         // Read the file context if it already exists to avoid smashing your storage sync metrics

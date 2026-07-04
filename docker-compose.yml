@@ -3,12 +3,13 @@ version: '3.8'
 services:
   # --- 🍿 THE CORE APPLICATION CONTAINER ENGINE ---
   movie-streamer:
-    container_name: movie-streamer-v2-prod
+    container_name: movie-streamer-v2-test
+    image: simple-streamer:v2
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    cpus: "2.0"
+    cpus: "6.0"
     env_file:
       - .env
     ports:
