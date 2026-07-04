@@ -11,6 +11,7 @@ const app = express();
 app.use(express.json());
 
 const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
+const BROWSER_SAFE_AUDIO_CODECS = new Set(['aac', 'mp3']);
 
 function isVideoCandidate(fileName) {
     const lower = String(fileName || '').toLowerCase();
@@ -206,13 +207,14 @@ function inspectMediaStreams(filePath) {
         const audioCodecs = audioStreams.map(stream => String(stream.codec_name || '').toLowerCase());
         const videoCodec = String(videoStream?.codec_name || '').toLowerCase();
         const audioCodec = audioCodecs[0] || '';
+        const hasOnlyBrowserSafeAudio = audioCodecs.length > 0 && audioCodecs.every(codec => BROWSER_SAFE_AUDIO_CODECS.has(codec));
 
         return {
             videoCodec,
             audioCodec,
             audioTracks: audioStreams.length,
             hasMultipleAudioTracks: audioStreams.length > 1,
-            isWebNative: (videoCodec === 'h264' || videoCodec === 'hevc') && audioCodecs.every(codec => codec === 'aac' || codec === 'mp3' || codec === 'ac3' || codec === 'eac3')
+            isWebNative: (videoCodec === 'h264' || videoCodec === 'hevc') && hasOnlyBrowserSafeAudio
         };
     } catch (err) {
         logger.error(`ffprobe inspection crash on ${path.basename(filePath)}: ${err.message}`);
