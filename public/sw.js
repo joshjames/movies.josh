@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'anymovie-static-v1';
+const CACHE_VERSION = 'anymovie-static-v2';
 const CACHE_NAME = CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',
@@ -34,6 +34,31 @@ function isSameOrigin(url) {
   return url.origin === self.location.origin;
 }
 
+function shouldCacheResponse(request, response) {
+  if (!response || response.status !== 200 || response.redirected) {
+    return false;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (request.destination === 'image') {
+    return contentType.startsWith('image/');
+  }
+
+  if (request.destination === 'script') {
+    return contentType.includes('javascript') || contentType.includes('ecmascript') || contentType.includes('text/plain');
+  }
+
+  if (request.destination === 'style') {
+    return contentType.includes('text/css');
+  }
+
+  if (request.destination === 'font') {
+    return contentType.startsWith('font/') || contentType.includes('application/font') || contentType.includes('application/octet-stream');
+  }
+
+  return true;
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
@@ -49,8 +74,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (shouldCacheResponse(request, response)) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => caches.match(request).then((cached) => cached || caches.match('/index.html')))
@@ -67,7 +94,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(request).then((cached) => {
       const fetchPromise = fetch(request)
         .then((response) => {
-          if (response && response.status === 200) {
+          if (shouldCacheResponse(request, response)) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
