@@ -8,6 +8,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     restart: unless-stopped
     cpus: "6.0"
     env_file:
