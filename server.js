@@ -54,7 +54,10 @@ app.use(express.json({ limit: '20mb' }));
 app.use('/login.html', express.static(path.join(__dirname, 'public/login.html')));
 app.use('/css', express.static(path.join(__dirname, 'public/css'))); 
 app.use('/js', express.static(path.join(__dirname, 'public/js'))); 
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/favicon.ico', express.static(path.join(__dirname, 'public/favicon.ico')));
+app.use('/manifest.webmanifest', express.static(path.join(__dirname, 'public/manifest.webmanifest')));
+app.use('/sw.js', express.static(path.join(__dirname, 'public/sw.js')));
 
 const authRouter = require('./src/routes/auth.routes');
 app.use('/api/auth', authRouter);
