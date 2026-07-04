@@ -246,12 +246,13 @@
             <div class="plan-card selected" onclick="selectPlan(this, 'premium-monthly')">
                 <div class="plan-header">
                     <span class="plan-title">Premium Stream Access</span>
-                    <span class="plan-price">$9.99<span style="font-size:0.75rem; color:#64748b">/mo</span></span>
+                    <span class="plan-price">$15.90<span style="font-size:0.75rem; color:#64748b">/mo</span></span>
                 </div>
                 <ul class="plan-features">
-                    <li>Full 4K UHD Bitrate Pipeline Compilation</li>
-                    <li>Unrestricted Parallel Multi-Worker Core Access</li>
-                    <li>Synchronized Android TV Native Client Sideloading</li>
+                    <li>Up to Full 4K UHD Bitrate Pipeline Compilation</li>
+                    <li>Unrestricted Parallel Multi-Screen Access</li>
+                    <li>Synchronized Android/Google TV Native Client</li>
+                    <li>Dynamic Personal Library with smart search</li>
                 </ul>
             </div>
 
@@ -296,6 +297,7 @@
             isProduction: false
         };
         let paymentHandlerBound = false;
+        let cardMounted = false;
 
         function loadSquareSdk(isProduction) {
             return new Promise((resolve, reject) => {
@@ -386,9 +388,12 @@
                     showError("Gateway subsystem not ready. Please refresh.");
                     return;
                 }
-                // Mount the interactive payment iframe elements inside our container
-                document.getElementById('checkoutStatus').innerText = 'Loading secure card fields...';
-                await cardEngine.attach('#card-container');
+                if (!cardMounted) {
+                    // Mount Square iframe only once; re-attach throws PaymentMethodAlreadyAttachedError.
+                    document.getElementById('checkoutStatus').innerText = 'Loading secure card fields...';
+                    await cardEngine.attach('#card-container');
+                    cardMounted = true;
+                }
                 document.getElementById('checkoutStatus').innerText = 'Card fields ready.';
                 
                 // Bind click engine trigger directly to Square's asynchronous tokenizer evaluation

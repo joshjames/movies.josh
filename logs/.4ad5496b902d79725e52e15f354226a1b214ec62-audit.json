@@ -19,6 +19,11 @@
             "date": 1783095549020,
             "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-03.log",
             "hash": "8e77f05b3f94511b71a9b34f56690b38479c7cf405be27714fc7dea810dfd812"
+        },
+        {
+            "date": 1783138347253,
+            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-04.log",
+            "hash": "ac2c7bd9e40f63ed54ce227b4bbdd6998a5b80c4e871934ef4dd490ecf327ce2"
         }
     ],
     "hashType": "sha256"

@@ -5,3 +5,10 @@ node_modules/
 *.log
 *.gz
 npm-debug.log
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.snode
+sydney.env
+*.env

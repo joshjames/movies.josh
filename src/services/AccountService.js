@@ -1,6 +1,6 @@
 // src/services/AccountService.js
 const { square, config } = require('../config/square');
-const { randomUUID } = require('crypto');
+const { randomUUID, createHash } = require('crypto');
 const ProfileService = require('./ProfileService');
 const logger = require('./logger');
 
@@ -34,6 +34,30 @@ function normalizeSquareSubscriptionStatus(status) {
   };
 
   return map[raw] || raw;
+}
+
+function buildSquareIdempotencyKey(prefix, seed, withNonce = false) {
+  const hash = createHash('sha1').update(String(seed || '')).digest('hex').slice(0, 24);
+  if (!withNonce) {
+    return `${prefix}-${hash}`.slice(0, 45);
+  }
+  const nonce = randomUUID().replace(/-/g, '').slice(0, 10);
+  return `${prefix}-${hash}-${nonce}`.slice(0, 45);
+}
+
+function hasSquareErrorCode(error, code) {
+  const target = String(code || '').toUpperCase().trim();
+  if (!target) return false;
+
+  const bodyErrors = Array.isArray(error?.body?.errors) ? error.body.errors : [];
+  const directErrors = Array.isArray(error?.errors) ? error.errors : [];
+  const messageText = String(error?.message || '').toUpperCase();
+
+  if (messageText.includes(target)) return true;
+
+  return [...bodyErrors, ...directErrors].some((entry) => {
+    return String(entry?.code || '').toUpperCase().trim() === target;
+  });
 }
 
 class AccountService {
@@ -88,32 +112,46 @@ class AccountService {
       process.env.SQUARE_SUBSCRIPTION_NAME ||
       'AnyMovie Monthly Subscription'
     ).trim();
-    const variationNameFingerprint = Buffer.from(variationName).toString('hex').slice(0, 24) || 'default';
-
-    const upsertResponse = await square.catalog.object.upsert({
-      idempotencyKey: `anymovie-static-variation-${planId}-${monthlyPriceCents}-${currency}-${variationNameFingerprint}`,
-      object: {
-        type: 'SUBSCRIPTION_PLAN_VARIATION',
-        id: '#anymovie-monthly-static',
-        subscriptionPlanVariationData: {
-          name: variationName,
-          subscriptionPlanId: planId,
-          phases: [
-            {
-              cadence: 'MONTHLY',
-              ordinal: BigInt(0),
-              pricing: {
-                type: 'STATIC',
-                priceMoney: {
-                  amount: BigInt(monthlyPriceCents),
-                  currency
-                }
+    const upsertObject = {
+      type: 'SUBSCRIPTION_PLAN_VARIATION',
+      id: '#anymovie-monthly-static',
+      subscriptionPlanVariationData: {
+        name: variationName,
+        subscriptionPlanId: planId,
+        phases: [
+          {
+            cadence: 'MONTHLY',
+            ordinal: BigInt(0),
+            pricing: {
+              type: 'STATIC',
+              priceMoney: {
+                amount: BigInt(monthlyPriceCents),
+                currency
               }
             }
-          ]
-        }
+          }
+        ]
       }
-    });
+    };
+    const keySeed = `${planId}|${monthlyPriceCents}|${currency}|${variationName}`;
+
+    let upsertResponse;
+    try {
+      upsertResponse = await square.catalog.object.upsert({
+        idempotencyKey: buildSquareIdempotencyKey('staticvar', keySeed, false),
+        object: upsertObject
+      });
+    } catch (upsertErr) {
+      if (!hasSquareErrorCode(upsertErr, 'IDEMPOTENCY_KEY_REUSED')) {
+        throw upsertErr;
+      }
+
+      // Fall back to a one-off key when Square rejects a stale reused key.
+      upsertResponse = await square.catalog.object.upsert({
+        idempotencyKey: buildSquareIdempotencyKey('staticvar', `${keySeed}|retry`, true),
+        object: upsertObject
+      });
+    }
 
     const createdObject = upsertResponse.catalogObject || upsertResponse.catalog_object || upsertResponse.object || null;
     const createdId = createdObject?.id || null;
@@ -291,7 +329,7 @@ class AccountService {
 
       // 2. Attach the secure card token safely to their Customer profile
       const cardResponse = await square.cards.create({
-        idempotencyKey: `card-${userKey}-${randomUUID()}`,
+        idempotencyKey: buildSquareIdempotencyKey('card', `${userKey}|${Date.now()}`, true),
         card: {
           customerId: squareCustomerId,
           referenceId: userKey.toString()
@@ -302,7 +340,7 @@ class AccountService {
 
       // 3. Bind the customer profile to your subscription plan
       const subscriptionResponse = await square.subscriptions.create({
-        idempotencyKey: `sub-${userKey}-${randomUUID()}`,
+        idempotencyKey: buildSquareIdempotencyKey('sub', `${userKey}|${planVariationId}|${Date.now()}`, true),
         locationId: config.locationId,
         planVariationId,
         customerId: squareCustomerId,
