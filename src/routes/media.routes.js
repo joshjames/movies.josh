@@ -31,6 +31,11 @@ const MOVIE_PATH_CANDIDATES = [
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
+const CATALOG_DATA_DIR_CANDIDATES = [
+    String(process.env.CATALOG_DATA_DIR || '').trim(),
+    '/app/catalog-metadata',
+    CATALOG_DATA_DIR
+].filter(Boolean);
 const CATALOG_COVER_DIR = path.join(__dirname, '../../public/images/catalog-covers');
 
 const CATALOG_LABEL_OVERRIDES = {
@@ -88,13 +93,38 @@ function getCatalogSortWeight(slug = '') {
     return 1000;
 }
 
+function listCatalogFilesByDirectory() {
+    return CATALOG_DATA_DIR_CANDIDATES.map((dirPath) => {
+        if (!fs.existsSync(dirPath)) return { dirPath, files: [] };
+
+        const files = fs.readdirSync(dirPath)
+            .filter(name => /^catalog_.*\.json$/i.test(name));
+        return { dirPath, files };
+    });
+}
+
+function pickCatalogDirectoryForSlug(slug = '') {
+    const safe = String(slug || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '');
+    if (!safe) return null;
+
+    for (const dirPath of CATALOG_DATA_DIR_CANDIDATES) {
+        const preferredTrimmed = path.join(dirPath, `catalog_${safe}_trimmed.json`);
+        if (fs.existsSync(preferredTrimmed)) return { dirPath, filePath: preferredTrimmed };
+
+        const fallbackLegacy = path.join(dirPath, `catalog_${safe}.json`);
+        if (fs.existsSync(fallbackLegacy)) return { dirPath, filePath: fallbackLegacy };
+    }
+
+    return null;
+}
+
 function readCatalogJsonBySlug(slug = '') {
     const safe = String(slug || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '');
     if (!safe) return null;
 
-    const preferredTrimmed = path.join(CATALOG_DATA_DIR, `catalog_${safe}_trimmed.json`);
-    const fallbackLegacy = path.join(CATALOG_DATA_DIR, `catalog_${safe}.json`);
-    const filePath = fs.existsSync(preferredTrimmed) ? preferredTrimmed : fallbackLegacy;
+    const selected = pickCatalogDirectoryForSlug(safe);
+    const filePath = selected?.filePath;
+    if (!filePath) return null;
     if (!fs.existsSync(filePath)) return null;
 
     try {
@@ -1081,21 +1111,32 @@ router.get('/movies/search/unified', async (req, res) => {
 
 router.get('/catalogs/movies', async (_req, res) => {
     try {
-        if (!fs.existsSync(CATALOG_DATA_DIR)) {
+        const dirEntries = listCatalogFilesByDirectory();
+        const allCatalogFiles = dirEntries.flatMap(entry => entry.files.map(fileName => ({ fileName, dirPath: entry.dirPath })));
+
+        if (!allCatalogFiles.length) {
             return res.json({ success: true, catalogs: [] });
         }
 
-        const allCatalogFiles = fs.readdirSync(CATALOG_DATA_DIR)
-            .filter(name => /^catalog_.*\.json$/i.test(name));
+        const preferredBySlug = new Map();
+        for (const entry of allCatalogFiles) {
+            const slug = toCatalogSlug(entry.fileName);
+            const isTrimmed = /_trimmed\.json$/i.test(entry.fileName);
+            const current = preferredBySlug.get(slug);
 
-        const trimmedFiles = allCatalogFiles.filter(name => /_trimmed\.json$/i.test(name));
-        const files = trimmedFiles.length > 0
-            ? trimmedFiles
-            : allCatalogFiles.filter(name => !/_trimmed\.json$/i.test(name));
+            if (!current) {
+                preferredBySlug.set(slug, { ...entry, slug, isTrimmed });
+                continue;
+            }
 
-        const catalogs = files.map((fileName) => {
-            const slug = toCatalogSlug(fileName);
-            const filePath = path.join(CATALOG_DATA_DIR, fileName);
+            if (!current.isTrimmed && isTrimmed) {
+                preferredBySlug.set(slug, { ...entry, slug, isTrimmed });
+            }
+        }
+
+        const catalogs = Array.from(preferredBySlug.values()).map((entry) => {
+            const slug = entry.slug;
+            const filePath = path.join(entry.dirPath, entry.fileName);
             let count = 0;
 
             try {

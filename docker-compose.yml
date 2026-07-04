@@ -18,6 +18,7 @@ services:
       - /home/epic/movies:/app/storage/movies
       - /data/blockchain/media/Series:/app/storage/series
       - /home/epic/movie-streamer-data:/app/metadata
+      - /home/epic/movie-streamer/metadata:/app/catalog-metadata:ro
       - /home/epic/tobedel:/app/archive
       - /home/epic/.config/subliminal:/root/.config/subliminal:ro
     depends_on:
