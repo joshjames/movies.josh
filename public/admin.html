@@ -428,10 +428,12 @@
         </div>
     </div>
 
+    <script src="/js/watch-history-panel.js"></script>
     <script>
         let currentTabMode = 'movies';
         let fullLibraryCache = { movies: [], shows: [] };
         let activeSyncFolder = null; // Track single folder being manual-synchronized
+        const watchHistoryPanel = new window.WatchHistoryPanel();
 
         const WORKER_PORTS = {
             'Orchestrator': 3000,
@@ -1496,6 +1498,7 @@
                                         <th>Tier</th>
                                         <th>Next Bill</th>
                                         <th>Activity</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1515,6 +1518,9 @@
                                                 <td style="color:#cbd5e1;">${escapeHtml(u.billingTier || '-')}</td>
                                                 <td style="color:#cbd5e1;">${fmtDate(u.nextBillingDate || u.trialEndsAt)}</td>
                                                 <td style="color:#94a3b8;">${escapeHtml(flags.join(' • ') || '-')}</td>
+                                                <td>
+                                                    <button type="button" style="background:#1d4ed8; font-size:0.72rem; padding:6px 10px;" onclick="viewUserWatchHistory('${escapeHtml(u.username || '')}')">View History</button>
+                                                </td>
                                             </tr>
                                         `;
                                     }).join('')}
@@ -1560,6 +1566,20 @@
                 container.innerHTML = '<span style="color:#f87171;">Error loading failed jobs.</span>';
                 console.error('[Admin] fetchFailedJobs failed:', err);
             }
+        }
+
+        function viewUserWatchHistory(userKey) {
+            const cleanUser = String(userKey || '').trim().toLowerCase();
+            if (!cleanUser) {
+                showToast('Unable to resolve user key for history view.', 'error', 3200);
+                return;
+            }
+
+            watchHistoryPanel.open({
+                endpoint: `/api/admin/users/${encodeURIComponent(cleanUser)}/watch-history`,
+                title: `Watch History: ${cleanUser}`,
+                subtitle: 'Recent playback activity for selected profile'
+            });
         }
 
         async function retryFailedJob(jobId) {

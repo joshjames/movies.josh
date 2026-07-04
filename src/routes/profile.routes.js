@@ -74,4 +74,26 @@ router.get('/playback/state', async (req, res) => {
     }
 });
 
+// GET: /api/profile/watch-history
+router.get('/watch-history', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        const limit = parseInt(req.query.limit, 10) || 200;
+
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const history = await ProfileService.getWatchHistory(username, { limit });
+        return res.json({
+            success: true,
+            userKey: username,
+            count: history.length,
+            history
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 module.exports = router;

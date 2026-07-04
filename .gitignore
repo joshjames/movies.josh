@@ -12,3 +12,4 @@ npm-debug.log
 .env.snode
 sydney.env
 *.env
+.env*

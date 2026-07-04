@@ -1811,4 +1811,25 @@ router.get('/users', (req, res) => {
     }
 });
 
+// GET: /api/admin/users/:userKey/watch-history
+router.get('/users/:userKey/watch-history', async (req, res) => {
+    try {
+        const userKey = String(req.params.userKey || '').trim().toLowerCase();
+        const limit = parseInt(req.query.limit, 10) || 200;
+        if (!userKey) {
+            return res.status(400).json({ success: false, error: 'Missing user key.' });
+        }
+
+        const history = await ProfileService.getWatchHistory(userKey, { limit });
+        return res.json({
+            success: true,
+            userKey,
+            count: history.length,
+            history
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 module.exports = router;

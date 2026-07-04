@@ -457,6 +457,7 @@
             <section class="card">
                 <h2>Settings</h2>
                 <p class="muted">More account settings can be added here over time.</p>
+                <button class="btn btn-primary" id="viewWatchHistoryBtn" type="button">View My Watch History</button>
             </section>
         </div>
     </div>
@@ -478,10 +479,12 @@
         </div>
     </aside>
 
+    <script src="/js/watch-history-panel.js"></script>
     <script>
         const TOTAL_AVATARS = 136;
         const AVATAR_GRID_SIZE = 12;
         let selectedAvatar = 'avatar_001.png';
+        const watchHistoryPanel = new window.WatchHistoryPanel();
 
         function setStatus(id, message, ok = true) {
             const el = document.getElementById(id);
@@ -764,6 +767,13 @@
         document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
         document.getElementById('changePasswordBtn').addEventListener('click', changePassword);
         document.getElementById('shuffleAvatarsBtn').addEventListener('click', renderAvatarGrid);
+        document.getElementById('viewWatchHistoryBtn').addEventListener('click', () => {
+            watchHistoryPanel.open({
+                endpoint: '/api/profile/watch-history',
+                title: 'My Watch History',
+                subtitle: 'Recent playback activity from your account profile'
+            });
+        });
         document.getElementById('profileAvatarTrigger').addEventListener('click', (event) => {
             event.stopPropagation();
             toggleAvatarActionMenu();

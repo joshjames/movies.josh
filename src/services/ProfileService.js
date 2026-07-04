@@ -53,6 +53,21 @@ function normalizeAvatarFileName(value, fallback = 'avatar_001.png') {
     return `avatar_${String(numeric).padStart(3, '0')}.png`;
 }
 
+function humanizeMediaTitle(mediaId) {
+    const raw = String(mediaId || '').trim();
+    if (!raw) return 'Unknown Title';
+
+    const withoutPrefix = raw.replace(/^series\//i, '');
+    const cleaned = withoutPrefix
+        .replace(/\.S\d{1,2}E\d{1,3}$/i, '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!cleaned) return raw;
+    return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ====== PRIVATE DATA UTILITIES ======
 async function ensureUserDir(username) {
     const userDir = path.join(USER_BASE_DIR, username);
@@ -137,6 +152,31 @@ const ProfileService = {
             updatedAt: Date.now()
         };
         return await this.writeData(username, 'playback', playback);
+    },
+
+    async getWatchHistory(username, options = {}) {
+        const limit = Math.max(1, Math.min(parseInt(options.limit, 10) || 200, 1000));
+        const playback = await this.getPlaybackState(username);
+
+        const rows = Object.entries(playback || {})
+            .map(([mediaId, entry]) => {
+                const updatedAt = Number(entry?.updatedAt || 0);
+                const position = Number(entry?.position || 0);
+                return {
+                    mediaId,
+                    title: humanizeMediaTitle(mediaId),
+                    position: Number.isFinite(position) ? position : 0,
+                    updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
+                    updatedAtIso: Number.isFinite(updatedAt) && updatedAt > 0
+                        ? new Date(updatedAt).toISOString()
+                        : null
+                };
+            })
+            .filter((row) => row.updatedAt > 0)
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, limit);
+
+        return rows;
     },
 
     // --- TELEMETRY SECURITY HISTORY TRACKS ---
