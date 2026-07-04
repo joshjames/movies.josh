@@ -1043,6 +1043,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
+                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="normalizeSeriesFolderNow('${item.folder}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'purge')" ${hasQuarantinedArchive ? '' : 'disabled'}>Permanently Purge Archive</button>
@@ -1067,6 +1068,7 @@
                                 <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
                                 <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
                                 <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${item.folder}', '${currentTabMode}')">Apply Rename</button>
+                                ${currentTabMode === 'series' ? `<button type="button" style="background:#8b5cf6;" onclick="normalizeSeriesFolderNow('${item.folder}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
                                 <button type="button" style="background:#0ea5e9;" onclick="repairMetadataNow('${item.folder}', '${currentTabMode}')">Repair Metadata</button>
                             </div>
                         </div>
@@ -1325,6 +1327,7 @@
             if (action === 'profiles') return generateStreamingProfilesNow(folder, type);
             if (action === 'worker') return runWorkerNow(folder, type);
             if (action === 'rename') return renameMediaNow(folder, type);
+            if (action === 'normalize') return normalizeSeriesFolderNow(folder, type);
             if (action === 'archive') return archiveLocalMediaNow(folder, type);
             if (action === 'restore') return restoreArchivedMediaNow(folder, type);
             if (action === 'purge') return purgeArchivedMediaNow(folder, type);
@@ -1554,6 +1557,38 @@
                 fetchLibraryData();
             } catch (_err) {
                 showToast('Rename request failed.', 'error', 4200);
+            }
+        }
+
+        async function normalizeSeriesFolderNow(folder, type) {
+            const title = (document.getElementById(`title-${folder}`)?.value || '').trim();
+            const imdbId = (document.getElementById(`imdbId-${folder}`)?.value || '').trim();
+
+            if (!confirm(`Normalize the series folder for ${folder}?\n\nThis safely renames or merges the show root, keeps IMDb metadata attached, and rebuilds the season manifest.`)) {
+                return;
+            }
+
+            try {
+                showToast(`Normalizing series folder for ${folder}...`, 'info', 3000);
+                const res = await fetch('/api/admin/series/normalize-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type, title, imdbId, attemptEpisodeReorg: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Normalize failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                const renameMode = data.renameMode || 'metadata-only';
+                const moved = data.reorgSummary?.moved || 0;
+                const skipped = data.reorgSummary?.skipped || 0;
+                const mergeMoved = data.mergeSummary?.movedFiles || 0;
+                showToast(`Series folder normalized (${renameMode}). Root moves: ${mergeMoved}, episode reorg moved ${moved}, skipped ${skipped}.`, 'success', 5200);
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Normalize request failed.', 'error', 4200);
             }
         }
 

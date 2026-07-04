@@ -91,6 +91,133 @@ function sanitizeSeriesFolderName(folderName = '') {
     return clean;
 }
 
+function toSeriesFolderName(value = '') {
+    const raw = String(value || '')
+        .replace(/\.[a-z0-9]{2,4}$/i, '')
+        .replace(/\bMeGusta\b/gi, '')
+        .replace(/\bingest\b/gi, '')
+        .replace(/\bSeason[\s._-]?\d{1,3}\b/gi, '')
+        .replace(/\bS\d{1,2}E\d{1,3}\b/gi, '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!raw) return '';
+
+    return raw
+        .split(' ')
+        .filter(Boolean)
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('.');
+}
+
+function removeEmptyDirectories(dirPath) {
+    if (!fs.existsSync(dirPath)) return false;
+
+    const stat = fs.lstatSync(dirPath);
+    if (!stat.isDirectory()) return false;
+
+    let empty = true;
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const entryPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+            const childRemoved = removeEmptyDirectories(entryPath);
+            if (!childRemoved) empty = false;
+        } else {
+            empty = false;
+        }
+    }
+
+    if (empty) {
+        try {
+            fs.rmdirSync(dirPath);
+            return true;
+        } catch (_err) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+function mergeSeriesTreeContents(sourceDir, targetDir) {
+    const summary = {
+        movedFiles: 0,
+        mergedDirectories: 0,
+        skipped: 0,
+        conflicts: []
+    };
+
+    if (!fs.existsSync(sourceDir) || !fs.existsSync(targetDir)) {
+        return summary;
+    }
+
+    const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+        if (entry.name === 'metadata.json' || entry.name === 'series.json') {
+            summary.skipped += 1;
+            continue;
+        }
+
+        const sourceEntryPath = path.join(sourceDir, entry.name);
+        const targetEntryPath = path.join(targetDir, entry.name);
+
+        if (entry.isDirectory()) {
+            if (!fs.existsSync(targetEntryPath)) {
+                fs.renameSync(sourceEntryPath, targetEntryPath);
+                summary.mergedDirectories += 1;
+                continue;
+            }
+
+            if (fs.lstatSync(targetEntryPath).isDirectory()) {
+                const nested = mergeSeriesTreeContents(sourceEntryPath, targetEntryPath);
+                summary.movedFiles += nested.movedFiles;
+                summary.mergedDirectories += nested.mergedDirectories;
+                summary.skipped += nested.skipped;
+                summary.conflicts.push(...nested.conflicts);
+                removeEmptyDirectories(sourceEntryPath);
+                continue;
+            }
+
+            summary.skipped += 1;
+            summary.conflicts.push({ path: entry.name, reason: 'target-file-exists' });
+            continue;
+        }
+
+        if (!fs.existsSync(targetEntryPath)) {
+            fs.renameSync(sourceEntryPath, targetEntryPath);
+            summary.movedFiles += 1;
+        } else {
+            summary.skipped += 1;
+            summary.conflicts.push({ path: entry.name, reason: 'target-file-exists' });
+        }
+    }
+
+    removeEmptyDirectories(sourceDir);
+    return summary;
+}
+
+function buildSeriesRenameMetadata(existingMetadata, folderPath, targetFolderName, imdbId, title) {
+    return {
+        ...existingMetadata,
+        title: title || existingMetadata.title || targetFolderName.replace(/[._-]/g, ' '),
+        contentType: 'series',
+        folderName: targetFolderName,
+        folderPath,
+        imdbId: imdbId || existingMetadata.imdbId || existingMetadata.imdbID || null,
+        imdb_id: imdbId || existingMetadata.imdb_id || existingMetadata.imdbId || existingMetadata.imdbID || null,
+        pipelineState: {
+            ...(existingMetadata.pipelineState || {}),
+            currentStep: 'COMPLETED',
+            lastUpdated: new Date().toISOString(),
+            error: null
+        }
+    };
+}
+
 function normalizeEpisodeToken(value = '') {
     return String(value || '')
         .toLowerCase()
@@ -640,6 +767,111 @@ router.post('/series/manual-add', async (req, res) => {
             folder: cleanFolder,
             imdbId: cleanImdbId,
             metadataUpdated: true,
+            reorgSummary,
+            totalSeasons: seriesManifest.totalSeasons,
+            scanSummary
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/series/normalize-folder', async (req, res) => {
+    try {
+        const { folder, imdbId, title, targetFolderName, attemptEpisodeReorg = true } = req.body || {};
+        const cleanFolder = sanitizeSeriesFolderName(folder || '');
+        const cleanImdbId = String(imdbId || '').trim();
+        const cleanTitle = String(title || '').trim();
+
+        if (!cleanFolder) {
+            return res.status(400).json({ success: false, error: 'Missing or invalid series folder name.' });
+        }
+
+        const showPath = resolveSeriesFolderPath(cleanFolder);
+        if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
+            return res.status(404).json({ success: false, error: 'Series folder not found.' });
+        }
+
+        const metadataPath = path.join(showPath, 'metadata.json');
+        let metadata = {};
+        if (fs.existsSync(metadataPath)) {
+            try {
+                metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+            } catch (_err) {
+                metadata = {};
+            }
+        }
+
+        const metadataTitle = cleanTitle || metadata.title || metadata.name || cleanFolder;
+        const derivedFolderName = sanitizeSeriesFolderName(targetFolderName || toSeriesFolderName(metadataTitle));
+
+        if (!derivedFolderName) {
+            return res.status(400).json({ success: false, error: 'Could not derive a valid target folder name.' });
+        }
+
+        let finalPath = showPath;
+        let finalFolderName = cleanFolder;
+        let renameMode = 'metadata-only';
+        let mergeSummary = { movedFiles: 0, mergedDirectories: 0, skipped: 0, conflicts: [] };
+
+        if (derivedFolderName !== cleanFolder) {
+            const targetPath = resolveSeriesFolderPath(derivedFolderName);
+
+            if (fs.existsSync(targetPath) && path.resolve(targetPath) !== path.resolve(showPath)) {
+                renameMode = 'merge-into-existing';
+                mergeSummary = mergeSeriesTreeContents(showPath, targetPath);
+                finalPath = targetPath;
+                finalFolderName = derivedFolderName;
+            } else {
+                renameMode = 'rename-root';
+                await fsPromises.rename(showPath, targetPath);
+                finalPath = targetPath;
+                finalFolderName = derivedFolderName;
+            }
+        }
+
+        const finalMetadataPath = path.join(finalPath, 'metadata.json');
+        let finalBaseMetadata = metadata;
+        if (finalPath !== showPath && fs.existsSync(finalMetadataPath)) {
+            try {
+                finalBaseMetadata = {
+                    ...JSON.parse(fs.readFileSync(finalMetadataPath, 'utf-8')),
+                    ...metadata
+                };
+            } catch (_err) {
+                finalBaseMetadata = metadata;
+            }
+        }
+
+        const nextMetadata = buildSeriesRenameMetadata(
+            finalBaseMetadata,
+            finalPath,
+            finalFolderName,
+            cleanImdbId || metadata.imdbId || metadata.imdbID || '',
+            metadataTitle
+        );
+
+        await fsPromises.writeFile(finalMetadataPath, JSON.stringify(nextMetadata, null, 4), 'utf-8');
+
+        let reorgSummary = { moved: 0, skipped: 0, details: [] };
+        if (attemptEpisodeReorg) {
+            reorgSummary = await organizeRootEpisodesIntoSeasonFolders(finalPath, finalFolderName, nextMetadata.imdbId || cleanImdbId);
+        }
+
+        const seriesManifest = rebuildSeriesManifest(finalPath, {
+            showFolderName: finalFolderName,
+            write: true
+        });
+
+        const scanSummary = await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            folder: finalFolderName,
+            sourceFolder: cleanFolder,
+            targetFolder: finalFolderName,
+            renameMode,
+            mergeSummary,
             reorgSummary,
             totalSeasons: seriesManifest.totalSeasons,
             scanSummary

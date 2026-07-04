@@ -157,6 +157,12 @@ function analyzeDirectoryContents(dirPath) {
     };
 }
 
+function normalizeImdbId(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return '';
+    return `tt${cleaned}`;
+}
+
 function findExistingShowFolder(cleanTitle, targetSeriesDir) {
     if (!fs.existsSync(targetSeriesDir)) return null;
     
@@ -168,8 +174,76 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
         if (normalizedFolder === normalizedTarget || normalizedFolder.includes(normalizedTarget)) {
             return folder;
         }
+
+        const metaPath = path.join(targetSeriesDir, folder, 'metadata.json');
+        if (!fs.existsSync(metaPath)) continue;
+
+        try {
+            const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            const metaTitle = String(metadata.title || metadata.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
+
+            if (metaTitle && (metaTitle === normalizedTarget || metaTitle.includes(normalizedTarget) || normalizedTarget.includes(metaTitle))) {
+                return folder;
+            }
+        } catch (_err) {
+            // Ignore malformed metadata and keep scanning.
+        }
     }
     return null;
+}
+
+function findExistingShowFolderByImdbId(imdbId, targetSeriesDir) {
+    const cleanImdb = normalizeImdbId(imdbId);
+    if (!cleanImdb || !fs.existsSync(targetSeriesDir)) return null;
+
+    const currentFolders = fs.readdirSync(targetSeriesDir);
+    for (const folder of currentFolders) {
+        const metaPath = path.join(targetSeriesDir, folder, 'metadata.json');
+        if (!fs.existsSync(metaPath)) continue;
+
+        try {
+            const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
+            if (metaImdb && metaImdb === cleanImdb) {
+                return folder;
+            }
+        } catch (_err) {
+            // Ignore malformed metadata and keep scanning.
+        }
+    }
+
+    return null;
+}
+
+function moveSeriesFilesIntoSeasonFolder(sourcePath, showRootPath, showFolder, seasonNumber, episodeItems = []) {
+    const seasonFolder = `Season.${String(seasonNumber).padStart(2, '0')}`;
+    const targetDir = path.join(showRootPath, seasonFolder);
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const candidateFiles = fs.readdirSync(sourcePath)
+        .filter(file => {
+            const ext = path.extname(file).toLowerCase();
+            return KEEP_EXTENSIONS.includes(ext) && fs.lstatSync(path.join(sourcePath, file)).isFile();
+        });
+
+    const episodeLookup = new Map((episodeItems || []).map(item => [String(item.fileName || ''), item]));
+
+    for (const fileName of candidateFiles) {
+        const sourceFilePath = path.join(sourcePath, fileName);
+        const parsedEpisode = episodeLookup.get(fileName) || null;
+        const ext = path.extname(fileName);
+        const renamed = parsedEpisode
+            ? `${showFolder}.S${String(parsedEpisode.season).padStart(2, '0')}E${String(parsedEpisode.episode).padStart(2, '0')}${ext}`
+            : fileName;
+        const destinationPath = path.join(targetDir, renamed);
+
+        if (!fs.existsSync(destinationPath)) {
+            fs.renameSync(sourceFilePath, destinationPath);
+        }
+    }
 }
 
 function deriveSeriesTitleFromEpisodeName(fileName, fallbackTitle) {
@@ -439,7 +513,7 @@ function resolveInputFolderContext(folderPath, folderName, contentType) {
 // 📥 UNIFIED INGEST PROCESSING ENDPOINT
 // =========================================================================
 app.post('/process', async (req, res) => {
-    const { folderPath, folderName, contentType } = req.body;
+    const { folderPath, folderName, contentType, imdbId, queueContext } = req.body;
 
     logger.debug(`🧹 [Ingest] Start | folderName=${folderName || 'unknown'} | folderPath=${folderPath || 'missing'} | contentType=${contentType || 'movie'}`);
 
@@ -540,27 +614,31 @@ app.post('/process', async (req, res) => {
         // =====================================================================
         if (contentType === 'series') {
             const analysis = analyzeDirectoryContents(finalPath);
+            const requestImdbId = normalizeImdbId(imdbId || queueContext?.imdbId || '');
+            const seasonEpisodes = Array.isArray(analysis.detectedEpisodes) ? analysis.detectedEpisodes : [];
+            const titleFromEpisode = seasonEpisodes.length
+                ? deriveSeriesTitleFromEpisodeName(seasonEpisodes[0].fileName, cleanTitle)
+                : cleanTitle;
+            const showTitleHint = titleFromEpisode || cleanTitle;
+            const showDotTitle = showTitleHint.replace(/\s+/g, '.');
+            const showFolder = findExistingShowFolderByImdbId(requestImdbId, SERIES_DIR)
+                || findExistingShowFolder(showTitleHint, SERIES_DIR)
+                || showDotTitle;
+            const showRootPath = path.join(SERIES_DIR, showFolder);
+
+            if (!fs.existsSync(showRootPath)) {
+                fs.mkdirSync(showRootPath, { recursive: true });
+                logger.debug(`📁 [Smart Ingest] Established show root entry: ${showFolder}`);
+            } else {
+                logger.debug(`🎯 [Smart Ingest] Linked incoming assets to show root: ${showFolder}`);
+            }
 
             if (analysis.isSeasonPack) {
                 logger.debug(`🧠 [Smart Ingest] Detected multi-file TV Season Pack inside: [${targetFolderName}]`);
 
-                const titleFromEpisode = analysis.detectedEpisodes.length
-                    ? deriveSeriesTitleFromEpisodeName(analysis.detectedEpisodes[0].fileName, cleanTitle)
-                    : cleanTitle;
-                const showDotTitle = titleFromEpisode.replace(/\s+/g, '.');
-
-                let showFolder = findExistingShowFolder(titleFromEpisode, SERIES_DIR);
-                if (!showFolder) {
-                    showFolder = showDotTitle;
-                    fs.mkdirSync(path.join(SERIES_DIR, showFolder), { recursive: true });
-                    logger.debug(`📁 [Smart Ingest] Established brand new show root entry: ${showFolder}`);
-                } else {
-                    logger.debug(`🎯 [Smart Ingest] Linked incoming assets to existing archive: ${showFolder}`);
-                }
-
                 for (const ep of analysis.detectedEpisodes) {
                     const seasonFolder = `Season.${String(ep.season).padStart(2, '0')}`;
-                    const targetDir = path.join(SERIES_DIR, showFolder, seasonFolder);
+                    const targetDir = path.join(showRootPath, seasonFolder);
                     
                     if (!fs.existsSync(targetDir)) {
                         fs.mkdirSync(targetDir, { recursive: true });
@@ -575,7 +653,6 @@ app.post('/process', async (req, res) => {
                     }
                 }
 
-                const showRootPath = path.join(SERIES_DIR, showFolder);
                 rebuildSeriesManifest(showRootPath, {
                     showFolderName: showFolder,
                     write: true
@@ -583,11 +660,13 @@ app.post('/process', async (req, res) => {
 
                 const showMetadataPath = path.join(showRootPath, 'metadata.json');
                 let showMeta = {
-                    title: cleanTitle,
+                    title: titleFromEpisode,
                     year: parsedYear || '',
                     plot: '',
                     genre: '',
-                    contentType: 'series'
+                    contentType: 'series',
+                    imdbId: requestImdbId || null,
+                    imdb_id: requestImdbId || null
                 };
                 if (fs.existsSync(showMetadataPath)) {
                     try {
@@ -597,8 +676,10 @@ app.post('/process', async (req, res) => {
                     }
                 }
 
-                showMeta.title = showMeta.title || cleanTitle;
+                showMeta.title = showMeta.title || titleFromEpisode;
                 showMeta.contentType = 'series';
+                showMeta.imdbId = showMeta.imdbId || requestImdbId || null;
+                showMeta.imdb_id = showMeta.imdb_id || requestImdbId || null;
                 showMeta.pipelineState = {
                     currentStep: 'METADATA',
                     lastUpdated: new Date().toISOString(),
@@ -627,12 +708,12 @@ app.post('/process', async (req, res) => {
                 });
             }
 
-            logger.debug(`📺 Mapping deep TV configuration manifests for series structural tree: [${targetFolderName}]`);
-            let mainMeta = { title: cleanTitle, year: parsedYear || '', plot: '', genre: '', contentType: 'series' };
+            logger.debug(`📺 Mapping deep TV configuration manifests for series structural tree: [${showFolder}]`);
+            let mainMeta = { title: titleFromEpisode, year: parsedYear || '', plot: '', genre: '', contentType: 'series', imdbId: requestImdbId || null, imdb_id: requestImdbId || null };
             let totalSeasons = 1;
 
             try {
-                const showRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(cleanTitle)}&type=series`, { timeout: 5000 });
+                const showRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(titleFromEpisode)}&type=series`, { timeout: 5000 });
                 if (showRes.data && showRes.data.Response === "True") {
                     mainMeta.title = showRes.data.Title;
                     mainMeta.year = showRes.data.Year;
@@ -641,14 +722,16 @@ app.post('/process', async (req, res) => {
                     totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
                 }
             } catch (err) {
-                logger.error(`⚠️ OMDb API series query exception for ${cleanTitle}: ${err.message}`, 'warn');
+                logger.error(`⚠️ OMDb API series query exception for ${titleFromEpisode}: ${err.message}`, 'warn');
             }
 
             let physicalFileMap = {};
             if (fs.existsSync(finalPath)) {
-                const diskItems = fs.readdirSync(finalPath);
+                moveSeriesFilesIntoSeasonFolder(finalPath, showRootPath, showFolder, seasonEpisodes[0]?.season || 1, seasonEpisodes);
+
+                const diskItems = fs.readdirSync(showRootPath);
                 diskItems.forEach(item => {
-                    const itemPath = path.join(finalPath, item);
+                    const itemPath = path.join(showRootPath, item);
                     if (!fs.lstatSync(itemPath).isDirectory()) return;
 
                     const files = fs.readdirSync(itemPath);
@@ -659,7 +742,7 @@ app.post('/process', async (req, res) => {
                         if (match) {
                             const sNum = parseInt(match[1], 10);
                             const eNum = parseInt(match[2], 10);
-                            physicalFileMap[`${sNum}-${eNum}`] = `series/${targetFolderName}/${item}/${file}`;
+                            physicalFileMap[`${sNum}-${eNum}`] = `series/${showFolder}/${item}/${file}`;
                         }
                     });
                 });
@@ -670,7 +753,7 @@ app.post('/process', async (req, res) => {
             for (let s = 1; s <= totalSeasons; s++) {
                 fullSeriesStructure.seasons[s] = { seasonNumber: s.toString(), episodes: [] };
                 try {
-                    const seasonRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(cleanTitle)}&Season=${s}`, { timeout: 4000 });
+                    const seasonRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(titleFromEpisode)}&Season=${s}`, { timeout: 4000 });
                     if (seasonRes.data && seasonRes.data.Response === "True" && seasonRes.data.Episodes) {
                         for (const ep of seasonRes.data.Episodes) {
                             const epNum = parseInt(ep.Episode, 10);
@@ -695,19 +778,27 @@ app.post('/process', async (req, res) => {
                 }
             }
 
-            if (fs.existsSync(finalPath)) {
-                fs.writeFileSync(path.join(finalPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
-                const metaFilePath = path.join(finalPath, 'metadata.json');
+            if (fs.existsSync(showRootPath)) {
+                fs.writeFileSync(path.join(showRootPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 2));
+                const metaFilePath = path.join(showRootPath, 'metadata.json');
                 mainMeta.pipelineState = { currentStep: 'METADATA', lastUpdated: new Date().toISOString() };
                 fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
-                logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${targetFolderName} and advanced pipeline to METADATA.`);
+                logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${showFolder} and advanced pipeline to METADATA.`);
+
+                if (finalPath !== showRootPath && fs.existsSync(finalPath)) {
+                    try {
+                        deleteFolderRecursive(finalPath);
+                    } catch (_err) {
+                        // Ignore cleanup failures; the library root is already populated.
+                    }
+                }
             }
 
             return res.json({
                 success: true,
                 patchData: {
-                    folderPath: finalPath,
-                    folderName: targetFolderName,
+                    folderPath: showRootPath,
+                    folderName: showFolder,
                     pipelineState: { currentStep: 'METADATA', lastUpdated: new Date().toISOString() }
                 }
             });
