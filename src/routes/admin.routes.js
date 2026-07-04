@@ -879,6 +879,7 @@ router.post('/repair-metadata', async (req, res) => {
 router.post('/manual-worker-run', async (req, res) => {
     try {
         const { folder, contentType, worker } = req.body || {};
+        const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
         if (!folder || !worker) {
             return res.status(400).json({ success: false, error: 'Missing folder or worker.' });
         }
@@ -920,7 +921,8 @@ router.post('/manual-worker-run', async (req, res) => {
             contentType: contentType || metadata.contentType || (folderPath.includes('/series') ? 'series' : 'movie'),
             imdbId: metadata.imdbId || null,
             manualImdbId: metadata.imdbId || null,
-            forceActualUpload: cleanWorker === 'CLOUDSYNC'
+            forceActualUpload: cleanWorker === 'CLOUDSYNC',
+            forceReprocess: cleanWorker === 'TRANSCODE' ? forceReprocess : undefined
         };
 
         const workerResponse = await axios.post(workerUrl, payload, { timeout: 1800000 });

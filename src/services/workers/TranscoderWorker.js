@@ -45,6 +45,29 @@ function walkVideoSources(rootFolder) {
     return discovered.sort((a, b) => a.localeCompare(b));
 }
 
+function walkWebProfiles(rootFolder) {
+    const discovered = [];
+
+    function visit(currentPath) {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name.startsWith('.')) continue;
+            const absolutePath = path.join(currentPath, entry.name);
+            if (entry.isDirectory()) {
+                visit(absolutePath);
+                continue;
+            }
+
+            if (entry.isFile() && /\.web\.mp4$/i.test(entry.name)) {
+                discovered.push(absolutePath);
+            }
+        }
+    }
+
+    visit(rootFolder);
+    return discovered.sort((a, b) => a.localeCompare(b));
+}
+
 function probeMediaStreams(filePath) {
     try {
         const command = `ffprobe -v error -show_entries stream=index,codec_type,codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default,forced -of json "${filePath}"`;
@@ -222,11 +245,29 @@ function inspectMediaStreams(filePath) {
     }
 }
 
-function processSingleVideoFile(inputPath) {
+function processSingleVideoFile(inputPath, options = {}) {
+    const forceReprocess = Boolean(options.forceReprocess);
+    const inputIsWebProfile = /\.web\.mp4$/i.test(String(inputPath || ''));
+
+    if (forceReprocess && inputIsWebProfile) {
+        const tempOutputPath = inputPath.replace(/\.web\.mp4$/i, '.web.rebuild.tmp.mp4');
+        logger.debug(`♻️ [Force Reprocess] Rebuilding existing web profile: ${path.basename(inputPath)}`);
+        generate1080pProfile(inputPath, tempOutputPath);
+        fs.renameSync(tempOutputPath, inputPath);
+        return {
+            success: true,
+            skipped: false,
+            output1080Path: inputPath,
+            inputPath,
+            media: inspectMediaStreams(inputPath),
+            forceReprocessed: true
+        };
+    }
+
     const parsedPath = path.parse(inputPath);
     const output1080Path = path.join(parsedPath.dir, `${parsedPath.name}.web.mp4`);
 
-    if (fs.existsSync(output1080Path)) {
+    if (fs.existsSync(output1080Path) && !forceReprocess) {
         logger.debug(`🎯 [Web Target Confirmed] ${path.basename(inputPath)} already has optimized asset: ${path.basename(output1080Path)}. Skipping.`);
         return {
             success: true,
@@ -234,6 +275,10 @@ function processSingleVideoFile(inputPath) {
             output1080Path,
             inputPath
         };
+    }
+
+    if (forceReprocess && fs.existsSync(output1080Path) && inputPath !== output1080Path) {
+        fs.unlinkSync(output1080Path);
     }
 
     const media = inspectMediaStreams(inputPath);
@@ -275,6 +320,7 @@ function processSingleVideoFile(inputPath) {
 // =========================================================================
 app.post('/process', async (req, res) => {
     const { folderPath, folderName } = req.body;
+    const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
 
     if (!folderPath) {
         return res.status(400).json({ success: false, error: "Missing required folderPath context." });
@@ -285,7 +331,14 @@ app.post('/process', async (req, res) => {
             return res.json({ success: false, error: `Directory target does not exist on disk: ${folderPath}` });
         }
 
-        const sourceVideos = walkVideoSources(folderPath);
+        let sourceVideos = walkVideoSources(folderPath);
+        if (!sourceVideos.length && forceReprocess) {
+            sourceVideos = walkWebProfiles(folderPath);
+            if (sourceVideos.length) {
+                logger.debug(`♻️ [Force Reprocess] No original source files found; reprocessing existing web profiles in place.`);
+            }
+        }
+
         if (!sourceVideos.length) {
             return res.json({ success: false, error: "No viable processing source video found." });
         }
@@ -293,7 +346,7 @@ app.post('/process', async (req, res) => {
         const results = [];
         for (const inputPath of sourceVideos) {
             try {
-                results.push(processSingleVideoFile(inputPath));
+                results.push(processSingleVideoFile(inputPath, { forceReprocess }));
             } catch (videoErr) {
                 logger.error(`❌ Transcoder Worker failed for ${path.basename(inputPath)}: ${videoErr.message}`);
                 results.push({ success: false, inputPath, error: videoErr.message });
@@ -310,6 +363,7 @@ app.post('/process', async (req, res) => {
             message: `Processed ${results.filter(item => item.success !== false).length} video file(s).`,
             processedCount: results.filter(item => item.success !== false).length,
             skippedCount: results.filter(item => item.skipped).length,
+            forceReprocess,
             results,
             patchData: {
                 storage: {
