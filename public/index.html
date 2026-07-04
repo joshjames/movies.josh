@@ -527,9 +527,7 @@
             .header-content {
                 display: grid;
                 grid-template-columns: auto 1fr;
-                grid-template-areas:
-                    "logo right"
-                    "search search";
+                grid-template-areas: "logo right";
                 align-items: center;
                 gap: 10px;
             }
@@ -542,9 +540,12 @@
                 grid-area: right;
                 min-width: 0;
                 display: grid;
-                grid-template-columns: auto auto;
+                grid-template-columns: 1fr auto;
+                grid-template-areas:
+                    "browse avatar"
+                    "search search";
                 align-items: center;
-                justify-content: end;
+                justify-items: end;
                 gap: 8px;
                 width: 100%;
             }
@@ -553,6 +554,15 @@
                 grid-area: search;
                 width: 100%;
                 margin-top: 4px;
+                justify-self: stretch;
+            }
+
+            .browse-nav-btn {
+                grid-area: browse;
+            }
+
+            .avatar-wrap {
+                grid-area: avatar;
             }
 
             .home-search-input {
