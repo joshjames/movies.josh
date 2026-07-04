@@ -7,6 +7,7 @@ const TorrentService = require('../TorrentService');
 const LibraryScanner = require('../LibraryScanner');
 const { getLibrary } = require('../db');
 const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
+const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
 const {
     createJob,
     getAllJobs,
@@ -50,6 +51,29 @@ function parseSeasonEpisodeFromName(name) {
     return { season: null, episode: null };
 }
 
+function normalizeImdbId(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return null;
+    return `tt${cleaned}`;
+}
+
+function cleanSeriesTitleFromTorrentName(value) {
+    return String(value || '')
+        .replace(/\bS\d{1,2}\s*E\d{1,3}\b.*$/i, '')
+        .replace(/\b(720p|1080p|2160p|x264|x265|h264|hevc|web[-_. ]?dl|web[-_. ]?rip|bluray|brrip|aac|ddp5\.1|megusta|ingest)\b/gi, ' ')
+        .replace(/[._-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function inferSeriesImdbIdFromTorrentName(torrentName) {
+    const query = cleanSeriesTitleFromTorrentName(torrentName);
+    if (!query) return null;
+    const candidates = searchTvSeriesIndex(query, 5);
+    const best = Array.isArray(candidates) ? candidates[0] : null;
+    return normalizeImdbId(best?.imdbId);
+}
+
 function normalizeQueueContext(existingContext, torrentName, imdbId) {
     const context = (existingContext && typeof existingContext === 'object') ? existingContext : {};
     const parsed = parseSeasonEpisodeFromName(torrentName);
@@ -69,7 +93,7 @@ function normalizeQueueContext(existingContext, torrentName, imdbId) {
         : (episode ? 'episode' : (season ? 'pack' : null));
 
     return {
-        imdbId: context.imdbId || imdbId || null,
+        imdbId: normalizeImdbId(context.imdbId || imdbId) || null,
         season,
         episode,
         sourceType
@@ -246,7 +270,16 @@ async function enqueueCompletedTorrent(torrent) {
     if (tagStr.includes('-processed')) return null;
 
     // Retrieve IMDB ID from TorrentService mapping
-    const imdbId = TorrentService.getImdbIdByHash(torrent.hash);
+    const isSeries = tagStr.includes('series-streamer');
+    let imdbId = normalizeImdbId(TorrentService.getImdbIdByHash(torrent.hash));
+    if (!imdbId && isSeries) {
+        imdbId = inferSeriesImdbIdFromTorrentName(torrent.name);
+        if (imdbId) {
+            TorrentService.setImdbIdForHash(torrent.hash, imdbId);
+            logger.info(`🧩 [Queue] Recovered missing IMDb from TV index for ${torrent.name}: ${imdbId}`);
+        }
+    }
+
     const rawPath = resolveTorrentDownloadPath(torrent);
     const resolvedFolderName = rawPath ? path.basename(rawPath) : (torrent.name || null);
     const torrentQueueContext = normalizeQueueContext(null, resolvedFolderName || torrent.name, imdbId || null);
@@ -405,7 +438,7 @@ async function processNextJob(job) {
             CLOUDSYNC: 'COMPLETE'
         }[job.currentStep] || 'COMPLETE';
 
-        const resolvedImdbId = patchData.imdbId || job.imdbId || job.payload?.imdbId || null;
+        const resolvedImdbId = normalizeImdbId(patchData.imdbId || job.imdbId || job.payload?.imdbId) || null;
 
         const mergedPayload = {
             ...job.payload,

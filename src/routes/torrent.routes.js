@@ -52,6 +52,12 @@ function parseSeasonEpisodeFromTitle(title) {
     return { season: null, episode: null };
 }
 
+function normalizeImdbId(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return null;
+    return `tt${cleaned}`;
+}
+
 function looksLikeSeasonPack(title) {
     return /(season\s*pack|\bcomplete\b|s\d{1,2}\s*complete|seasons?\s*\d+\s*-\s*\d+|\[pack\]|\bpack\b)/i.test(String(title || ''));
 }
@@ -82,7 +88,7 @@ function normalizeQueueContext(queueContext, magnetUrl) {
         : (episode ? 'episode' : (season ? 'pack' : null));
 
     return {
-        imdbId: incoming.imdbId || null,
+        imdbId: normalizeImdbId(incoming.imdbId) || null,
         season,
         episode,
         sourceType: normalizedSourceType
@@ -447,7 +453,7 @@ router.get('/eztv/browse', async (req, res) => {
             
             if (omdbRes.data?.Search?.length > 0) {
                 const match = omdbRes.data.Search[0];
-                targetImdbId = match.imdbID.replace('tt', ''); 
+                targetImdbId = match.imdbID.replace(/^tt/i, '');
                 const detailRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&i=${match.imdbID}`);
                 omdbMeta = detailRes.data;
             } else {
@@ -457,16 +463,19 @@ router.get('/eztv/browse', async (req, res) => {
 
         if (!targetImdbId) return res.json({ success: true, torrents: [] });
 
+        const normalizedImdbId = normalizeImdbId(targetImdbId);
+        if (!normalizedImdbId) return res.json({ success: true, torrents: [] });
+
         const eztvFetch = await fetchEztvPages(targetImdbId, 5);
         const allTorrents = eztvFetch.torrents;
 
         const posterUrl = typeof omdbMeta?.Poster === 'string' ? omdbMeta.Poster.trim() : '';
         const cover = posterUrl && posterUrl !== 'N/A' ? posterUrl : FALLBACK_COVER_DATA_URI;
         const reduced = consolidated
-            ? simplifyEztvTorrents(allTorrents, targetImdbId, cover, packsOnly)
-            : mapRawEztvRows(allTorrents, targetImdbId, cover, packsOnly);
+            ? simplifyEztvTorrents(allTorrents, normalizedImdbId, cover, packsOnly)
+            : mapRawEztvRows(allTorrents, normalizedImdbId, cover, packsOnly);
 
-        logger.debug(`[EZTV] imdb=${targetImdbId} packsOnly=${packsOnly} consolidated=${consolidated} raw=${allTorrents.length} out=${reduced.items.length} packRows=${reduced.packRows || 0} episodeRows=${reduced.episodeRows || 0}`);
+        logger.debug(`[EZTV] imdb=${normalizedImdbId} packsOnly=${packsOnly} consolidated=${consolidated} raw=${allTorrents.length} out=${reduced.items.length} packRows=${reduced.packRows || 0} episodeRows=${reduced.episodeRows || 0}`);
 
         return res.json({
             success: true,
@@ -505,7 +514,12 @@ router.post('/downloader/add', async (req, res) => {
     try {
         const targetCategory = category || 'series-streamer';
         const normalizedQueueContext = normalizeQueueContext(queueContext, magnetUrl);
-        await TorrentService.addMagnet(magnetUrl, targetCategory, imdbId);
+        const effectiveImdbId = normalizeImdbId(imdbId || normalizedQueueContext.imdbId);
+        const effectiveQueueContext = {
+            ...normalizedQueueContext,
+            imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
+        };
+        await TorrentService.addMagnet(magnetUrl, targetCategory, effectiveImdbId);
         
         // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
@@ -521,7 +535,7 @@ router.post('/downloader/add', async (req, res) => {
         createJob({
             status: 'WAITING_DOWNLOAD',
             currentStep: 'INGEST',
-            imdbId: imdbId || null,
+            imdbId: effectiveImdbId || null,
             contentType: targetCategory === 'series-streamer' ? 'series' : 'movie',
             payload: {
                 torrentHash: infoHash,
@@ -530,8 +544,8 @@ router.post('/downloader/add', async (req, res) => {
                 cleanPath: null,
                 videoFile: null,
                 magnetUrl,
-                imdbId: imdbId || null,
-                queueContext: normalizedQueueContext
+                imdbId: effectiveImdbId || null,
+                queueContext: effectiveQueueContext
             }
         });
         
@@ -548,7 +562,12 @@ router.post('/yts/add', async (req, res) => {
 
     try {
         const normalizedQueueContext = normalizeQueueContext(queueContext, magnetUrl);
-        await TorrentService.addMagnet(magnetUrl, 'movie-streamer', imdbId);
+        const effectiveImdbId = normalizeImdbId(imdbId || normalizedQueueContext.imdbId);
+        const effectiveQueueContext = {
+            ...normalizedQueueContext,
+            imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
+        };
+        await TorrentService.addMagnet(magnetUrl, 'movie-streamer', effectiveImdbId);
         
         // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
@@ -564,7 +583,7 @@ router.post('/yts/add', async (req, res) => {
         createJob({
             status: 'WAITING_DOWNLOAD',
             currentStep: 'INGEST',
-            imdbId: imdbId || null,
+            imdbId: effectiveImdbId || null,
             contentType: 'movie',
             payload: {
                 torrentHash: infoHash,
@@ -573,8 +592,8 @@ router.post('/yts/add', async (req, res) => {
                 cleanPath: null,
                 videoFile: null,
                 magnetUrl,
-                imdbId: imdbId || null,
-                queueContext: normalizedQueueContext
+                imdbId: effectiveImdbId || null,
+                queueContext: effectiveQueueContext
             }
         });
         
