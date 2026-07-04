@@ -1223,6 +1223,72 @@ router.get('/catalogs/movies/:slug', async (req, res) => {
     }
 });
 
+router.get('/catalogs/movies/cover/:imdbId', async (req, res) => {
+    try {
+        const imdbId = normalizeMovieImdbId(req.params.imdbId || '');
+        if (!imdbId) {
+            return res.status(400).json({ success: false, error: 'Invalid IMDb ID.' });
+        }
+
+        const coverPath = path.join(CATALOG_COVER_DIR, `${imdbId}.jpg`);
+        if (fs.existsSync(coverPath) && fs.statSync(coverPath).size > 0) {
+            return res.sendFile(coverPath);
+        }
+
+        fs.mkdirSync(CATALOG_COVER_DIR, { recursive: true });
+
+        let posterUrl = '';
+
+        try {
+            const apiKey = process.env.OMDB_API_KEY || '84196d01';
+            const omdbRes = await axios.get(`http://www.omdbapi.com/?apikey=${apiKey}&i=${encodeURIComponent(imdbId)}`, {
+                timeout: 8000
+            });
+            posterUrl = String(omdbRes.data?.Poster || '').trim();
+            if (posterUrl === 'N/A') posterUrl = '';
+        } catch (_omdbErr) {
+            posterUrl = '';
+        }
+
+        if (!posterUrl) {
+            const tmdbApiKey = String(process.env.THEMOVIEDB_API_KEY || '').trim();
+            const tmdbBearer = String(process.env.THEMOVIEDB_API_READ_ACCESS_TOKEN || '').trim();
+            const tmdbBase = String(process.env.TMDB_API_URL || 'https://api.themoviedb.org/3').replace(/\/+$/, '');
+
+            if (tmdbApiKey || tmdbBearer) {
+                const tmdbHeaders = tmdbBearer ? { Authorization: `Bearer ${tmdbBearer}` } : {};
+                const tmdbUrl = tmdbApiKey
+                    ? `${tmdbBase}/find/${encodeURIComponent(imdbId)}?api_key=${encodeURIComponent(tmdbApiKey)}&external_source=imdb_id`
+                    : `${tmdbBase}/find/${encodeURIComponent(imdbId)}?external_source=imdb_id`;
+
+                try {
+                    const tmdbRes = await axios.get(tmdbUrl, { headers: tmdbHeaders, timeout: 9000 });
+                    const movie = Array.isArray(tmdbRes.data?.movie_results) ? tmdbRes.data.movie_results[0] : null;
+                    const posterPath = String(movie?.poster_path || '').trim();
+                    if (posterPath) {
+                        posterUrl = `https://image.tmdb.org/t/p/w500${posterPath}`;
+                    }
+                } catch (_tmdbErr) {
+                    posterUrl = '';
+                }
+            }
+        }
+
+        if (!posterUrl || posterUrl === 'N/A') {
+            return res.status(404).json({ success: false, error: 'Poster unavailable.' });
+        }
+
+        const imageRes = await axios.get(posterUrl, {
+            responseType: 'arraybuffer',
+            timeout: 12000
+        });
+        await fsPromises.writeFile(coverPath, Buffer.from(imageRes.data));
+        return res.sendFile(coverPath);
+    } catch (err) {
+        return res.status(404).json({ success: false, error: err.message || 'Poster fetch failed.' });
+    }
+});
+
 
 
 // GET: /api/movies/:id (Individual Stream Quality Switcher Profile Router)

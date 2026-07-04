@@ -368,6 +368,12 @@
         function renderCatalogResultCards(items) {
             return (items || []).map((item) => {
                 const encodedTitle = encodeURIComponent(String(item.title || ''));
+                const localCover = item.localId ? `/movie-assets/${encodeURIComponent(item.localId)}/cover.jpg` : '';
+                const cachedCover = item.cover || '';
+                const remoteCover = item.imdbId ? `/api/catalogs/movies/cover/${encodeURIComponent(item.imdbId)}` : '';
+                const primaryCover = item.inLibrary && localCover
+                    ? localCover
+                    : (cachedCover || remoteCover);
                 const watchAction = item.inLibrary && item.localHref
                     ? `<a class="open-btn" href="${item.localHref}">Watch Now</a>`
                     : `<button class="add-btn" onclick="queueCatalogItem(this, '${item.imdbId || ''}', '${encodedTitle}', '${item.year || ''}')">Find & Queue</button>`;
@@ -375,7 +381,7 @@
                 return `
                     <div class="card ${item.inLibrary ? 'local-card' : ''}">
                         <div class="cover-frame">
-                            <img src="${sanitizeImageSrc(item.cover || '')}" alt="${escapeHtml(item.title || 'Movie')}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"300\"><rect width=\"100%\" height=\"100%\" fill=\"%23020617\"/><text x=\"50%\" y=\"50%\" dominant-baseline=\"middle\" text-anchor=\"middle\" fill=\"%23475569\">No Cover</text></svg>'">
+                            <img src="${sanitizeImageSrc(primaryCover)}" alt="${escapeHtml(item.title || 'Movie')}" data-local-cover="${sanitizeImageSrc(localCover)}" data-cached-cover="${sanitizeImageSrc(cachedCover)}" data-remote-cover="${sanitizeImageSrc(remoteCover)}" onerror="handleCatalogCardImageError(this)">
                             <div class="badge-row">
                                 <span class="rating-badge">⭐ ${Number(item.rating || 0).toFixed(1)}</span>
                                 ${item.inLibrary ? '<span class="size-badge">In Library</span>' : ''}
@@ -392,6 +398,26 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function handleCatalogCardImageError(img) {
+            const tried = new Set(String(img.dataset.tried || '').split(',').filter(Boolean));
+            const candidates = [
+                String(img.dataset.localCover || '').trim(),
+                String(img.dataset.cachedCover || '').trim(),
+                String(img.dataset.remoteCover || '').trim()
+            ].filter(Boolean);
+
+            for (const candidate of candidates) {
+                if (tried.has(candidate) || img.src.endsWith(candidate)) continue;
+                tried.add(candidate);
+                img.dataset.tried = Array.from(tried).join(',');
+                img.src = candidate;
+                return;
+            }
+
+            img.onerror = null;
+            img.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="%23020617"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23475569">No Cover</text></svg>';
         }
 
         async function fetchCatalogPage(page = 1) {
