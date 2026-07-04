@@ -1059,6 +1059,10 @@
                                     <option value="TRANSCODE">TRANSCODE</option>
                                     <option value="CLOUDSYNC">CLOUDSYNC</option>
                                 </select>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; color:#cbd5e1; user-select:none; white-space:nowrap;">
+                                    <input type="checkbox" id="force-reprocess-${item.folder}" disabled>
+                                    Force Reprocess (.web.mp4)
+                                </label>
                                 <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${item.folder}', '${currentTabMode}')">Run Worker</button>
                                 <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
                                 <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
@@ -1364,12 +1368,15 @@
         async function runWorkerNow(folder, type) {
             try {
                 const worker = document.getElementById(`worker-${folder}`)?.value || 'METADATA';
+                const forceReprocess = worker === 'TRANSCODE'
+                    ? Boolean(document.getElementById(`force-reprocess-${folder}`)?.checked)
+                    : false;
                 showToast(`Running ${worker} for ${folder}...`, 'info', 3000);
 
                 const res = await fetch('/api/admin/manual-worker-run', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder, contentType: type, worker })
+                    body: JSON.stringify({ folder, contentType: type, worker, forceReprocess })
                 });
                 const data = await res.json();
                 if (!data.success) {
@@ -1382,6 +1389,23 @@
                 showToast('Worker trigger request failed.', 'error', 4200);
             }
         }
+
+        function toggleForceReprocess(folder) {
+            const workerSelect = document.getElementById(`worker-${folder}`);
+            const forceToggle = document.getElementById(`force-reprocess-${folder}`);
+            if (!workerSelect || !forceToggle) return;
+
+            const enabled = workerSelect.value === 'TRANSCODE';
+            forceToggle.disabled = !enabled;
+            if (!enabled) forceToggle.checked = false;
+        }
+
+        document.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!target || !target.id || !target.id.startsWith('worker-')) return;
+            const folder = target.id.replace(/^worker-/, '');
+            toggleForceReprocess(folder);
+        });
 
         async function repairMetadataNow(folder, type) {
             try {
