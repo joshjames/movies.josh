@@ -218,6 +218,15 @@ function buildSeriesRenameMetadata(existingMetadata, folderPath, targetFolderNam
     };
 }
 
+async function refreshLibraryFeeds() {
+    const library = await getLibrary();
+    const feed = buildHomeFeed(library);
+    const recentFeed = buildRecentFeed(library);
+    saveHomeFeed(feed);
+    saveRecentFeed(recentFeed);
+    return { feed, recentFeed };
+}
+
 function normalizeEpisodeToken(value = '') {
     return String(value || '')
         .toLowerCase()
@@ -622,6 +631,7 @@ router.post('/sync-item', async (req, res) => {
     try {
         const { folder, contentType } = req.body || {};
         const summary = await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
 
         let itemFound = null;
         if (folder) {
@@ -635,12 +645,7 @@ router.post('/sync-item', async (req, res) => {
             }
         }
 
-        return res.json({
-            success: true,
-            message: 'Library snapshot refreshed from disk.',
-            summary,
-            itemFound
-        });
+        return res.json({ success: true, message: 'Library snapshot refreshed from disk.', summary, itemFound });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
@@ -681,6 +686,7 @@ router.post('/series/manual-scan', async (req, res) => {
         }
 
         const summary = await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
         return res.json({
             success: true,
             message: 'TV library scan complete.',
@@ -864,6 +870,7 @@ router.post('/series/normalize-folder', async (req, res) => {
         });
 
         const scanSummary = await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
 
         return res.json({
             success: true,
@@ -1291,6 +1298,30 @@ router.post('/generate-streaming-profiles', async (req, res) => {
     }
 });
 
+router.post('/sync-item', async (req, res) => {
+    try {
+        const { folder, contentType } = req.body || {};
+        const summary = await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
+
+        let itemFound = null;
+        if (folder) {
+            const library = await getLibrary();
+            if (contentType === 'series') {
+                const expectedId = `series/${encodeURIComponent(folder)}`;
+                itemFound = (library.shows || []).some(s => s.id === expectedId || s.id === `series/${folder}`);
+            } else {
+                const expectedId = encodeURIComponent(folder);
+                itemFound = (library.movies || []).some(m => m.id === expectedId);
+            }
+        }
+
+        return res.json({ success: true, message: 'Library snapshot refreshed from disk.', summary, itemFound });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.post('/rename-media', async (req, res) => {
     try {
         const { folder, contentType, newFolderName, newFileName } = req.body || {};
@@ -1361,6 +1392,7 @@ router.post('/rename-media', async (req, res) => {
         }
 
         await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
         return res.json({ success: true, folder: currentFolderName });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

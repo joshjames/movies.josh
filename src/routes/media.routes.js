@@ -784,6 +784,83 @@ function normalizeShowFolderInput(showFolder) {
     return normalized.replace(/^series\//i, '');
 }
 
+function normalizeSeriesLookupKey(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function deriveSeriesTitleFromFolder(folderName = '') {
+    return String(folderName || '')
+        .replace(/\.[a-z0-9]{2,4}$/i, '')
+        .replace(/\bMeGusta\b/gi, '')
+        .replace(/\bingest\b/gi, '')
+        .replace(/\bSeason[\s._-]?\d{1,3}\b/gi, '')
+        .replace(/\bS\d{1,2}E\d{1,3}\b/gi, '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+async function resolveSeriesShowFolder(showFolder) {
+    const cleanFolder = normalizeShowFolderInput(showFolder);
+    if (!cleanFolder) return null;
+
+    const directPath = path.join(SERIES_DIR, cleanFolder);
+    if (fs.existsSync(directPath) && fs.lstatSync(directPath).isDirectory()) {
+        return { folder: cleanFolder, path: directPath };
+    }
+
+    const library = await getLibrary();
+    const shows = Array.isArray(library.shows) ? library.shows : [];
+    const lookupKey = normalizeSeriesLookupKey(cleanFolder);
+    const titleHint = normalizeSeriesLookupKey(deriveSeriesTitleFromFolder(cleanFolder));
+
+    const directMatch = shows.find(item => {
+        const itemId = String(item?.id || '');
+        if (itemId === `series/${cleanFolder}`) return true;
+
+        const itemFolder = normalizeShowFolderInput(String(item?.sourcePath ? path.basename(item.sourcePath) : ''));
+        return itemFolder === cleanFolder;
+    });
+
+    if (directMatch) {
+        const canonicalFolder = normalizeShowFolderInput(String(directMatch.sourcePath ? path.basename(directMatch.sourcePath) : ''))
+            || normalizeShowFolderInput(String(directMatch.id || '').replace(/^series\//i, ''))
+            || cleanFolder;
+        const canonicalPath = path.join(SERIES_DIR, canonicalFolder);
+        if (fs.existsSync(canonicalPath) && fs.lstatSync(canonicalPath).isDirectory()) {
+            return { folder: canonicalFolder, path: canonicalPath };
+        }
+    }
+
+    const titleMatches = shows.filter(item => {
+        const itemTitle = normalizeSeriesLookupKey(item?.title || '');
+        const itemImdb = normalizeSeriesLookupKey(item?.imdbId || item?.imdb_id || '');
+        const itemFolder = normalizeSeriesLookupKey(normalizeShowFolderInput(String(item?.sourcePath ? path.basename(item.sourcePath) : item?.id || '')));
+        return Boolean(
+            (lookupKey && (itemFolder === lookupKey || itemFolder.includes(lookupKey) || lookupKey.includes(itemFolder))) ||
+            (titleHint && (itemTitle === titleHint || itemTitle.includes(titleHint) || titleHint.includes(itemTitle))) ||
+            (itemImdb && itemImdb === lookupKey)
+        );
+    });
+
+    if (titleMatches.length === 1) {
+        const item = titleMatches[0];
+        const canonicalFolder = normalizeShowFolderInput(String(item?.sourcePath ? path.basename(item.sourcePath) : item?.id || ''))
+            || normalizeShowFolderInput(String(item?.id || '').replace(/^series\//i, ''))
+            || cleanFolder;
+        const canonicalPath = path.join(SERIES_DIR, canonicalFolder);
+        if (fs.existsSync(canonicalPath) && fs.lstatSync(canonicalPath).isDirectory()) {
+            return { folder: canonicalFolder, path: canonicalPath };
+        }
+    }
+
+    return null;
+}
+
 function findMetadataPathForVideo(videoPath) {
     let currentDir = path.dirname(videoPath);
     const root = path.resolve(SERIES_DIR);
@@ -1462,9 +1539,13 @@ router.get('/movies/:id', async (req, res) => {
 // GET: /api/series/:showFolder (Unified Series Hierarchy Aggregator)
 router.get('/series/:showFolder', async (req, res) => {
     try {
-        const showFolder = normalizeShowFolderInput(req.params.showFolder);
-        // 🚨 FIX: Updated to find directories inside the new separate SERIES_DIR path
-        const showPath = path.join(SERIES_DIR, showFolder);
+        const resolved = await resolveSeriesShowFolder(req.params.showFolder);
+        if (!resolved) {
+            return res.status(404).json({ error: "Serialized map targets are currently missing for this show cluster destination." });
+        }
+
+        const showFolder = resolved.folder;
+        const showPath = resolved.path;
 
         const metaFile = path.join(showPath, 'metadata.json');
         const seriesFile = path.join(showPath, 'series.json');
@@ -1497,7 +1578,8 @@ router.get('/series/:showFolder', async (req, res) => {
             genre: metaData.genre,
             poster: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
             seasons: seriesData.seasons,
-            totalSeasons: seriesData.totalSeasons
+            totalSeasons: seriesData.totalSeasons,
+            canonicalFolder: showFolder
         });
     } catch (err) {
         console.error("❌ Unified Series router failure:", err);
