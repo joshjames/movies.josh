@@ -1828,6 +1828,67 @@ router.get('/users', (req, res) => {
     }
 });
 
+// POST: /api/admin/users/reset-subscriptions
+// Bulk reset billing/subscription state for all users (intended for sandbox -> production cutover cleanup).
+router.post('/users/reset-subscriptions', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const resetTrial = body.resetTrial !== false;
+
+        const users = await ProfileService.listUsers();
+        if (!Array.isArray(users) || users.length === 0) {
+            return res.json({ success: true, updated: 0, users: [], message: 'No users found.' });
+        }
+
+        const updatedUsers = [];
+        const errors = [];
+
+        for (const userKey of users) {
+            try {
+                const config = await ProfileService.readData(userKey, 'config', {});
+
+                const nextConfig = {
+                    ...config,
+                    subscriptionStatus: 'GUEST',
+                    billingTier: null,
+                    cancelAtPeriodEnd: false,
+                    nextBillingDate: null,
+                    subscribedAt: null,
+                    squareCustomerId: null,
+                    squareSubscriptionId: null,
+                    squarePlanVariationId: null,
+                    lastSquareWebhookType: null,
+                    lastSquareWebhookAt: null,
+                    hasDonated: false,
+                    freeAccessActive: false,
+                    gracePeriodEndsAt: null,
+                    updatedAt: Date.now()
+                };
+
+                if (resetTrial) {
+                    nextConfig.trialDays = 0;
+                    nextConfig.trialEndsAt = null;
+                }
+
+                await ProfileService.writeData(userKey, 'config', nextConfig);
+                updatedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            updated: updatedUsers.length,
+            users: updatedUsers,
+            errors,
+            resetTrial
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/admin/users/:userKey/watch-history
 router.get('/users/:userKey/watch-history', async (req, res) => {
     try {
