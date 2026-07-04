@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/images/icons/pwa-192.png">
     <title>AnyMovie - Login</title>
     <style>
         :root {
@@ -19,7 +22,7 @@
             background:
                 linear-gradient(180deg, rgba(2, 6, 23, 0.76) 0%, rgba(2, 6, 23, 0.86) 100%),
                 radial-gradient(circle at top, rgba(30, 41, 59, 0.2), transparent 46%),
-                url('/images/background.jpg') center center / cover no-repeat fixed;
+                url('/css/login-background.jpg') center center / cover no-repeat fixed;
             color: var(--text-main);
             font-family: system-ui, -apple-system, sans-serif;
             margin: 0;
@@ -556,6 +559,14 @@
             } catch (err) {
                 showAlert("Network loop transmission exception dropped.", "error");
             }
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {
+                    // Silent on login page; PWA registration is best-effort here.
+                });
+            });
         }
     </script>
 </body>
