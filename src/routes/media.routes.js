@@ -39,9 +39,17 @@ const CATALOG_DATA_DIR_CANDIDATES = [
 const CATALOG_COVER_DIR = path.join(__dirname, '../../public/images/catalog-covers');
 
 const CATALOG_LABEL_OVERRIDES = {
+    weekly_fresh_100: 'Weekly Fresh 100',
     top_100_all_time: 'Top 100 of All Time',
     critics_choices: 'Critics Choice',
     master_popular_2000: 'Master Popular 2000',
+    top_50_action: 'Top 50 Action',
+    top_50_comedy: 'Top 50 Comedy',
+    top_50_drama: 'Top 50 Drama',
+    top_50_horror: 'Top 50 Horror',
+    top_50_romance: 'Top 50 Romance',
+    top_50_sci_fi: 'Top 50 Sci-Fi',
+    top_50_thriller: 'Top 50 Thriller',
     popular_1920s: 'Best of 1920s',
     popular_1930s: 'Best of 1930s',
     popular_1940s: 'Best of 1940s',
@@ -85,12 +93,30 @@ function catalogDisplayName(slug = '') {
 }
 
 function getCatalogSortWeight(slug = '') {
+    if (slug === 'weekly_fresh_100') return 5;
     if (slug === 'top_100_all_time') return 10;
     if (slug === 'critics_choices') return 20;
     if (slug === 'master_popular_2000') return 30;
+
+    const top50Genre = String(slug).match(/^top_50_(.+)$/);
+    if (top50Genre) {
+        const genreOrder = ['action', 'comedy', 'drama', 'horror', 'romance', 'sci_fi', 'thriller'];
+        const idx = genreOrder.indexOf(top50Genre[1]);
+        return idx >= 0 ? 40 + idx : 49;
+    }
+
     const decade = String(slug).match(/popular_(\d{4})s$/);
     if (decade) return 100 + parseInt(decade[1], 10);
     return 1000;
+}
+
+function getCatalogIcon(slug = '') {
+    if (slug === 'weekly_fresh_100') return '🆕';
+    if (slug.includes('critics')) return '⭐';
+    if (slug.includes('top_100')) return '🏆';
+    if (slug.startsWith('top_50_')) return '🎭';
+    if (slug.includes('popular_')) return '🎬';
+    return '📚';
 }
 
 function listCatalogFilesByDirectory() {
@@ -1150,7 +1176,7 @@ router.get('/catalogs/movies', async (_req, res) => {
                 slug,
                 title: catalogDisplayName(slug),
                 count,
-                icon: slug.includes('critics') ? '⭐' : (slug.includes('top_100') ? '🏆' : (slug.includes('popular_') ? '🎬' : '📚')),
+                icon: getCatalogIcon(slug),
                 weight: getCatalogSortWeight(slug)
             };
         })

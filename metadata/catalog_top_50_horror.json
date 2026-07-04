@@ -1,0 +1,583 @@
+[
+  {
+    "id": "tt0102926",
+    "title": "The Silence of the Lambs",
+    "year": 1991,
+    "rating": 8.6,
+    "votes": 1729913,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0054215",
+    "title": "Psycho",
+    "year": 1960,
+    "rating": 8.5,
+    "votes": 787847,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0081505",
+    "title": "The Shining",
+    "year": 1980,
+    "rating": 8.4,
+    "votes": 1230696,
+    "genres": [
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0078748",
+    "title": "Alien",
+    "year": 1979,
+    "rating": 8.4,
+    "votes": 1067499,
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0090605",
+    "title": "Aliens",
+    "year": 1986,
+    "rating": 8.4,
+    "votes": 842024,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0084787",
+    "title": "The Thing",
+    "year": 1982,
+    "rating": 8.2,
+    "votes": 528505,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt8239946",
+    "title": "Tumbbad",
+    "year": 2018,
+    "rating": 8.2,
+    "votes": 75961,
+    "genres": [
+      "Drama",
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0073195",
+    "title": "Jaws",
+    "year": 1975,
+    "rating": 8.1,
+    "votes": 741011,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0070047",
+    "title": "The Exorcist",
+    "year": 1973,
+    "rating": 8.1,
+    "votes": 499594,
+    "genres": [
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt37287335",
+    "title": "Obsession",
+    "year": 2025,
+    "rating": 8.1,
+    "votes": 128999,
+    "genres": [
+      "Horror",
+      "Romance",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0046911",
+    "title": "Diabolique",
+    "year": 1955,
+    "rating": 8.1,
+    "votes": 73480,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0016847",
+    "title": "Faust",
+    "year": 1926,
+    "rating": 8.1,
+    "votes": 18403,
+    "genres": [
+      "Drama",
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0063522",
+    "title": "Rosemary's Baby",
+    "year": 1968,
+    "rating": 8.0,
+    "votes": 258996,
+    "genres": [
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0010323",
+    "title": "The Cabinet of Dr. Caligari",
+    "year": 1920,
+    "rating": 8.0,
+    "votes": 76416,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0056687",
+    "title": "What Ever Happened to Baby Jane?",
+    "year": 1962,
+    "rating": 8.0,
+    "votes": 67917,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt3461252",
+    "title": "The Blue Elephant",
+    "year": 2014,
+    "rating": 8.0,
+    "votes": 31206,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0012364",
+    "title": "The Phantom Carriage",
+    "year": 1921,
+    "rating": 8.0,
+    "votes": 15835,
+    "genres": [
+      "Drama",
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0024216",
+    "title": "King Kong",
+    "year": 1933,
+    "rating": 7.9,
+    "votes": 96149,
+    "genres": [
+      "Adventure",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0058279",
+    "title": "Kwaidan",
+    "year": 1964,
+    "rating": 7.9,
+    "votes": 22959,
+    "genres": [
+      "Drama",
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt5052448",
+    "title": "Get Out",
+    "year": 2017,
+    "rating": 7.8,
+    "votes": 823768,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0365748",
+    "title": "Shaun of the Dead",
+    "year": 2004,
+    "rating": 7.8,
+    "votes": 641113,
+    "genres": [
+      "Comedy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0093773",
+    "title": "Predator",
+    "year": 1987,
+    "rating": 7.8,
+    "votes": 502611,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt1139797",
+    "title": "Let the Right One In",
+    "year": 2008,
+    "rating": 7.8,
+    "votes": 240575,
+    "genres": [
+      "Drama",
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0063350",
+    "title": "Night of the Living Dead",
+    "year": 1968,
+    "rating": 7.8,
+    "votes": 151451,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0077402",
+    "title": "Dawn of the Dead",
+    "year": 1978,
+    "rating": 7.8,
+    "votes": 136879,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0013442",
+    "title": "Nosferatu",
+    "year": 1922,
+    "rating": 7.8,
+    "votes": 123656,
+    "genres": [
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0026138",
+    "title": "Bride of Frankenstein",
+    "year": 1935,
+    "rating": 7.8,
+    "votes": 59154,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0022913",
+    "title": "Freaks",
+    "year": 1932,
+    "rating": 7.8,
+    "votes": 54925,
+    "genres": [
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0058430",
+    "title": "Onibaba",
+    "year": 1964,
+    "rating": 7.8,
+    "votes": 25873,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0077651",
+    "title": "Halloween",
+    "year": 1978,
+    "rating": 7.7,
+    "votes": 340164,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0021884",
+    "title": "Frankenstein",
+    "year": 1931,
+    "rating": 7.7,
+    "votes": 88111,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0049366",
+    "title": "Invasion of the Body Snatchers",
+    "year": 1956,
+    "rating": 7.7,
+    "votes": 60020,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0055018",
+    "title": "The Innocents",
+    "year": 1961,
+    "rating": 7.7,
+    "votes": 36273,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt27431598",
+    "title": "Bramayugam",
+    "year": 2024,
+    "rating": 7.7,
+    "votes": 18030,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0144084",
+    "title": "American Psycho",
+    "year": 2000,
+    "rating": 7.6,
+    "votes": 843774,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0387564",
+    "title": "Saw",
+    "year": 2004,
+    "rating": 7.6,
+    "votes": 512437,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0230600",
+    "title": "The Others",
+    "year": 2001,
+    "rating": 7.6,
+    "votes": 428018,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt5700672",
+    "title": "Train to Busan",
+    "year": 2016,
+    "rating": 7.6,
+    "votes": 309380,
+    "genres": [
+      "Action",
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0091064",
+    "title": "The Fly",
+    "year": 1986,
+    "rating": 7.6,
+    "votes": 225332,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0056869",
+    "title": "The Birds",
+    "year": 1963,
+    "rating": 7.6,
+    "votes": 220787,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt3416742",
+    "title": "What We Do in the Shadows",
+    "year": 2014,
+    "rating": 7.6,
+    "votes": 214353,
+    "genres": [
+      "Comedy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0092991",
+    "title": "Evil Dead II",
+    "year": 1987,
+    "rating": 7.6,
+    "votes": 197146,
+    "genres": [
+      "Comedy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0047034",
+    "title": "Godzilla",
+    "year": 1954,
+    "rating": 7.6,
+    "votes": 45617,
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0024184",
+    "title": "The Invisible Man",
+    "year": 1933,
+    "rating": 7.6,
+    "votes": 44297,
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0054167",
+    "title": "Peeping Tom",
+    "year": 1960,
+    "rating": 7.6,
+    "votes": 43959,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0053459",
+    "title": "Eyes Without a Face",
+    "year": 1960,
+    "rating": 7.6,
+    "votes": 39313,
+    "genres": [
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt7914416",
+    "title": "One Cut of the Dead",
+    "year": 2017,
+    "rating": 7.6,
+    "votes": 35664,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0050539",
+    "title": "The Incredible Shrinking Man",
+    "year": 1957,
+    "rating": 7.6,
+    "votes": 22148,
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0013257",
+    "title": "Häxan",
+    "year": 1922,
+    "rating": 7.6,
+    "votes": 19326,
+    "genres": [
+      "Documentary",
+      "Fantasy",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0022835",
+    "title": "Dr. Jekyll and Mr. Hyde",
+    "year": 1931,
+    "rating": 7.6,
+    "votes": 17829,
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ]
+  }
+]

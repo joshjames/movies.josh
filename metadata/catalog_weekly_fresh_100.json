@@ -1,0 +1,1165 @@
+[
+  {
+    "id": "tt0096874",
+    "title": "Back to the Future Part II",
+    "year": 1989,
+    "rating": 7.8,
+    "votes": 623977,
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0361748",
+    "title": "Inglourious Basterds",
+    "year": 2009,
+    "rating": 8.4,
+    "votes": 1793615,
+    "genres": [
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt1895587",
+    "title": "Spotlight",
+    "year": 2015,
+    "rating": 8.1,
+    "votes": 536944,
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0163978",
+    "title": "The Beach",
+    "year": 2000,
+    "rating": 6.6,
+    "votes": 269477,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt4972582",
+    "title": "Split",
+    "year": 2016,
+    "rating": 7.3,
+    "votes": 624530,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt11564570",
+    "title": "Glass Onion",
+    "year": 2022,
+    "rating": 7.1,
+    "votes": 527158,
+    "genres": [
+      "Comedy",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt4925292",
+    "title": "Lady Bird",
+    "year": 2017,
+    "rating": 7.4,
+    "votes": 365261,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt4912910",
+    "title": "Mission: Impossible - Fallout",
+    "year": 2018,
+    "rating": 7.7,
+    "votes": 421301,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0092890",
+    "title": "Dirty Dancing",
+    "year": 1987,
+    "rating": 7.1,
+    "votes": 281294,
+    "genres": [
+      "Drama",
+      "Music",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0118884",
+    "title": "Contact",
+    "year": 1997,
+    "rating": 7.5,
+    "votes": 314763,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0075314",
+    "title": "Taxi Driver",
+    "year": 1976,
+    "rating": 8.2,
+    "votes": 1030401,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0332379",
+    "title": "School of Rock",
+    "year": 2003,
+    "rating": 7.2,
+    "votes": 359360,
+    "genres": [
+      "Comedy",
+      "Music"
+    ]
+  },
+  {
+    "id": "tt0121766",
+    "title": "Star Wars: Episode III - Revenge of the Sith",
+    "year": 2005,
+    "rating": 7.7,
+    "votes": 926309,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0338013",
+    "title": "Eternal Sunshine of the Spotless Mind",
+    "year": 2004,
+    "rating": 8.3,
+    "votes": 1185776,
+    "genres": [
+      "Drama",
+      "Romance",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0167261",
+    "title": "The Lord of the Rings: The Two Towers",
+    "year": 2002,
+    "rating": 8.8,
+    "votes": 1963746,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt1790809",
+    "title": "Pirates of the Caribbean: Dead Men Tell No Tales",
+    "year": 2017,
+    "rating": 6.5,
+    "votes": 387031,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt1735898",
+    "title": "Snow White and the Huntsman",
+    "year": 2012,
+    "rating": 6.1,
+    "votes": 315545,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0119654",
+    "title": "Men in Black",
+    "year": 1997,
+    "rating": 7.3,
+    "votes": 666434,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt2381941",
+    "title": "Focus",
+    "year": 2015,
+    "rating": 6.6,
+    "votes": 295755,
+    "genres": [
+      "Comedy",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0119116",
+    "title": "The Fifth Element",
+    "year": 1997,
+    "rating": 7.6,
+    "votes": 547265,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0195714",
+    "title": "Final Destination",
+    "year": 2000,
+    "rating": 6.7,
+    "votes": 336863,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt6718170",
+    "title": "The Super Mario Bros. Movie",
+    "year": 2023,
+    "rating": 7.0,
+    "votes": 297979,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt1457767",
+    "title": "The Conjuring",
+    "year": 2013,
+    "rating": 7.5,
+    "votes": 625790,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1951261",
+    "title": "The Hangover Part III",
+    "year": 2013,
+    "rating": 5.9,
+    "votes": 364732,
+    "genres": [
+      "Comedy",
+      "Crime"
+    ]
+  },
+  {
+    "id": "tt0110413",
+    "title": "Léon: The Professional",
+    "year": 1994,
+    "rating": 8.5,
+    "votes": 1354983,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt3183660",
+    "title": "Fantastic Beasts and Where to Find Them",
+    "year": 2016,
+    "rating": 7.2,
+    "votes": 541902,
+    "genres": [
+      "Adventure",
+      "Family",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0169547",
+    "title": "American Beauty",
+    "year": 1999,
+    "rating": 8.3,
+    "votes": 1281468,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt30144839",
+    "title": "One Battle After Another",
+    "year": 2025,
+    "rating": 7.6,
+    "votes": 421377,
+    "genres": [
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1650554",
+    "title": "Kick-Ass 2",
+    "year": 2013,
+    "rating": 6.5,
+    "votes": 300695,
+    "genres": [
+      "Action",
+      "Comedy",
+      "Crime"
+    ]
+  },
+  {
+    "id": "tt1853728",
+    "title": "Django Unchained",
+    "year": 2012,
+    "rating": 8.5,
+    "votes": 1891514,
+    "genres": [
+      "Drama",
+      "Western"
+    ]
+  },
+  {
+    "id": "tt0351283",
+    "title": "Madagascar",
+    "year": 2005,
+    "rating": 7.0,
+    "votes": 482557,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt6806448",
+    "title": "Fast & Furious Presents: Hobbs & Shaw",
+    "year": 2019,
+    "rating": 6.4,
+    "votes": 258111,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0082971",
+    "title": "Raiders of the Lost Ark",
+    "year": 1981,
+    "rating": 8.4,
+    "votes": 1112894,
+    "genres": [
+      "Adventure"
+    ]
+  },
+  {
+    "id": "tt0910970",
+    "title": "WALL·E",
+    "year": 2008,
+    "rating": 8.4,
+    "votes": 1327093,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt0838283",
+    "title": "Step Brothers",
+    "year": 2008,
+    "rating": 6.9,
+    "votes": 342482,
+    "genres": [
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0059742",
+    "title": "The Sound of Music",
+    "year": 1965,
+    "rating": 8.1,
+    "votes": 292010,
+    "genres": [
+      "Biography",
+      "Drama",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt0147800",
+    "title": "10 Things I Hate About You",
+    "year": 1999,
+    "rating": 7.4,
+    "votes": 453765,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt1877830",
+    "title": "The Batman",
+    "year": 2022,
+    "rating": 7.8,
+    "votes": 933912,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0081398",
+    "title": "Raging Bull",
+    "year": 1980,
+    "rating": 8.1,
+    "votes": 411033,
+    "genres": [
+      "Biography",
+      "Drama",
+      "Sport"
+    ]
+  },
+  {
+    "id": "tt0250494",
+    "title": "Legally Blonde",
+    "year": 2001,
+    "rating": 6.5,
+    "votes": 287361,
+    "genres": [
+      "Comedy",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0120912",
+    "title": "Men in Black II",
+    "year": 2002,
+    "rating": 6.2,
+    "votes": 432999,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0942385",
+    "title": "Tropic Thunder",
+    "year": 2008,
+    "rating": 7.1,
+    "votes": 492107,
+    "genres": [
+      "Action",
+      "Comedy",
+      "War"
+    ]
+  },
+  {
+    "id": "tt1323594",
+    "title": "Despicable Me",
+    "year": 2010,
+    "rating": 7.6,
+    "votes": 635165,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt14849194",
+    "title": "The Holdovers",
+    "year": 2023,
+    "rating": 7.9,
+    "votes": 267309,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0482571",
+    "title": "The Prestige",
+    "year": 2006,
+    "rating": 8.5,
+    "votes": 1596076,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0796366",
+    "title": "Star Trek",
+    "year": 2009,
+    "rating": 7.9,
+    "votes": 639214,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0107614",
+    "title": "Mrs. Doubtfire",
+    "year": 1993,
+    "rating": 7.1,
+    "votes": 317463,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt5700672",
+    "title": "Train to Busan",
+    "year": 2016,
+    "rating": 7.6,
+    "votes": 309380,
+    "genres": [
+      "Action",
+      "Horror",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0978764",
+    "title": "Sucker Punch",
+    "year": 2011,
+    "rating": 6.1,
+    "votes": 261965,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0790724",
+    "title": "Jack Reacher",
+    "year": 2012,
+    "rating": 7.0,
+    "votes": 392831,
+    "genres": [
+      "Action",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0032138",
+    "title": "The Wizard of Oz",
+    "year": 1939,
+    "rating": 8.1,
+    "votes": 468990,
+    "genres": [
+      "Adventure",
+      "Family",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0120363",
+    "title": "Toy Story 2",
+    "year": 1999,
+    "rating": 7.9,
+    "votes": 674876,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0289765",
+    "title": "Red Dragon",
+    "year": 2002,
+    "rating": 7.2,
+    "votes": 312406,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1535108",
+    "title": "Elysium",
+    "year": 2013,
+    "rating": 6.6,
+    "votes": 492484,
+    "genres": [
+      "Action",
+      "Drama",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt1160419",
+    "title": "Dune: Part One",
+    "year": 2021,
+    "rating": 8.0,
+    "votes": 1067129,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0448157",
+    "title": "Hancock",
+    "year": 2008,
+    "rating": 6.4,
+    "votes": 540520,
+    "genres": [
+      "Action",
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0112573",
+    "title": "Braveheart",
+    "year": 1995,
+    "rating": 8.3,
+    "votes": 1164298,
+    "genres": [
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt10811166",
+    "title": "The Kashmir Files",
+    "year": 2022,
+    "rating": 8.5,
+    "votes": 579218,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0362227",
+    "title": "The Terminal",
+    "year": 2004,
+    "rating": 7.4,
+    "votes": 537575,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0945513",
+    "title": "Source Code",
+    "year": 2011,
+    "rating": 7.5,
+    "votes": 584278,
+    "genres": [
+      "Action",
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt5311514",
+    "title": "Your Name.",
+    "year": 2016,
+    "rating": 8.4,
+    "votes": 396441,
+    "genres": [
+      "Animation",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt7144666",
+    "title": "The Black Phone",
+    "year": 2021,
+    "rating": 6.9,
+    "votes": 266682,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0103639",
+    "title": "Aladdin",
+    "year": 1992,
+    "rating": 8.0,
+    "votes": 502099,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0120611",
+    "title": "Blade",
+    "year": 1998,
+    "rating": 7.1,
+    "votes": 331718,
+    "genres": [
+      "Action",
+      "Horror",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt1637725",
+    "title": "Ted",
+    "year": 2012,
+    "rating": 6.9,
+    "votes": 712620,
+    "genres": [
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt7131622",
+    "title": "Once Upon a Time in... Hollywood",
+    "year": 2019,
+    "rating": 7.6,
+    "votes": 967041,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0314331",
+    "title": "Love Actually",
+    "year": 2003,
+    "rating": 7.5,
+    "votes": 581570,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt1431045",
+    "title": "Deadpool",
+    "year": 2016,
+    "rating": 8.0,
+    "votes": 1258499,
+    "genres": [
+      "Action",
+      "Comedy",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0110632",
+    "title": "Natural Born Killers",
+    "year": 1994,
+    "rating": 7.2,
+    "votes": 268462,
+    "genres": [
+      "Crime",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt1386588",
+    "title": "The Other Guys",
+    "year": 2010,
+    "rating": 6.7,
+    "votes": 310619,
+    "genres": [
+      "Action",
+      "Comedy",
+      "Crime"
+    ]
+  },
+  {
+    "id": "tt1318514",
+    "title": "Rise of the Planet of the Apes",
+    "year": 2011,
+    "rating": 7.6,
+    "votes": 606918,
+    "genres": [
+      "Action",
+      "Drama",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt5052448",
+    "title": "Get Out",
+    "year": 2017,
+    "rating": 7.8,
+    "votes": 823768,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0887883",
+    "title": "Burn After Reading",
+    "year": 2008,
+    "rating": 7.0,
+    "votes": 377561,
+    "genres": [
+      "Comedy",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0120762",
+    "title": "Mulan",
+    "year": 1998,
+    "rating": 7.7,
+    "votes": 347815,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt0063522",
+    "title": "Rosemary's Baby",
+    "year": 1968,
+    "rating": 8.0,
+    "votes": 258996,
+    "genres": [
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt2004420",
+    "title": "Neighbors",
+    "year": 2014,
+    "rating": 6.3,
+    "votes": 346408,
+    "genres": [
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt1401152",
+    "title": "Unknown",
+    "year": 2011,
+    "rating": 6.8,
+    "votes": 276822,
+    "genres": [
+      "Action",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0099674",
+    "title": "The Godfather Part III",
+    "year": 1990,
+    "rating": 7.5,
+    "votes": 456992,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0119282",
+    "title": "Hercules",
+    "year": 1997,
+    "rating": 7.3,
+    "votes": 280865,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt1055369",
+    "title": "Transformers: Revenge of the Fallen",
+    "year": 2009,
+    "rating": 6.0,
+    "votes": 455563,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0408236",
+    "title": "Sweeney Todd: The Demon Barber of Fleet Street",
+    "year": 2007,
+    "rating": 7.3,
+    "votes": 407367,
+    "genres": [
+      "Drama",
+      "Horror",
+      "Musical"
+    ]
+  },
+  {
+    "id": "tt0095953",
+    "title": "Rain Man",
+    "year": 1988,
+    "rating": 8.0,
+    "votes": 585950,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0246578",
+    "title": "Donnie Darko",
+    "year": 2001,
+    "rating": 8.0,
+    "votes": 913565,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0325710",
+    "title": "The Last Samurai",
+    "year": 2003,
+    "rating": 7.8,
+    "votes": 505663,
+    "genres": [
+      "Action",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt1189340",
+    "title": "The Lincoln Lawyer",
+    "year": 2011,
+    "rating": 7.3,
+    "votes": 271032,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0887912",
+    "title": "The Hurt Locker",
+    "year": 2008,
+    "rating": 7.5,
+    "votes": 497475,
+    "genres": [
+      "Drama",
+      "Thriller",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0095016",
+    "title": "Die Hard",
+    "year": 1988,
+    "rating": 8.2,
+    "votes": 1032090,
+    "genres": [
+      "Action",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0170016",
+    "title": "How the Grinch Stole Christmas",
+    "year": 2000,
+    "rating": 6.4,
+    "votes": 334024,
+    "genres": [
+      "Comedy",
+      "Family",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0349903",
+    "title": "Ocean's Twelve",
+    "year": 2004,
+    "rating": 6.5,
+    "votes": 438564,
+    "genres": [
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt6263850",
+    "title": "Deadpool & Wolverine",
+    "year": 2024,
+    "rating": 7.5,
+    "votes": 574714,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Comedy"
+    ]
+  },
+  {
+    "id": "tt5083738",
+    "title": "The Favourite",
+    "year": 2018,
+    "rating": 7.5,
+    "votes": 259504,
+    "genres": [
+      "Biography",
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt4196776",
+    "title": "Jason Bourne",
+    "year": 2016,
+    "rating": 6.6,
+    "votes": 258319,
+    "genres": [
+      "Action",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0059578",
+    "title": "For a Few Dollars More",
+    "year": 1965,
+    "rating": 8.2,
+    "votes": 301004,
+    "genres": [
+      "Drama",
+      "Western"
+    ]
+  },
+  {
+    "id": "tt1190080",
+    "title": "2012",
+    "year": 2009,
+    "rating": 5.9,
+    "votes": 423319,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0407304",
+    "title": "War of the Worlds",
+    "year": 2005,
+    "rating": 6.6,
+    "votes": 509326,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0800080",
+    "title": "The Incredible Hulk",
+    "year": 2008,
+    "rating": 6.6,
+    "votes": 566892,
+    "genres": [
+      "Action",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt15239678",
+    "title": "Dune: Part Two",
+    "year": 2024,
+    "rating": 8.4,
+    "votes": 766819,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt9114286",
+    "title": "Black Panther: Wakanda Forever",
+    "year": 2022,
+    "rating": 6.6,
+    "votes": 389728,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt11286314",
+    "title": "Don't Look Up",
+    "year": 2021,
+    "rating": 7.1,
+    "votes": 674503,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0317219",
+    "title": "Cars",
+    "year": 2006,
+    "rating": 7.3,
+    "votes": 539941,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ]
+  }
+]

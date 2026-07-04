@@ -1,0 +1,590 @@
+[
+  {
+    "id": "tt0468569",
+    "title": "The Dark Knight",
+    "year": 2008,
+    "rating": 9.1,
+    "votes": 3182342,
+    "genres": [
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt5354160",
+    "title": "Mirror Game",
+    "year": 2016,
+    "rating": 8.9,
+    "votes": 31057,
+    "genres": [
+      "Crime",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1375666",
+    "title": "Inception",
+    "year": 2010,
+    "rating": 8.8,
+    "votes": 2828931,
+    "genres": [
+      "Adventure",
+      "Sci-Fi",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0137523",
+    "title": "Fight Club",
+    "year": 1999,
+    "rating": 8.8,
+    "votes": 2622581,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt6019206",
+    "title": "Kill Bill: The Whole Bloody Affair",
+    "year": 2004,
+    "rating": 8.7,
+    "votes": 45596,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0407887",
+    "title": "The Departed",
+    "year": 2006,
+    "rating": 8.5,
+    "votes": 1560407,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt6751668",
+    "title": "Parasite",
+    "year": 2019,
+    "rating": 8.5,
+    "votes": 1173286,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0054407",
+    "title": "Le Trou",
+    "year": 1960,
+    "rating": 8.5,
+    "votes": 23745,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1345836",
+    "title": "The Dark Knight Rises",
+    "year": 2012,
+    "rating": 8.4,
+    "votes": 2002671,
+    "genres": [
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0209144",
+    "title": "Memento",
+    "year": 2000,
+    "rating": 8.4,
+    "votes": 1439684,
+    "genres": [
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0047396",
+    "title": "Rear Window",
+    "year": 1954,
+    "rating": 8.4,
+    "votes": 569839,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0405094",
+    "title": "The Lives of Others",
+    "year": 2006,
+    "rating": 8.4,
+    "votes": 444370,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt9900782",
+    "title": "Kaithi",
+    "year": 2019,
+    "rating": 8.4,
+    "votes": 52000,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0058625",
+    "title": "Woman in the Dunes",
+    "year": 1964,
+    "rating": 8.4,
+    "votes": 25643,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt4991384",
+    "title": "Visaaranai",
+    "year": 2015,
+    "rating": 8.4,
+    "votes": 15584,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0105236",
+    "title": "Reservoir Dogs",
+    "year": 1992,
+    "rating": 8.3,
+    "votes": 1172952,
+    "genres": [
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0022100",
+    "title": "M",
+    "year": 1931,
+    "rating": 8.3,
+    "votes": 183215,
+    "genres": [
+      "Crime",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt33014583",
+    "title": "Dhurandhar",
+    "year": 2025,
+    "rating": 8.3,
+    "votes": 144350,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0091251",
+    "title": "Come and See",
+    "year": 1985,
+    "rating": 8.3,
+    "votes": 124113,
+    "genres": [
+      "Drama",
+      "Thriller",
+      "War"
+    ]
+  },
+  {
+    "id": "tt9179430",
+    "title": "Vikram",
+    "year": 2022,
+    "rating": 8.3,
+    "votes": 90006,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt13391710",
+    "title": "Jana Gana Mana",
+    "year": 2022,
+    "rating": 8.3,
+    "votes": 22057,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt9006564",
+    "title": "2018",
+    "year": 2023,
+    "rating": 8.3,
+    "votes": 16835,
+    "genres": [
+      "Action",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1130884",
+    "title": "Shutter Island",
+    "year": 2010,
+    "rating": 8.2,
+    "votes": 1657954,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0266697",
+    "title": "Kill Bill: Vol. 1",
+    "year": 2003,
+    "rating": 8.2,
+    "votes": 1312272,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0477348",
+    "title": "No Country for Old Men",
+    "year": 2007,
+    "rating": 8.2,
+    "votes": 1197133,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0167404",
+    "title": "The Sixth Sense",
+    "year": 1999,
+    "rating": 8.2,
+    "votes": 1148690,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0095016",
+    "title": "Die Hard",
+    "year": 1988,
+    "rating": 8.2,
+    "votes": 1032090,
+    "genres": [
+      "Action",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0052357",
+    "title": "Vertigo",
+    "year": 1958,
+    "rating": 8.2,
+    "votes": 459471,
+    "genres": [
+      "Mystery",
+      "Romance",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0057115",
+    "title": "The Great Escape",
+    "year": 1963,
+    "rating": 8.2,
+    "votes": 278196,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0055630",
+    "title": "Yojimbo",
+    "year": 1961,
+    "rating": 8.2,
+    "votes": 143576,
+    "genres": [
+      "Action",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt39139925",
+    "title": "Dhurandhar: The Revenge",
+    "year": 2026,
+    "rating": 8.2,
+    "votes": 63070,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt26458038",
+    "title": "Manjummel Boys",
+    "year": 2024,
+    "rating": 8.2,
+    "votes": 34099,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt7060460",
+    "title": "Theeran Adhigaram Ondru",
+    "year": 2017,
+    "rating": 8.2,
+    "votes": 19689,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt2267998",
+    "title": "Gone Girl",
+    "year": 2014,
+    "rating": 8.1,
+    "votes": 1174189,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0116282",
+    "title": "Fargo",
+    "year": 1996,
+    "rating": 8.1,
+    "votes": 789144,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt3170832",
+    "title": "Room",
+    "year": 2015,
+    "rating": 8.1,
+    "votes": 481532,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0071315",
+    "title": "Chinatown",
+    "year": 1974,
+    "rating": 8.1,
+    "votes": 377285,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt3011894",
+    "title": "Wild Tales",
+    "year": 2014,
+    "rating": 8.1,
+    "votes": 239384,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt4016934",
+    "title": "The Handmaiden",
+    "year": 2016,
+    "rating": 8.1,
+    "votes": 205147,
+    "genres": [
+      "Drama",
+      "Romance",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0047296",
+    "title": "On the Waterfront",
+    "year": 1954,
+    "rating": 8.1,
+    "votes": 179055,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt37287335",
+    "title": "Obsession",
+    "year": 2025,
+    "rating": 8.1,
+    "votes": 128999,
+    "genres": [
+      "Horror",
+      "Romance",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt2545118",
+    "title": "Blackfish",
+    "year": 2013,
+    "rating": 8.1,
+    "votes": 76677,
+    "genres": [
+      "Documentary",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0046268",
+    "title": "The Wages of Fear",
+    "year": 1953,
+    "rating": 8.1,
+    "votes": 73745,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1821480",
+    "title": "Kahaani",
+    "year": 2012,
+    "rating": 8.1,
+    "votes": 70131,
+    "genres": [
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0048021",
+    "title": "Rififi",
+    "year": 1955,
+    "rating": 8.1,
+    "votes": 39453,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0065234",
+    "title": "Z",
+    "year": 1969,
+    "rating": 8.1,
+    "votes": 34133,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0049902",
+    "title": "A Man Escaped",
+    "year": 1956,
+    "rating": 8.1,
+    "votes": 30837,
+    "genres": [
+      "Drama",
+      "Thriller",
+      "War"
+    ]
+  },
+  {
+    "id": "tt4432480",
+    "title": "RangiTaranga",
+    "year": 2015,
+    "rating": 8.1,
+    "votes": 16001,
+    "genres": [
+      "Mystery",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0947798",
+    "title": "Black Swan",
+    "year": 2010,
+    "rating": 8.0,
+    "votes": 891678,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt2084970",
+    "title": "The Imitation Game",
+    "year": 2014,
+    "rating": 8.0,
+    "votes": 880161,
+    "genres": [
+      "Biography",
+      "Drama",
+      "Thriller"
+    ]
+  }
+]

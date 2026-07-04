@@ -1,0 +1,596 @@
+[
+  {
+    "id": "tt0259534",
+    "title": "Ramayana: The Legend of Prince Rama",
+    "year": 1993,
+    "rating": 9.1,
+    "votes": 17811,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt33175825",
+    "title": "Attack on Titan: The Last Attack",
+    "year": 2024,
+    "rating": 9.0,
+    "votes": 31518,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt0133093",
+    "title": "The Matrix",
+    "year": 1999,
+    "rating": 8.7,
+    "votes": 2256147,
+    "genres": [
+      "Action",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt6019206",
+    "title": "Kill Bill: The Whole Bloody Affair",
+    "year": 2004,
+    "rating": 8.7,
+    "votes": 45596,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt14888874",
+    "title": "Demon Slayer: Kimetsu no Yaiba - Mt. Natagumo Arc",
+    "year": 2020,
+    "rating": 8.7,
+    "votes": 18728,
+    "genres": [
+      "Action",
+      "Animation",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt33428606",
+    "title": "Solo Leveling: ReAwakening",
+    "year": 2024,
+    "rating": 8.7,
+    "votes": 17336,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt0076759",
+    "title": "Star Wars: Episode IV - A New Hope",
+    "year": 1977,
+    "rating": 8.6,
+    "votes": 1575169,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0103064",
+    "title": "Terminator 2: Judgment Day",
+    "year": 1991,
+    "rating": 8.6,
+    "votes": 1287811,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0047478",
+    "title": "Seven Samurai",
+    "year": 1954,
+    "rating": 8.6,
+    "votes": 402828,
+    "genres": [
+      "Action",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0172495",
+    "title": "Gladiator",
+    "year": 2000,
+    "rating": 8.5,
+    "votes": 1857332,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0110413",
+    "title": "Léon: The Professional",
+    "year": 1994,
+    "rating": 8.5,
+    "votes": 1354983,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt9362722",
+    "title": "Spider-Man: Across the Spider-Verse",
+    "year": 2023,
+    "rating": 8.5,
+    "votes": 531841,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt20850406",
+    "title": "Sita Ramam",
+    "year": 2022,
+    "rating": 8.5,
+    "votes": 84385,
+    "genres": [
+      "Action",
+      "Drama",
+      "Musical"
+    ]
+  },
+  {
+    "id": "tt34365591",
+    "title": "Mahavatar Narsimha",
+    "year": 2024,
+    "rating": 8.5,
+    "votes": 47816,
+    "genres": [
+      "Action",
+      "Animation",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt11580854",
+    "title": "Sarpatta Parambarai",
+    "year": 2021,
+    "rating": 8.5,
+    "votes": 28742,
+    "genres": [
+      "Action",
+      "Drama",
+      "Sport"
+    ]
+  },
+  {
+    "id": "tt0101649",
+    "title": "Thalapathi",
+    "year": 1991,
+    "rating": 8.5,
+    "votes": 16037,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt4154796",
+    "title": "Avengers: Endgame",
+    "year": 2019,
+    "rating": 8.4,
+    "votes": 1455930,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt4154756",
+    "title": "Avengers: Infinity War",
+    "year": 2018,
+    "rating": 8.4,
+    "votes": 1380621,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0090605",
+    "title": "Aliens",
+    "year": 1986,
+    "rating": 8.4,
+    "votes": 842024,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt4633694",
+    "title": "Spider-Man: Into the Spider-Verse",
+    "year": 2018,
+    "rating": 8.4,
+    "votes": 796013,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt15239678",
+    "title": "Dune: Part Two",
+    "year": 2024,
+    "rating": 8.4,
+    "votes": 766819,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt32820897",
+    "title": "Demon Slayer: Kimetsu No Yaiba Infinity Castle",
+    "year": 2025,
+    "rating": 8.4,
+    "votes": 74239,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt9900782",
+    "title": "Kaithi",
+    "year": 2019,
+    "rating": 8.4,
+    "votes": 52000,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt9477520",
+    "title": "Asuran",
+    "year": 2019,
+    "rating": 8.4,
+    "votes": 37423,
+    "genres": [
+      "Action",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt16492678",
+    "title": "Demon Slayer: Kimetsu no Yaiba - Tsuzumi Mansion Arc",
+    "year": 2021,
+    "rating": 8.4,
+    "votes": 36381,
+    "genres": [
+      "Action",
+      "Animation",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0376127",
+    "title": "Anniyan",
+    "year": 2005,
+    "rating": 8.4,
+    "votes": 26553,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0400234",
+    "title": "Black Friday",
+    "year": 2004,
+    "rating": 8.4,
+    "votes": 26004,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt5959980",
+    "title": "Vada Chennai",
+    "year": 2018,
+    "rating": 8.4,
+    "votes": 24524,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt4987556",
+    "title": "Thani Oruvan",
+    "year": 2015,
+    "rating": 8.4,
+    "votes": 24237,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0086190",
+    "title": "Star Wars: Episode VI - Return of the Jedi",
+    "year": 1983,
+    "rating": 8.3,
+    "votes": 1213667,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0113277",
+    "title": "Heat",
+    "year": 1995,
+    "rating": 8.3,
+    "votes": 808631,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0364569",
+    "title": "Oldboy",
+    "year": 2003,
+    "rating": 8.3,
+    "votes": 722894,
+    "genres": [
+      "Action",
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt5074352",
+    "title": "Dangal",
+    "year": 2016,
+    "rating": 8.3,
+    "votes": 244819,
+    "genres": [
+      "Action",
+      "Biography",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt33014583",
+    "title": "Dhurandhar",
+    "year": 2025,
+    "rating": 8.3,
+    "votes": 144350,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt10295212",
+    "title": "Shershaah",
+    "year": 2021,
+    "rating": 8.3,
+    "votes": 136827,
+    "genres": [
+      "Action",
+      "Biography",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt9179430",
+    "title": "Vikram",
+    "year": 2022,
+    "rating": 8.3,
+    "votes": 90006,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt26548265",
+    "title": "Maharaja",
+    "year": 2024,
+    "rating": 8.3,
+    "votes": 83142,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt30472557",
+    "title": "Chainsaw Man - The Movie: Reze Arc",
+    "year": 2025,
+    "rating": 8.3,
+    "votes": 60833,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt9098872",
+    "title": "The Rescue",
+    "year": 2021,
+    "rating": 8.3,
+    "votes": 23612,
+    "genres": [
+      "Action",
+      "Documentary",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt9006564",
+    "title": "2018",
+    "year": 2023,
+    "rating": 8.3,
+    "votes": 16835,
+    "genres": [
+      "Action",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0266697",
+    "title": "Kill Bill: Vol. 1",
+    "year": 2003,
+    "rating": 8.2,
+    "votes": 1312272,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0095016",
+    "title": "Die Hard",
+    "year": 1988,
+    "rating": 8.2,
+    "votes": 1032090,
+    "genres": [
+      "Action",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt1745960",
+    "title": "Top Gun: Maverick",
+    "year": 2022,
+    "rating": 8.2,
+    "votes": 885554,
+    "genres": [
+      "Action",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt10698680",
+    "title": "K.G.F: Chapter 2",
+    "year": 2022,
+    "rating": 8.2,
+    "votes": 170375,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0089881",
+    "title": "Ran",
+    "year": 1985,
+    "rating": 8.2,
+    "votes": 152732,
+    "genres": [
+      "Action",
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0055630",
+    "title": "Yojimbo",
+    "year": 1961,
+    "rating": 8.2,
+    "votes": 143576,
+    "genres": [
+      "Action",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt4849438",
+    "title": "Baahubali 2: The Conclusion",
+    "year": 2017,
+    "rating": 8.2,
+    "votes": 134912,
+    "genres": [
+      "Action",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt1954470",
+    "title": "Gangs of Wasseypur",
+    "year": 2012,
+    "rating": 8.2,
+    "votes": 114695,
+    "genres": [
+      "Action",
+      "Comedy",
+      "Crime"
+    ]
+  },
+  {
+    "id": "tt11032374",
+    "title": "Demon Slayer: Kimetsu no Yaiba - The Movie: Mugen Train",
+    "year": 2020,
+    "rating": 8.2,
+    "votes": 101610,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ]
+  },
+  {
+    "id": "tt8291224",
+    "title": "Uri: The Surgical Strike",
+    "year": 2019,
+    "rating": 8.2,
+    "votes": 84305,
+    "genres": [
+      "Action",
+      "Drama",
+      "History"
+    ]
+  }
+]

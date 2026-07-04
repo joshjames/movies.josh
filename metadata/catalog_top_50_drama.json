@@ -1,0 +1,572 @@
+[
+  {
+    "id": "tt0111161",
+    "title": "The Shawshank Redemption",
+    "year": 1994,
+    "rating": 9.3,
+    "votes": 3201561,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0068646",
+    "title": "The Godfather",
+    "year": 1972,
+    "rating": 9.2,
+    "votes": 2233551,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0167260",
+    "title": "The Lord of the Rings: The Return of the King",
+    "year": 2003,
+    "rating": 9.0,
+    "votes": 2171730,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0108052",
+    "title": "Schindler's List",
+    "year": 1993,
+    "rating": 9.0,
+    "votes": 1589460,
+    "genres": [
+      "Biography",
+      "Drama",
+      "History"
+    ]
+  },
+  {
+    "id": "tt0071562",
+    "title": "The Godfather Part II",
+    "year": 1974,
+    "rating": 9.0,
+    "votes": 1499019,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0050083",
+    "title": "12 Angry Men",
+    "year": 1957,
+    "rating": 9.0,
+    "votes": 988738,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0120737",
+    "title": "The Lord of the Rings: The Fellowship of the Ring",
+    "year": 2001,
+    "rating": 8.9,
+    "votes": 2213970,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0137523",
+    "title": "Fight Club",
+    "year": 1999,
+    "rating": 8.8,
+    "votes": 2622581,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0109830",
+    "title": "Forrest Gump",
+    "year": 1994,
+    "rating": 8.8,
+    "votes": 2505851,
+    "genres": [
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0110912",
+    "title": "Pulp Fiction",
+    "year": 1994,
+    "rating": 8.8,
+    "votes": 2443878,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0167261",
+    "title": "The Lord of the Rings: The Two Towers",
+    "year": 2002,
+    "rating": 8.8,
+    "votes": 1963746,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0060196",
+    "title": "The Good, the Bad and the Ugly",
+    "year": 1966,
+    "rating": 8.8,
+    "votes": 892797,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Western"
+    ]
+  },
+  {
+    "id": "tt0084302",
+    "title": "The Marathon Family",
+    "year": 1982,
+    "rating": 8.8,
+    "votes": 18205,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0816692",
+    "title": "Interstellar",
+    "year": 2014,
+    "rating": 8.7,
+    "votes": 2549522,
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0099685",
+    "title": "GoodFellas",
+    "year": 1990,
+    "rating": 8.7,
+    "votes": 1397578,
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt23849204",
+    "title": "12th Fail",
+    "year": 2023,
+    "rating": 8.7,
+    "votes": 173463,
+    "genres": [
+      "Biography",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt7466810",
+    "title": "777 Charlie",
+    "year": 2022,
+    "rating": 8.7,
+    "votes": 47904,
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt10534500",
+    "title": "#Home",
+    "year": 2021,
+    "rating": 8.7,
+    "votes": 19850,
+    "genres": [
+      "Drama",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt7738784",
+    "title": "Resurrection",
+    "year": 2018,
+    "rating": 8.7,
+    "votes": 18843,
+    "genres": [
+      "Drama",
+      "Family"
+    ]
+  },
+  {
+    "id": "tt0076276",
+    "title": "Who's Singin' Over There?",
+    "year": 1980,
+    "rating": 8.7,
+    "votes": 17970,
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0114369",
+    "title": "Seven",
+    "year": 1995,
+    "rating": 8.6,
+    "votes": 2031024,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt0102926",
+    "title": "The Silence of the Lambs",
+    "year": 1991,
+    "rating": 8.6,
+    "votes": 1729913,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Horror"
+    ]
+  },
+  {
+    "id": "tt0120815",
+    "title": "Saving Private Ryan",
+    "year": 1998,
+    "rating": 8.6,
+    "votes": 1646034,
+    "genres": [
+      "Drama",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0120689",
+    "title": "The Green Mile",
+    "year": 1999,
+    "rating": 8.6,
+    "votes": 1567187,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0073486",
+    "title": "One Flew Over the Cuckoo's Nest",
+    "year": 1975,
+    "rating": 8.6,
+    "votes": 1159074,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0317248",
+    "title": "City of God",
+    "year": 2002,
+    "rating": 8.6,
+    "votes": 873758,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0118799",
+    "title": "Life Is Beautiful",
+    "year": 1997,
+    "rating": 8.6,
+    "votes": 815425,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ]
+  },
+  {
+    "id": "tt0038650",
+    "title": "It's a Wonderful Life",
+    "year": 1946,
+    "rating": 8.6,
+    "votes": 555192,
+    "genres": [
+      "Drama",
+      "Family",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt0047478",
+    "title": "Seven Samurai",
+    "year": 1954,
+    "rating": 8.6,
+    "votes": 402828,
+    "genres": [
+      "Action",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt15097216",
+    "title": "Jai Bhim",
+    "year": 2021,
+    "rating": 8.6,
+    "votes": 234925,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt10189514",
+    "title": "Soorarai Pottru",
+    "year": 2020,
+    "rating": 8.6,
+    "votes": 132212,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0056058",
+    "title": "Harakiri",
+    "year": 1962,
+    "rating": 8.6,
+    "votes": 92079,
+    "genres": [
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt9263550",
+    "title": "Rocketry: The Nambi Effect",
+    "year": 2022,
+    "rating": 8.6,
+    "votes": 62273,
+    "genres": [
+      "Biography",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0367495",
+    "title": "Anbe Sivam",
+    "year": 2003,
+    "rating": 8.6,
+    "votes": 28370,
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0093603",
+    "title": "Nayakan",
+    "year": 1987,
+    "rating": 8.6,
+    "votes": 27962,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0271383",
+    "title": "A Dog's Will",
+    "year": 2000,
+    "rating": 8.6,
+    "votes": 21722,
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Fantasy"
+    ]
+  },
+  {
+    "id": "tt8176054",
+    "title": "Pariyerum Perumal",
+    "year": 2018,
+    "rating": 8.6,
+    "votes": 20571,
+    "genres": [
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0116860",
+    "title": "Pretty Village, Pretty Flame",
+    "year": 1996,
+    "rating": 8.6,
+    "votes": 19040,
+    "genres": [
+      "Drama",
+      "History",
+      "War"
+    ]
+  },
+  {
+    "id": "tt0252597",
+    "title": "Feyzo, the Polite One",
+    "year": 1978,
+    "rating": 8.6,
+    "votes": 18707,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0201368",
+    "title": "The Broken Landlord",
+    "year": 1985,
+    "rating": 8.6,
+    "votes": 17748,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt1853728",
+    "title": "Django Unchained",
+    "year": 2012,
+    "rating": 8.5,
+    "votes": 1891514,
+    "genres": [
+      "Drama",
+      "Western"
+    ]
+  },
+  {
+    "id": "tt0172495",
+    "title": "Gladiator",
+    "year": 2000,
+    "rating": 8.5,
+    "votes": 1857332,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0482571",
+    "title": "The Prestige",
+    "year": 2006,
+    "rating": 8.5,
+    "votes": 1596076,
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ]
+  },
+  {
+    "id": "tt0407887",
+    "title": "The Departed",
+    "year": 2006,
+    "rating": 8.5,
+    "votes": 1560407,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt0110413",
+    "title": "Léon: The Professional",
+    "year": 1994,
+    "rating": 8.5,
+    "votes": 1354983,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0120586",
+    "title": "American History X",
+    "year": 1998,
+    "rating": 8.5,
+    "votes": 1276748,
+    "genres": [
+      "Crime",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0110357",
+    "title": "The Lion King",
+    "year": 1994,
+    "rating": 8.5,
+    "votes": 1264121,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Drama"
+    ]
+  },
+  {
+    "id": "tt0114814",
+    "title": "The Usual Suspects",
+    "year": 1995,
+    "rating": 8.5,
+    "votes": 1242218,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ]
+  },
+  {
+    "id": "tt6751668",
+    "title": "Parasite",
+    "year": 2019,
+    "rating": 8.5,
+    "votes": 1173286,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ]
+  },
+  {
+    "id": "tt2582802",
+    "title": "Whiplash",
+    "year": 2014,
+    "rating": 8.5,
+    "votes": 1162631,
+    "genres": [
+      "Drama",
+      "Music"
+    ]
+  }
+]
