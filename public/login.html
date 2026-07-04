@@ -5,9 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AnyMovie - Login</title>
     <style>
+        :root {
+            --login-bg: #020617;
+            --card-bg: rgba(15, 23, 42, 0.9);
+            --card-border: rgba(51, 65, 85, 0.95);
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --brand-red: #ff121f;
+            --brand-red-deep: #b90710;
+        }
+
         body {
-            background: #020617;
-            color: #f8fafc;
+            background:
+                linear-gradient(180deg, rgba(2, 6, 23, 0.76) 0%, rgba(2, 6, 23, 0.86) 100%),
+                radial-gradient(circle at top, rgba(30, 41, 59, 0.2), transparent 46%),
+                url('/images/background.jpg') center center / cover no-repeat fixed;
+            color: var(--text-main);
             font-family: system-ui, -apple-system, sans-serif;
             margin: 0;
             display: flex;
@@ -18,25 +31,53 @@
         }
 
         .auth-card {
-            background: #0f172a;
-            border: 1px solid #1e293b;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
             padding: 40px;
             border-radius: 16px;
             width: 100%;
             max-width: 420px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.68);
+            backdrop-filter: blur(8px);
         }
 
         .login-logo-wrapper {
             width: 100%;
             max-width: 260px;
             margin: 0 auto 20px auto;
-            display: block;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            user-select: none;
         }
 
-        .login-logo-wrapper svg {
-            width: 100%;
-            height: auto;
+        .brand-arc {
+            display: inline-block;
+            color: var(--brand-red);
+            font-size: clamp(2rem, 6vw, 2.7rem);
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            line-height: 1;
+            text-transform: uppercase;
+            text-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+            transform: perspective(520px) rotateX(28deg) scaleY(1.08);
+            transform-origin: center bottom;
+            white-space: nowrap;
+            will-change: transform;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: geometricPrecision;
+        }
+
+        .brand-sub {
+            color: rgba(248, 250, 252, 0.92);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.9em;
+            margin-top: 8px;
+            margin-left: 0.9em;
+            text-transform: uppercase;
         }
 
         h1 {
@@ -76,7 +117,7 @@
         }
 
         input {
-            background: #020617;
+            background: rgba(2, 6, 23, 0.78);
             border: 1px solid #334155;
             color: white;
             padding: 12px;
@@ -91,7 +132,7 @@
         }
 
         .submit-btn {
-            background: #e50914; 
+            background: var(--brand-red);
             color: white;
             border: none;
             width: 100%;
@@ -105,7 +146,7 @@
         }
 
         .submit-btn:hover {
-            background: #b90710;
+            background: var(--brand-red-deep);
         }
 
         .toggle-box {
@@ -160,47 +201,32 @@
             border: 1px solid #10b981;
             color: #34d399;
         }
+
+        @media (max-width: 560px) {
+            body {
+                padding: 14px;
+                background-attachment: scroll;
+            }
+
+            .auth-card {
+                padding: 28px 20px;
+                border-radius: 14px;
+            }
+
+            .brand-sub {
+                letter-spacing: 0.6em;
+                margin-left: 0.6em;
+            }
+        }
     </style>
 </head>
 <body>
 
     <div class="auth-card">
-        <div class="logo-wrapper" onclick="window.location.href='/';">
-        <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
-                
-                <filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
-                    <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
-                </filter>
-            </defs>
-
-            <g filter="url(#cinematicGlow)">
-                <text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                    font-size="52" 
-                    font-weight="900" 
-                    letter-spacing="5" 
-                    fill="#e50914">
-                    <textPath href="#textArchPath" startOffset="50%" text-anchor="middle">
-                        ANYMOVIE
-                    </textPath>
-                </text>
-            </g>
-
-            <text x="50%" 
-                y="118" 
-                font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-                font-size="16" 
-                font-weight="700" 
-                letter-spacing="14" 
-                fill="#ffffff" 
-                text-anchor="middle"
-                opacity="0.9">
-                ONLINE
-            </text>
-        </svg>
-</div>
+        <a class="login-logo-wrapper" href="/" aria-label="Go to AnyMovie home">
+            <span class="brand-arc">AnyMovie</span>
+            <span class="brand-sub">Online</span>
+        </a>
 
         <h1 id="form-title">Welcome Back</h1>
         <div class="subtitle" id="form-subtitle">Enter your details to Signup for Anymovie</div>
