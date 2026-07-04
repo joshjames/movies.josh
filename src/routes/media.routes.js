@@ -486,6 +486,12 @@ function scoreSubtitleCandidate(candidate) {
 function pickSubtitleCandidate(candidates, query = {}) {
     if (!candidates.length) return null;
 
+    const preferredRelativePath = String(query.preferredRelativePath || query.preferred || '').trim();
+    if (preferredRelativePath) {
+        const preferred = candidates.find(item => String(item.relativePath || item.file || '').trim() === preferredRelativePath);
+        if (preferred) return preferred;
+    }
+
     const requestedTrack = parseInt(query.track, 10);
     if (Number.isFinite(requestedTrack)) {
         const byStreamIndex = candidates.find(item => item.streamIndex === requestedTrack);
@@ -527,6 +533,39 @@ function normalizeMediaIdInput(mediaId) {
 function normalizeShowFolderInput(showFolder) {
     const normalized = normalizeMediaIdInput(showFolder);
     return normalized.replace(/^series\//i, '');
+}
+
+function findMetadataPathForVideo(videoPath) {
+    let currentDir = path.dirname(videoPath);
+    const root = path.resolve(SERIES_DIR);
+
+    while (currentDir && currentDir.startsWith(root)) {
+        const candidate = path.join(currentDir, 'metadata.json');
+        if (fs.existsSync(candidate)) return candidate;
+
+        const parentDir = path.dirname(currentDir);
+        if (parentDir === currentDir) break;
+        currentDir = parentDir;
+    }
+
+    const localCandidate = path.join(path.dirname(videoPath), 'metadata.json');
+    if (fs.existsSync(localCandidate)) return localCandidate;
+    return null;
+}
+
+function readMediaMetadataForVideo(videoPath) {
+    if (!videoPath) return { metadata: {}, metaPath: null };
+    const metaPath = findMetadataPathForVideo(videoPath);
+    if (!metaPath) return { metadata: {}, metaPath: null };
+
+    try {
+        return {
+            metadata: JSON.parse(fs.readFileSync(metaPath, 'utf-8')),
+            metaPath
+        };
+    } catch (_err) {
+        return { metadata: {}, metaPath };
+    }
 }
 
 function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile) {
@@ -1167,7 +1206,10 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
             return res.status(404).json({ success: false, error: 'No playable video target found for subtitle inspection.' });
         }
 
+        const { metadata } = readMediaMetadataForVideo(videoPath);
+
         const candidates = listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: true });
+        const selectedDefault = String(metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || '').trim();
         return res.json({
             success: true,
             count: candidates.length,
@@ -1176,6 +1218,8 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
                 streamIndex: item.streamIndex,
                 lang: item.langHint,
                 file: item.file,
+                relativePath: item.relativePath,
+                isDefault: selectedDefault ? String(item.relativePath || item.file || '').trim() === selectedDefault : false,
                 label: `${item.langHint.toUpperCase()}${item.streamIndex !== null ? ` (stream ${item.streamIndex})` : ''} - ${item.file}`
             }))
         });
@@ -1196,8 +1240,13 @@ router.get('/subtitles/:id', async (req, res) => {
             return res.status(404).send('No video target found for subtitles.');
         }
 
+        const { metadata } = readMediaMetadataForVideo(videoPath);
+
         const candidates = listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: true });
-        const selected = pickSubtitleCandidate(candidates, req.query || {});
+        const selected = pickSubtitleCandidate(candidates, {
+            ...req.query,
+            preferredRelativePath: metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || ''
+        });
         const subtitlePath = selected?.filePath || null;
 
         if (!subtitlePath || !fs.existsSync(subtitlePath)) {

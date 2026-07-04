@@ -185,6 +185,17 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
         merged.subtitles = patchData.subtitles;
     }
 
+    if (patchData.subtitleSelection || existing.subtitleSelection) {
+        merged.subtitleSelection = {
+            ...(existing.subtitleSelection || {}),
+            ...(patchData.subtitleSelection || {})
+        };
+    }
+
+    if (Array.isArray(patchData.subtitleCatalog)) {
+        merged.subtitleCatalog = patchData.subtitleCatalog;
+    }
+
     // These keys are transport-level fields and should not be persisted in metadata manifests.
     delete merged.folderPath;
     delete merged.folderName;

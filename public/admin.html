@@ -335,6 +335,98 @@
         .toast.error { border-left: 4px solid #ef4444; }
         .toast.info { border-left: 4px solid #38bdf8; }
 
+        .subtitle-drawer-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.68);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease;
+            z-index: 1250;
+        }
+        .subtitle-drawer-backdrop.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .subtitle-drawer {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: min(920px, 94vw);
+            height: 100vh;
+            background: #0b1220;
+            border-left: 1px solid #334155;
+            box-shadow: -16px 0 36px rgba(0, 0, 0, 0.38);
+            transform: translateX(102%);
+            transition: transform 0.22s ease;
+            z-index: 1260;
+            display: flex;
+            flex-direction: column;
+        }
+        .subtitle-drawer.show { transform: translateX(0); }
+        .subtitle-drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #1e293b;
+        }
+        .subtitle-drawer-title {
+            color: #f8fafc;
+            font-weight: 800;
+            font-size: 1rem;
+        }
+        .subtitle-drawer-subtitle {
+            color: #94a3b8;
+            font-size: 0.76rem;
+            margin-top: 2px;
+        }
+        .subtitle-drawer-body {
+            padding: 14px 16px 16px 16px;
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .subtitle-track-card {
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #020617;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .subtitle-track-main {
+            display: grid;
+            gap: 4px;
+        }
+        .subtitle-track-title {
+            color: #f8fafc;
+            font-weight: 700;
+        }
+        .subtitle-track-meta {
+            color: #94a3b8;
+            font-size: 0.76rem;
+        }
+        .subtitle-track-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .subtitle-default-pill {
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: #86efac;
+            border: 1px solid #166534;
+            background: #052e16;
+            border-radius: 999px;
+            padding: 4px 8px;
+        }
+
         @keyframes toast-in {
             from { transform: translateY(-6px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
@@ -343,6 +435,19 @@
 </head>
 <body>
     <div id="toast-stack" class="toast-stack"></div>
+    <div id="subtitle-drawer-backdrop" class="subtitle-drawer-backdrop"></div>
+    <aside id="subtitle-drawer" class="subtitle-drawer" aria-hidden="true">
+        <div class="subtitle-drawer-header">
+            <div>
+                <div class="subtitle-drawer-title" id="subtitle-drawer-title">Subtitle Manager</div>
+                <div class="subtitle-drawer-subtitle" id="subtitle-drawer-subtitle">Loading subtitle catalog...</div>
+            </div>
+            <button type="button" style="background:#1e293b;" onclick="closeSubtitleDrawer()">Close</button>
+        </div>
+        <div class="subtitle-drawer-body" id="subtitle-drawer-body">
+            <div style="color:#94a3b8; border:1px dashed #334155; border-radius:8px; padding:16px; text-align:center;">Select a media row and open subtitle controls.</div>
+        </div>
+    </aside>
     <div class="container">
         <h1>🛠️ Joshflix Library Override Desk</h1>
         
@@ -592,6 +697,105 @@
             }, timeoutMs);
         }
 
+        function closeSubtitleDrawer() {
+            const drawer = document.getElementById('subtitle-drawer');
+            const backdrop = document.getElementById('subtitle-drawer-backdrop');
+            if (drawer) drawer.classList.remove('show');
+            if (backdrop) backdrop.classList.remove('show');
+            if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        const subtitleDrawerBackdrop = document.getElementById('subtitle-drawer-backdrop');
+        if (subtitleDrawerBackdrop) {
+            subtitleDrawerBackdrop.addEventListener('click', closeSubtitleDrawer);
+        }
+
+        async function openSubtitleManager(folder, contentType) {
+            const drawer = document.getElementById('subtitle-drawer');
+            const backdrop = document.getElementById('subtitle-drawer-backdrop');
+            const title = document.getElementById('subtitle-drawer-title');
+            const subtitle = document.getElementById('subtitle-drawer-subtitle');
+            const body = document.getElementById('subtitle-drawer-body');
+
+            if (!drawer || !backdrop || !title || !subtitle || !body) return;
+
+            drawer.classList.add('show');
+            backdrop.classList.add('show');
+            drawer.setAttribute('aria-hidden', 'false');
+            title.textContent = `Subtitle Manager: ${folder}`;
+            subtitle.textContent = 'Loading subtitle catalog...';
+            body.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Loading subtitle catalog...</div>';
+
+            try {
+                const res = await fetch(`/api/admin/media/${encodeURIComponent(contentType)}/${encodeURIComponent(folder)}/subtitles`, { credentials: 'include' });
+                const data = await res.json();
+
+                if (!data.success) {
+                    body.innerHTML = `<div style="color:#fca5a5;border:1px solid #7f1d1d;background:rgba(127,29,29,.18);border-radius:8px;padding:14px;">${escapeHtml(data.error || 'Unable to load subtitle catalog.')}</div>`;
+                    subtitle.textContent = 'Subtitle catalog unavailable';
+                    return;
+                }
+
+                const subtitles = Array.isArray(data.subtitles) ? data.subtitles : [];
+                const selectedPath = String(data.subtitleSelection?.defaultRelativePath || '').trim();
+                subtitle.textContent = subtitles.length ? `${subtitles.length} subtitle track(s) found` : 'No subtitle tracks found';
+
+                if (subtitles.length === 0) {
+                    body.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">No subtitle tracks were discovered for this item.</div>';
+                    return;
+                }
+
+                body.innerHTML = subtitles.map((track) => {
+                    const relativePath = String(track.relativePath || '').trim();
+                    const isDefault = selectedPath && relativePath === selectedPath;
+                    const label = track.label || track.fileName || relativePath || 'Unknown subtitle';
+                    return `
+                        <div class="subtitle-track-card">
+                            <div class="subtitle-track-main">
+                                <div class="subtitle-track-title">${escapeHtml(label)}</div>
+                                <div class="subtitle-track-meta">
+                                    ${escapeHtml(track.language || 'und')} · ${escapeHtml(track.source || 'unknown source')} · ${escapeHtml(relativePath || '-')}
+                                </div>
+                            </div>
+                            <div class="subtitle-track-actions">
+                                ${isDefault ? '<span class="subtitle-default-pill">Default</span>' : `<button type="button" style="background:#1d4ed8;" onclick="setSubtitleDefault('${escapeHtml(folder)}', '${escapeHtml(contentType)}', '${escapeHtml(relativePath)}')">Set Default</button>`}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                body.innerHTML = '<div style="color:#fca5a5;border:1px solid #7f1d1d;background:rgba(127,29,29,.18);border-radius:8px;padding:14px;">Failed to load subtitle catalog.</div>';
+                subtitle.textContent = 'Subtitle catalog unavailable';
+                console.error('[Admin] openSubtitleManager failed:', err);
+            }
+        }
+
+        async function setSubtitleDefault(folder, contentType, relativePath) {
+            if (!folder || !contentType || !relativePath) return;
+
+            try {
+                const res = await fetch(`/api/admin/media/${encodeURIComponent(contentType)}/${encodeURIComponent(folder)}/subtitles/default`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ relativePath })
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    showToast(data.error || 'Unable to update subtitle default.', 'error', 4200);
+                    return;
+                }
+
+                showToast('Subtitle default updated.', 'success');
+                openSubtitleManager(folder, contentType);
+                fetchLibraryData();
+            } catch (err) {
+                showToast('Subtitle update failed.', 'error', 4200);
+                console.error('[Admin] setSubtitleDefault failed:', err);
+            }
+        }
+
         function formatBytes(bytes) {
             const value = Number(bytes || 0);
             if (!Number.isFinite(value) || value <= 0) return '0 B';
@@ -837,6 +1041,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
+                                        <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>

@@ -45,6 +45,48 @@ function sanitizeCliToken(value, fallback = '') {
     return cleaned || fallback;
 }
 
+function classifySubtitleFile(fileName = '') {
+    const raw = String(fileName || '').toLowerCase();
+    const isForced = /\bforced\b|\.forced\.|\bforc\b/.test(raw);
+    const isHearingImpaired = /\b(sdh|hi|cc|closed.?captions?|hearing.?impaired|deaf)\b/.test(raw);
+    const isEnglish = /\b(en|eng|english)\b/.test(raw);
+    const isDefault = /\bdefault\b/.test(raw);
+
+    let language = 'und';
+    if (isEnglish) language = 'eng';
+    else if (/\b(spa|es|spanish)\b/.test(raw)) language = 'spa';
+    else if (/\b(hin|hi|hindi)\b/.test(raw)) language = 'hin';
+
+    return {
+        language,
+        isForced,
+        isHearingImpaired,
+        isEnglish,
+        isDefault
+    };
+}
+
+function scoreSubtitleRecord(record) {
+    let score = 0;
+    const label = String(record.label || record.relativePath || '').toLowerCase();
+    const language = String(record.language || '').toLowerCase();
+
+    if (language === 'eng' || language === 'en') score += 80;
+    if (record.isDefaultCandidate) score += 40;
+    if (/\bdefault\b/.test(label)) score += 20;
+    if (/\b(forced|sdh|hi|deaf|commentary)\b/.test(label)) score -= 35;
+    if (record.isForced) score -= 25;
+    if (record.isHearingImpaired) score -= 15;
+    if (record.isEmbedded) score += 10;
+
+    return score;
+}
+
+function pickDefaultSubtitleRecord(records = []) {
+    if (!Array.isArray(records) || records.length === 0) return null;
+    return [...records].sort((a, b) => scoreSubtitleRecord(b) - scoreSubtitleRecord(a))[0] || null;
+}
+
 function readLocalSubtitleContext(folderPath) {
     try {
         const metadataPath = path.join(folderPath, 'metadata.json');
@@ -253,14 +295,22 @@ function collectSubtitleRecords(folderPath, source = 'local-cached') {
     return subtitleFiles.map(filePath => {
         const file = path.basename(filePath);
         const normalized = file.toLowerCase();
-        let language = 'und';
-        if (normalized.includes('.en.') || normalized.includes('english')) language = 'eng';
-        if (normalized.includes('hindi') || normalized.includes('.hi.')) language = 'hin';
+        const classification = classifySubtitleFile(file);
+        const embeddedMatch = String(file).match(/\.sub\.(\d+)\.([a-z]{2,3})\.(srt|vtt)$/i);
+        const streamIndex = embeddedMatch ? parseInt(embeddedMatch[1], 10) : null;
+        const language = embeddedMatch?.[2] || classification.language;
 
         return {
             language,
             relativePath: path.relative(folderPath, filePath),
-            source
+            source,
+            fileName: file,
+            label: file,
+            streamIndex,
+            isEmbedded: Boolean(embeddedMatch),
+            isForced: classification.isForced,
+            isHearingImpaired: classification.isHearingImpaired,
+            isDefaultCandidate: classification.isDefault || classification.isEnglish || language === 'eng'
         };
     });
 }
@@ -358,7 +408,18 @@ function extractEmbeddedSubtitleForVideo(videoPath) {
     ], { encoding: 'utf8' });
 
     if (extractSrt.status === 0 && fs.existsSync(srtPath)) {
-        return { language: 'eng', relativePath: path.relative(path.dirname(videoPath), srtPath), source: 'embedded-mkv' };
+        return {
+            language: 'eng',
+            relativePath: path.relative(path.dirname(videoPath), srtPath),
+            source: 'embedded-mkv',
+            fileName: path.basename(srtPath),
+            label: path.basename(srtPath),
+            streamIndex,
+            isEmbedded: true,
+            isForced: /forced/i.test(String(selected?.tags?.title || '')),
+            isHearingImpaired: false,
+            isDefaultCandidate: true
+        };
     }
 
     const vttPath = path.join(dir, `${base}.English.vtt`);
@@ -371,7 +432,18 @@ function extractEmbeddedSubtitleForVideo(videoPath) {
     ], { encoding: 'utf8' });
 
     if (extractVtt.status === 0 && fs.existsSync(vttPath)) {
-        return { language: 'eng', relativePath: path.relative(path.dirname(videoPath), vttPath), source: 'embedded-mkv' };
+        return {
+            language: 'eng',
+            relativePath: path.relative(path.dirname(videoPath), vttPath),
+            source: 'embedded-mkv',
+            fileName: path.basename(vttPath),
+            label: path.basename(vttPath),
+            streamIndex,
+            isEmbedded: true,
+            isForced: /forced/i.test(String(selected?.tags?.title || '')),
+            isHearingImpaired: false,
+            isDefaultCandidate: true
+        };
     }
 
     return null;
@@ -390,7 +462,14 @@ function extractEmbeddedSubtitles(folderPath, contentType) {
             records.push({
                 language: extracted.language,
                 relativePath: path.relative(folderPath, path.join(path.dirname(video), extracted.relativePath)),
-                source: extracted.source
+                source: extracted.source,
+                fileName: extracted.fileName || path.basename(extracted.relativePath),
+                label: extracted.label || path.basename(extracted.relativePath),
+                streamIndex: extracted.streamIndex ?? null,
+                isEmbedded: Boolean(extracted.isEmbedded),
+                isForced: Boolean(extracted.isForced),
+                isHearingImpaired: Boolean(extracted.isHearingImpaired),
+                isDefaultCandidate: Boolean(extracted.isDefaultCandidate)
             });
         }
     }
@@ -417,11 +496,20 @@ app.post('/process', async (req, res) => {
             const subliminalRecords = await fetchSubliminalFallback(resolvedImdbId, folderPath, { singleMode: false });
             if (subliminalRecords.length > 0) {
                 logger.debug(`🧩 [SUBTITLES] Subliminal resolved ${subliminalRecords.length} subtitle file(s) for series.`);
+                const defaultSubtitle = pickDefaultSubtitleRecord(subliminalRecords);
                 return res.json({
                     success: true,
                     message: 'Series subtitles resolved via Subliminal providers.',
                     patchData: {
                         subtitles: subliminalRecords,
+                        subtitleCatalog: subliminalRecords,
+                        subtitleSelection: defaultSubtitle ? {
+                            defaultRelativePath: defaultSubtitle.relativePath,
+                            defaultLanguage: defaultSubtitle.language,
+                            defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
+                            source: defaultSubtitle.source,
+                            updatedAt: new Date().toISOString()
+                        } : null,
                         pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() }
                     }
                 });
@@ -431,11 +519,20 @@ app.post('/process', async (req, res) => {
         const embeddedRecords = extractEmbeddedSubtitles(folderPath, contentType);
         if (embeddedRecords.length > 0) {
             logger.debug(`🧩 [SUBTITLES] Extracted ${embeddedRecords.length} embedded subtitle track(s) from container files.`);
+            const defaultSubtitle = pickDefaultSubtitleRecord(embeddedRecords);
             return res.json({
                 success: true,
                 message: 'Embedded subtitle tracks extracted from local media containers.',
                 patchData: {
                     subtitles: embeddedRecords,
+                    subtitleCatalog: embeddedRecords,
+                    subtitleSelection: defaultSubtitle ? {
+                        defaultRelativePath: defaultSubtitle.relativePath,
+                        defaultLanguage: defaultSubtitle.language,
+                        defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
+                        source: defaultSubtitle.source,
+                        updatedAt: new Date().toISOString()
+                    } : null,
                     ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
                 }
             });
@@ -445,11 +542,20 @@ app.post('/process', async (req, res) => {
         if (hasSubtitleTrack(folderPath)) {
             const records = collectSubtitleRecords(folderPath, 'local-cached');
             logger.debug(`⏭️ [SUBTITLES] Skipping [${folderName || path.basename(folderPath)}]. Subtitle track already present on disk.`);
+            const defaultSubtitle = pickDefaultSubtitleRecord(records);
             return res.json({
                 success: true,
                 message: "Subtitle track verified instantly via local storage check.",
                 patchData: {
                     subtitles: records,
+                    subtitleCatalog: records,
+                    subtitleSelection: defaultSubtitle ? {
+                        defaultRelativePath: defaultSubtitle.relativePath,
+                        defaultLanguage: defaultSubtitle.language,
+                        defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
+                        source: defaultSubtitle.source,
+                        updatedAt: new Date().toISOString()
+                    } : null,
                     ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
                 }
             });
@@ -478,11 +584,20 @@ app.post('/process', async (req, res) => {
         }
 
         // Return unified response structures cleanly back to the Orchestrator loop
+        const defaultSubtitle = pickDefaultSubtitleRecord(records);
         return res.json({
             success: true,
             message: records.length > 0 ? "Subtitle profiles resolved successfully." : "Subtitle sweeps completed with empty records.",
             patchData: {
                 subtitles: records,
+                subtitleCatalog: records,
+                subtitleSelection: defaultSubtitle ? {
+                    defaultRelativePath: defaultSubtitle.relativePath,
+                    defaultLanguage: defaultSubtitle.language,
+                    defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
+                    source: defaultSubtitle.source,
+                    updatedAt: new Date().toISOString()
+                } : null,
                 ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
             }
         });

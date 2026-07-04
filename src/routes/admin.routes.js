@@ -298,22 +298,45 @@ function ensurePathInside(parentDir, targetPath) {
 }
 
 function gatherArchiveCandidates(folderPath, metadata) {
-    const allowedExt = new Set(['.mp4']);
+    const sourceVideoExts = new Set(['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv']);
+    const subtitleExts = new Set(['.srt', '.vtt']);
     const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
 
-    const fromStorage = Object.values(metadata?.storage?.files || {})
-        .map(block => block?.localPath)
-        .filter(Boolean)
-        .filter(fileName => filesOnDisk.includes(fileName));
+    const candidates = [];
 
-    const sidecars = filesOnDisk.filter(fileName => {
-        const ext = path.extname(fileName).toLowerCase();
-        if (!allowedExt.has(ext)) return false;
-        const lower = fileName.toLowerCase();
-        return lower !== 'metadata.json' && lower !== 'cover.jpg';
+    Object.values(metadata?.storage?.files || {}).forEach((block) => {
+        const localPath = String(block?.localPath || '').trim();
+        if (!localPath) return;
+        if (!filesOnDisk.includes(localPath)) return;
+
+        candidates.push({ fileName: localPath, fileType: 'delivery' });
     });
 
-    return [...new Set([...fromStorage, ...sidecars])];
+    filesOnDisk.forEach((fileName) => {
+        const ext = path.extname(fileName).toLowerCase();
+        const lower = fileName.toLowerCase();
+
+        if (lower === 'metadata.json' || lower === 'cover.jpg') return;
+
+        if (sourceVideoExts.has(ext)) {
+            const fileType = ext === '.mp4' && (lower.includes('.web.') || lower.includes('1080') || lower.includes('720') || lower.includes('480'))
+                ? 'delivery'
+                : (ext === '.mp4' ? 'delivery' : 'source');
+            candidates.push({ fileName, fileType });
+            return;
+        }
+
+        if (subtitleExts.has(ext) || /\.sub\.\d+\.[a-z]{2,3}\.(srt|vtt)$/i.test(fileName)) {
+            candidates.push({ fileName, fileType: 'subtitle' });
+        }
+    });
+
+    const seen = new Set();
+    return candidates.filter((item) => {
+        if (seen.has(item.fileName)) return false;
+        seen.add(item.fileName);
+        return true;
+    });
 }
 
 async function verifyRemoteCloudCopy(metadata) {
@@ -1157,7 +1180,8 @@ router.post('/archive-local-media', async (req, res) => {
 
         const movedFiles = [];
         let reclaimedBytes = 0;
-        for (const fileName of candidates) {
+        for (const candidate of candidates) {
+            const fileName = candidate.fileName;
             const sourcePath = path.join(folderPath, fileName);
             if (!fs.existsSync(sourcePath)) continue;
 
@@ -1171,6 +1195,7 @@ router.post('/archive-local-media', async (req, res) => {
             await fsPromises.rename(sourcePath, destPath);
             movedFiles.push({
                 fileName,
+                fileType: candidate.fileType || 'other',
                 size: stat.size,
                 archivedPath: destPath
             });
@@ -1826,6 +1851,91 @@ router.get('/users/:userKey/watch-history', async (req, res) => {
             userKey,
             count: history.length,
             history
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/media/:contentType/:folder/subtitles', async (req, res) => {
+    try {
+        const contentType = String(req.params.contentType || '').toLowerCase();
+        const folder = String(req.params.folder || '').trim();
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+
+        if (!folder || !fs.existsSync(folderPath) || !fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'Metadata folder not found.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const subtitles = Array.isArray(metadata.subtitleCatalog)
+            ? metadata.subtitleCatalog
+            : (Array.isArray(metadata.subtitles) ? metadata.subtitles : []);
+
+        return res.json({
+            success: true,
+            folder,
+            contentType,
+            subtitleSelection: metadata.subtitleSelection || null,
+            subtitles
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/media/:contentType/:folder/subtitles/default', async (req, res) => {
+    try {
+        const contentType = String(req.params.contentType || '').toLowerCase();
+        const folder = String(req.params.folder || '').trim();
+        const relativePath = String(req.body?.relativePath || '').trim();
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+
+        if (!folder || !relativePath) {
+            return res.status(400).json({ success: false, error: 'Missing folder or relative subtitle path.' });
+        }
+
+        if (!fs.existsSync(folderPath) || !fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'Metadata folder not found.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const subtitles = Array.isArray(metadata.subtitleCatalog)
+            ? metadata.subtitleCatalog
+            : (Array.isArray(metadata.subtitles) ? metadata.subtitles : []);
+
+        const selected = subtitles.find(item => String(item.relativePath || '').trim() === relativePath);
+        if (!selected) {
+            return res.status(404).json({ success: false, error: 'Subtitle track not found in catalog.' });
+        }
+
+        metadata.subtitleSelection = {
+            defaultRelativePath: selected.relativePath,
+            defaultLanguage: selected.language || null,
+            defaultLabel: selected.label || selected.fileName || selected.relativePath,
+            source: selected.source || null,
+            updatedAt: new Date().toISOString()
+        };
+        metadata.subtitleDefault = selected.relativePath;
+        metadata.subtitleCatalog = subtitles;
+        metadata.subtitles = subtitles;
+        metadata.pipelineState = metadata.pipelineState || {};
+        metadata.pipelineState.lastUpdated = new Date().toISOString();
+
+        await persistMetadataFile(metaPath, metadata);
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            folder,
+            contentType,
+            subtitleSelection: metadata.subtitleSelection
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
