@@ -7,7 +7,7 @@ const { Upload } = require('@aws-sdk/lib-storage');
 const path = require('path');
 const fs = require('fs');
 const logger = require('../logger');
-
+require('dotenv').config({ path: path.join(__dirname, '../../../.env') }); // 
 const app = express();
 app.use(express.json());
 
