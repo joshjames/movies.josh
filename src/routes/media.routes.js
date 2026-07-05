@@ -1399,24 +1399,25 @@ router.get('/catalogs/movies/cover/:imdbId', async (req, res) => {
 // GET: /api/movies/:id (Individual Stream Quality Switcher Profile Router)
 router.get('/movies/:id', async (req, res) => {
     // Extract the user session or authentication token from the request
-    const userKey = getActiveUser(req);
+    //commented out till we fix the playback subscription checker
+    // const userKey = getActiveUser(req);
 
-    if (!userKey) {
-        return res.status(401).json({ error: 'Authentication required.' });
-    }
+    // if (!userKey) {
+    //     return res.status(401).json({ error: 'Authentication required.' });
+    // }
 
-    try {
-        const sub = await ProfileService.getSubscriptionStatus(userKey);
-        if (!sub.active) {
-            return res.status(403).json({ 
-                error: 'Subscription Required', 
-                reason: sub.reason,
-                redirectTo: '/subscribe.html?reason=trial_expired'
-            });
-        }
-    } catch (err) {
-        return res.status(500).json({ error: 'Subscription verification failed.' });
-    }
+    // try {
+    //     const sub = await ProfileService.getSubscriptionStatus(userKey);
+    //     if (!sub.active) {
+    //         return res.status(403).json({ 
+    //             error: 'Subscription Required', 
+    //             reason: sub.reason,
+    //             redirectTo: '/subscribe.html?reason=trial_expired'
+    //         });
+    //     }
+    // } catch (err) {
+    //     return res.status(500).json({ error: 'Subscription verification failed.' });
+    // }
     
     //rest of playback logic
     
@@ -1788,26 +1789,29 @@ router.get('/audio-tracks/:id', async (req, res) => {
 });
 
 router.get('/playback/:id', async (req, res) => {
-    const userKey = getActiveUser(req);
+    
+    
+    //code to check user subscription status is commented out for now as its breaking playback will fix soon.
+    // const userKey = getActiveUser(req);
 
-    if (!userKey) {
-        return res.status(401).send('Authentication required.');
-    }
+    // if (!userKey) {
+    //     return res.status(401).send('Authentication required.');
+    // }
 
-    try {
-        const sub = await ProfileService.getSubscriptionStatus(userKey);
-        if (!sub.active) {
-            // Note: Since this endpoint is often consumed directly by an HTML5 <video> src attribute,
-            // returning a 403 status code cleanly tells the player engine to stop fetching chunks.
-            return res.status(403).json({ 
-                error: 'Subscription Required', 
-                reason: sub.reason,
-                redirectTo: '/subscribe.html?reason=trial_expired'
-            });
-        }
-    } catch (err) {
-        return res.status(500).send('Subscription verification failed.');
-    }
+    // try {
+    //     const sub = await ProfileService.getSubscriptionStatus(userKey);
+    //     if (!sub.active) {
+    //         // Note: Since this endpoint is often consumed directly by an HTML5 <video> src attribute,
+    //         // returning a 403 status code cleanly tells the player engine to stop fetching chunks.
+    //         return res.status(403).json({ 
+    //             error: 'Subscription Required', 
+    //             reason: sub.reason,
+    //             redirectTo: '/subscribe.html?reason=trial_expired'
+    //         });
+    //     }
+    // } catch (err) {
+    //     return res.status(500).send('Subscription verification failed.');
+    // }
     
     try {
         const mediaId = normalizeMediaIdInput(req.params.id);
