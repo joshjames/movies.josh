@@ -51,6 +51,7 @@ router.post('/register', async (req, res) => {
     }
 });
 
+
 // GET: /api/auth/verify
 router.get('/verify', async (req, res) => {
     const { token, user } = req.query;
@@ -65,10 +66,21 @@ router.get('/verify', async (req, res) => {
     
     try {
         const userConfig = await ProfileService.readData(cleanName, 'config', null);
+        if (!userConfig) {
+            return res.send('<h3>User configuration not found.</h3>');
+        }
+
+        // 🧠 FIX: If a background email crawler or previous click already completed this task,
+        // don't fail—just redirect them to the login dashboard cleanly.
+        if (userConfig.isVerified === true && !userConfig.verificationToken) {
+            return res.redirect('/login.html?verified=true');
+        }
         
-        if (!userConfig || userConfig.verificationToken !== token) {
+        // Strict token matching validation check
+        if (userConfig.verificationToken !== token) {
             return res.send('<h3>Invalid verification token layout.</h3>');
         }
+        
         if (Date.now() > userConfig.verificationExpires) {
             return res.send('<h3>Verification token has expired. Please register again.</h3>');
         }

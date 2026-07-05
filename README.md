@@ -1,4 +1,5 @@
 # v2 UPDATE
+This entire readme is redundant.
 
 complete re-write - microservice seperation
 
