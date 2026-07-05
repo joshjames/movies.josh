@@ -18,7 +18,7 @@ const s3Client = new S3Client({
     credentials: {
         accessKeyId: process.env.BBkeyID,
         secretAccessKey: process.env.BBapplicationKey
-    },
+    },          
     region: process.env.CLOUD_REGION || 'us-west-004'
 });
 
@@ -94,28 +94,44 @@ app.post('/process', async (req, res) => {
                 remoteKey: executeCloudUpload ? remoteKey : null
             };
             
-            hasProcessedAny = true;
-        }
-
-        // Force downstream pipeline tracking state to fully clear out 'UPLOAD' steps
-        patchData.pipelineState = {
-            currentStep: 'COMPLETED',
-            lastUpdated: new Date().toISOString(),
-            error: null
-        };
-
-        return res.json({
-            success: true,
-            message: executeCloudUpload 
-                ? "Cloud synchronization cycles finalized seamlessly." 
-                : "Safe-mode manifest translation finalized successfully. Pipeline state updated to COMPLETED.",
-            patchData: patchData
-        });
-
-    } catch (err) {
-        logger.error(`❌ Cloud Sync Worker failure on target ${folderName}: ${err.message}`);
-        return res.json({ success: false, error: err.message });
+        // ... (rest of your profile loop above)
+        
+        hasProcessedAny = true;
     }
+
+    // =========================================================================
+    // 💾 PHYSICAL STATE PERSISTENCE FIX
+    // =========================================================================
+    // Deep merge the newly processed patchData back into the original metadata
+    metadata.storage.location = patchData.storage.location;
+    metadata.storage.files = {
+        ...metadata.storage.files,
+        ...patchData.storage.files
+    };
+    
+    // Synchronize downstream pipeline tracking states completely
+    metadata.pipelineState = {
+        currentStep: 'COMPLETED',
+        lastUpdated: new Date().toISOString(),
+        error: null
+    };
+
+    // Physically overwrite the metadata.json manifest file on local storage disk
+    fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+    logger.info(`💾 [Cloud Sync Manifest Update]: Successfully synced local state changes back to ${metaFilePath}`);
+
+    return res.json({
+        success: true,
+        message: executeCloudUpload 
+            ? "Cloud synchronization cycles finalized seamlessly and state persisted to disk." 
+            : "Safe-mode manifest translation finalized successfully. Pipeline state updated to COMPLETED.",
+        patchData: metadata // Return full synchronized object back to orchestration queue loops
+    });
+
+} catch (err) {
+    logger.error(`❌ Cloud Sync Worker failure on target ${folderName}: ${err.message}`);
+    return res.json({ success: false, error: err.message });
+}
 });
 
 // =========================================================================
