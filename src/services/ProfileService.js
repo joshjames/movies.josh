@@ -68,6 +68,41 @@ function humanizeMediaTitle(mediaId) {
     return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// --- SUBSCRIPTION ENTITLEMENT VALUATION ---
+async function getSubscriptionStatus(username) {
+    const cleanKey = await this.resolveUserKey(username);
+    if (!cleanKey) return { active: false, reason: 'user_not_found' };
+
+    const config = await this.readData(cleanKey, 'config', {});
+    
+    // If you manually flag accounts with lifetime/unlocked access
+    if (config.freeAccessActive === true) {
+        return { active: true, reason: 'administrative_bypass' };
+    }
+
+    const now = Date.now();
+    const trialEnd = config.trialEndsAt ? Date.parse(config.trialEndsAt) : 0;
+
+    // 1. Check if they are still inside the core trial window
+    if (now <= trialEnd) {
+        return { active: true, reason: 'active_trial' };
+    }
+
+    // 2. Check if they are inside the grace period window
+    const graceDays = resolvePositiveInt(config.gracePeriodDays, 3);
+    const graceEnd = trialEnd + (graceDays * 24 * 60 * 60 * 1000);
+
+    if (now <= graceEnd) {
+        return { active: true, reason: 'grace_period' };
+    }
+
+    // Both trial and grace periods have lapsed
+    return { active: false, reason: 'trial_expired' };
+}
+
+
+
+
 // ====== PRIVATE DATA UTILITIES ======
 async function ensureUserDir(username) {
     const userDir = path.join(USER_BASE_DIR, username);

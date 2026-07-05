@@ -13,6 +13,8 @@ const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const ProfileService = require('../services/ProfileService');
+const { requireAuth, getActiveUser } = require('../middleware/auth');
 
 const MediaService = require('../services/MediaService');
 const MOVIES_DIR = process.env.MOVIES_DIR
@@ -50,17 +52,17 @@ const CATALOG_LABEL_OVERRIDES = {
     top_50_romance: 'Top 50 Romance',
     top_50_sci_fi: 'Top 50 Sci-Fi',
     top_50_thriller: 'Top 50 Thriller',
+    popular_1980s: 'Best of 1980s',
+    popular_1990s: 'Best of 1990s',
+    popular_2000s: 'Best of 2000s',
+    popular_2010s: 'Best of 2010s',
+    popular_2020s: 'Best of 2020s',
     popular_1920s: 'Best of 1920s',
     popular_1930s: 'Best of 1930s',
     popular_1940s: 'Best of 1940s',
     popular_1950s: 'Best of 1950s',
     popular_1960s: 'Best of 1960s',
-    popular_1970s: 'Best of 1970s',
-    popular_1980s: 'Best of 1980s',
-    popular_1990s: 'Best of 1990s',
-    popular_2000s: 'Best of 2000s',
-    popular_2010s: 'Best of 2010s',
-    popular_2020s: 'Best of 2020s'
+    popular_1970s: 'Best of 1970s'
 };
 
 function normalizeSearchText(value = '') {
@@ -1396,6 +1398,28 @@ router.get('/catalogs/movies/cover/:imdbId', async (req, res) => {
 
 // GET: /api/movies/:id (Individual Stream Quality Switcher Profile Router)
 router.get('/movies/:id', async (req, res) => {
+    // Extract the user session or authentication token from the request
+    const userKey = getActiveUser(req);
+
+    if (!userKey) {
+        return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    try {
+        const sub = await ProfileService.getSubscriptionStatus(userKey);
+        if (!sub.active) {
+            return res.status(403).json({ 
+                error: 'Subscription Required', 
+                reason: sub.reason,
+                redirectTo: '/subscribe.html?reason=trial_expired'
+            });
+        }
+    } catch (err) {
+        return res.status(500).json({ error: 'Subscription verification failed.' });
+    }
+    
+    //rest of playback logic
+    
     const movieId = req.params.id;
     const movieFolder = resolveMovieFolderPath(movieId);
     const infoFilePath = path.join(movieFolder, 'movie_info.json');
@@ -1764,6 +1788,27 @@ router.get('/audio-tracks/:id', async (req, res) => {
 });
 
 router.get('/playback/:id', async (req, res) => {
+    const userKey = getActiveUser(req);
+
+    if (!userKey) {
+        return res.status(401).send('Authentication required.');
+    }
+
+    try {
+        const sub = await ProfileService.getSubscriptionStatus(userKey);
+        if (!sub.active) {
+            // Note: Since this endpoint is often consumed directly by an HTML5 <video> src attribute,
+            // returning a 403 status code cleanly tells the player engine to stop fetching chunks.
+            return res.status(403).json({ 
+                error: 'Subscription Required', 
+                reason: sub.reason,
+                redirectTo: '/subscribe.html?reason=trial_expired'
+            });
+        }
+    } catch (err) {
+        return res.status(500).send('Subscription verification failed.');
+    }
+    
     try {
         const mediaId = normalizeMediaIdInput(req.params.id);
         const season = parseInt(req.query.season, 10);
