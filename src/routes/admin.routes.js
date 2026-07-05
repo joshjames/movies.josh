@@ -1399,6 +1399,7 @@ router.post('/rename-media', async (req, res) => {
     }
 });
 
+
 router.post('/archive-local-media', async (req, res) => {
     try {
         const { folder, contentType, retentionDays = ARCHIVE_RETENTION_DAYS } = req.body || {};
@@ -1450,7 +1451,24 @@ router.post('/archive-local-media', async (req, res) => {
 
             const stat = fs.statSync(sourcePath);
             reclaimedBytes += stat.size;
-            await fsPromises.rename(sourcePath, destPath);
+
+            // =========================================================================
+            // 🔄 EXDEV CROSS-DEVICE MOVE FALLBACK
+            // =========================================================================
+            try {
+                // Try fast atomic filesystem rename
+                await fsPromises.rename(sourcePath, destPath);
+            } catch (renameErr) {
+                if (renameErr.code === 'EXDEV') {
+                    // Fall back to multi-device stream copy and delete
+                    await fsPromises.copyFile(sourcePath, destPath);
+                    await fsPromises.unlink(sourcePath);
+                } else {
+                    throw renameErr; // Bubble up true permission or disk space issues
+                }
+            }
+            // =========================================================================
+
             movedFiles.push({
                 fileName,
                 fileType: candidate.fileType || 'other',
