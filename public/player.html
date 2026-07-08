@@ -623,9 +623,9 @@
                     // Helper function to safely map local assets without touching cloud signatures
                     const resolveStreamSource = (fileUrl) => {
                         if (!fileUrl) return '';
-                        // If it's a remote URL from B2, bypass string manipulation completely
+                        // Route remote object-storage URLs through our same-origin relay to avoid browser CORS blocks.
                         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-                            return fileUrl;
+                            return `/api/remote-playback?src=${encodeURIComponent(fileUrl)}`;
                         }
                         // Fallback: If it's a local relative file path, map it to the static server mount
                         return fileUrl.replace('/movies/', '/movie-assets/');

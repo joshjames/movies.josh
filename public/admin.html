@@ -1538,6 +1538,10 @@
                     <div class="tv-manual-row tv-live-search-wrap">
                         <input type="text" id="tv-folder-input" placeholder="Show folder (e.g. Rick.and.Morty)">
                         <input type="text" id="tv-imdb-input" placeholder="IMDb ID (e.g. tt2861424)">
+                        <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#cbd5e1;white-space:nowrap;">
+                            <input type="checkbox" id="tv-ensure-global" checked>
+                            Ensure Global
+                        </label>
                         <button type="button" style="background:#0ea5e9;" onclick="manualAddSeries()">Add/Update Show</button>
                         <div id="tv-live-search-results" class="tv-live-search-results"></div>
                     </div>
@@ -1583,6 +1587,8 @@
                 const hasQuarantinedArchive = localArchiveState === 'quarantined';
                 const hasAnyLocalPath = profiles.some(p => storageMeta.files[p] && storageMeta.files[p].localPath);
                 const canArchive = storageLoc === 'remote' && !hasQuarantinedArchive && hasAnyLocalPath;
+                const activeGroups = Array.isArray(item.metadata?.libraryGroups) ? item.metadata.libraryGroups : [];
+                const shouldEnsureGlobal = activeGroups.length === 0 || activeGroups.includes('global');
 
                 return `
                 <div class="show-row" id="row-${item.folder}">
@@ -1667,6 +1673,13 @@
                             <div class="form-group full-width">
                                 <label>Plot Synopsis Outline</label>
                                 <textarea id="plot-${item.folder}" rows="2">${(item.metadata && item.metadata.plot) || ''}</textarea>
+                            </div>
+                            <div class="form-group full-width" style="display:flex;align-items:center;gap:8px;">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                    <input type="checkbox" id="ensureGlobal-${item.folder}" ${shouldEnsureGlobal ? 'checked' : ''}>
+                                    Ensure Global Visibility
+                                </label>
+                                <span style="font-size:0.74rem;color:#94a3b8;">When enabled, this save tags media with the global group.</span>
                             </div>
                             
                             <div class="form-group full-width" id="sync-container-${item.folder}" style="display: none;">
@@ -1860,6 +1873,7 @@
         async function manualAddSeries() {
             const folder = (document.getElementById('tv-folder-input')?.value || '').trim();
             const imdbId = (document.getElementById('tv-imdb-input')?.value || '').trim();
+            const ensureGlobal = Boolean(document.getElementById('tv-ensure-global')?.checked);
 
             if (!folder || !imdbId) {
                 setTvManualResult('Please enter both show folder and IMDb ID.');
@@ -1871,7 +1885,7 @@
                 const res = await fetch('/api/admin/series/manual-add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder, imdbId, attemptEpisodeReorg: true })
+                    body: JSON.stringify({ folder, imdbId, attemptEpisodeReorg: true, ensureGlobal })
                 });
                 const data = await res.json();
 
@@ -2433,6 +2447,7 @@
         }
 
         async function saveOverride(folder, type) {
+            const ensureGlobal = Boolean(document.getElementById(`ensureGlobal-${folder}`)?.checked);
             const payload = {
                 folder,
                 contentType: type,
@@ -2445,7 +2460,8 @@
                 parentalRating: document.getElementById(`parentalRating-${folder}`)?.value || '',
                 popularity: document.getElementById(`popularity-${folder}`)?.value || '',
                 plot: document.getElementById('plot-' + folder).value,
-                storage: { location: document.getElementById(`storage-${folder}`).value }
+                storage: { location: document.getElementById(`storage-${folder}`).value },
+                ...(ensureGlobal ? { libraryGroups: ['global'] } : {})
             };
 
             try {

@@ -1012,6 +1012,17 @@ function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile
     return sourceVideo ? path.join(folderPath, sourceVideo) : null;
 }
 
+function isAllowedRemoteStreamUrl(inputUrl) {
+    try {
+        const parsed = new URL(String(inputUrl || ''));
+        if (parsed.protocol !== 'https:') return false;
+        const host = String(parsed.hostname || '').toLowerCase();
+        return host.endsWith('.backblazeb2.com') || host === 's3.us-west-004.backblazeb2.com';
+    } catch (_err) {
+        return false;
+    }
+}
+
 function normalizeEpisodeSearchToken(value = '') {
     return String(value || '')
         .toLowerCase()
@@ -1967,6 +1978,65 @@ router.get('/playback/:id', async (req, res) => {
         }
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: /api/remote-playback?src=<signed-url>
+// Relays remote object storage streams through same-origin to bypass browser CORS restrictions.
+router.get('/remote-playback', async (req, res) => {
+    try {
+        const src = String(req.query.src || '').trim();
+        if (!src) {
+            return res.status(400).json({ success: false, error: 'Missing remote source URL.' });
+        }
+
+        if (!isAllowedRemoteStreamUrl(src)) {
+            return res.status(400).json({ success: false, error: 'Remote source URL is not allowed.' });
+        }
+
+        const upstreamHeaders = {};
+        if (req.headers.range) {
+            upstreamHeaders.Range = req.headers.range;
+        }
+
+        const upstream = await axios.get(src, {
+            responseType: 'stream',
+            headers: upstreamHeaders,
+            timeout: 30000,
+            validateStatus: () => true
+        });
+
+        const status = upstream.status;
+        if (status >= 400) {
+            return res.status(status).json({
+                success: false,
+                error: `Upstream media returned status ${status}`
+            });
+        }
+
+        const contentType = upstream.headers['content-type'] || 'video/mp4';
+        const contentLength = upstream.headers['content-length'];
+        const contentRange = upstream.headers['content-range'];
+        const acceptRanges = upstream.headers['accept-ranges'] || 'bytes';
+
+        res.status(status);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Accept-Ranges', acceptRanges);
+        if (contentLength) res.setHeader('Content-Length', contentLength);
+        if (contentRange) res.setHeader('Content-Range', contentRange);
+        res.setHeader('Cache-Control', 'private, max-age=60');
+
+        upstream.data.on('error', () => {
+            if (!res.headersSent) {
+                res.status(502).end('Remote stream relay failed.');
+            } else {
+                res.end();
+            }
+        });
+
+        upstream.data.pipe(res);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message || 'Remote playback relay failed.' });
     }
 });
 

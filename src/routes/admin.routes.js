@@ -794,7 +794,7 @@ router.post('/series/manual-scan', async (req, res) => {
 
 router.post('/series/manual-add', async (req, res) => {
     try {
-        const { folder, imdbId, attemptEpisodeReorg = true } = req.body || {};
+        const { folder, imdbId, attemptEpisodeReorg = true, ensureGlobal = true } = req.body || {};
         const cleanFolder = sanitizeSeriesFolderName(folder || '');
         const cleanImdbId = String(imdbId || '').trim();
 
@@ -844,6 +844,14 @@ router.post('/series/manual-add', async (req, res) => {
                 error: null
             }
         };
+
+        if (ensureGlobal) {
+            mergedMeta.libraryGroups = mergeLibraryGroups(
+                mergedMeta.libraryGroups || metadata.libraryGroups || [],
+                [GROUP_GLOBAL],
+                { addGlobalIfMissing: true }
+            );
+        }
 
         await fsPromises.writeFile(metadataPath, JSON.stringify(mergedMeta, null, 4), 'utf-8');
 
