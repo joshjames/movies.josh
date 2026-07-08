@@ -687,7 +687,9 @@ function listSubtitleCandidatesForVideo(videoPath, options = {}) {
         extractEmbeddedSubtitleSet(videoPath, parseInt(process.env.SUBTITLE_MAX_TRACKS || '8', 10) || 8);
     }
 
-    const files = fs.readdirSync(dir).filter(file => /\.(srt|vtt)$/i.test(file));
+    const files = fs.readdirSync(dir)
+        .filter(file => /\.(srt|vtt)$/i.test(file))
+        .sort((a, b) => a.localeCompare(b));
     const candidates = [];
 
     for (const file of files) {
@@ -707,6 +709,7 @@ function listSubtitleCandidatesForVideo(videoPath, options = {}) {
         candidates.push({
             file,
             filePath,
+            relativePath: file,
             ext: path.extname(file).toLowerCase(),
             langHint,
             streamIndex: embeddedMeta?.streamIndex ?? null,
@@ -720,6 +723,50 @@ function listSubtitleCandidatesForVideo(videoPath, options = {}) {
         seen.add(item.filePath);
         return true;
     });
+}
+
+function listSubtitleCandidatesForDirectory(dirPath, options = {}) {
+    if (!dirPath || !fs.existsSync(dirPath)) return [];
+
+    const baseHintRaw = String(options.baseHint || '').trim();
+    const baseHint = baseHintRaw ? path.parse(baseHintRaw).name : '';
+    const normalizedBaseHint = normalizeSubtitleToken(baseHint);
+    const files = fs.readdirSync(dirPath)
+        .filter(file => /\.(srt|vtt)$/i.test(file))
+        .sort((a, b) => a.localeCompare(b));
+
+    const candidates = [];
+    for (const file of files) {
+        const filePath = path.join(dirPath, file);
+        const fileToken = normalizeSubtitleToken(file);
+
+        if (normalizedBaseHint) {
+            const looksRelatedToHint = file.startsWith(`${baseHint}.`)
+                || file === 'English.srt'
+                || file === 'English.vtt'
+                || fileToken.includes(normalizedBaseHint);
+            if (!looksRelatedToHint) continue;
+        }
+
+        const langHint = (() => {
+            if (/\beng(lish)?\b/i.test(file)) return 'eng';
+            if (/\bhin(di)?\b/i.test(file)) return 'hin';
+            if (/\bspa(nish)?\b/i.test(file)) return 'spa';
+            return 'und';
+        })();
+
+        candidates.push({
+            file,
+            filePath,
+            relativePath: file,
+            ext: path.extname(file).toLowerCase(),
+            langHint,
+            streamIndex: null,
+            token: fileToken
+        });
+    }
+
+    return candidates;
 }
 
 function scoreSubtitleCandidate(candidate) {
@@ -894,6 +941,54 @@ function readMediaMetadataForVideo(videoPath) {
     } catch (_err) {
         return { metadata: {}, metaPath };
     }
+}
+
+function readMediaMetadataForMovieFolder(folderPath) {
+    if (!folderPath || !fs.existsSync(folderPath)) return { metadata: {}, metaPath: null };
+    const metaPath = path.join(folderPath, 'metadata.json');
+    if (!fs.existsSync(metaPath)) return { metadata: {}, metaPath: null };
+
+    try {
+        return {
+            metadata: JSON.parse(fs.readFileSync(metaPath, 'utf-8')),
+            metaPath
+        };
+    } catch (_err) {
+        return { metadata: {}, metaPath };
+    }
+}
+
+function resolveSubtitleContextForRequest(mediaId, season, episode, requestedFile) {
+    const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
+    if (videoPath && fs.existsSync(videoPath)) {
+        const { metadata } = readMediaMetadataForVideo(videoPath);
+        return {
+            mode: 'video',
+            videoPath,
+            folderPath: path.dirname(videoPath),
+            metadata,
+            baseHint: path.basename(videoPath)
+        };
+    }
+
+    const normalizedMediaId = normalizeMediaIdInput(mediaId);
+    if (normalizedMediaId.startsWith('series/')) {
+        return null;
+    }
+
+    const movieFolder = resolveMovieFolderPath(normalizedMediaId);
+    if (!movieFolder || !fs.existsSync(movieFolder)) {
+        return null;
+    }
+
+    const { metadata } = readMediaMetadataForMovieFolder(movieFolder);
+    return {
+        mode: 'folder',
+        videoPath: null,
+        folderPath: movieFolder,
+        metadata,
+        baseHint: requestedFile
+    };
 }
 
 function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile) {
@@ -1855,15 +1950,17 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
-        const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
+        const subtitleContext = resolveSubtitleContextForRequest(mediaId, season, episode, requestedFile);
 
-        if (!videoPath || !fs.existsSync(videoPath)) {
+        if (!subtitleContext) {
             return res.status(404).json({ success: false, error: 'No playable video target found for subtitle inspection.' });
         }
 
-        const { metadata } = readMediaMetadataForVideo(videoPath);
+        const { metadata } = subtitleContext;
 
-        const candidates = listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: true });
+        const candidates = subtitleContext.mode === 'video'
+            ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true })
+            : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint });
         const selectedDefault = String(metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || '').trim();
         return res.json({
             success: true,
@@ -1890,14 +1987,16 @@ router.get('/subtitles/:id', async (req, res) => {
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
 
-        const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
-        if (!videoPath || !fs.existsSync(videoPath)) {
+        const subtitleContext = resolveSubtitleContextForRequest(mediaId, season, episode, requestedFile);
+        if (!subtitleContext) {
             return res.status(404).send('No video target found for subtitles.');
         }
 
-        const { metadata } = readMediaMetadataForVideo(videoPath);
+        const { metadata } = subtitleContext;
 
-        const candidates = listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: true });
+        const candidates = subtitleContext.mode === 'video'
+            ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true })
+            : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint });
         const selected = pickSubtitleCandidate(candidates, {
             ...req.query,
             preferredRelativePath: metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || ''
