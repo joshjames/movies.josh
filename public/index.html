@@ -757,6 +757,7 @@
         <h3 style="margin-top: 0; color: #3b82f6; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
             ⚙️ System Ingestion & Processing Pipeline
         </h3>
+        <div id="pipeline-scope-label" style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 10px;"></div>
         <div id="pipeline-rows" style="display: flex; flex-direction: column; gap: 12px;"></div>
     </div>
 
@@ -1246,6 +1247,7 @@
         async function updatePipelineStatus() {
             const monitorBox = document.getElementById('pipeline-monitor');
             const rowsContainer = document.getElementById('pipeline-rows');
+            const scopeLabel = document.getElementById('pipeline-scope-label');
 
             try {
                 // Pass credentials so the requireAuth middleware can see session cookie
@@ -1261,6 +1263,11 @@
 
                 const data = await res.json();
                 let html = '';
+                if (scopeLabel) {
+                    scopeLabel.textContent = data.scope === 'all'
+                        ? 'Showing all active pipeline jobs'
+                        : 'Showing your active pipeline jobs';
+                }
 
                 // Stage-based color mapping for consistent visual hierarchy
                 const stageColors = {
@@ -1287,7 +1294,7 @@
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                     <div style="flex-grow: 1; min-width: 300px;">
                                         <div style="font-size: 0.95rem; color: #f8fafc; font-weight: 600;">${item.title}</div>
-                                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">Size: ${item.size}</div>
+                                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">Size: ${item.size}${data.scope === 'all' && item.addedByUser ? ` • User: ${item.addedByUser}` : ''}</div>
                                     </div>
                                     <div style="text-align: right;">
                                         <span style="background: ${statusColor}40; color: ${statusColor}; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; white-space: nowrap;">

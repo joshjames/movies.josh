@@ -135,6 +135,23 @@ function safelyReadJson(filePath, fallback = {}) {
     }
 }
 
+function isPrivilegedUser(userKey) {
+    const clean = normalizeUserKey(userKey);
+    if (!clean) return false;
+    return clean === 'josh' || clean.startsWith('josh@');
+}
+
+function getJobOwner(job) {
+    const payload = (job && typeof job.payload === 'object') ? job.payload : {};
+    const queueContext = (payload && typeof payload.queueContext === 'object') ? payload.queueContext : {};
+    return normalizeUserKey(
+        queueContext.addedByUser ||
+        queueContext.userKey ||
+        queueContext.userId ||
+        payload.addedByUser
+    );
+}
+
 async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
     const cleanUser = normalizeUserKey(activeUser);
     if (!cleanUser || cleanUser === 'guest') {
@@ -615,7 +632,9 @@ router.post('/downloader/add', async (req, res) => {
             ...normalizedQueueContext,
             imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
         };
-        await TorrentService.addMagnet(magnetUrl, targetCategory, effectiveImdbId);
+        await TorrentService.addMagnet(magnetUrl, targetCategory, effectiveImdbId, {
+            addedByUser: effectiveQueueContext.addedByUser || activeUser || null
+        });
         
         // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
@@ -641,6 +660,7 @@ router.post('/downloader/add', async (req, res) => {
                 videoFile: null,
                 magnetUrl,
                 imdbId: effectiveImdbId || null,
+                addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
                 queueContext: effectiveQueueContext
             }
         });
@@ -681,7 +701,9 @@ router.post('/yts/add', async (req, res) => {
             ...normalizedQueueContext,
             imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
         };
-        await TorrentService.addMagnet(magnetUrl, 'movie-streamer', effectiveImdbId);
+        await TorrentService.addMagnet(magnetUrl, 'movie-streamer', effectiveImdbId, {
+            addedByUser: effectiveQueueContext.addedByUser || activeUser || null
+        });
         
         // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
@@ -707,6 +729,7 @@ router.post('/yts/add', async (req, res) => {
                 videoFile: null,
                 magnetUrl,
                 imdbId: effectiveImdbId || null,
+                addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
                 queueContext: effectiveQueueContext
             }
         });
@@ -724,15 +747,32 @@ router.post('/yts/add', async (req, res) => {
 // GET: /api/pipeline/status - Returns active downloads and queue jobs with stage info
 router.get('/pipeline/status', async (req, res) => {
     try {
+        const activeUser = normalizeUserKey(getActiveUser(req));
+        const requestScope = String(req.query.scope || '').trim().toLowerCase();
+        const includeAll = requestScope === 'all' && isPrivilegedUser(activeUser);
+        const viewerUser = includeAll ? null : activeUser;
+
         let pipeline = [];
         let failedJobs = [];
 
         // 1. Get active downloads from qBittorrent
-        const torrents = await TorrentService.getActivePipelineTorrents();
+        const torrents = await TorrentService.getActivePipelineTorrents(
+            viewerUser ? { addedByUser: viewerUser } : {}
+        );
         torrents.forEach(torrent => {
             let displayStatus = 'Downloading';
             if (torrent.progress === 1) displayStatus = 'Finalizing...';
             if (torrent.state.includes('paused') || torrent.state.includes('queued')) displayStatus = 'Queued';
+
+            let torrentOwner =
+                TorrentService.extractAddedByUserFromTags(torrent.tags) ||
+                TorrentService.getAddedByUserByHash(torrent.hash) ||
+                null;
+
+            if (viewerUser && !torrentOwner) {
+                // In user-scoped mode, TorrentService already filtered by user tag.
+                torrentOwner = viewerUser;
+            }
 
             pipeline.push({
                 title: torrent.name.replace(/[._-]/g, ' '),
@@ -740,13 +780,19 @@ router.get('/pipeline/status', async (req, res) => {
                 status: displayStatus,
                 eta: torrent.eta, 
                 size: (torrent.size / (1024 ** 3)).toFixed(2) + ' GB',
-                stage: 'downloading'
+                stage: 'downloading',
+                addedByUser: torrentOwner
             });
         });
 
         // 2. Get active jobs from queue system
         const allJobs = getAllJobs();
         allJobs.forEach(job => {
+            const jobOwner = getJobOwner(job);
+            if (viewerUser && (!jobOwner || jobOwner !== viewerUser)) {
+                return;
+            }
+
             // Collect failed jobs separately
             if (job.status === 'FAILED') {
                 failedJobs.push({
@@ -756,7 +802,8 @@ router.get('/pipeline/status', async (req, res) => {
                     jobId: job.id,
                     stage: job.currentStep,
                     imdbId: job.imdbId,
-                    failedAt: job.updatedAt
+                    failedAt: job.updatedAt,
+                    addedByUser: jobOwner
                 });
                 return;
             }
@@ -782,7 +829,8 @@ router.get('/pipeline/status', async (req, res) => {
                     size: 'Awaiting qBittorrent completion',
                     stage: 'downloading',
                     imdbId: job.imdbId,
-                    jobId: job.id
+                    jobId: job.id,
+                    addedByUser: jobOwner
                 });
                 return;
             }
@@ -801,11 +849,18 @@ router.get('/pipeline/status', async (req, res) => {
                 size: 'In Pipeline',
                 stage: stepInfo.stage,
                 imdbId: job.imdbId,
-                jobId: job.id
+                jobId: job.id,
+                addedByUser: jobOwner
             });
         });
 
-        return res.json({ success: true, pipeline, failures: failedJobs });
+        return res.json({
+            success: true,
+            scope: includeAll ? 'all' : 'user',
+            viewer: viewerUser,
+            pipeline,
+            failures: failedJobs
+        });
     } catch (err) {
         logger.error('Pipeline Status Error: ' + err.message);
         return res.status(500).json({ error: "Failed to assemble pipeline matrix state structures." });

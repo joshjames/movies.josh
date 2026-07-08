@@ -9,6 +9,49 @@ const QBIT_BASE_URL = process.env.QBIT_API_URL || 'http://qbittorrent:8080/api/v
 
 // Simple in-memory cache for torrent hash -> IMDB ID mapping
 const torrentImdbMap = new Map();
+const torrentUserMap = new Map();
+const userTagMap = new Map();
+
+function normalizeUserKey(value) {
+    const clean = String(value || '').trim().toLowerCase();
+    if (!clean || clean === 'guest') return null;
+    return clean;
+}
+
+function buildUserTag(userKey) {
+    const clean = normalizeUserKey(userKey);
+    if (!clean) return null;
+    const encoded = clean.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return encoded ? `user-${encoded}` : null;
+}
+
+function normalizeHash(value) {
+    const clean = String(value || '').trim().toLowerCase();
+    return clean || null;
+}
+
+function parseTags(tags) {
+    return String(tags || '')
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean);
+}
+
+function extractInfoHashFromMagnet(magnetUrl) {
+    try {
+        const xt = new URL(magnetUrl).searchParams.get('xt') || '';
+        const raw = xt.includes('btih:') ? xt.split('btih:')[1] : '';
+        return normalizeHash(raw);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function extractUserFromTagList(tagList = []) {
+    const userTag = tagList.find(tag => tag.startsWith('user-'));
+    if (!userTag) return null;
+    return normalizeUserKey(userTagMap.get(userTag)) || null;
+}
 
 class TorrentService {
     /**
@@ -17,7 +60,7 @@ class TorrentService {
      * @param {string} category 'movie' or 'series-streamer'
      * @param {string} imdbId Optional IMDB ID to track with torrent
      */
-    async addMagnet(magnetUrl, category = 'movie', imdbId = null) {
+    async addMagnet(magnetUrl, category = 'movie', imdbId = null, options = {}) {
         try {
             const form = new FormData();
             form.append('urls', magnetUrl);
@@ -31,13 +74,26 @@ class TorrentService {
             
             // Set dynamic workflow tags based on the media type
             const targetTag = targetCategory === 'series-streamer' ? 'series-streamer' : 'movie-streamer';
-            form.append('tags', targetTag);
+            const addedByUser = normalizeUserKey(options.addedByUser || options.userKey || options.username);
+            const userTag = buildUserTag(addedByUser);
+            if (userTag && addedByUser) {
+                userTagMap.set(userTag, addedByUser);
+            }
+            form.append('tags', [targetTag, userTag].filter(Boolean).join(','));
 
             const endpoint = `${QBIT_BASE_URL}/torrents/add`;
             await axios.post(endpoint, form, {
                 headers: form.getHeaders(),
                 timeout: 5000
             });
+
+            const infoHashFromMagnet = extractInfoHashFromMagnet(magnetUrl);
+            if (infoHashFromMagnet && imdbId) {
+                torrentImdbMap.set(infoHashFromMagnet, imdbId);
+            }
+            if (infoHashFromMagnet && addedByUser) {
+                torrentUserMap.set(infoHashFromMagnet, addedByUser);
+            }
 
             // After adding to qBittorrent, fetch the torrent info to get its hash
             if (imdbId) {
@@ -53,7 +109,24 @@ class TorrentService {
                 }
             }
 
-            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] download payload with tag [${targetTag}].`);
+            if (addedByUser) {
+                try {
+                    const allTorrents = await axios.get(`${QBIT_BASE_URL}/torrents/info`, { timeout: 3000 });
+                    const addedTorrent = (allTorrents.data || []).find(t => {
+                        const hash = normalizeHash(t.hash);
+                        if (infoHashFromMagnet && hash && hash === infoHashFromMagnet) return true;
+                        return t.category === targetCategory;
+                    });
+
+                    if (addedTorrent && addedTorrent.hash) {
+                        torrentUserMap.set(normalizeHash(addedTorrent.hash), addedByUser);
+                    }
+                } catch (mapErr) {
+                    logger.warn(`⚠️ [Torrent Service] Could not map user to torrent: ${mapErr.message}`);
+                }
+            }
+
+            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] payload with tags [${[targetTag, userTag].filter(Boolean).join(',')}].`);
             return { success: true };
         } catch (err) {
             logger.error(`❌ [Torrent Service] Failed to add magnet to qBit: ${err.message}`);
@@ -64,8 +137,11 @@ class TorrentService {
     /**
      * Retrieves all active downloads matching our systemic workflow tags.
      */
-    async getActivePipelineTorrents() {
+    async getActivePipelineTorrents(filters = {}) {
         try {
+            const requestedUser = normalizeUserKey(filters.addedByUser || filters.userKey);
+            const requiredUserTag = buildUserTag(requestedUser);
+
             // Fetch everything so we capture both 'movie-stream' and 'tv-pack' tags
             const endpoint = `${QBIT_BASE_URL}/torrents/info`;
             const response = await axios.get(endpoint, { timeout: 3000 });
@@ -86,7 +162,18 @@ class TorrentService {
             // );
 
 
-            return activeTorrents;
+            if (!requiredUserTag) {
+                return activeTorrents;
+            }
+
+            return activeTorrents.filter((torrent) => {
+                const tags = parseTags(torrent.tags);
+                if (tags.includes(requiredUserTag)) return true;
+
+                const hash = normalizeHash(torrent.hash);
+                if (!hash) return false;
+                return normalizeUserKey(torrentUserMap.get(hash)) === requestedUser;
+            });
         } catch (err) {
             logger.warn(`⚠️ [Torrent Service] Pipeline target unreachable: ${err.message}`);
             return [];
@@ -123,7 +210,7 @@ class TorrentService {
      * @param {string} hash 
      */
     getImdbIdByHash(hash) {
-        return torrentImdbMap.get(hash) || null;
+        return torrentImdbMap.get(normalizeHash(hash)) || null;
     }
 
     /**
@@ -132,7 +219,24 @@ class TorrentService {
      * @param {string} imdbId 
      */
     setImdbIdForHash(hash, imdbId) {
-        torrentImdbMap.set(hash, imdbId);
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return;
+        torrentImdbMap.set(cleanHash, imdbId);
+    }
+
+    getAddedByUserByHash(hash) {
+        return normalizeUserKey(torrentUserMap.get(normalizeHash(hash))) || null;
+    }
+
+    setAddedByUserForHash(hash, userKey) {
+        const cleanHash = normalizeHash(hash);
+        const cleanUser = normalizeUserKey(userKey);
+        if (!cleanHash || !cleanUser) return;
+        torrentUserMap.set(cleanHash, cleanUser);
+    }
+
+    extractAddedByUserFromTags(tags) {
+        return extractUserFromTagList(parseTags(tags));
     }
 }
 

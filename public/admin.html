@@ -479,6 +479,112 @@
             padding: 4px 8px;
         }
 
+        .group-manager-drawer {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: min(1040px, 96vw);
+            height: 100vh;
+            background: #0b1220;
+            border-left: 1px solid #334155;
+            box-shadow: -16px 0 36px rgba(0, 0, 0, 0.38);
+            transform: translateX(102%);
+            transition: transform 0.22s ease;
+            z-index: 1270;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .group-manager-drawer.show { transform: translateX(0); }
+
+        .group-manager-toolbar {
+            display: grid;
+            grid-template-columns: 1fr 160px 170px 170px auto;
+            gap: 8px;
+            padding: 12px 14px;
+            border-bottom: 1px solid #1e293b;
+            background: #0f172a;
+        }
+
+        .group-manager-toolbar input,
+        .group-manager-toolbar select,
+        .group-manager-toolbar button {
+            min-height: 36px;
+        }
+
+        .group-manager-body {
+            padding: 12px 14px 14px 14px;
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        .group-manager-bulk {
+            display: grid;
+            grid-template-columns: auto 1fr 160px 180px auto;
+            gap: 8px;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #020617;
+        }
+
+        .group-manager-item {
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #020617;
+            padding: 10px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .group-manager-item-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .group-manager-item-title {
+            color: #f8fafc;
+            font-weight: 700;
+            font-size: 0.92rem;
+        }
+
+        .group-manager-item-meta {
+            color: #94a3b8;
+            font-size: 0.76rem;
+        }
+
+        .group-manager-item-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .group-manager-pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            border-top: 1px solid #1e293b;
+            padding: 10px 14px;
+            background: #0f172a;
+        }
+
+        @media(max-width: 960px) {
+            .group-manager-toolbar {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .group-manager-bulk {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
         @keyframes toast-in {
             from { transform: translateY(-6px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
@@ -500,6 +606,40 @@
             <div style="color:#94a3b8; border:1px dashed #334155; border-radius:8px; padding:16px; text-align:center;">Select a media row and open subtitle controls.</div>
         </div>
     </aside>
+    <div id="group-manager-backdrop" class="subtitle-drawer-backdrop"></div>
+    <aside id="group-manager-drawer" class="group-manager-drawer" aria-hidden="true">
+        <div class="subtitle-drawer-header">
+            <div>
+                <div class="subtitle-drawer-title">Group Manager</div>
+                <div class="subtitle-drawer-subtitle" id="group-manager-subtitle">Manage global and per-user library visibility.</div>
+            </div>
+            <button type="button" style="background:#1e293b;" onclick="closeGroupManager()">Close</button>
+        </div>
+        <div class="group-manager-toolbar">
+            <input type="search" id="group-manager-search" placeholder="Search title, imdb, folder...">
+            <select id="group-manager-type">
+                <option value="movies">Movies</option>
+                <option value="series">TV Shows</option>
+            </select>
+            <select id="group-manager-filter-group">
+                <option value="any">All Groups</option>
+            </select>
+            <select id="group-manager-user-select">
+                <option value="">Select user...</option>
+            </select>
+            <button type="button" onclick="loadGroupManagerPage(1)">Refresh</button>
+        </div>
+        <div class="group-manager-body" id="group-manager-body">
+            <div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Open Group Manager to load items.</div>
+        </div>
+        <div class="group-manager-pagination" id="group-manager-pagination">
+            <div style="font-size:0.8rem;color:#94a3b8;">Page 1 / 1</div>
+            <div style="display:flex;gap:8px;">
+                <button type="button" disabled>◀ Prev</button>
+                <button type="button" disabled>Next ▶</button>
+            </div>
+        </div>
+    </aside>
     <div class="container">
         <h1>🛠️ Joshflix Library Override Desk</h1>
         
@@ -507,6 +647,7 @@
             <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
             <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
             <button class="btn-trigger" style="background:#1d4ed8;" onclick="backfillGlobalGroups()">Backfill Global + All-Media</button>
+            <button class="btn-trigger" style="background:#4f46e5;" onclick="openGroupManager()">Open Group Manager</button>
             <a href="/feed-diagnostics.html" style="background:#334155; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Feed Diagnostics</a>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
@@ -621,6 +762,15 @@
         };
         let activeSyncFolder = null; // Track single folder being manual-synchronized
         const watchHistoryPanel = new window.WatchHistoryPanel();
+        const groupManagerState = {
+            page: 1,
+            totalPages: 1,
+            totalItems: 0,
+            limit: 24,
+            items: [],
+            users: [],
+            availableGroups: ['any']
+        };
 
         const WORKER_PORTS = {
             'Orchestrator': 3000,
@@ -779,6 +929,313 @@
             }, timeoutMs);
         }
 
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function readGroupManagerFilters() {
+            return {
+                query: (document.getElementById('group-manager-search')?.value || '').trim(),
+                contentType: (document.getElementById('group-manager-type')?.value || 'movies').trim(),
+                group: (document.getElementById('group-manager-filter-group')?.value || 'any').trim(),
+                targetUser: (document.getElementById('group-manager-user-select')?.value || '').trim().toLowerCase()
+            };
+        }
+
+        function renderGroupFilterSelect() {
+            const select = document.getElementById('group-manager-filter-group');
+            if (!select) return;
+            const current = select.value || 'any';
+            const options = Array.from(new Set(['any', ...(groupManagerState.availableGroups || [])])).sort((a, b) => a.localeCompare(b));
+            select.innerHTML = options.map((group) => `<option value="${group}">${group === 'any' ? 'All Groups' : group}</option>`).join('');
+            if (options.includes(current)) select.value = current;
+        }
+
+        function renderGroupUserSelect() {
+            const select = document.getElementById('group-manager-user-select');
+            if (!select) return;
+            const current = select.value || '';
+            const rows = Array.isArray(groupManagerState.users) ? groupManagerState.users : [];
+            select.innerHTML = `<option value="">Select user...</option>${rows
+                .map((row) => {
+                    const user = String(row.username || '').trim().toLowerCase();
+                    const label = row.displayName ? `${row.displayName} (${user})` : user;
+                    return `<option value="${escapeHtml(user)}">${escapeHtml(label)}</option>`;
+                })
+                .join('')}`;
+            if (current && rows.some((row) => String(row.username || '').trim().toLowerCase() === current)) {
+                select.value = current;
+            }
+        }
+
+        async function loadGroupManagerUsers() {
+            try {
+                const res = await fetch('/api/admin/users');
+                const data = await res.json();
+                if (data.success && Array.isArray(data.users)) {
+                    groupManagerState.users = data.users;
+                    renderGroupUserSelect();
+                }
+            } catch (_err) {
+                // Non-fatal for group manager load.
+            }
+        }
+
+        function openGroupManager(prefill = null) {
+            const drawer = document.getElementById('group-manager-drawer');
+            const backdrop = document.getElementById('group-manager-backdrop');
+            if (!drawer || !backdrop) return;
+
+            if (!prefill || !prefill.contentType) {
+                const typeSelect = document.getElementById('group-manager-type');
+                if (typeSelect) typeSelect.value = currentTabMode || 'movies';
+            }
+
+            if (prefill && prefill.contentType) {
+                const typeSelect = document.getElementById('group-manager-type');
+                if (typeSelect) typeSelect.value = prefill.contentType;
+            }
+
+            if (prefill && prefill.query) {
+                const queryInput = document.getElementById('group-manager-search');
+                if (queryInput) queryInput.value = prefill.query;
+            }
+
+            drawer.classList.add('show');
+            backdrop.classList.add('show');
+            drawer.setAttribute('aria-hidden', 'false');
+            loadGroupManagerUsers();
+            loadGroupManagerPage(1);
+        }
+
+        function openGroupManagerForItem(folder, contentType, title = '') {
+            const cleanFolder = String(folder || '').trim();
+            const cleanType = String(contentType || 'movies').trim();
+            const cleanTitle = String(title || '').trim();
+            openGroupManager({
+                contentType: cleanType,
+                query: cleanTitle || cleanFolder
+            });
+        }
+
+        function closeGroupManager() {
+            const drawer = document.getElementById('group-manager-drawer');
+            const backdrop = document.getElementById('group-manager-backdrop');
+            if (drawer) drawer.classList.remove('show');
+            if (backdrop) backdrop.classList.remove('show');
+            if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        async function applyGroupUpdate(folder, contentType, action, targetUser = '') {
+            const body = {
+                folder,
+                contentType,
+                action,
+                targetUser
+            };
+
+            const res = await fetch('/api/admin/library-groups/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            return res.json();
+        }
+
+        async function runGroupManagerActionOnRow(folder, contentType, action) {
+            const filters = readGroupManagerFilters();
+            const needsUser = action === 'add-user' || action === 'remove-user' || action === 'set-user-only';
+            const targetUser = needsUser ? filters.targetUser : '';
+            if (needsUser && !targetUser) {
+                showToast('Pick a user in Group Manager first.', 'error', 3000);
+                return;
+            }
+
+            try {
+                const data = await applyGroupUpdate(folder, contentType, action, targetUser);
+                if (!data.success) {
+                    showToast('Group update failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                showToast('Group updated.', 'success', 2200);
+                loadGroupManagerPage(groupManagerState.page || 1);
+                fetchLibraryData(false);
+            } catch (_err) {
+                showToast('Group update request failed.', 'error', 4200);
+            }
+        }
+
+        function renderGroupManagerBody() {
+            const body = document.getElementById('group-manager-body');
+            if (!body) return;
+
+            const rows = Array.isArray(groupManagerState.items) ? groupManagerState.items : [];
+            if (!rows.length) {
+                body.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">No items match current filters.</div>';
+                return;
+            }
+
+            body.innerHTML = `
+                <div class="group-manager-bulk">
+                    <label style="display:flex;align-items:center;gap:6px;color:#cbd5e1;"><input type="checkbox" id="group-select-all"> Select All On Page</label>
+                    <div style="font-size:0.8rem;color:#94a3b8;">${groupManagerState.totalItems} item(s) • page ${groupManagerState.page}/${groupManagerState.totalPages}</div>
+                    <select id="group-bulk-action">
+                        <option value="add-global">Bulk: Add Global</option>
+                        <option value="remove-global">Bulk: Remove Global</option>
+                        <option value="add-user">Bulk: Add User Group</option>
+                        <option value="remove-user">Bulk: Remove User Group</option>
+                        <option value="set-user-only">Bulk: Set User-Only</option>
+                    </select>
+                    <div style="font-size:0.76rem;color:#94a3b8;">Uses selected user for user actions</div>
+                    <button type="button" onclick="runGroupManagerBulk()">Apply Bulk</button>
+                </div>
+                ${rows.map((item) => {
+                    const groups = Array.isArray(item.metadata?.libraryGroups) ? item.metadata.libraryGroups : [];
+                    const folderJs = JSON.stringify(String(item.folder || ''));
+                    const contentTypeJs = JSON.stringify(String(item.contentType || 'movies'));
+                    const chips = groups.length
+                        ? groups.map((group) => {
+                            const cls = String(group).startsWith('user:') ? 'user' : (group === 'global' ? 'global' : '');
+                            return `<span class="group-chip ${cls}">${escapeHtml(group)}</span>`;
+                        }).join('')
+                        : '<span class="group-chip">(none)</span>';
+
+                    return `
+                        <div class="group-manager-item">
+                            <div class="group-manager-item-head">
+                                <label style="display:flex;align-items:center;gap:8px;min-width:0;">
+                                    <input type="checkbox" class="group-item-check" data-folder="${escapeHtml(item.folder)}" data-content-type="${escapeHtml(item.contentType || 'movies')}">
+                                    <span style="min-width:0;display:grid;gap:2px;">
+                                        <span class="group-manager-item-title">${escapeHtml(item.metadata?.title || item.folder)}</span>
+                                        <span class="group-manager-item-meta">${escapeHtml(item.contentType || 'movies')} • ${escapeHtml(item.folder)} • ${escapeHtml(item.metadata?.imdbId || item.metadata?.imdb_id || '')}</span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div class="group-chip-row">${chips}</div>
+                            <div class="group-manager-item-actions">
+                                <button type="button" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'add-global')">Add Global</button>
+                                <button type="button" style="background:#475569;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'remove-global')">Remove Global</button>
+                                <button type="button" style="background:#166534;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'add-user')">Add User</button>
+                                <button type="button" style="background:#7c2d12;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'remove-user')">Remove User</button>
+                                <button type="button" style="background:#7c3aed;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'set-user-only')">Set User-Only</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            `;
+
+            const selectAll = document.getElementById('group-select-all');
+            if (selectAll) {
+                selectAll.addEventListener('change', (event) => {
+                    const checks = document.querySelectorAll('.group-item-check');
+                    checks.forEach((box) => { box.checked = event.target.checked; });
+                });
+            }
+        }
+
+        function renderGroupManagerPagination() {
+            const box = document.getElementById('group-manager-pagination');
+            const subtitle = document.getElementById('group-manager-subtitle');
+            if (!box) return;
+
+            if (subtitle) {
+                subtitle.textContent = `${groupManagerState.totalItems} item(s) • page ${groupManagerState.page}/${groupManagerState.totalPages}`;
+            }
+
+            box.innerHTML = `
+                <div style="font-size:0.8rem;color:#94a3b8;">Page ${groupManagerState.page} / ${groupManagerState.totalPages}</div>
+                <div style="display:flex;gap:8px;">
+                    <button type="button" ${groupManagerState.page <= 1 ? 'disabled' : ''} onclick="loadGroupManagerPage(${Math.max(1, groupManagerState.page - 1)})">◀ Prev</button>
+                    <button type="button" ${groupManagerState.page >= groupManagerState.totalPages ? 'disabled' : ''} onclick="loadGroupManagerPage(${Math.min(groupManagerState.totalPages, groupManagerState.page + 1)})">Next ▶</button>
+                </div>
+            `;
+        }
+
+        async function loadGroupManagerPage(page = 1) {
+            const filters = readGroupManagerFilters();
+            const body = document.getElementById('group-manager-body');
+            if (body) {
+                body.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Loading group-managed library list...</div>';
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    contentType: filters.contentType,
+                    page: String(Math.max(1, Number(page) || 1)),
+                    limit: String(groupManagerState.limit),
+                    query: filters.query,
+                    group: filters.group,
+                    sort: 'updated_desc'
+                });
+                const res = await fetch(`/api/admin/library-browser?${params.toString()}`);
+                const data = await res.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Group manager load failed.');
+                }
+
+                groupManagerState.items = Array.isArray(data.items) ? data.items : [];
+                groupManagerState.page = Number(data.page || 1);
+                groupManagerState.totalPages = Number(data.totalPages || 1);
+                groupManagerState.totalItems = Number(data.totalItems || 0);
+                groupManagerState.availableGroups = Array.isArray(data.availableGroups) ? data.availableGroups : ['any'];
+                renderGroupFilterSelect();
+                renderGroupManagerBody();
+                renderGroupManagerPagination();
+            } catch (err) {
+                if (body) {
+                    body.innerHTML = `<div style="color:#fca5a5;border:1px solid #7f1d1d;background:rgba(127,29,29,.18);border-radius:8px;padding:14px;">${escapeHtml(err.message || 'Failed to load group manager.')}</div>`;
+                }
+                renderGroupManagerPagination();
+            }
+        }
+
+        async function runGroupManagerBulk() {
+            const checks = Array.from(document.querySelectorAll('.group-item-check:checked'));
+            if (!checks.length) {
+                showToast('Select at least one item for bulk update.', 'info', 2600);
+                return;
+            }
+
+            const action = (document.getElementById('group-bulk-action')?.value || '').trim();
+            if (!action) {
+                showToast('Pick a bulk action first.', 'error', 2600);
+                return;
+            }
+
+            const filters = readGroupManagerFilters();
+            const needsUser = action === 'add-user' || action === 'remove-user' || action === 'set-user-only';
+            const targetUser = needsUser ? filters.targetUser : '';
+            if (needsUser && !targetUser) {
+                showToast('Select a user first for this bulk action.', 'error', 3000);
+                return;
+            }
+
+            let ok = 0;
+            let failed = 0;
+            for (const box of checks) {
+                const folder = String(box.dataset.folder || '');
+                const contentType = String(box.dataset.contentType || 'movies');
+                try {
+                    const result = await applyGroupUpdate(folder, contentType, action, targetUser);
+                    if (result.success) ok += 1;
+                    else failed += 1;
+                } catch (_err) {
+                    failed += 1;
+                }
+            }
+
+            showToast(`Bulk update complete. Success: ${ok}, Failed: ${failed}.`, failed ? 'error' : 'success', 4200);
+            loadGroupManagerPage(groupManagerState.page || 1);
+            fetchLibraryData(false);
+        }
+
         function closeSubtitleDrawer() {
             const drawer = document.getElementById('subtitle-drawer');
             const backdrop = document.getElementById('subtitle-drawer-backdrop');
@@ -790,6 +1247,11 @@
         const subtitleDrawerBackdrop = document.getElementById('subtitle-drawer-backdrop');
         if (subtitleDrawerBackdrop) {
             subtitleDrawerBackdrop.addEventListener('click', closeSubtitleDrawer);
+        }
+
+        const groupManagerBackdrop = document.getElementById('group-manager-backdrop');
+        if (groupManagerBackdrop) {
+            groupManagerBackdrop.addEventListener('click', closeGroupManager);
         }
 
         async function openSubtitleManager(folder, contentType) {
@@ -1041,6 +1503,12 @@
             document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
             document.getElementById('tab-shows').classList.toggle('active', mode === 'series');
             fullLibraryCache.page = 1;
+
+            const groupManagerType = document.getElementById('group-manager-type');
+            if (groupManagerType && !document.getElementById('group-manager-drawer')?.classList.contains('show')) {
+                groupManagerType.value = mode;
+            }
+
             fetchLibraryData(true);
         }
 
@@ -1222,6 +1690,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
+                                        <button class="action-item" onclick="openGroupManagerForItem('${item.folder}', '${currentTabMode}')">Open Group Manager</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'addglobal')">Add To Global Group</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'removeglobal')">Remove From Global Group</button>
@@ -2140,6 +2609,42 @@
         fetchLibraryData(true);
         fetchUserProfileIndexes();
         fetchFailedJobs();
+
+        const groupManagerSearch = document.getElementById('group-manager-search');
+        if (groupManagerSearch) {
+            groupManagerSearch.addEventListener('input', debounce(() => {
+                if (document.getElementById('group-manager-drawer')?.classList.contains('show')) {
+                    loadGroupManagerPage(1);
+                }
+            }, 260));
+            groupManagerSearch.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    loadGroupManagerPage(1);
+                }
+            });
+        }
+
+        const groupManagerType = document.getElementById('group-manager-type');
+        if (groupManagerType) {
+            groupManagerType.value = currentTabMode || 'movies';
+            groupManagerType.addEventListener('change', () => loadGroupManagerPage(1));
+        }
+
+        const groupManagerGroupFilter = document.getElementById('group-manager-filter-group');
+        if (groupManagerGroupFilter) {
+            groupManagerGroupFilter.addEventListener('change', () => loadGroupManagerPage(1));
+        }
+
+        const groupManagerUserSelect = document.getElementById('group-manager-user-select');
+        if (groupManagerUserSelect) {
+            groupManagerUserSelect.addEventListener('change', () => {
+                const drawerOpen = document.getElementById('group-manager-drawer')?.classList.contains('show');
+                if (drawerOpen) {
+                    showToast('Selected user applied for Add/Remove User and Set User-Only actions.', 'info', 1800);
+                }
+            });
+        }
 
         checkWorkerHealth();
         setInterval(checkWorkerHealth, 5000);
