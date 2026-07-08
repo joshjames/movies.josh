@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'anymovie-static-v2';
+const CACHE_VERSION = 'anymovie-static-v3';
 const CACHE_NAME = CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',

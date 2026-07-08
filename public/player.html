@@ -393,7 +393,7 @@
                 query.set('season', String(seasonParam));
                 query.set('episode', String(episodeParam));
             }
-            if (currentPlaybackFile) {
+            if (currentPlaybackFile && currentPlaybackFile !== 'remote-playback') {
                 query.set('file', currentPlaybackFile);
             }
             return query;
@@ -413,6 +413,7 @@
 
         function deriveFileNameFromPath(inputPath = '') {
             const clean = String(inputPath || '').split('?')[0];
+            if (clean.includes('/api/remote-playback')) return '';
             const parts = clean.split('/');
             const last = parts[parts.length - 1] || '';
             return decodeURIComponent(last);
@@ -623,9 +624,9 @@
                     // Helper function to safely map local assets without touching cloud signatures
                     const resolveStreamSource = (fileUrl) => {
                         if (!fileUrl) return '';
-                        // Route remote object-storage URLs through our same-origin relay to avoid browser CORS blocks.
+                        // Direct object storage playback to avoid relaying traffic through the app server.
                         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-                            return `/api/remote-playback?src=${encodeURIComponent(fileUrl)}`;
+                            return fileUrl;
                         }
                         // Fallback: If it's a local relative file path, map it to the static server mount
                         return fileUrl.replace('/movies/', '/movie-assets/');
