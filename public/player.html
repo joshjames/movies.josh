@@ -139,6 +139,41 @@
             max-width: 44vw;
         }
 
+        .ios-seek-overlay {
+            position: absolute;
+            left: 16px;
+            right: 16px;
+            bottom: 12px;
+            z-index: 14;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            background: rgba(2, 6, 23, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            backdrop-filter: blur(6px);
+        }
+
+        .ios-seek-overlay.show {
+            display: flex;
+        }
+
+        .ios-seek-time {
+            min-width: 44px;
+            font-size: 0.74rem;
+            color: #e2e8f0;
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+            user-select: none;
+        }
+
+        .ios-seek-range {
+            flex: 1;
+            accent-color: #ef4444;
+            min-height: 26px;
+        }
+
         @supports (padding: env(safe-area-inset-bottom)) {
             .back-overlay-btn,
             .next-overlay-btn,
@@ -177,6 +212,12 @@
                 bottom: auto;
                 right: 16px;
             }
+
+            .ios-seek-overlay {
+                left: 12px;
+                right: 12px;
+                bottom: 10px;
+            }
         }
     </style>
 </head>
@@ -192,6 +233,12 @@
             <option value="auto">Subtitles: Auto</option>
             <option value="off">Subtitles: Off</option>
         </select>
+
+        <div class="ios-seek-overlay" id="iosSeekOverlay" aria-hidden="true">
+            <span class="ios-seek-time" id="iosSeekCurrent">0:00</span>
+            <input class="ios-seek-range" id="iosSeekRange" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek position">
+            <span class="ios-seek-time" id="iosSeekDuration">0:00</span>
+        </div>
         
         <div class="quality-badge" id="qualityTag">DETECTING...</div>
         <video id="cinemaVideo" controls autoplay playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
@@ -213,12 +260,20 @@
         const nextBtn = document.getElementById('nextBtn');
         const audioTrackSelect = document.getElementById('audioTrackSelect');
         const subtitleTrackSelect = document.getElementById('subtitleTrackSelect');
+        const iosSeekOverlay = document.getElementById('iosSeekOverlay');
+        const iosSeekRange = document.getElementById('iosSeekRange');
+        const iosSeekCurrent = document.getElementById('iosSeekCurrent');
+        const iosSeekDuration = document.getElementById('iosSeekDuration');
         const stage = document.getElementById('stage');
         const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const useCustomInlineSeek = isIOSDevice && isTouchDevice;
         let audioTracks = [];
         let subtitleTracks = [];
         let currentPlaybackFile = '';
         let currentRemoteStreamUrl = '';
+        let isSeekingWithOverlay = false;
 
         videoEl.controls = true;
         videoEl.playsInline = true;
@@ -226,6 +281,97 @@
         videoEl.setAttribute('playsinline', '');
         videoEl.setAttribute('webkit-playsinline', '');
         videoEl.setAttribute('x-webkit-airplay', 'allow');
+
+        function formatPlaybackClock(totalSeconds = 0) {
+            const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+            const hours = Math.floor(secs / 3600);
+            const mins = Math.floor((secs % 3600) / 60);
+            const rem = secs % 60;
+            if (hours > 0) {
+                return `${hours}:${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+            }
+            return `${mins}:${String(rem).padStart(2, '0')}`;
+        }
+
+        function isVideoInFullscreen() {
+            return Boolean(document.fullscreenElement)
+                || Boolean(document.webkitFullscreenElement)
+                || Boolean(videoEl.webkitDisplayingFullscreen);
+        }
+
+        function syncCustomSeekUi() {
+            if (!useCustomInlineSeek) return;
+
+            const duration = Number(videoEl.duration) || 0;
+            const current = Number(videoEl.currentTime) || 0;
+
+            iosSeekDuration.textContent = formatPlaybackClock(duration);
+
+            if (!isSeekingWithOverlay) {
+                iosSeekCurrent.textContent = formatPlaybackClock(current);
+                if (duration > 0) {
+                    iosSeekRange.value = String(Math.round((current / duration) * 1000));
+                } else {
+                    iosSeekRange.value = '0';
+                }
+            }
+        }
+
+        function updateCustomSeekVisibility() {
+            if (!useCustomInlineSeek) {
+                iosSeekOverlay.classList.remove('show');
+                iosSeekOverlay.setAttribute('aria-hidden', 'true');
+                return;
+            }
+
+            const shouldShow = !isVideoInFullscreen();
+            iosSeekOverlay.classList.toggle('show', shouldShow);
+            iosSeekOverlay.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+        }
+
+        if (useCustomInlineSeek) {
+            videoEl.controls = true;
+            iosSeekRange.addEventListener('input', () => {
+                isSeekingWithOverlay = true;
+                const duration = Number(videoEl.duration) || 0;
+                if (duration <= 0) return;
+
+                const ratio = Math.max(0, Math.min(1000, Number(iosSeekRange.value) || 0)) / 1000;
+                const nextTime = ratio * duration;
+                iosSeekCurrent.textContent = formatPlaybackClock(nextTime);
+            });
+
+            const commitOverlaySeek = () => {
+                const duration = Number(videoEl.duration) || 0;
+                if (duration > 0) {
+                    const ratio = Math.max(0, Math.min(1000, Number(iosSeekRange.value) || 0)) / 1000;
+                    videoEl.currentTime = ratio * duration;
+                }
+                isSeekingWithOverlay = false;
+                syncCustomSeekUi();
+            };
+
+            iosSeekRange.addEventListener('change', commitOverlaySeek);
+            iosSeekRange.addEventListener('pointerup', commitOverlaySeek);
+            iosSeekRange.addEventListener('touchend', commitOverlaySeek, { passive: true });
+
+            videoEl.addEventListener('timeupdate', syncCustomSeekUi);
+            videoEl.addEventListener('loadedmetadata', syncCustomSeekUi);
+            videoEl.addEventListener('durationchange', syncCustomSeekUi);
+            videoEl.addEventListener('play', syncCustomSeekUi);
+
+            document.addEventListener('fullscreenchange', updateCustomSeekVisibility);
+            document.addEventListener('webkitfullscreenchange', updateCustomSeekVisibility);
+            videoEl.addEventListener('webkitbeginfullscreen', updateCustomSeekVisibility);
+            videoEl.addEventListener('webkitendfullscreen', updateCustomSeekVisibility);
+            window.addEventListener('orientationchange', () => {
+                updateCustomSeekVisibility();
+                syncCustomSeekUi();
+            });
+
+            updateCustomSeekVisibility();
+            syncCustomSeekUi();
+        }
 
         // RESUME ENGINE CORE STATES
         let currentMediaId = movieId; // Fallback to raw ID for movies
@@ -623,7 +769,7 @@
         }
 
         document.addEventListener('mousemove', resetControlVisibility);
-    document.addEventListener('touchstart', resetControlVisibility, { passive: true });
+        document.addEventListener('touchstart', resetControlVisibility, { passive: true });
         videoEl.addEventListener('play', resetControlVisibility);
         videoEl.addEventListener('pause', resetControlVisibility);
 
