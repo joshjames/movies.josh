@@ -138,6 +138,46 @@
             font-size: 0.8rem;
             max-width: 44vw;
         }
+
+        @supports (padding: env(safe-area-inset-bottom)) {
+            .back-overlay-btn,
+            .next-overlay-btn,
+            .subtitle-track-select,
+            .audio-track-select,
+            .quality-badge {
+                margin-bottom: env(safe-area-inset-bottom);
+            }
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .back-overlay-btn,
+            .next-overlay-btn {
+                top: 16px;
+                opacity: 0.82;
+            }
+
+            .subtitle-track-select {
+                top: 68px;
+                bottom: auto;
+                left: 16px;
+                max-width: calc(100vw - 32px);
+                font-size: 0.76rem;
+            }
+
+            .audio-track-select {
+                top: 112px;
+                bottom: auto;
+                left: 16px;
+                max-width: calc(100vw - 32px);
+                font-size: 0.76rem;
+            }
+
+            .quality-badge {
+                top: 16px;
+                bottom: auto;
+                right: 16px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -154,7 +194,7 @@
         </select>
         
         <div class="quality-badge" id="qualityTag">DETECTING...</div>
-        <video id="cinemaVideo" controls autoplay playsinline></video>
+        <video id="cinemaVideo" controls autoplay playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
     </div>
 
     <script>
@@ -174,10 +214,18 @@
         const audioTrackSelect = document.getElementById('audioTrackSelect');
         const subtitleTrackSelect = document.getElementById('subtitleTrackSelect');
         const stage = document.getElementById('stage');
+        const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
         let audioTracks = [];
         let subtitleTracks = [];
         let currentPlaybackFile = '';
         let currentRemoteStreamUrl = '';
+
+        videoEl.controls = true;
+        videoEl.playsInline = true;
+        videoEl.preload = 'metadata';
+        videoEl.setAttribute('playsinline', '');
+        videoEl.setAttribute('webkit-playsinline', '');
+        videoEl.setAttribute('x-webkit-airplay', 'allow');
 
         // RESUME ENGINE CORE STATES
         let currentMediaId = movieId; // Fallback to raw ID for movies
@@ -550,6 +598,14 @@
         // Custom UI Polish: Include nextBtn in the visibility fade wrapper array structures
         let mouseMoveTimeout;
         function resetControlVisibility() {
+            if (isTouchDevice) {
+                backBtn.classList.remove('hide-controls');
+                nextBtn.classList.remove('hide-controls');
+                qualityTag.classList.remove('hide-controls');
+                stage.style.cursor = 'default';
+                return;
+            }
+
             backBtn.classList.remove('hide-controls');
             nextBtn.classList.remove('hide-controls');
             qualityTag.classList.remove('hide-controls');
@@ -567,6 +623,7 @@
         }
 
         document.addEventListener('mousemove', resetControlVisibility);
+    document.addEventListener('touchstart', resetControlVisibility, { passive: true });
         videoEl.addEventListener('play', resetControlVisibility);
         videoEl.addEventListener('pause', resetControlVisibility);
 
