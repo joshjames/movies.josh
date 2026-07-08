@@ -32,6 +32,14 @@ const metadataService = require('../services/MetadataService');
 const metadataProvider = require('../services/MetadataProvider');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
+const {
+    GROUP_ALL_MEDIA,
+    GROUP_GLOBAL,
+    normalizeGroups,
+    mergeLibraryGroups,
+    userGroup,
+    normalizeUserKey
+} = require('../services/LibraryAccessService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR
     || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
@@ -388,6 +396,89 @@ function normalizeTagList(value, fallback = []) {
         : (typeof value === 'string' ? value.split(',') : fallback);
 
     return [...new Set(source.map(tag => String(tag).trim()).filter(Boolean))].sort();
+}
+
+function getLibraryGroupsFromMetadata(meta = {}) {
+    return normalizeGroups(meta.libraryGroups || meta.metadata?.libraryGroups || [], { addGlobalIfMissing: true });
+}
+
+function readMetadataIfExists(metaPath) {
+    if (!fs.existsSync(metaPath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    } catch (_err) {
+        return null;
+    }
+}
+
+function getContentTypeBucket(contentTypeRaw = '') {
+    return String(contentTypeRaw || '').toLowerCase() === 'series' ? 'shows' : 'movies';
+}
+
+function toAdminResultItem(row = {}) {
+    const contentType = String(row.contentType || '').toLowerCase() === 'series' ? 'series' : 'movies';
+    const folder = contentType === 'series'
+        ? String(row.id || '').replace(/^series\//i, '')
+        : decodeURIComponent(String(row.id || ''));
+
+    return {
+        folder,
+        contentType,
+        metadata: row,
+        redisMetadata: row,
+        diskMetadata: null,
+        resolvedDiskPath: row.sourcePath || null,
+        syncState: {
+            inSync: true,
+            redisAvailable: true,
+            diskAvailable: Boolean(row.sourcePath),
+            redisStorageLocation: row.storageLocation || row.storage?.location || 'local',
+            diskStorageLocation: row.storageLocation || row.storage?.location || 'local',
+            mismatchNote: ''
+        }
+    };
+}
+
+function applyLibrarySearchAndSort(items = [], { query = '', group = 'any', sort = 'updated_desc' } = {}) {
+    const queryNorm = String(query || '').toLowerCase().trim();
+    let rows = Array.isArray(items) ? [...items] : [];
+
+    if (queryNorm) {
+        rows = rows.filter((item) => {
+            const haystack = [
+                item.title,
+                item.id,
+                item.imdbId,
+                item.imdb_id,
+                item.genre,
+                Array.isArray(item.tags) ? item.tags.join(' ') : item.tags
+            ].map((v) => String(v || '').toLowerCase()).join(' ');
+            return haystack.includes(queryNorm);
+        });
+    }
+
+    const cleanGroup = String(group || 'any').trim().toLowerCase();
+    if (cleanGroup && cleanGroup !== 'any') {
+        rows = rows.filter((item) => {
+            const groups = normalizeGroups(item.libraryGroups || [], { addGlobalIfMissing: true });
+            return groups.includes(cleanGroup);
+        });
+    }
+
+    const sorter = String(sort || 'updated_desc').toLowerCase();
+    rows.sort((a, b) => {
+        if (sorter === 'title_asc') return String(a.title || '').localeCompare(String(b.title || ''));
+        if (sorter === 'title_desc') return String(b.title || '').localeCompare(String(a.title || ''));
+        if (sorter === 'year_asc') return Number(a.year || 0) - Number(b.year || 0);
+        if (sorter === 'year_desc') return Number(b.year || 0) - Number(a.year || 0);
+
+        const aTime = new Date(a.updatedAt || a.addedAt || 0).getTime();
+        const bTime = new Date(b.updatedAt || b.addedAt || 0).getTime();
+        if (sorter === 'updated_asc') return aTime - bTime;
+        return bTime - aTime;
+    });
+
+    return rows;
 }
 
 function normalizeScalar(value) {
@@ -1788,7 +1879,25 @@ router.post('/trigger-automation', async (req, res) => {
 // ✍️ ENDPOINT 1: OVERRIDE METADATA (DASHBOARD PANEL SAVES)
 // =========================================================================
 router.post('/override-metadata', async (req, res) => {
-    const { folder, contentType, title, year, imdbId, plot, genre, storage, tags, imdbScore, parentalRating, popularity, enrichment } = req.body;
+    const {
+        folder,
+        contentType,
+        title,
+        year,
+        imdbId,
+        plot,
+        genre,
+        storage,
+        tags,
+        imdbScore,
+        parentalRating,
+        popularity,
+        enrichment,
+        groupMode,
+        targetUser,
+        libraryGroups,
+        replaceGroups
+    } = req.body;
     
     // Ensure custom dashboard panel modifications write metadata out to the true folder mounts
     const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
@@ -1844,6 +1953,37 @@ router.post('/override-metadata', async (req, res) => {
             metadata.metadata.parentalRating = nextEnrichment.parentalRating;
             metadata.metadata.popularity = nextEnrichment.popularity;
             metadata.metadata.enrichment = nextEnrichment;
+        }
+
+        const normalizedTargetUser = normalizeUserKey(targetUser || '');
+        const explicitGroups = normalizeGroups(libraryGroups || [], { ensureAllMedia: false });
+        const requestedMode = String(groupMode || '').toLowerCase();
+
+        if (explicitGroups.length > 0) {
+            metadata.libraryGroups = mergeLibraryGroups(
+                replaceGroups ? [] : (metadata.libraryGroups || []),
+                explicitGroups,
+                { addGlobalIfMissing: false }
+            );
+        } else if (requestedMode === 'user' && normalizedTargetUser) {
+            const targetGroup = userGroup(normalizedTargetUser);
+            metadata.libraryGroups = mergeLibraryGroups(
+                replaceGroups ? [GROUP_ALL_MEDIA] : (metadata.libraryGroups || []),
+                [targetGroup],
+                { addGlobalIfMissing: false }
+            );
+
+            if (replaceGroups) {
+                metadata.libraryGroups = normalizeGroups([GROUP_ALL_MEDIA, targetGroup], { addGlobalIfMissing: false });
+            }
+
+            metadata.addedByUsers = Array.from(new Set([
+                ...(Array.isArray(metadata.addedByUsers) ? metadata.addedByUsers : []),
+                normalizedTargetUser
+            ])).sort();
+        } else {
+            // Admin edits default to globally visible assets unless explicitly moved to user-only mode.
+            metadata.libraryGroups = mergeLibraryGroups(metadata.libraryGroups || [], [GROUP_GLOBAL], { addGlobalIfMissing: true });
         }
 
         let triggerCloudSync = false;
@@ -1942,6 +2082,190 @@ router.post('/override-metadata', async (req, res) => {
 
     } catch (err) {
         console.error(err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: /api/admin/library-browser
+// Lightweight paged/searchable view so admin UI can avoid loading full metadata for every item.
+router.get('/library-browser', async (req, res) => {
+    try {
+        const contentType = String(req.query.contentType || 'movies').toLowerCase() === 'series' ? 'series' : 'movies';
+        const query = String(req.query.query || '').trim();
+        const group = String(req.query.group || 'any').trim();
+        const sort = String(req.query.sort || 'updated_desc').trim();
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
+
+        const library = await getLibrary();
+        const bucket = getContentTypeBucket(contentType);
+        const baseRows = Array.isArray(library[bucket]) ? library[bucket] : [];
+        const normalizedRows = baseRows.map((row) => ({
+            ...row,
+            libraryGroups: normalizeGroups(row.libraryGroups || [], { addGlobalIfMissing: true })
+        }));
+
+        const filtered = applyLibrarySearchAndSort(normalizedRows, { query, group, sort });
+        const totalItems = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+        const safePage = Math.min(page, totalPages);
+        const start = (safePage - 1) * limit;
+        const slice = filtered.slice(start, start + limit);
+
+        const items = slice.map((row) => {
+            const lite = toAdminResultItem(row);
+            const folderPath = contentType === 'series'
+                ? resolveSeriesFolderPath(lite.folder)
+                : resolveMovieFolderPath(lite.folder);
+            const metaPath = path.join(folderPath, 'metadata.json');
+            const diskMeta = readMetadataIfExists(metaPath);
+
+            return {
+                ...lite,
+                metadata: diskMeta || lite.metadata,
+                diskMetadata: diskMeta,
+                resolvedDiskPath: fs.existsSync(folderPath) ? folderPath : null,
+                syncState: {
+                    ...lite.syncState,
+                    diskAvailable: Boolean(diskMeta),
+                    inSync: Boolean(diskMeta)
+                }
+            };
+        });
+
+        const groupsSeen = new Set(['any', GROUP_GLOBAL, GROUP_ALL_MEDIA]);
+        normalizedRows.forEach((row) => {
+            normalizeGroups(row.libraryGroups || [], { addGlobalIfMissing: true }).forEach((groupName) => groupsSeen.add(groupName));
+        });
+
+        return res.json({
+            success: true,
+            contentType,
+            query,
+            group,
+            sort,
+            page: safePage,
+            limit,
+            totalItems,
+            totalPages,
+            availableGroups: Array.from(groupsSeen).sort(),
+            items
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/library-groups/backfill
+// Ensures all existing metadata manifests carry all-media + global unless already explicitly user-scoped.
+router.post('/library-groups/backfill', async (_req, res) => {
+    try {
+        const library = await getLibrary();
+        const buckets = [
+            ...(Array.isArray(library.movies) ? library.movies : []),
+            ...(Array.isArray(library.shows) ? library.shows : [])
+        ];
+
+        let updated = 0;
+        let scanned = 0;
+        for (const row of buckets) {
+            const contentType = String(row.contentType || '').toLowerCase() === 'series' ? 'series' : 'movies';
+            const folder = contentType === 'series'
+                ? String(row.id || '').replace(/^series\//i, '')
+                : decodeURIComponent(String(row.id || ''));
+            const folderPath = contentType === 'series'
+                ? resolveSeriesFolderPath(folder)
+                : resolveMovieFolderPath(folder);
+            const metaPath = path.join(folderPath, 'metadata.json');
+            if (!fs.existsSync(metaPath)) continue;
+            scanned += 1;
+
+            const metadata = readMetadataIfExists(metaPath);
+            if (!metadata) continue;
+
+            const before = normalizeGroups(metadata.libraryGroups || [], { addGlobalIfMissing: false });
+            const after = mergeLibraryGroups(before, [GROUP_GLOBAL], { addGlobalIfMissing: true });
+            if (JSON.stringify(before.sort()) === JSON.stringify(after.sort())) continue;
+
+            metadata.libraryGroups = after;
+            fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 4), 'utf-8');
+            updated += 1;
+        }
+
+        const summary = await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
+        return res.json({ success: true, scanned, updated, summary });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/library-groups/update
+// Add/remove global or user group tags for a specific media item.
+router.post('/library-groups/update', async (req, res) => {
+    try {
+        const folder = String(req.body?.folder || '').trim();
+        const contentType = String(req.body?.contentType || '').toLowerCase() === 'series' ? 'series' : 'movies';
+        const action = String(req.body?.action || '').toLowerCase();
+        const targetUser = normalizeUserKey(req.body?.targetUser || '');
+        const explicitGroup = String(req.body?.group || '').trim().toLowerCase();
+
+        if (!folder || !action) {
+            return res.status(400).json({ success: false, error: 'Missing folder or action.' });
+        }
+
+        const folderPath = contentType === 'series' ? resolveSeriesFolderPath(folder) : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+        if (!fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'metadata.json not found.' });
+        }
+
+        const metadata = readMetadataIfExists(metaPath) || {};
+        const current = normalizeGroups(metadata.libraryGroups || [], { addGlobalIfMissing: true });
+        const targetGroup = explicitGroup || (targetUser ? userGroup(targetUser) : '');
+
+        let next = [...current];
+        if (action === 'add-global') {
+            next = mergeLibraryGroups(current, [GROUP_GLOBAL], { addGlobalIfMissing: true });
+        } else if (action === 'remove-global') {
+            next = normalizeGroups(current.filter((groupName) => groupName !== GROUP_GLOBAL), { addGlobalIfMissing: false });
+            if (!next.includes(GROUP_ALL_MEDIA)) next.unshift(GROUP_ALL_MEDIA);
+            next = Array.from(new Set(next)).sort();
+        } else if (action === 'add-user') {
+            if (!targetGroup) return res.status(400).json({ success: false, error: 'Missing target user/group.' });
+            next = mergeLibraryGroups(current, [targetGroup], { addGlobalIfMissing: false });
+        } else if (action === 'remove-user') {
+            if (!targetGroup) return res.status(400).json({ success: false, error: 'Missing target user/group.' });
+            next = normalizeGroups(current.filter((groupName) => groupName !== targetGroup), { addGlobalIfMissing: false });
+            if (!next.includes(GROUP_ALL_MEDIA)) next.unshift(GROUP_ALL_MEDIA);
+            next = Array.from(new Set(next)).sort();
+        } else if (action === 'set-user-only') {
+            if (!targetGroup) return res.status(400).json({ success: false, error: 'Missing target user/group.' });
+            next = normalizeGroups([GROUP_ALL_MEDIA, targetGroup], { addGlobalIfMissing: false });
+        } else {
+            return res.status(400).json({ success: false, error: `Unsupported action: ${action}` });
+        }
+
+        metadata.libraryGroups = next;
+        if (targetUser) {
+            metadata.addedByUsers = Array.from(new Set([
+                ...(Array.isArray(metadata.addedByUsers) ? metadata.addedByUsers : []),
+                targetUser
+            ])).sort();
+        }
+
+        fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 4), 'utf-8');
+        await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
+
+        return res.json({
+            success: true,
+            folder,
+            contentType,
+            libraryGroups: metadata.libraryGroups,
+            addedByUsers: metadata.addedByUsers || []
+        });
+    } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
 });

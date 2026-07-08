@@ -10,11 +10,12 @@ const axios = require('axios');
 const { spawnSync } = require('child_process');
 const crypto = require('crypto');
 const { getLibrary } = require('../services/db');
-const { loadHomeFeedWithFallback } = require('../services/HomeFeedService');
+const { loadHomeFeedWithFallback, normalizeCard } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
 const ProfileService = require('../services/ProfileService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
+const { buildMyLibraryCollection } = require('../services/LibraryAccessService');
 
 const MediaService = require('../services/MediaService');
 const MOVIES_DIR = process.env.MOVIES_DIR
@@ -1055,7 +1056,33 @@ router.get('/home-feed', (req, res) => {
         });
     }
 
-    return res.json({ success: true, feed: homeFeed });
+    const activeUser = getActiveUser(req);
+
+    return getLibrary()
+        .then((library) => {
+            const myLibraryCollection = buildMyLibraryCollection(library, activeUser, { limit: 18 });
+            myLibraryCollection.cards = (myLibraryCollection.cards || []).map((item) => normalizeCard(item));
+
+            const existing = Array.isArray(homeFeed.collections) ? homeFeed.collections : [];
+            const withoutExistingMyShelf = existing.filter((collection) => collection.id !== 'my-library-row');
+            const first = withoutExistingMyShelf[0] || null;
+            const tail = withoutExistingMyShelf.slice(1);
+
+            const collections = first
+                ? [first, myLibraryCollection, ...tail]
+                : [myLibraryCollection, ...tail];
+
+            return res.json({
+                success: true,
+                feed: {
+                    ...homeFeed,
+                    collections
+                }
+            });
+        })
+        .catch((err) => {
+            return res.status(500).json({ success: false, error: err.message });
+        });
 });
 
 router.get('/tv-shows/search', async (req, res) => {

@@ -7,6 +7,15 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
+const { getLibrary } = require('../services/db');
+const { runLibraryScanSweep } = require('../services/LibraryScanner');
+const { getActiveUser } = require('../middleware/auth');
+const {
+    userGroup,
+    normalizeGroups,
+    mergeLibraryGroups,
+    normalizeUserKey
+} = require('../services/LibraryAccessService');
 
 const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
@@ -87,11 +96,80 @@ function normalizeQueueContext(queueContext, magnetUrl) {
         ? sourceType
         : (episode ? 'episode' : (season ? 'pack' : null));
 
+    const incomingUser = normalizeUserKey(incoming.addedByUser || incoming.userKey || incoming.userId);
+    const inferredGroup = userGroup(incomingUser);
+    const requestedGroups = normalizeGroups(incoming.libraryGroups || [], { ensureAllMedia: false });
+
     return {
         imdbId: normalizeImdbId(incoming.imdbId) || null,
         season,
         episode,
-        sourceType: normalizedSourceType
+        sourceType: normalizedSourceType,
+        addedByUser: incomingUser || null,
+        libraryGroups: mergeLibraryGroups(
+            requestedGroups,
+            inferredGroup ? [inferredGroup] : [],
+            { addGlobalIfMissing: false }
+        )
+    };
+}
+
+function findLibraryItemByImdbId(library, imdbId) {
+    const target = normalizeImdbId(imdbId);
+    if (!target) return null;
+
+    const allItems = [
+        ...(Array.isArray(library?.movies) ? library.movies : []),
+        ...(Array.isArray(library?.shows) ? library.shows : [])
+    ];
+
+    return allItems.find((item) => normalizeImdbId(item?.imdbId || item?.imdb_id) === target) || null;
+}
+
+function safelyReadJson(filePath, fallback = {}) {
+    try {
+        if (!fs.existsSync(filePath)) return fallback;
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch (_err) {
+        return fallback;
+    }
+}
+
+async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
+    const cleanUser = normalizeUserKey(activeUser);
+    if (!cleanUser || cleanUser === 'guest') {
+        return { attached: false, reason: 'guest-user' };
+    }
+
+    const library = await getLibrary();
+    const existingItem = findLibraryItemByImdbId(library, imdbId);
+    if (!existingItem?.sourcePath) {
+        return { attached: false, reason: 'missing-existing-item' };
+    }
+
+    const metadataPath = path.join(existingItem.sourcePath, 'metadata.json');
+    const metadata = safelyReadJson(metadataPath, {});
+    const targetGroup = userGroup(cleanUser);
+
+    metadata.libraryGroups = mergeLibraryGroups(
+        metadata.libraryGroups || existingItem.libraryGroups || [],
+        [targetGroup],
+        { addGlobalIfMissing: true }
+    );
+
+    metadata.addedByUsers = Array.from(new Set([
+        ...(Array.isArray(metadata.addedByUsers) ? metadata.addedByUsers : []),
+        cleanUser
+    ])).sort();
+
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 4));
+    await runLibraryScanSweep();
+
+    return {
+        attached: true,
+        itemId: existingItem.id,
+        title: existingItem.title || existingItem.id,
+        metadataPath
     };
 }
 
@@ -512,9 +590,27 @@ router.post('/downloader/add', async (req, res) => {
     }
 
     try {
+        const activeUser = normalizeUserKey(getActiveUser(req));
         const targetCategory = category || 'series-streamer';
-        const normalizedQueueContext = normalizeQueueContext(queueContext, magnetUrl);
+        const normalizedQueueContext = normalizeQueueContext({
+            ...(queueContext || {}),
+            addedByUser: activeUser || null
+        }, magnetUrl);
         const effectiveImdbId = normalizeImdbId(imdbId || normalizedQueueContext.imdbId);
+
+        if (effectiveImdbId) {
+            const attached = await attachExistingMediaToUserLibrary({ imdbId: effectiveImdbId, activeUser });
+            if (attached.attached) {
+                return res.status(200).json({
+                    success: true,
+                    alreadyAvailable: true,
+                    message: 'Already in storage. Added to your My Library shelf.',
+                    itemId: attached.itemId,
+                    title: attached.title
+                });
+            }
+        }
+
         const effectiveQueueContext = {
             ...normalizedQueueContext,
             imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
@@ -561,8 +657,26 @@ router.post('/yts/add', async (req, res) => {
     if (!magnetUrl) return res.status(400).json({ error: "Missing target magnet payload." });
 
     try {
-        const normalizedQueueContext = normalizeQueueContext(queueContext, magnetUrl);
+        const activeUser = normalizeUserKey(getActiveUser(req));
+        const normalizedQueueContext = normalizeQueueContext({
+            ...(queueContext || {}),
+            addedByUser: activeUser || null
+        }, magnetUrl);
         const effectiveImdbId = normalizeImdbId(imdbId || normalizedQueueContext.imdbId);
+
+        if (effectiveImdbId) {
+            const attached = await attachExistingMediaToUserLibrary({ imdbId: effectiveImdbId, activeUser });
+            if (attached.attached) {
+                return res.status(200).json({
+                    success: true,
+                    alreadyAvailable: true,
+                    message: 'Already in storage. Added to your My Library shelf.',
+                    itemId: attached.itemId,
+                    title: attached.title
+                });
+            }
+        }
+
         const effectiveQueueContext = {
             ...normalizedQueueContext,
             imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null

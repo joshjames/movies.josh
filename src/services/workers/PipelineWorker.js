@@ -9,6 +9,11 @@ const { getLibrary } = require('../db');
 const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
 const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
 const {
+    userGroup,
+    mergeLibraryGroups,
+    normalizeUserKey
+} = require('../LibraryAccessService');
+const {
     createJob,
     getAllJobs,
     getJob,
@@ -194,6 +199,29 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
             error: null
         }
     };
+
+    const queueContext = (job.payload && typeof job.payload.queueContext === 'object') ? job.payload.queueContext : {};
+    const addedByUser = normalizeUserKey(queueContext.addedByUser || queueContext.userKey || queueContext.userId);
+    const addedByGroup = userGroup(addedByUser);
+
+    merged.libraryGroups = mergeLibraryGroups(
+        mergeLibraryGroups(existing.libraryGroups || [], patchData.libraryGroups || [], { addGlobalIfMissing: true }),
+        mergeLibraryGroups(queueContext.libraryGroups || [], addedByGroup ? [addedByGroup] : [], { addGlobalIfMissing: false }),
+        { addGlobalIfMissing: true }
+    );
+
+    if (addedByUser) {
+        merged.addedByUsers = Array.from(new Set([
+            ...(Array.isArray(existing.addedByUsers) ? existing.addedByUsers : []),
+            ...(Array.isArray(patchData.addedByUsers) ? patchData.addedByUsers : []),
+            addedByUser
+        ])).sort();
+    } else if (Array.isArray(existing.addedByUsers) || Array.isArray(patchData.addedByUsers)) {
+        merged.addedByUsers = Array.from(new Set([
+            ...(Array.isArray(existing.addedByUsers) ? existing.addedByUsers : []),
+            ...(Array.isArray(patchData.addedByUsers) ? patchData.addedByUsers : [])
+        ])).sort();
+    }
 
     if (!existing.addedAt && nextStep === 'COMPLETE') {
         merged.addedAt = new Date().toISOString();

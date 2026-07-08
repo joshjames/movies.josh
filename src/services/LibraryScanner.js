@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 const { syncLibraryToStorage } = require('./db');
+const { normalizeGroups } = require('./LibraryAccessService');
 
 const MOVIE_SCAN_PATHS = [
     process.env.MOVIES_DIR,
@@ -53,6 +54,10 @@ function scanDirectory(basePath, contentType) {
         const normalizedPlot = meta.plot || meta.metadata?.plot || '';
         const normalizedGenre = meta.genre || meta.metadata?.genre || '';
         const normalizedImdbId = meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '';
+        const normalizedLibraryGroups = normalizeGroups(
+            meta.libraryGroups || meta.metadata?.libraryGroups || [],
+            { addGlobalIfMissing: true }
+        );
         const normalizedTags = [...new Set(
             (Array.isArray(meta.tags) ? meta.tags : (Array.isArray(meta.enrichment?.tags) ? meta.enrichment.tags : (Array.isArray(meta.metadata?.tags) ? meta.metadata.tags : [])))
                 .map(tag => String(tag).trim())
@@ -93,6 +98,7 @@ function scanDirectory(basePath, contentType) {
                 genre: normalizedGenre,
                 imdbId: normalizedImdbId,
                 imdb_id: normalizedImdbId,
+                libraryGroups: normalizedLibraryGroups,
                 tags: normalizedEnrichment.tags,
                 imdbScore: normalizedEnrichment.imdbScore,
                 parentalRating: normalizedEnrichment.parentalRating,

@@ -103,6 +103,58 @@
         
         .controls { display: flex; gap: 12px; margin-bottom: 20px; }
 
+        .catalog-filter-bar {
+            display: grid;
+            grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) auto;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .catalog-filter-bar input,
+        .catalog-filter-bar select {
+            min-height: 36px;
+        }
+        .catalog-filter-bar button {
+            min-height: 36px;
+        }
+
+        .catalog-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #0b1220;
+        }
+
+        .group-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .group-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            font-size: 0.72rem;
+            border-radius: 999px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #cbd5e1;
+        }
+
+        .group-chip.global { border-color: #1d4ed8; color: #93c5fd; }
+        .group-chip.user { border-color: #166534; color: #86efac; }
+
+        @media(max-width: 1100px) {
+            .catalog-filter-bar {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
         .tv-manual-panel {
             background: #0b1220;
             border: 1px solid #334155;
@@ -454,6 +506,7 @@
         <div class="controls">
             <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
             <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
+            <button class="btn-trigger" style="background:#1d4ed8;" onclick="backfillGlobalGroups()">Backfill Global + All-Media</button>
             <a href="/feed-diagnostics.html" style="background:#334155; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Feed Diagnostics</a>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
@@ -464,7 +517,29 @@
                     <button class="tab-btn active" id="tab-movies" onclick="switchTab('movies')">Movies</button>
                     <button class="tab-btn" id="tab-shows" onclick="switchTab('series')">TV Shows</button>
                 </div>
+                <div class="catalog-filter-bar">
+                    <input type="search" id="admin-search" placeholder="Search title, imdb, folder, tags...">
+                    <select id="admin-group-filter">
+                        <option value="any">All Groups</option>
+                    </select>
+                    <select id="admin-sort">
+                        <option value="updated_desc">Updated (Newest)</option>
+                        <option value="updated_asc">Updated (Oldest)</option>
+                        <option value="title_asc">Title A-Z</option>
+                        <option value="title_desc">Title Z-A</option>
+                        <option value="year_desc">Year Desc</option>
+                        <option value="year_asc">Year Asc</option>
+                    </select>
+                    <select id="admin-limit">
+                        <option value="20" selected>20 / page</option>
+                        <option value="40">40 / page</option>
+                        <option value="60">60 / page</option>
+                    </select>
+                    <button type="button" onclick="fetchLibraryData(true)">Apply</button>
+                    <button type="button" style="background:#334155;" onclick="resetAdminFilters()">Reset</button>
+                </div>
                 <div id="catalog-list">Loading localized digital storage lists...</div>
+                <div id="catalog-pagination" class="catalog-pagination" style="display:none;"></div>
             </div>
 
             <div>
@@ -536,7 +611,14 @@
     <script src="/js/watch-history-panel.js"></script>
     <script>
         let currentTabMode = 'movies';
-        let fullLibraryCache = { movies: [], shows: [] };
+        let fullLibraryCache = {
+            items: [],
+            page: 1,
+            totalPages: 1,
+            totalItems: 0,
+            limit: 20,
+            availableGroups: ['any']
+        };
         let activeSyncFolder = null; // Track single folder being manual-synchronized
         const watchHistoryPanel = new window.WatchHistoryPanel();
 
@@ -862,27 +944,122 @@
             }
         }
 
-        async function fetchLibraryData() {
+        function getAdminFilterState() {
+            return {
+                query: (document.getElementById('admin-search')?.value || '').trim(),
+                group: (document.getElementById('admin-group-filter')?.value || 'any').trim(),
+                sort: (document.getElementById('admin-sort')?.value || 'updated_desc').trim(),
+                limit: Math.max(1, parseInt(document.getElementById('admin-limit')?.value, 10) || 20)
+            };
+        }
+
+        function updateGroupFilterOptions(groups = []) {
+            const select = document.getElementById('admin-group-filter');
+            if (!select) return;
+            const current = select.value || 'any';
+            const normalized = Array.from(new Set(['any', ...(Array.isArray(groups) ? groups : [])]));
+            select.innerHTML = normalized
+                .sort((a, b) => a.localeCompare(b))
+                .map(group => `<option value="${group}">${group === 'any' ? 'All Groups' : group}</option>`)
+                .join('');
+            if (normalized.includes(current)) {
+                select.value = current;
+            }
+        }
+
+        function renderPaginationBar() {
+            const box = document.getElementById('catalog-pagination');
+            if (!box) return;
+
+            if (!fullLibraryCache.totalItems || fullLibraryCache.totalPages <= 1) {
+                box.style.display = 'none';
+                box.innerHTML = '';
+                return;
+            }
+
+            box.style.display = 'flex';
+            box.innerHTML = `
+                <div style="font-size:0.82rem;color:#94a3b8;">Page ${fullLibraryCache.page} / ${fullLibraryCache.totalPages} • ${fullLibraryCache.totalItems} item(s)</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button type="button" ${fullLibraryCache.page <= 1 ? 'disabled' : ''} onclick="goToAdminPage(${fullLibraryCache.page - 1})">◀ Prev</button>
+                    <button type="button" ${fullLibraryCache.page >= fullLibraryCache.totalPages ? 'disabled' : ''} onclick="goToAdminPage(${fullLibraryCache.page + 1})">Next ▶</button>
+                </div>
+            `;
+        }
+
+        async function fetchLibraryData(resetPage = false) {
             try {
-                const res = await fetch('/api/admin/library-metadata');
+                const filters = getAdminFilterState();
+                const page = resetPage ? 1 : Math.max(1, fullLibraryCache.page || 1);
+                const params = new URLSearchParams({
+                    contentType: currentTabMode,
+                    page: String(page),
+                    limit: String(filters.limit),
+                    query: filters.query,
+                    group: filters.group,
+                    sort: filters.sort
+                });
+
+                const res = await fetch(`/api/admin/library-browser?${params.toString()}`);
                 const data = await res.json();
                 if (data.success) {
-                    fullLibraryCache = data.library;
+                    fullLibraryCache = {
+                        items: Array.isArray(data.items) ? data.items : [],
+                        page: Number(data.page || 1),
+                        totalPages: Number(data.totalPages || 1),
+                        totalItems: Number(data.totalItems || 0),
+                        limit: Number(data.limit || filters.limit),
+                        availableGroups: Array.isArray(data.availableGroups) ? data.availableGroups : ['any']
+                    };
+                    updateGroupFilterOptions(fullLibraryCache.availableGroups);
                     renderActiveTab();
+                    renderPaginationBar();
                 }
             } catch (err) { console.error(err); }
+        }
+
+        function goToAdminPage(nextPage) {
+            fullLibraryCache.page = Math.max(1, Number(nextPage || 1));
+            fetchLibraryData(false);
+        }
+
+        function resetAdminFilters() {
+            const search = document.getElementById('admin-search');
+            const group = document.getElementById('admin-group-filter');
+            const sort = document.getElementById('admin-sort');
+            const limit = document.getElementById('admin-limit');
+            if (search) search.value = '';
+            if (group) group.value = 'any';
+            if (sort) sort.value = 'updated_desc';
+            if (limit) limit.value = '20';
+            fullLibraryCache.page = 1;
+            fetchLibraryData(true);
         }
 
         function switchTab(mode) {
             currentTabMode = mode;
             document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
             document.getElementById('tab-shows').classList.toggle('active', mode === 'series');
-            renderActiveTab();
+            fullLibraryCache.page = 1;
+            fetchLibraryData(true);
+        }
+
+        function renderLibraryGroups(item) {
+            const groups = Array.isArray(item.metadata?.libraryGroups)
+                ? item.metadata.libraryGroups
+                : [];
+            if (!groups.length) {
+                return '<span class="group-chip">(none)</span>';
+            }
+            return groups.map((group) => {
+                const cls = String(group || '').startsWith('user:') ? 'user' : (String(group || '') === 'global' ? 'global' : '');
+                return `<span class="group-chip ${cls}">${group}</span>`;
+            }).join('');
         }
 
         function renderActiveTab() {
             const container = document.getElementById('catalog-list');
-            const collection = currentTabMode === 'movies' ? fullLibraryCache.movies : fullLibraryCache.shows;
+            const collection = Array.isArray(fullLibraryCache.items) ? fullLibraryCache.items : [];
 
             const seriesTools = currentTabMode === 'series' ? `
                 <div class="tv-manual-panel">
@@ -975,6 +1152,9 @@
                         <div style="font-size: 0.75rem; color: #a855f7; font-family: monospace; background: #020617; padding: 4px 8px; border-radius: 4px; border: 1px solid #1e293b;">
                             <strong>Allocation Metrics:</strong> ${cloudStatusStr}
                         </div>
+                        <div class="group-chip-row" style="margin-top:6px;">
+                            ${renderLibraryGroups(item)}
+                        </div>
 
                         <div class="meta-form">
                             <div class="form-group">
@@ -1043,6 +1223,11 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'addglobal')">Add To Global Group</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'removeglobal')">Remove From Global Group</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'adduser')">Add User Group</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'setuseronly')">Set User-Only Group</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'removeuser')">Remove User Group</button>
                                         ${currentTabMode === 'series' ? `<button class="action-item" onclick="normalizeSeriesFolderNow('${item.folder}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>
@@ -1328,9 +1513,72 @@
             if (action === 'worker') return runWorkerNow(folder, type);
             if (action === 'rename') return renameMediaNow(folder, type);
             if (action === 'normalize') return normalizeSeriesFolderNow(folder, type);
+            if (action === 'addglobal') return manageLibraryGroup(folder, type, 'add-global');
+            if (action === 'removeglobal') return manageLibraryGroup(folder, type, 'remove-global');
+            if (action === 'adduser') return manageLibraryGroup(folder, type, 'add-user');
+            if (action === 'setuseronly') return manageLibraryGroup(folder, type, 'set-user-only');
+            if (action === 'removeuser') return manageLibraryGroup(folder, type, 'remove-user');
             if (action === 'archive') return archiveLocalMediaNow(folder, type);
             if (action === 'restore') return restoreArchivedMediaNow(folder, type);
             if (action === 'purge') return purgeArchivedMediaNow(folder, type);
+        }
+
+        async function manageLibraryGroup(folder, type, action) {
+            let targetUser = '';
+            if (action === 'add-user' || action === 'set-user-only' || action === 'remove-user') {
+                targetUser = (window.prompt('Enter username for group action:', '') || '').trim().toLowerCase();
+                if (!targetUser) {
+                    showToast('Group action cancelled: no user provided.', 'info', 2600);
+                    return;
+                }
+            }
+
+            try {
+                const res = await fetch('/api/admin/library-groups/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folder,
+                        contentType: type,
+                        action,
+                        targetUser
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Group update failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                showToast('Library group updated.', 'success', 2800);
+                fetchLibraryData(false);
+            } catch (_err) {
+                showToast('Group update request failed.', 'error', 4200);
+            }
+        }
+
+        async function backfillGlobalGroups() {
+            if (!confirm('Backfill all current media with global + all-media groups?')) {
+                return;
+            }
+
+            try {
+                showToast('Running group backfill...', 'info', 2600);
+                const res = await fetch('/api/admin/library-groups/backfill', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Backfill failed: ' + (data.error || 'Unknown error'), 'error', 4600);
+                    return;
+                }
+
+                showToast(`Backfill complete. Updated ${data.updated} / ${data.scanned}.`, 'success', 4600);
+                fetchLibraryData(true);
+            } catch (_err) {
+                showToast('Backfill request failed.', 'error', 4600);
+            }
         }
 
         document.addEventListener('click', (event) => {
@@ -1408,6 +1656,22 @@
             if (!target || !target.id || !target.id.startsWith('worker-')) return;
             const folder = target.id.replace(/^worker-/, '');
             toggleForceReprocess(folder);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            if (event.target && event.target.id === 'admin-search') {
+                event.preventDefault();
+                fetchLibraryData(true);
+            }
+        });
+
+        document.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!target || !target.id) return;
+            if (target.id === 'admin-group-filter' || target.id === 'admin-sort' || target.id === 'admin-limit') {
+                fetchLibraryData(true);
+            }
         });
 
         async function repairMetadataNow(folder, type) {
@@ -1873,7 +2137,7 @@
 
         // Execution mounts
         connectToLogStream();
-        fetchLibraryData();
+        fetchLibraryData(true);
         fetchUserProfileIndexes();
         fetchFailedJobs();
 
