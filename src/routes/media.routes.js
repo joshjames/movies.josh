@@ -16,21 +16,15 @@ const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSer
 const ProfileService = require('../services/ProfileService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
 const { buildMyLibraryCollection } = require('../services/LibraryAccessService');
+const {
+    getSeriesRoots,
+    resolveMovieFolderPath,
+    resolveSeriesFolderPath,
+    resolveRelativePathInSeriesRoots,
+    listSeriesFolders
+} = require('../services/StoragePathResolver');
 
 const MediaService = require('../services/MediaService');
-const MOVIES_DIR = process.env.MOVIES_DIR
-    || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
-        : (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies'));
-// 🚨 NEW FIX: Isolated pathway pointing to the new separate SSD mount for TV shows
-const SERIES_DIR = process.env.SERIES_DIR
-    || (fs.existsSync('/app/storage/series') ? '/app/storage/series' : '/data/blockchain/media/Series');
-
-const MOVIE_PATH_CANDIDATES = [
-    MOVIES_DIR,
-    '/home/epic/movies',
-    '/app/storage/movies',
-    '/app/movies'
-].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
@@ -298,13 +292,8 @@ function withCover(item) {
     };
 }
 
-function resolveMovieFolderPath(movieId) {
-    const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, movieId));
-    return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, movieId);
-}
-
 function resolveSeriesEpisodeVideoPath(showFolder, seasonNumber, episodeNumber) {
-    const showPath = path.join(SERIES_DIR, showFolder);
+    const showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
     if (!fs.existsSync(showPath)) return null;
 
     let seriesData;
@@ -323,8 +312,7 @@ function resolveSeriesEpisodeVideoPath(showFolder, seasonNumber, episodeNumber) 
     const target = episodes.find(ep => Number(ep.episodeNumber) === Number(episodeNumber) && ep.localRelativePath);
     if (!target?.localRelativePath) return null;
 
-    const relativeUnderSeries = String(target.localRelativePath).replace(/^series[\\/]/i, '');
-    const absolutePath = path.join(SERIES_DIR, relativeUnderSeries);
+    const absolutePath = resolveRelativePathInSeriesRoots(target.localRelativePath);
     return fs.existsSync(absolutePath) ? absolutePath : null;
 }
 
@@ -858,7 +846,7 @@ async function resolveSeriesShowFolder(showFolder) {
     const cleanFolder = normalizeShowFolderInput(showFolder);
     if (!cleanFolder) return null;
 
-    const directPath = path.join(SERIES_DIR, cleanFolder);
+    const directPath = resolveSeriesFolderPath(cleanFolder, { mustExist: true });
     if (fs.existsSync(directPath) && fs.lstatSync(directPath).isDirectory()) {
         return { folder: cleanFolder, path: directPath };
     }
@@ -880,7 +868,7 @@ async function resolveSeriesShowFolder(showFolder) {
         const canonicalFolder = normalizeShowFolderInput(String(directMatch.sourcePath ? path.basename(directMatch.sourcePath) : ''))
             || normalizeShowFolderInput(String(directMatch.id || '').replace(/^series\//i, ''))
             || cleanFolder;
-        const canonicalPath = path.join(SERIES_DIR, canonicalFolder);
+        const canonicalPath = resolveSeriesFolderPath(canonicalFolder, { mustExist: true });
         if (fs.existsSync(canonicalPath) && fs.lstatSync(canonicalPath).isDirectory()) {
             return { folder: canonicalFolder, path: canonicalPath };
         }
@@ -902,7 +890,7 @@ async function resolveSeriesShowFolder(showFolder) {
         const canonicalFolder = normalizeShowFolderInput(String(item?.sourcePath ? path.basename(item.sourcePath) : item?.id || ''))
             || normalizeShowFolderInput(String(item?.id || '').replace(/^series\//i, ''))
             || cleanFolder;
-        const canonicalPath = path.join(SERIES_DIR, canonicalFolder);
+        const canonicalPath = resolveSeriesFolderPath(canonicalFolder, { mustExist: true });
         if (fs.existsSync(canonicalPath) && fs.lstatSync(canonicalPath).isDirectory()) {
             return { folder: canonicalFolder, path: canonicalPath };
         }
@@ -913,9 +901,9 @@ async function resolveSeriesShowFolder(showFolder) {
 
 function findMetadataPathForVideo(videoPath) {
     let currentDir = path.dirname(videoPath);
-    const root = path.resolve(SERIES_DIR);
+    const roots = getSeriesRoots().map(rootPath => path.resolve(rootPath));
 
-    while (currentDir && currentDir.startsWith(root)) {
+    while (currentDir && roots.some(root => currentDir.startsWith(root))) {
         const candidate = path.join(currentDir, 'metadata.json');
         if (fs.existsSync(candidate)) return candidate;
 
@@ -1760,20 +1748,18 @@ router.get('/series/episodes/search', async (req, res) => {
         const showFolders = [];
 
         if (showFolderFilter) {
-            const showPath = path.join(SERIES_DIR, showFolderFilter);
+            const showPath = resolveSeriesFolderPath(showFolderFilter, { mustExist: true });
             if (!fs.existsSync(showPath) || !fs.lstatSync(showPath).isDirectory()) {
                 return res.status(404).json({ success: false, error: 'Show folder not found.' });
             }
             showFolders.push(showFolderFilter);
-        } else if (fs.existsSync(SERIES_DIR)) {
-            fs.readdirSync(SERIES_DIR, { withFileTypes: true })
-                .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-                .forEach(entry => showFolders.push(entry.name));
+        } else {
+            listSeriesFolders().forEach(entry => showFolders.push(entry.name));
         }
 
         const results = [];
         for (const showFolder of showFolders) {
-            const showPath = path.join(SERIES_DIR, showFolder);
+            const showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
             let seriesData;
 
             try {

@@ -3,10 +3,12 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const {
+    resolveMovieFolderPath,
+    resolveSeriesFolderPath
+} = require('../services/StoragePathResolver');
 
 // Fallback to environment variables or global properties safely
-const MOVIES_DIR = process.env.MOVIES_DIR || '/app/storage/movies';
-const SERIES_DIR = process.env.SERIES_DIR || '/app/storage/series';
 
 // =========================================================================
 // DYNAMIC SRT-TO-WEBVTT SUBTITLE STREAM ENGINE
@@ -16,9 +18,9 @@ router.get('/subtitles/:id', (req, res) => {
         const mediaId = decodeURIComponent(req.params.id);
         
         // 🎯 FIX: Check the movies folder first, fallback to the series folder if missing
-        let folderPath = path.join(MOVIES_DIR, mediaId);
+        let folderPath = resolveMovieFolderPath(mediaId, { mustExist: true });
         if (!fs.existsSync(folderPath)) {
-            folderPath = path.join(SERIES_DIR, mediaId);
+            folderPath = resolveSeriesFolderPath(mediaId, { mustExist: true });
         }
 
         if (!fs.existsSync(folderPath)) {

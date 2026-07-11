@@ -33,6 +33,13 @@ const metadataProvider = require('../services/MetadataProvider');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
 const {
+    getPrimaryMovieRoot,
+    getPrimarySeriesRoot,
+    resolveMovieFolderPath: resolveMovieFolderPathFromResolver,
+    resolveSeriesFolderPath: resolveSeriesFolderPathFromResolver,
+    listSeriesFolders
+} = require('../services/StoragePathResolver');
+const {
     GROUP_ALL_MEDIA,
     GROUP_GLOBAL,
     normalizeGroups,
@@ -41,27 +48,8 @@ const {
     normalizeUserKey
 } = require('../services/LibraryAccessService');
 
-const MOVIES_DIR = process.env.MOVIES_DIR
-    || (fs.existsSync('/app/storage/movies') ? '/app/storage/movies'
-        : (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies'));
-// 🚨 NEW FIX: Isolated pathway pointing to your separate TV series mount location
-const SERIES_DIR = process.env.SERIES_DIR
-    || (fs.existsSync('/app/storage/series') ? '/app/storage/series' : '/data/blockchain/media/Series');
-
-const MOVIE_PATH_CANDIDATES = [
-    MOVIES_DIR,
-    '/home/epic/movies',
-    '/app/storage/movies',
-    '/app/movies'
-].filter((v, i, arr) => v && arr.indexOf(v) === i);
-
-const SERIES_PATH_CANDIDATES = [
-    SERIES_DIR,
-    '/home/epic/movies/series',
-    '/data/blockchain/media/Series',
-    '/app/storage/series',
-    '/app/series'
-].filter((v, i, arr) => v && arr.indexOf(v) === i);
+const MOVIES_DIR = getPrimaryMovieRoot();
+const SERIES_DIR = getPrimarySeriesRoot();
 
 const ARCHIVE_DIR = process.env.ARCHIVE_DIR || '/app/archive';
 const ARCHIVE_RETENTION_DAYS = Number(process.env.ARCHIVE_RETENTION_DAYS || 10);
@@ -83,13 +71,17 @@ function getArchiveS3Client() {
 }
 
 function resolveMovieFolderPath(folderName) {
-    const candidates = MOVIE_PATH_CANDIDATES.map(base => path.join(base, folderName));
-    return candidates.find(candidate => fs.existsSync(candidate)) || path.join(MOVIES_DIR, folderName);
+    return resolveMovieFolderPathFromResolver(folderName);
 }
 
 function resolveSeriesFolderPath(folderName) {
-    const candidates = SERIES_PATH_CANDIDATES.map(base => path.join(base, folderName));
-    return candidates.find(candidate => fs.existsSync(candidate)) || path.join(SERIES_DIR, folderName);
+    return resolveSeriesFolderPathFromResolver(folderName);
+}
+
+function resolveContentFolderPath(contentType, folderName) {
+    return String(contentType || '').toLowerCase() === 'series'
+        ? resolveSeriesFolderPath(folderName)
+        : resolveMovieFolderPath(folderName);
 }
 
 function sanitizeSeriesFolderName(folderName = '') {
@@ -754,12 +746,10 @@ router.post('/series/manual-scan', async (req, res) => {
                 return res.status(404).json({ success: false, error: 'Series folder not found.' });
             }
             showFolders.push({ name: targetFolder, path: showPath });
-        } else if (fs.existsSync(SERIES_DIR)) {
-            fs.readdirSync(SERIES_DIR, { withFileTypes: true })
-                .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-                .forEach(entry => {
-                    showFolders.push({ name: entry.name, path: path.join(SERIES_DIR, entry.name) });
-                });
+        } else {
+            listSeriesFolders().forEach(entry => {
+                showFolders.push({ name: entry.name, path: entry.path });
+            });
         }
 
         let rebuiltCount = 0;
@@ -1101,9 +1091,7 @@ router.post('/repair-metadata', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing folder.' });
         }
 
-        const folderPath = contentType === 'series'
-            ? path.join(SERIES_DIR, folder)
-            : resolveMovieFolderPath(folder);
+        const folderPath = resolveContentFolderPath(contentType, folder);
         const metaFilePath = path.join(folderPath, 'metadata.json');
 
         if (!fs.existsSync(folderPath)) {
@@ -1236,9 +1224,7 @@ router.post('/manual-worker-run', async (req, res) => {
             return res.status(400).json({ success: false, error: `Unsupported worker: ${worker}` });
         }
 
-        const folderPath = contentType === 'series'
-            ? path.join(SERIES_DIR, folder)
-            : resolveMovieFolderPath(folder);
+        const folderPath = resolveContentFolderPath(contentType, folder);
         if (!fs.existsSync(folderPath)) {
             return res.status(404).json({ success: false, error: 'Target folder not found.' });
         }
@@ -1433,9 +1419,10 @@ router.post('/rename-media', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid rename value.' });
         }
 
-        const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        let baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
         let currentFolderName = folder;
-        let currentPath = path.join(baseDir, currentFolderName);
+        let currentPath = resolveContentFolderPath(contentType, currentFolderName);
+        baseDir = path.dirname(currentPath);
 
         if (!fs.existsSync(currentPath)) {
             return res.status(404).json({ success: false, error: 'Target folder not found.' });
@@ -1765,9 +1752,7 @@ router.post('/upload-poster', async (req, res) => {
         const buffer = Buffer.from(base64Data, 'base64');
 
         // 🚨 FIX 3: Point poster uploads to correct directory mount if it is a show
-        const targetDir = (contentType === 'series')
-            ? path.join(SERIES_DIR, folder)
-            : path.join(MOVIES_DIR, folder); 
+        const targetDir = resolveContentFolderPath(contentType, folder);
 
         try {
             await fsPromises.access(targetDir);
@@ -1910,8 +1895,7 @@ router.post('/override-metadata', async (req, res) => {
     } = req.body;
     
     // Ensure custom dashboard panel modifications write metadata out to the true folder mounts
-    const baseDir = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
-    const folderPath = path.join(baseDir, folder);
+    const folderPath = resolveContentFolderPath(contentType, folder);
     const metaFilePath = path.join(folderPath, 'metadata.json');
 
     try {
@@ -2321,9 +2305,7 @@ router.post('/refetch-metadata', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Target directory not supplied.' });
         }
 
-        const targetDir = (contentType === 'series') 
-            ? path.join(SERIES_DIR, folder) 
-            : path.join(MOVIES_DIR, folder);
+        const targetDir = resolveContentFolderPath(contentType, folder);
 
         const metaFilePath = path.join(targetDir, 'metadata.json');
 

@@ -110,6 +110,22 @@ Define your Docker subnet address matrix configurations:
 
 Plaintext
 172.16.0.0/12, 127.0.0.1
+
+5. Multi-Source Media Paths
+You can configure multiple movie and series roots with comma-separated environment variables.
+
+Plaintext
+MOVIE_SOURCES=/mnt/disk1/movies,/mnt/disk2/movies,/mnt/nas/movies
+SERIES_SOURCES=/mnt/disk1/series,/mnt/disk2/series,/mnt/nas/series
+
+Legacy compatibility is preserved:
+
+Plaintext
+MOVIES_DIR=/mnt/disk1/movies
+SERIES_DIR=/mnt/disk1/series
+
+If both are present, MOVIE_SOURCES and SERIES_SOURCES are used as the source list and MOVIES_DIR/SERIES_DIR are treated as legacy primary fallbacks.
+
 4. Hooking Up The Automation Trigger   !!## Depricated - node service now initriates post processing automatically.
 To trigger the post-processing optimization loop automatically when a download hits 100%, add this run command into your qBittorrent client configuration options under "Run external program on torrent completion":
 ```

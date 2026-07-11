@@ -6,13 +6,22 @@ const fsp = require('fs').promises;
 const axios = require('axios');
 const logger = require('../logger');
 const { rebuildSeriesManifest } = require('../SeriesIndexService');
+const {
+    getMovieRoots,
+    getSeriesRoots,
+    getPrimaryMovieRoot,
+    getPrimarySeriesRoot,
+    resolveSeriesFolderPath
+} = require('../StoragePathResolver');
 
 const app = express();
 app.use(express.json());
 
 // 🚨 CONTAINER MOUNT DIRECTORY MAPS
-const MOVIES_DIR = process.env.MOVIES_DIR || '/app/storage/movies';
-const SERIES_DIR = process.env.SERIES_DIR || '/app/storage/series';
+const MOVIES_DIR = getPrimaryMovieRoot();
+const SERIES_DIR = getPrimarySeriesRoot();
+const MOVIE_ROOTS = getMovieRoots();
+const SERIES_ROOTS = getSeriesRoots();
 const SERIES_DOWNLOAD_DIR = process.env.SERIES_DOWNLOAD_DIR || '/series-media/Series';
 const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || process.env.QBIT_DOWNLOAD_DIR || '/downloads';
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.mpeg', '.nfo', '.ogg', '.ogv', '.json', '.jpg', '.jpeg', '.png', '.ts'];
@@ -21,8 +30,8 @@ const OMDB_API_KEY = process.env.OMDB_API_KEY || '84196d01';
 const PROTECTED_ROOTS = new Set(
     [
         '/app/storage',
-        MOVIES_DIR,
-        SERIES_DIR,
+        ...MOVIE_ROOTS,
+        ...SERIES_ROOTS,
         DOWNLOADS_DIR,
         SERIES_DOWNLOAD_DIR,
         '/series-media',
@@ -164,52 +173,61 @@ function normalizeImdbId(value) {
 }
 
 function findExistingShowFolder(cleanTitle, targetSeriesDir) {
-    if (!fs.existsSync(targetSeriesDir)) return null;
-    
+    const targetRoots = Array.isArray(targetSeriesDir) ? targetSeriesDir : [targetSeriesDir];
     const normalizedTarget = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const currentFolders = fs.readdirSync(targetSeriesDir);
 
-    for (const folder of currentFolders) {
-        const normalizedFolder = folder.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (normalizedFolder === normalizedTarget || normalizedFolder.includes(normalizedTarget)) {
-            return folder;
-        }
+    for (const root of targetRoots) {
+        if (!root || !fs.existsSync(root)) continue;
+        const currentFolders = fs.readdirSync(root);
 
-        const metaPath = path.join(targetSeriesDir, folder, 'metadata.json');
-        if (!fs.existsSync(metaPath)) continue;
-
-        try {
-            const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            const metaTitle = String(metadata.title || metadata.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
-
-            if (metaTitle && (metaTitle === normalizedTarget || metaTitle.includes(normalizedTarget) || normalizedTarget.includes(metaTitle))) {
+        for (const folder of currentFolders) {
+            const normalizedFolder = folder.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (normalizedFolder === normalizedTarget || normalizedFolder.includes(normalizedTarget)) {
                 return folder;
             }
-        } catch (_err) {
-            // Ignore malformed metadata and keep scanning.
+
+            const metaPath = path.join(root, folder, 'metadata.json');
+            if (!fs.existsSync(metaPath)) continue;
+
+            try {
+                const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+                const metaTitle = String(metadata.title || metadata.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
+
+                if (metaTitle && (metaTitle === normalizedTarget || metaTitle.includes(normalizedTarget) || normalizedTarget.includes(metaTitle))) {
+                    return folder;
+                }
+            } catch (_err) {
+                // Ignore malformed metadata and keep scanning.
+            }
         }
     }
+
     return null;
 }
 
 function findExistingShowFolderByImdbId(imdbId, targetSeriesDir) {
     const cleanImdb = normalizeImdbId(imdbId);
-    if (!cleanImdb || !fs.existsSync(targetSeriesDir)) return null;
+    if (!cleanImdb) return null;
+    const targetRoots = Array.isArray(targetSeriesDir) ? targetSeriesDir : [targetSeriesDir];
 
-    const currentFolders = fs.readdirSync(targetSeriesDir);
-    for (const folder of currentFolders) {
-        const metaPath = path.join(targetSeriesDir, folder, 'metadata.json');
-        if (!fs.existsSync(metaPath)) continue;
+    for (const root of targetRoots) {
+        if (!root || !fs.existsSync(root)) continue;
+        const currentFolders = fs.readdirSync(root);
 
-        try {
-            const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
-            if (metaImdb && metaImdb === cleanImdb) {
-                return folder;
+        for (const folder of currentFolders) {
+            const metaPath = path.join(root, folder, 'metadata.json');
+            if (!fs.existsSync(metaPath)) continue;
+
+            try {
+                const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+                const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
+                if (metaImdb && metaImdb === cleanImdb) {
+                    return folder;
+                }
+            } catch (_err) {
+                // Ignore malformed metadata and keep scanning.
             }
-        } catch (_err) {
-            // Ignore malformed metadata and keep scanning.
         }
     }
 
@@ -401,13 +419,13 @@ function isSafeTransientCleanupPath(targetPath, contentType) {
     const livesInTransientRoot = transientRoots.some(root => isPathInside(root, resolvedTarget));
     if (!livesInTransientRoot) return false;
 
-    const libraryRoots = [MOVIES_DIR, SERIES_DIR].filter(Boolean);
+    const libraryRoots = [...MOVIE_ROOTS, ...SERIES_ROOTS].filter(Boolean);
     const insideLibraryRoot = libraryRoots.some(root => isPathInside(root, resolvedTarget));
     if (insideLibraryRoot) return false;
 
     if (isProtectedRootPath(resolvedTarget)) return false;
 
-    if (contentType === 'series' && isPathInside(SERIES_DIR, resolvedTarget)) {
+    if (contentType === 'series' && SERIES_ROOTS.some(root => isPathInside(root, resolvedTarget))) {
         return false;
     }
 
@@ -441,7 +459,7 @@ function resolveInputFolderContext(folderPath, folderName, contentType) {
     }
 
     if (baseName) {
-        const primaryRoot = contentType === 'series' ? SERIES_DIR : MOVIES_DIR;
+        const primaryRoot = contentType === 'series' ? getPrimarySeriesRoot() : getPrimaryMovieRoot();
         const topLevelPath = safePathCandidate(path.join(primaryRoot, baseName));
         if (topLevelPath) {
             return {
@@ -458,11 +476,12 @@ function resolveInputFolderContext(folderPath, folderName, contentType) {
     }
 
     const configuredDownloadRoot = process.env.QBIT_DOWNLOAD_DIR || process.env.DOWNLOADS_DIR || process.env.MOVIES_DIR || null;
+    const contentRoots = contentType === 'series' ? SERIES_ROOTS : MOVIE_ROOTS;
     const searchRoots = [
         contentType === 'series' ? process.env.SERIES_DOWNLOAD_DIR : null,
         contentType === 'series' ? SERIES_DOWNLOAD_DIR : null,
         configuredDownloadRoot,
-        contentType === 'series' ? SERIES_DIR : MOVIES_DIR,
+        ...contentRoots,
         '/app/downloads',
         '/downloads',
         '/series-media',
@@ -521,8 +540,12 @@ app.post('/process', async (req, res) => {
     if (!folderPath || !folderName) {
         try {
             logger.debug("🔍 Running global recursive Ingest sweep to discover untracked media assets...");
-            await autoDiscoverAndOrganize(MOVIES_DIR);
-            await autoDiscoverAndOrganize(SERIES_DIR); // 🎯 FIX: Scan series storage pools too
+            for (const root of MOVIE_ROOTS) {
+                await autoDiscoverAndOrganize(root);
+            }
+            for (const root of SERIES_ROOTS) {
+                await autoDiscoverAndOrganize(root);
+            }
             return res.json({ success: true, message: "Global collection discovery sweep complete." });
         } catch (crawlErr) {
             return res.status(500).json({ success: false, error: crawlErr.message });
@@ -621,10 +644,11 @@ app.post('/process', async (req, res) => {
                 : cleanTitle;
             const showTitleHint = titleFromEpisode || cleanTitle;
             const showDotTitle = showTitleHint.replace(/\s+/g, '.');
-            const showFolder = findExistingShowFolderByImdbId(requestImdbId, SERIES_DIR)
-                || findExistingShowFolder(showTitleHint, SERIES_DIR)
+            const showFolder = findExistingShowFolderByImdbId(requestImdbId, SERIES_ROOTS)
+                || findExistingShowFolder(showTitleHint, SERIES_ROOTS)
                 || showDotTitle;
-            const showRootPath = path.join(SERIES_DIR, showFolder);
+            const showRootPath = resolveSeriesFolderPath(showFolder, { mustExist: true })
+                || path.join(getPrimarySeriesRoot(), showFolder);
 
             if (!fs.existsSync(showRootPath)) {
                 fs.mkdirSync(showRootPath, { recursive: true });
@@ -847,7 +871,9 @@ async function autoDiscoverAndOrganize(currentDir) {
                     
                     if (seriesIndex !== -1 && pathParts[seriesIndex + 1]) {
                         const showFolderName = pathParts[seriesIndex + 1];
-                        const standardizedDir = path.join(SERIES_DIR, showFolderName, seasonStr);
+                        const showRoot = resolveSeriesFolderPath(showFolderName, { mustExist: true })
+                            || path.join(getPrimarySeriesRoot(), showFolderName);
+                        const standardizedDir = path.join(showRoot, seasonStr);
                         const cleanFinalPath = path.join(standardizedDir, cleanEpTitle);
 
                         logger.debug(`🎯 [AUTOMATION DISCOVERY] Realigning TV asset node: ${item.name}`);
