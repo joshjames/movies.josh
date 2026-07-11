@@ -2370,7 +2370,8 @@
                         popularity: document.getElementById(`popularity-${folder}`)?.value || '',
                         plot: document.getElementById('plot-' + folder).value,
                         storage: { location: 'remote' }, // Force state mapping update down pipe
-                        deferCloudSync: true
+                        deferCloudSync: true,
+                        forceCloudSync: true
                     })
                 });
                 
@@ -2391,7 +2392,24 @@
                         const holder = document.getElementById(`sync-container-${folder}`);
                         if (holder) holder.style.display = 'none';
                     }, 1800);
+                    return;
                 }
+
+                if (data.cloudSyncTriggered) {
+                    document.getElementById(`progress-bar-${folder}`).style.width = '100%';
+                    document.getElementById(`progress-txt-${folder}`).textContent = 'Cloud sync completed.';
+                    showToast(`Cloud sync completed for ${folder}.`, 'success', 3200);
+                } else {
+                    document.getElementById(`progress-bar-${folder}`).style.width = '0%';
+                    document.getElementById(`progress-txt-${folder}`).textContent = 'No upload candidates found on disk.';
+                    showToast(`No local stream files found to upload for ${folder}.`, 'error', 3800);
+                }
+
+                activeSyncFolder = null;
+                setTimeout(() => {
+                    const holder = document.getElementById(`sync-container-${folder}`);
+                    if (holder) holder.style.display = 'none';
+                }, 1500);
             } catch (err) {
                 alert("❌ Connection lost during multipart streaming allocation request.");
                 document.getElementById(`sync-container-${folder}`).style.display = 'none';

@@ -1905,7 +1905,8 @@ router.post('/override-metadata', async (req, res) => {
         targetUser,
         libraryGroups,
         replaceGroups,
-        deferCloudSync
+        deferCloudSync,
+        forceCloudSync
     } = req.body;
     
     // Ensure custom dashboard panel modifications write metadata out to the true folder mounts
@@ -2027,8 +2028,9 @@ router.post('/override-metadata', async (req, res) => {
                     ? existingBlock.localPath
                     : null;
                 const inferredLocalPath = existingLocalPath || findLocalProfileFile(profile);
+                const shouldForcePending = forceCloudSync === true && Boolean(inferredLocalPath);
 
-                if (existingBlock.status !== 'synced' && inferredLocalPath) {
+                if ((existingBlock.status !== 'synced' && inferredLocalPath) || shouldForcePending) {
                     metadata.storage.files[profile] = {
                         ...existingBlock,
                         status: 'pending',
@@ -2113,7 +2115,10 @@ router.post('/override-metadata', async (req, res) => {
             success: true,
             libraryLocation: metadata.storage.location,
             cloudSyncTriggered: triggerCloudSync,
-            cloudSyncDeferred: triggerCloudSync && deferCloudSync === true
+            cloudSyncDeferred: triggerCloudSync && deferCloudSync === true,
+            cloudSyncReason: triggerCloudSync
+                ? 'pending_profiles_queued'
+                : 'no_pending_profiles_or_local_files'
         });
 
     } catch (err) {

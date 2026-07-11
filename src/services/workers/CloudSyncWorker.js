@@ -81,22 +81,33 @@ app.post('/process', async (req, res) => {
                 logger.info(`🚀 [MANUAL OVERRIDE] Stream-uploading [${profile}] to cloud block store: ${remoteKey}`);
                 await uploadLargeFileStream(localVideoPath, remoteKey, profile);
                 patchData.storage.location = 'remote';
-            } else {
-                logger.info(`🔒 [LOCAL SAFEMODE] Bypassing cloud upload pipelines for [${profile}] inside ${folderName}. Updating manifest directly to synced.`);
-                // Keep the location descriptor local since the physical asset wasn't copied to B2
-                patchData.storage.location = 'local';
-            }
 
-            // Advance state values safely to unblock pipeline trees
-            patchData.storage.files[profile] = {
-                status: "synced",
-                localPath: path.basename(localVideoPath),
-                remoteKey: executeCloudUpload ? remoteKey : null
-            };
-            
-        // ... (rest of your profile loop above)
-        
-        hasProcessedAny = true;
+                // Advance state values only after successful upload
+                patchData.storage.files[profile] = {
+                    status: 'synced',
+                    localPath: path.basename(localVideoPath),
+                    remoteKey
+                };
+                hasProcessedAny = true;
+            } else {
+                logger.info(`🔒 [LOCAL SAFEMODE] Bypassing cloud upload for [${profile}] inside ${folderName}. Keeping profile pending.`);
+                patchData.storage.location = metadata.storage?.location || 'local';
+
+                patchData.storage.files[profile] = {
+                    ...(metadata.storage?.files?.[profile] || {}),
+                    status: 'pending',
+                    localPath: path.basename(localVideoPath),
+                    remoteKey: metadata.storage?.files?.[profile]?.remoteKey || null
+                };
+            }
+        }
+
+    if (executeCloudUpload && !hasProcessedAny) {
+        return res.json({
+            success: false,
+            error: `No pending local stream profiles found for ${folderName}.` ,
+            patchData: metadata
+        });
     }
 
     // =========================================================================
