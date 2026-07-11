@@ -1031,6 +1031,75 @@ function readShowMetadataTitle(showPath, fallbackTitle) {
     }
 }
 
+function sanitizeSeriesRelativePath(input = '') {
+    const candidate = String(input || '').trim().replace(/\\\\/g, '/');
+    if (!candidate) return '';
+    if (candidate.startsWith('/')) return '';
+    if (candidate.includes('..')) return '';
+    return path.posix.normalize(candidate);
+}
+
+function normalizeEpisodeManagerUpdate(update = {}) {
+    return {
+        seasonNumber: Number(update.seasonNumber),
+        episodeNumber: Number(update.episodeNumber),
+        title: String(update.title || '').trim(),
+        localRelativePath: sanitizeSeriesRelativePath(update.localRelativePath || ''),
+        subtitleRelativePath: sanitizeSeriesRelativePath(update.subtitleRelativePath || ''),
+        released: String(update.released || '').trim(),
+        plot: String(update.plot || '').trim(),
+        imdbRating: String(update.imdbRating || '').trim()
+    };
+}
+
+function buildEpisodeManagerItems(showFolder, showPath, seriesData) {
+    const seasons = seriesData?.seasons || {};
+    const items = [];
+
+    Object.keys(seasons)
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((seasonKey) => {
+            const seasonNumber = Number(seasonKey);
+            const episodes = Array.isArray(seasons[seasonKey]?.episodes) ? seasons[seasonKey].episodes : [];
+
+            episodes.forEach((ep) => {
+                const episodeNumber = Number(ep.episodeNumber);
+                const localRelativePath = sanitizeSeriesRelativePath(ep.localRelativePath || '');
+                const subtitleRelativePath = sanitizeSeriesRelativePath(ep.subtitleRelativePath || '');
+                const videoPath = localRelativePath ? resolveRelativePathInSeriesRoots(localRelativePath) : '';
+                const subtitleCandidates = (videoPath && fs.existsSync(videoPath))
+                    ? listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: false }).map((candidate) => ({
+                        file: candidate.file,
+                        relativePath: sanitizeSeriesRelativePath(candidate.relativePath || ''),
+                        lang: candidate.langHint || ''
+                    }))
+                    : [];
+
+                items.push({
+                    seasonNumber,
+                    episodeNumber,
+                    title: ep.title || `Episode ${episodeNumber}`,
+                    released: ep.released || '',
+                    plot: ep.plot || '',
+                    imdbRating: ep.imdbRating || '',
+                    available: Boolean(ep.available),
+                    localRelativePath,
+                    subtitleRelativePath,
+                    videoFile: localRelativePath ? path.basename(localRelativePath) : '',
+                    subtitleCandidates
+                });
+            });
+        });
+
+    return {
+        showFolder,
+        showPath,
+        totalSeasons: String(seriesData?.totalSeasons || '0'),
+        count: items.length,
+        items
+    };
+}
+
 // =========================================================================
 // ENDPOINTS
 // =========================================================================
@@ -1730,6 +1799,128 @@ router.get('/series/:showFolder', async (req, res) => {
     } catch (err) {
         console.error("❌ Unified Series router failure:", err);
         res.status(500).json({ error: "Failed assembling compiled local series data arrays." });
+    }
+});
+
+router.get('/series/:showFolder/episode-manager', async (req, res) => {
+    try {
+        const resolved = await resolveSeriesShowFolder(req.params.showFolder);
+        if (!resolved) {
+            return res.status(404).json({ success: false, error: 'Show folder not found.' });
+        }
+
+        const showFolder = resolved.folder;
+        const showPath = resolved.path;
+        const seriesData = rebuildSeriesManifest(showPath, {
+            showFolderName: showFolder,
+            write: true
+        });
+
+        const payload = buildEpisodeManagerItems(showFolder, showPath, seriesData);
+        return res.json({ success: true, ...payload });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/series/:showFolder/episode-manager', async (req, res) => {
+    try {
+        const resolved = await resolveSeriesShowFolder(req.params.showFolder);
+        if (!resolved) {
+            return res.status(404).json({ success: false, error: 'Show folder not found.' });
+        }
+
+        const updatesRaw = Array.isArray(req.body?.updates) ? req.body.updates : [];
+        if (!updatesRaw.length) {
+            return res.status(400).json({ success: false, error: 'No episode updates supplied.' });
+        }
+
+        const showFolder = resolved.folder;
+        const showPath = resolved.path;
+        const normalizedUpdates = updatesRaw
+            .map(normalizeEpisodeManagerUpdate)
+            .filter((entry) => Number.isFinite(entry.seasonNumber) && Number.isFinite(entry.episodeNumber));
+
+        if (!normalizedUpdates.length) {
+            return res.status(400).json({ success: false, error: 'No valid episode updates supplied.' });
+        }
+
+        const seriesData = rebuildSeriesManifest(showPath, {
+            showFolderName: showFolder,
+            write: false
+        });
+
+        let changed = 0;
+        for (const update of normalizedUpdates) {
+            const seasonKey = String(update.seasonNumber);
+            const episodes = Array.isArray(seriesData.seasons?.[seasonKey]?.episodes)
+                ? seriesData.seasons[seasonKey].episodes
+                : [];
+
+            let target = episodes.find((ep) => Number(ep.episodeNumber) === update.episodeNumber);
+            if (!target) {
+                target = {
+                    episodeNumber: update.episodeNumber,
+                    title: `Episode ${update.episodeNumber}`,
+                    released: 'Unknown',
+                    plot: '',
+                    imdbRating: 'N/A',
+                    available: false,
+                    localRelativePath: null,
+                    remoteRelativePath: null
+                };
+                episodes.push(target);
+                if (!seriesData.seasons[seasonKey]) {
+                    seriesData.seasons[seasonKey] = {
+                        seasonNumber: seasonKey,
+                        episodes
+                    };
+                }
+            }
+
+            if (update.title) target.title = update.title;
+            if (update.released) target.released = update.released;
+            if (update.plot) target.plot = update.plot;
+            if (update.imdbRating) target.imdbRating = update.imdbRating;
+
+            if (update.localRelativePath) {
+                const localPath = resolveRelativePathInSeriesRoots(update.localRelativePath);
+                if (localPath && fs.existsSync(localPath)) {
+                    target.localRelativePath = update.localRelativePath;
+                    target.available = true;
+                }
+            }
+
+            if (update.subtitleRelativePath) {
+                const subtitlePath = resolveRelativePathInSeriesRoots(update.subtitleRelativePath);
+                if (subtitlePath && fs.existsSync(subtitlePath)) {
+                    target.subtitleRelativePath = update.subtitleRelativePath;
+                }
+            }
+
+            changed += 1;
+        }
+
+        Object.keys(seriesData.seasons || {}).forEach((seasonKey) => {
+            const eps = Array.isArray(seriesData.seasons[seasonKey]?.episodes)
+                ? seriesData.seasons[seasonKey].episodes
+                : [];
+            eps.sort((a, b) => Number(a.episodeNumber) - Number(b.episodeNumber));
+            seriesData.seasons[seasonKey].episodes = eps;
+        });
+
+        const seasonNumbers = Object.keys(seriesData.seasons || {})
+            .map((k) => Number(k))
+            .filter(Number.isFinite)
+            .sort((a, b) => a - b);
+        seriesData.totalSeasons = String(seasonNumbers[seasonNumbers.length - 1] || 0);
+
+        await fsPromises.writeFile(path.join(showPath, 'series.json'), JSON.stringify(seriesData, null, 4), 'utf-8');
+
+        const payload = buildEpisodeManagerItems(showFolder, showPath, seriesData);
+        return res.json({ success: true, changed, ...payload });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 

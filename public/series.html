@@ -25,6 +25,93 @@
         .ep-meta { color: #64748b; font-size: 0.8rem; word-break: break-all; }
         .play-btn { background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; text-decoration: none; }
         .play-btn:hover { background: #1d4ed8; }
+
+        .episode-manager-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.72);
+            display: none;
+            z-index: 2000;
+            align-items: stretch;
+            justify-content: flex-end;
+        }
+        .episode-manager-overlay.show { display: flex; }
+        .episode-manager-drawer {
+            width: min(96vw, 920px);
+            height: 100vh;
+            background: #0b1220;
+            border-left: 1px solid #334155;
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+        }
+        .episode-manager-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 18px;
+            border-bottom: 1px solid #1e293b;
+        }
+        .episode-manager-toolbar {
+            display: flex;
+            gap: 8px;
+            padding: 10px 18px;
+            border-bottom: 1px solid #1e293b;
+            align-items: center;
+        }
+        .episode-manager-table-wrap {
+            overflow: auto;
+            padding: 12px 18px;
+        }
+        .episode-manager-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 820px;
+            background: #020617;
+            border: 1px solid #334155;
+        }
+        .episode-manager-table th,
+        .episode-manager-table td {
+            border-bottom: 1px solid #1e293b;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 0.8rem;
+            color: #cbd5e1;
+        }
+        .episode-manager-table th {
+            position: sticky;
+            top: 0;
+            background: #111b2f;
+            color: #93c5fd;
+            z-index: 1;
+        }
+        .episode-manager-table input,
+        .episode-manager-table select {
+            width: 100%;
+            min-height: 32px;
+            background: #0f172a;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            padding: 6px;
+            box-sizing: border-box;
+        }
+        .episode-manager-meta {
+            font-family: monospace;
+            font-size: 0.72rem;
+            color: #94a3b8;
+            white-space: pre-wrap;
+        }
+        .episode-manager-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            border-top: 1px solid #1e293b;
+            padding: 12px 18px;
+        }
+        .epmgr-status { color: #cbd5e1; font-size: 0.8rem; }
+
         @media(min-width: 768px) {
             .layout-deck { flex-direction: row; align-items: flex-start; }
             .show-sidebar { width: 280px; text-align: left; flex-shrink: 0; }
@@ -50,8 +137,11 @@
             <div class="content-browser">
                 <div class="selector-row">
                     <h3 style="margin:0; color:#3b82f6;">Episodes</h3>
-                    <select id="season-select" onchange="loadSeasonEpisodes(this.value)">
-                    </select>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button type="button" onclick="openEpisodeManager()" style="background:#0ea5e9;">Episode Manager</button>
+                        <select id="season-select" onchange="loadSeasonEpisodes(this.value)">
+                        </select>
+                    </div>
                 </div>
 
                 <div class="episode-list" id="episode-list">
@@ -60,10 +150,33 @@
         </div>
     </div>
 
+    <div id="episode-manager-overlay" class="episode-manager-overlay" onclick="closeEpisodeManager(event)">
+        <div class="episode-manager-drawer" onclick="event.stopPropagation()">
+            <div class="episode-manager-header">
+                <div>
+                    <div style="font-size:1rem; font-weight:700; color:#f8fafc;">Episode Manager</div>
+                    <div id="episode-manager-subtitle" style="font-size:0.78rem; color:#93c5fd;">Loading...</div>
+                </div>
+                <button type="button" onclick="closeEpisodeManager()" style="background:#334155;">Close</button>
+            </div>
+            <div class="episode-manager-toolbar">
+                <button type="button" onclick="reloadEpisodeManager()" style="background:#1d4ed8;">Reload</button>
+                <button type="button" onclick="saveEpisodeManager()" style="background:#059669;">Save Changes</button>
+                <span id="episode-manager-count" style="font-size:0.8rem;color:#94a3b8;">0 episodes</span>
+            </div>
+            <div class="episode-manager-table-wrap" id="episode-manager-table-wrap"></div>
+            <div class="episode-manager-footer">
+                <span id="episode-manager-status" class="epmgr-status">Ready.</span>
+                <button type="button" onclick="saveEpisodeManager()" style="background:#16a34a;">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const params = new URLSearchParams(window.location.search);
         const showId = params.get('id'); 
         let serverShowData = null;
+        let episodeManagerCache = null;
 
         async function initPage() {
             if (!showId) {
@@ -109,6 +222,163 @@
                 console.error("Failed executing structural pipeline initialization:", err);
                 document.getElementById('show-title').innerText = "Failed Loading Show Metadata.";
                 document.getElementById('episode-list').innerHTML = `<div style="color:#ef4444;text-align:center;padding:40px;">Error: ${err.message}. Ensure your library sanitizer has run completely.</div>`;
+            }
+        }
+
+        function setEpisodeManagerStatus(message, isError = false) {
+            const status = document.getElementById('episode-manager-status');
+            status.textContent = message;
+            status.style.color = isError ? '#f87171' : '#cbd5e1';
+        }
+
+        function openEpisodeManager() {
+            const overlay = document.getElementById('episode-manager-overlay');
+            overlay.classList.add('show');
+            reloadEpisodeManager();
+        }
+
+        function closeEpisodeManager(event) {
+            if (event && event.target && event.target.id !== 'episode-manager-overlay') return;
+            document.getElementById('episode-manager-overlay').classList.remove('show');
+        }
+
+        function managerApiPath() {
+            const cleanFolder = showId.replace('series/', '');
+            return `/api/series/${encodeURIComponent(cleanFolder)}/episode-manager`;
+        }
+
+        function renderEpisodeManagerTable(payload) {
+            const wrap = document.getElementById('episode-manager-table-wrap');
+            const count = Array.isArray(payload?.items) ? payload.items.length : 0;
+            document.getElementById('episode-manager-count').textContent = `${count} episodes`;
+            document.getElementById('episode-manager-subtitle').textContent = `Show: ${payload?.showFolder || 'Unknown'}`;
+
+            if (!count) {
+                wrap.innerHTML = '<div style="color:#94a3b8; padding:20px;">No episodes found in manifest.</div>';
+                return;
+            }
+
+            const rows = payload.items.map((item) => {
+                const key = `${item.seasonNumber}:${item.episodeNumber}`;
+                const subtitleOptions = ['<option value="">(none)</option>']
+                    .concat((item.subtitleCandidates || []).map((candidate) => {
+                        const selected = candidate.relativePath === item.subtitleRelativePath ? 'selected' : '';
+                        const label = `${candidate.file}${candidate.lang ? ` [${candidate.lang}]` : ''}`;
+                        return `<option value="${escapeHtml(candidate.relativePath || '')}" ${selected}>${escapeHtml(label)}</option>`;
+                    }))
+                    .join('');
+
+                return `
+                    <tr data-key="${escapeHtml(key)}" data-season="${item.seasonNumber}" data-episode="${item.episodeNumber}">
+                        <td>${item.seasonNumber}</td>
+                        <td>${item.episodeNumber}</td>
+                        <td>
+                            <input type="text" data-field="title" value="${escapeHtml(item.title || '')}">
+                        </td>
+                        <td>
+                            <input type="text" data-field="localRelativePath" value="${escapeHtml(item.localRelativePath || '')}">
+                        </td>
+                        <td>
+                            <select data-field="subtitleRelativePath">${subtitleOptions}</select>
+                            <div style="height:6px"></div>
+                            <input type="text" data-field="subtitleRelativePathManual" placeholder="or manual subtitle path" value="${escapeHtml(item.subtitleRelativePath || '')}">
+                        </td>
+                        <td>
+                            <div class="episode-manager-meta">${escapeHtml(item.videoFile || '(no local file)')}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            wrap.innerHTML = `
+                <table class="episode-manager-table">
+                    <thead>
+                        <tr>
+                            <th>Season</th>
+                            <th>Episode</th>
+                            <th>Title</th>
+                            <th>Video Path</th>
+                            <th>Subtitle</th>
+                            <th>Detected File</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function reloadEpisodeManager() {
+            try {
+                setEpisodeManagerStatus('Loading episode manager data...');
+                const res = await fetch(managerApiPath());
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Request failed (${res.status})`);
+                }
+                episodeManagerCache = data;
+                renderEpisodeManagerTable(data);
+                setEpisodeManagerStatus(`Loaded ${data.count || 0} episodes.`);
+            } catch (err) {
+                document.getElementById('episode-manager-table-wrap').innerHTML = `<div style="color:#f87171; padding:20px;">${escapeHtml(err.message)}</div>`;
+                setEpisodeManagerStatus(`Load failed: ${err.message}`, true);
+            }
+        }
+
+        function gatherEpisodeManagerUpdates() {
+            const rows = Array.from(document.querySelectorAll('#episode-manager-table-wrap tbody tr'));
+            return rows.map((row) => {
+                const seasonNumber = Number(row.getAttribute('data-season'));
+                const episodeNumber = Number(row.getAttribute('data-episode'));
+                const title = row.querySelector('[data-field="title"]')?.value || '';
+                const localRelativePath = row.querySelector('[data-field="localRelativePath"]')?.value || '';
+                const selectedSubtitle = row.querySelector('[data-field="subtitleRelativePath"]')?.value || '';
+                const manualSubtitle = row.querySelector('[data-field="subtitleRelativePathManual"]')?.value || '';
+
+                return {
+                    seasonNumber,
+                    episodeNumber,
+                    title,
+                    localRelativePath,
+                    subtitleRelativePath: manualSubtitle || selectedSubtitle
+                };
+            });
+        }
+
+        async function saveEpisodeManager() {
+            try {
+                const updates = gatherEpisodeManagerUpdates();
+                if (!updates.length) {
+                    setEpisodeManagerStatus('No episode rows to save.');
+                    return;
+                }
+
+                setEpisodeManagerStatus('Saving episode updates...');
+                const res = await fetch(managerApiPath(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Save failed (${res.status})`);
+                }
+
+                episodeManagerCache = data;
+                renderEpisodeManagerTable(data);
+                setEpisodeManagerStatus(`Saved ${data.changed || updates.length} episode entries.`);
+
+                await initPage();
+            } catch (err) {
+                setEpisodeManagerStatus(`Save failed: ${err.message}`, true);
             }
         }
 
