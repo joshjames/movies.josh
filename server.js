@@ -16,6 +16,7 @@ const ProfileService = require('./src/services/ProfileService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ENABLE_PIPELINE_WATCHER = !['false', '0', 'no'].includes(String(process.env.ENABLE_PIPELINE_WATCHER || 'true').trim().toLowerCase());
 
 //allow webhook requests from Square to reach our server without CORS issues
 //or authentication, since they are coming from Square's servers
@@ -149,8 +150,12 @@ app.use('/api/*', (req, res) => {
         LibraryScanner.runLibraryScanSweep().catch(err => logger.warn(`Scheduled library scan failed: ${err.message}`));
     }, LIBRARY_SCAN_INTERVAL_MS);
     
-    logger.info('Queue-driven pipeline active; waiting for torrent completion events.');
-    startPipelineWorker(10000);
+    if (ENABLE_PIPELINE_WATCHER) {
+        logger.info('Queue-driven pipeline active; waiting for torrent completion events.');
+        startPipelineWorker(10000);
+    } else {
+        logger.info('Pipeline watcher disabled on this node via ENABLE_PIPELINE_WATCHER=false.');
+    }
 })();
 
 app.listen(PORT, () => {

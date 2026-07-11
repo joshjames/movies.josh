@@ -766,7 +766,7 @@ router.get('/pipeline/status', async (req, res) => {
 
             let torrentOwner =
                 TorrentService.extractAddedByUserFromTags(torrent.tags) ||
-                TorrentService.getAddedByUserByHash(torrent.hash) ||
+                await TorrentService.getAddedByUserByHash(torrent.hash) ||
                 null;
 
             if (viewerUser && !torrentOwner) {

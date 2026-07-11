@@ -21,6 +21,7 @@ const {
     updateJob,
     removeJob
 } = require('../PipelineQueueService');
+const { withDistributedLock } = require('../DistributedLockService');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 
@@ -299,11 +300,11 @@ async function enqueueCompletedTorrent(torrent) {
 
     // Retrieve IMDB ID from TorrentService mapping
     const isSeries = tagStr.includes('series-streamer');
-    let imdbId = normalizeImdbId(TorrentService.getImdbIdByHash(torrent.hash));
+    let imdbId = normalizeImdbId(await TorrentService.getImdbIdByHash(torrent.hash));
     if (!imdbId && isSeries) {
         imdbId = inferSeriesImdbIdFromTorrentName(torrent.name);
         if (imdbId) {
-            TorrentService.setImdbIdForHash(torrent.hash, imdbId);
+            await TorrentService.setImdbIdForHash(torrent.hash, imdbId);
             logger.info(`🧩 [Queue] Recovered missing IMDb from TV index for ${torrent.name}: ${imdbId}`);
         }
     }
@@ -581,54 +582,50 @@ async function checkPipelineCompletions() {
         isProcessingPipeline = true;
         const torrentHash = completedTorrent.hash;
 
-        const tagStr = normalizeTags(completedTorrent.tags);
-        const isSeries = tagStr.includes('series-streamer');
+        await withDistributedLock(`pipeline:torrent:${torrentHash}`, async () => {
+            const tagStr = normalizeTags(completedTorrent.tags);
+            const isSeries = tagStr.includes('series-streamer');
 
-        const activeTag = isSeries ? 'series-streamer' : 'movie-streamer';
-        const processedTag = isSeries ? 'series-streamer-processed' : 'movie-streamer-processed';
+            const activeTag = isSeries ? 'series-streamer' : 'movie-streamer';
+            const processedTag = isSeries ? 'series-streamer-processed' : 'movie-streamer-processed';
 
-        logger.debug(`🎉 [Pipeline Agent] Download completion caught: [${completedTorrent.name}] (${isSeries ? 'TV Show' : 'Movie'})`);
+            logger.debug(`🎉 [Pipeline Agent] Download completion caught: [${completedTorrent.name}] (${isSeries ? 'TV Show' : 'Movie'})`);
 
-        // Inside src/services/workers/PipelineWorker.js -> checkPipelineCompletions()
+            try {
+                logger.debug(`⚙️  Rotating workflow tags [${activeTag} -> ${processedTag}] for hash: ${torrentHash}`);
 
-        // Rotate the workflow tag to prevent looping on the same item twice
-        try {
-            logger.debug(`⚙️  Rotating workflow tags [${activeTag} -> ${processedTag}] for hash: ${torrentHash}`);
-            
-            // Use URLSearchParams directly for strict urlencoded delivery
-            const removeParams = new URLSearchParams();
-            removeParams.append('hashes', torrentHash);
-            removeParams.append('tags', activeTag);
+                const removeParams = new URLSearchParams();
+                removeParams.append('hashes', torrentHash);
+                removeParams.append('tags', activeTag);
 
-            const addParams = new URLSearchParams();
-            addParams.append('hashes', torrentHash);
-            addParams.append('tags', processedTag);
+                const addParams = new URLSearchParams();
+                addParams.append('hashes', torrentHash);
+                addParams.append('tags', processedTag);
 
-            // 🎯 CRITICAL: Execute these sequentially and verify they complete
-            await axios.post(`${QBIT_URL}/api/v2/torrents/removeTags`, removeParams.toString(), {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-            });
-            
-            await axios.post(`${QBIT_URL}/api/v2/torrents/addTags`, addParams.toString(), {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-            });
-            
-            logger.debug(`✅ Tag rotation complete for hash ${torrentHash.substring(0,8)}. Triggering down-pipe automation.`);
-        } catch (tagErr) {
-            logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`);
-            isProcessingPipeline = false; // Release the lock so next check can recover
-            return; // Drop out early! Do not run orchestrator if tag assignment failed
-        }
+                await axios.post(`${QBIT_URL}/api/v2/torrents/removeTags`, removeParams.toString(), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
 
-        try {
-            const job = await enqueueCompletedTorrent(completedTorrent);
-            if (job) {
-                logger.debug(`🚦 [Queue] Starting pipeline chain for job ${job.id}`);
-                await processNextJob(job);
+                await axios.post(`${QBIT_URL}/api/v2/torrents/addTags`, addParams.toString(), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+
+                logger.debug(`✅ Tag rotation complete for hash ${torrentHash.substring(0,8)}. Triggering down-pipe automation.`);
+            } catch (tagErr) {
+                logger.error(`⚠️ Failed updating qBittorrent status tags: ${tagErr.message}`);
+                return;
             }
-        } catch (queueErr) {
-            logger.error(`❌ Queue processing failed: ${queueErr.message}`);
-        }
+
+            try {
+                const job = await enqueueCompletedTorrent(completedTorrent);
+                if (job) {
+                    logger.debug(`🚦 [Queue] Starting pipeline chain for job ${job.id}`);
+                    await processNextJob(job);
+                }
+            } catch (queueErr) {
+                logger.error(`❌ Queue processing failed: ${queueErr.message}`);
+            }
+        }, { ttlMs: 15000, waitMs: 2000 });
 
         isProcessingPipeline = false;
 

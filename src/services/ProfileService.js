@@ -6,6 +6,8 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
+const { connectDb, redisClient } = require('./db');
+const { withDistributedLock } = require('./DistributedLockService');
 
 function resolveUserBaseDir() {
     const configured = String(process.env.USER_BASE_DIR || '').trim();
@@ -22,6 +24,9 @@ function resolveUserBaseDir() {
 
 const USER_BASE_DIR = resolveUserBaseDir();
 const ROSTER_FILE = path.join(USER_BASE_DIR, 'roster.json');
+const PLAYBACK_KEY_PREFIX = process.env.PLAYBACK_REDIS_PREFIX || 'anymovie:user:playback:';
+const USER_STATE_KEY_PREFIX = process.env.USER_STATE_REDIS_PREFIX || 'anymovie:user:state:';
+const ROSTER_REDIS_KEY = `${USER_STATE_KEY_PREFIX}roster`;
 
 function normalizeIdentity(value) {
     return String(value || '').toLowerCase().trim();
@@ -111,17 +116,127 @@ async function ensureUserDir(username) {
 }
 
 async function readRoster() {
+    await connectDb();
+
+    if (redisClient.isOpen) {
+        try {
+            const cached = await redisClient.get(ROSTER_REDIS_KEY);
+            if (cached) {
+                return JSON.parse(cached);
+            }
+        } catch (err) {
+            logger.warn(`[PROFILE WARN] Failed reading roster cache: ${err.message}`);
+        }
+    }
+
     try {
         const data = await fs.readFile(ROSTER_FILE, 'utf-8');
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+
+        if (redisClient.isOpen) {
+            try {
+                await redisClient.set(ROSTER_REDIS_KEY, JSON.stringify(parsed));
+            } catch (err) {
+                logger.warn(`[PROFILE WARN] Failed hydrating roster cache: ${err.message}`);
+            }
+        }
+
+        return parsed;
     } catch (e) {
         return {}; 
     }
 }
 
 async function writeRoster(roster) {
+    await connectDb();
+    if (redisClient.isOpen) {
+        try {
+            await redisClient.set(ROSTER_REDIS_KEY, JSON.stringify(roster));
+        } catch (err) {
+            logger.warn(`[PROFILE WARN] Failed writing roster cache: ${err.message}`);
+        }
+    }
+
     await fs.mkdir(USER_BASE_DIR, { recursive: true });
     await fs.writeFile(ROSTER_FILE, JSON.stringify(roster, null, 4), 'utf-8');
+}
+
+function isRedisMirroredFileType(fileType) {
+    return fileType === 'config' || fileType === 'history';
+}
+
+function userStateRedisKey(username, fileType) {
+    return `${USER_STATE_KEY_PREFIX}${fileType}:${normalizeIdentity(username)}`;
+}
+
+async function readUserStateFromRedis(username, fileType) {
+    if (!isRedisMirroredFileType(fileType)) return null;
+
+    await connectDb();
+    if (!redisClient.isOpen) return null;
+
+    try {
+        const cached = await redisClient.get(userStateRedisKey(username, fileType));
+        return cached ? JSON.parse(cached) : null;
+    } catch (err) {
+        logger.warn(`[PROFILE WARN] Failed reading ${fileType} cache for ${username}: ${err.message}`);
+        return null;
+    }
+}
+
+async function writeUserStateToRedis(username, fileType, data) {
+    if (!isRedisMirroredFileType(fileType)) return;
+
+    await connectDb();
+    if (!redisClient.isOpen) return;
+
+    try {
+        await redisClient.set(userStateRedisKey(username, fileType), JSON.stringify(data));
+    } catch (err) {
+        logger.warn(`[PROFILE WARN] Failed writing ${fileType} cache for ${username}: ${err.message}`);
+    }
+}
+
+function playbackRedisKey(username) {
+    return `${PLAYBACK_KEY_PREFIX}${normalizeIdentity(username)}`;
+}
+
+async function readPlaybackFromRedis(username) {
+    await connectDb();
+    if (!redisClient.isOpen) return null;
+
+    try {
+        const raw = await redisClient.hGetAll(playbackRedisKey(username));
+        if (!raw || Object.keys(raw).length === 0) return null;
+
+        const playback = {};
+        for (const [mediaId, value] of Object.entries(raw)) {
+            try {
+                playback[mediaId] = JSON.parse(value);
+            } catch (_err) {
+                playback[mediaId] = { position: parseFloat(value) || 0, updatedAt: 0 };
+            }
+        }
+        return playback;
+    } catch (err) {
+        logger.warn(`[PROFILE WARN] Failed reading playback cache for ${username}: ${err.message}`);
+        return null;
+    }
+}
+
+async function mirrorPlaybackSnapshotToDisk(username) {
+    const snapshot = await readPlaybackFromRedis(username);
+    if (!snapshot) return false;
+
+    try {
+        const userDir = await ensureUserDir(username);
+        const filePath = path.join(userDir, 'playback.json');
+        await fs.writeFile(filePath, JSON.stringify(snapshot, null, 4), 'utf-8');
+        return true;
+    } catch (err) {
+        logger.warn(`[PROFILE WARN] Failed mirroring playback snapshot for ${username}: ${err.message}`);
+        return false;
+    }
 }
 
 // ====== CORE SERVICE CORE ======
@@ -152,11 +267,16 @@ const ProfileService = {
     
     // --- GENERIC READ OPERATIONS ---
     async readData(username, fileType, defaultData = {}) {
+        const cached = await readUserStateFromRedis(username, fileType);
+        if (cached) return cached;
+
         try {
             const userDir = path.join(USER_BASE_DIR, username);
             const filePath = path.join(userDir, `${fileType}.json`);
             const data = await fs.readFile(filePath, 'utf-8');
-            return JSON.parse(data);
+            const parsed = JSON.parse(data);
+            await writeUserStateToRedis(username, fileType, parsed);
+            return parsed;
         } catch (err) {
             return defaultData;
         }
@@ -165,6 +285,7 @@ const ProfileService = {
     // --- GENERIC WRITE OPERATIONS ---
     async writeData(username, fileType, data) {
         try {
+            await writeUserStateToRedis(username, fileType, data);
             const userDir = await ensureUserDir(username);
             const filePath = path.join(userDir, `${fileType}.json`);
             await fs.writeFile(filePath, JSON.stringify(data, null, 4), 'utf-8');
@@ -177,16 +298,35 @@ const ProfileService = {
 
     // --- PLAYBACK PROGRESS COORDINATE TRACKS ---
     async getPlaybackState(username) {
+        const cached = await readPlaybackFromRedis(username);
+        if (cached) return cached;
         return await this.readData(username, 'playback', {});
     },
 
     async savePlaybackPosition(username, mediaId, position) {
-        const playback = await this.getPlaybackState(username);
-        playback[mediaId] = {
+        const cleanUser = normalizeIdentity(username);
+        const cleanMediaId = String(mediaId || '').trim();
+        const entry = {
             position: parseFloat(position),
             updatedAt: Date.now()
         };
-        return await this.writeData(username, 'playback', playback);
+
+        await connectDb();
+        if (redisClient.isOpen) {
+            try {
+                await redisClient.hSet(playbackRedisKey(cleanUser), cleanMediaId, JSON.stringify(entry));
+                await mirrorPlaybackSnapshotToDisk(cleanUser);
+                return true;
+            } catch (err) {
+                logger.warn(`[PROFILE WARN] Failed writing playback cache for ${cleanUser}: ${err.message}`);
+            }
+        }
+
+        return await withDistributedLock(`profile:user:${cleanUser}:playback`, async () => {
+            const playback = await this.readData(cleanUser, 'playback', {});
+            playback[cleanMediaId] = entry;
+            return await this.writeData(cleanUser, 'playback', playback);
+        }, { ttlMs: 5000, waitMs: 4000 });
     },
 
     async getWatchHistory(username, options = {}) {
@@ -216,74 +356,79 @@ const ProfileService = {
 
     // --- TELEMETRY SECURITY HISTORY TRACKS ---
     async updateLoginHistory(username, ipAddress) {
-        const history = await this.readData(username, 'history', { logins: [], lastLogin: null });
-        const currentTimestamp = Date.now();
-        
-        history.lastLogin = currentTimestamp;
-        history.logins.unshift({ ip: ipAddress, timestamp: currentTimestamp });
-        
-        if (history.logins.length > 50) history.logins.pop();
-        
-        return await this.writeData(username, 'history', history);
+        const cleanUser = normalizeIdentity(username);
+        return await withDistributedLock(`profile:user:${cleanUser}:history`, async () => {
+            const history = await this.readData(cleanUser, 'history', { logins: [], lastLogin: null });
+            const currentTimestamp = Date.now();
+            
+            history.lastLogin = currentTimestamp;
+            history.logins.unshift({ ip: ipAddress, timestamp: currentTimestamp });
+            
+            if (history.logins.length > 50) history.logins.pop();
+            
+            return await this.writeData(cleanUser, 'history', history);
+        }, { ttlMs: 5000, waitMs: 4000 });
     },
 
     // --- SECURE PROVISIONING & LEADER MATRIX ---
     async registerUser(username, password, email, displayName = '') {
-        const cleanName = normalizeIdentity(username);
-        const cleanEmail = normalizeIdentity(email);
-        const cleanDisplayName = String(displayName || '').trim() || defaultDisplayNameFromEmail(cleanEmail || cleanName);
-        const roster = await readRoster();
-        const now = Date.now();
-        const nowIso = new Date(now).toISOString();
-        const trialDays = resolvePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7);
-        const trialEndsAt = new Date(now + trialDays * 24 * 60 * 60 * 1000).toISOString();
+        return await withDistributedLock('profile:roster', async () => {
+            const cleanName = normalizeIdentity(username);
+            const cleanEmail = normalizeIdentity(email);
+            const cleanDisplayName = String(displayName || '').trim() || defaultDisplayNameFromEmail(cleanEmail || cleanName);
+            const roster = await readRoster();
+            const now = Date.now();
+            const nowIso = new Date(now).toISOString();
+            const trialDays = resolvePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7);
+            const trialEndsAt = new Date(now + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
-        if (roster[cleanName]) {
-            return { success: false, error: "Account already exists for this email." };
-        }
+            if (roster[cleanName]) {
+                return { success: false, error: "Account already exists for this email." };
+            }
 
-        const duplicateEmail = Object.keys(roster).find(key => normalizeIdentity(roster[key]?.email) === cleanEmail);
-        if (duplicateEmail) {
-            return { success: false, error: "Account already exists for this email." };
-        }
+            const duplicateEmail = Object.keys(roster).find(key => normalizeIdentity(roster[key]?.email) === cleanEmail);
+            if (duplicateEmail) {
+                return { success: false, error: "Account already exists for this email." };
+            }
 
-        roster[cleanName] = {
-            password: password,
-            email: cleanEmail,
-            displayName: cleanDisplayName,
-            createdAt: now,
-            updatedAt: now
-        };
-        await writeRoster(roster);
+            roster[cleanName] = {
+                password: password,
+                email: cleanEmail,
+                displayName: cleanDisplayName,
+                createdAt: now,
+                updatedAt: now
+            };
 
-        const token = require('crypto').randomBytes(32).toString('hex');
-        const expires = Date.now() + (24 * 60 * 60 * 1000); 
+            const token = require('crypto').randomBytes(32).toString('hex');
+            const expires = Date.now() + (24 * 60 * 60 * 1000); 
 
-        const defaultConfigs = {
-            username: cleanDisplayName,
-            displayName: cleanDisplayName,
-            name: cleanDisplayName,
-            email: cleanEmail,
-            loginKey: cleanName,
-            isVerified: false,
-            verificationToken: token,
-            verificationExpires: expires,
-            avatar: 'avatar_001.png',
-            signupDate: nowIso,
-            trialDays,
-            trialEndsAt,
-            freeAccessActive: trialDays > 0,
-            gracePeriodDays: resolvePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3),
-            gracePeriodEndsAt: null,
-            preferences: { autoplay: true, UITheme: "dark" }
-        };
-        
-        await this.writeData(cleanName, 'config', defaultConfigs);
-        await this.writeData(cleanName, 'history', { logins: [], lastLogin: null });
-        await this.writeData(cleanName, 'playback', {});
+            const defaultConfigs = {
+                username: cleanDisplayName,
+                displayName: cleanDisplayName,
+                name: cleanDisplayName,
+                email: cleanEmail,
+                loginKey: cleanName,
+                isVerified: false,
+                verificationToken: token,
+                verificationExpires: expires,
+                avatar: 'avatar_001.png',
+                signupDate: nowIso,
+                trialDays,
+                trialEndsAt,
+                freeAccessActive: trialDays > 0,
+                gracePeriodDays: resolvePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3),
+                gracePeriodEndsAt: null,
+                preferences: { autoplay: true, UITheme: "dark" }
+            };
 
-        logger.info(`👤 [USER PROVISIONING] Created new profile volume workspace for: ${cleanName}`);
-        return { success: true, token: token }; 
+            await writeRoster(roster);
+            await this.writeData(cleanName, 'config', defaultConfigs);
+            await this.writeData(cleanName, 'history', { logins: [], lastLogin: null });
+            await this.writeData(cleanName, 'playback', {});
+
+            logger.info(`👤 [USER PROVISIONING] Created new profile volume workspace for: ${cleanName}`);
+            return { success: true, token: token };
+        }, { ttlMs: 10000, waitMs: 8000 });
     },
 
     async authenticateUser(username, password) {
@@ -303,166 +448,176 @@ const ProfileService = {
     },
 
     async setPassword(userKey, nextPassword) {
-        const cleanKey = await this.resolveUserKey(userKey);
-        if (!cleanKey) {
-            return { success: false, error: 'Account not found.' };
-        }
+        return await withDistributedLock('profile:roster', async () => {
+            const cleanKey = await this.resolveUserKey(userKey);
+            if (!cleanKey) {
+                return { success: false, error: 'Account not found.' };
+            }
 
-        const roster = await readRoster();
-        if (!roster[cleanKey]) {
-            return { success: false, error: 'Account not found.' };
-        }
+            const roster = await readRoster();
+            if (!roster[cleanKey]) {
+                return { success: false, error: 'Account not found.' };
+            }
 
-        roster[cleanKey].password = String(nextPassword);
-        roster[cleanKey].updatedAt = Date.now();
-        await writeRoster(roster);
+            roster[cleanKey].password = String(nextPassword);
+            roster[cleanKey].updatedAt = Date.now();
+            await writeRoster(roster);
 
-        return { success: true, userKey: cleanKey };
+            return { success: true, userKey: cleanKey };
+        }, { ttlMs: 10000, waitMs: 8000 });
     },
 
     async issuePasswordResetToken(identifier, ttlMs = 60 * 60 * 1000) {
-        const cleanKey = await this.resolveUserKey(identifier);
-        if (!cleanKey) {
+        const resolvedKey = await this.resolveUserKey(identifier);
+        if (!resolvedKey) {
             return { success: false, error: 'Account not found.' };
         }
 
-        const config = await this.readData(cleanKey, 'config', {});
-        const token = require('crypto').randomBytes(32).toString('hex');
-        const expires = Date.now() + Math.max(5 * 60 * 1000, Number(ttlMs) || 0);
+        return await withDistributedLock(`profile:user:${resolvedKey}:config`, async () => {
+            const config = await this.readData(resolvedKey, 'config', {});
+            const token = require('crypto').randomBytes(32).toString('hex');
+            const expires = Date.now() + Math.max(5 * 60 * 1000, Number(ttlMs) || 0);
 
-        config.passwordResetToken = token;
-        config.passwordResetExpires = expires;
-        config.updatedAt = Date.now();
+            config.passwordResetToken = token;
+            config.passwordResetExpires = expires;
+            config.updatedAt = Date.now();
 
-        await this.writeData(cleanKey, 'config', config);
+            await this.writeData(resolvedKey, 'config', config);
 
-        return {
-            success: true,
-            userKey: cleanKey,
-            token,
-            expires,
-            email: config.email || cleanKey,
-            displayName: config.displayName || config.name || config.username || cleanKey
-        };
+            return {
+                success: true,
+                userKey: resolvedKey,
+                token,
+                expires,
+                email: config.email || resolvedKey,
+                displayName: config.displayName || config.name || config.username || resolvedKey
+            };
+        }, { ttlMs: 5000, waitMs: 4000 });
     },
 
     async resetPasswordWithToken(identifier, token, nextPassword) {
-        const cleanKey = await this.resolveUserKey(identifier);
-        if (!cleanKey) {
+        const resolvedKey = await this.resolveUserKey(identifier);
+        if (!resolvedKey) {
             return { success: false, error: 'Invalid reset request.' };
         }
 
-        const config = await this.readData(cleanKey, 'config', {});
-        if (!config.passwordResetToken || !config.passwordResetExpires) {
-            return { success: false, error: 'Reset token is invalid or already used.' };
-        }
+        return await withDistributedLock(`profile:user:${resolvedKey}:config`, async () => {
+            const config = await this.readData(resolvedKey, 'config', {});
+            if (!config.passwordResetToken || !config.passwordResetExpires) {
+                return { success: false, error: 'Reset token is invalid or already used.' };
+            }
 
-        if (config.passwordResetToken !== String(token)) {
-            return { success: false, error: 'Reset token is invalid or already used.' };
-        }
+            if (config.passwordResetToken !== String(token)) {
+                return { success: false, error: 'Reset token is invalid or already used.' };
+            }
 
-        if (Date.now() > Number(config.passwordResetExpires)) {
-            return { success: false, error: 'Reset token has expired. Request a new reset email.' };
-        }
+            if (Date.now() > Number(config.passwordResetExpires)) {
+                return { success: false, error: 'Reset token has expired. Request a new reset email.' };
+            }
 
-        const updateResult = await this.setPassword(cleanKey, nextPassword);
-        if (!updateResult.success) {
-            return updateResult;
-        }
+            const updateResult = await this.setPassword(resolvedKey, nextPassword);
+            if (!updateResult.success) {
+                return updateResult;
+            }
 
-        delete config.passwordResetToken;
-        delete config.passwordResetExpires;
-        config.updatedAt = Date.now();
-        await this.writeData(cleanKey, 'config', config);
+            delete config.passwordResetToken;
+            delete config.passwordResetExpires;
+            config.updatedAt = Date.now();
+            await this.writeData(resolvedKey, 'config', config);
 
-        return { success: true, userKey: cleanKey };
+            return { success: true, userKey: resolvedKey };
+        }, { ttlMs: 10000, waitMs: 8000 });
     },
 
     async updateAccountProfile(userKey, payload = {}) {
         const cleanKey = normalizeIdentity(userKey);
-        const roster = await readRoster();
-        if (!roster[cleanKey]) {
-            throw new Error('Account roster entry not found.');
-        }
-
-        const currentConfig = await this.readData(cleanKey, 'config', {});
-        const nextDisplayName = String(payload.displayName || payload.name || '').trim() || currentConfig.displayName || currentConfig.username || defaultDisplayNameFromEmail(cleanKey);
-        const nextEmail = normalizeIdentity(payload.email || currentConfig.email || cleanKey);
-        const nextAvatar = normalizeAvatarFileName(payload.avatar, normalizeAvatarFileName(currentConfig.avatar, 'avatar_001.png'));
-
-        let finalUserKey = cleanKey;
-        if (nextEmail && nextEmail !== cleanKey) {
-            const collision = Object.keys(roster).find(key => key !== cleanKey && normalizeIdentity(roster[key]?.email) === nextEmail);
-            if (collision) {
-                throw new Error('Another account already uses this email.');
+        return await withDistributedLock('profile:roster', async () => {
+            const roster = await readRoster();
+            if (!roster[cleanKey]) {
+                throw new Error('Account roster entry not found.');
             }
 
-            const collisionByKey = roster[nextEmail];
-            if (collisionByKey) {
-                throw new Error('Another account already uses this email.');
+            const currentConfig = await this.readData(cleanKey, 'config', {});
+            const nextDisplayName = String(payload.displayName || payload.name || '').trim() || currentConfig.displayName || currentConfig.username || defaultDisplayNameFromEmail(cleanKey);
+            const nextEmail = normalizeIdentity(payload.email || currentConfig.email || cleanKey);
+            const nextAvatar = normalizeAvatarFileName(payload.avatar, normalizeAvatarFileName(currentConfig.avatar, 'avatar_001.png'));
+
+            let finalUserKey = cleanKey;
+            if (nextEmail && nextEmail !== cleanKey) {
+                const collision = Object.keys(roster).find(key => key !== cleanKey && normalizeIdentity(roster[key]?.email) === nextEmail);
+                if (collision) {
+                    throw new Error('Another account already uses this email.');
+                }
+
+                const collisionByKey = roster[nextEmail];
+                if (collisionByKey) {
+                    throw new Error('Another account already uses this email.');
+                }
+
+                finalUserKey = await this.renameUserKey(cleanKey, nextEmail);
             }
 
-            finalUserKey = await this.renameUserKey(cleanKey, nextEmail);
-        }
+            const refreshedRoster = await readRoster();
+            refreshedRoster[finalUserKey] = {
+                ...(refreshedRoster[finalUserKey] || {}),
+                email: nextEmail,
+                displayName: nextDisplayName,
+                updatedAt: Date.now()
+            };
+            await writeRoster(refreshedRoster);
 
-        const refreshedRoster = await readRoster();
-        refreshedRoster[finalUserKey] = {
-            ...(refreshedRoster[finalUserKey] || {}),
-            email: nextEmail,
-            displayName: nextDisplayName,
-            updatedAt: Date.now()
-        };
-        await writeRoster(refreshedRoster);
+            const nextConfig = {
+                ...currentConfig,
+                username: nextDisplayName,
+                displayName: nextDisplayName,
+                name: nextDisplayName,
+                email: nextEmail,
+                loginKey: finalUserKey,
+                avatar: nextAvatar,
+                updatedAt: Date.now()
+            };
 
-        const nextConfig = {
-            ...currentConfig,
-            username: nextDisplayName,
-            displayName: nextDisplayName,
-            name: nextDisplayName,
-            email: nextEmail,
-            loginKey: finalUserKey,
-            avatar: nextAvatar,
-            updatedAt: Date.now()
-        };
-
-        await this.writeData(finalUserKey, 'config', nextConfig);
-        return { userKey: finalUserKey, config: nextConfig };
+            await this.writeData(finalUserKey, 'config', nextConfig);
+            return { userKey: finalUserKey, config: nextConfig };
+        }, { ttlMs: 15000, waitMs: 12000 });
     },
 
     async renameUserKey(oldKey, newKey) {
-        const fromKey = normalizeIdentity(oldKey);
-        const toKey = normalizeIdentity(newKey);
+        return await withDistributedLock('profile:roster', async () => {
+            const fromKey = normalizeIdentity(oldKey);
+            const toKey = normalizeIdentity(newKey);
 
-        if (!fromKey || !toKey) throw new Error('Invalid account identity key.');
-        if (fromKey === toKey) return fromKey;
+            if (!fromKey || !toKey) throw new Error('Invalid account identity key.');
+            if (fromKey === toKey) return fromKey;
 
-        const roster = await readRoster();
-        if (!roster[fromKey]) {
-            throw new Error('Current account identity not found.');
-        }
-        if (roster[toKey]) {
-            throw new Error('Target account identity already exists.');
-        }
+            const roster = await readRoster();
+            if (!roster[fromKey]) {
+                throw new Error('Current account identity not found.');
+            }
+            if (roster[toKey]) {
+                throw new Error('Target account identity already exists.');
+            }
 
-        const fromDir = path.join(USER_BASE_DIR, fromKey);
-        const toDir = path.join(USER_BASE_DIR, toKey);
+            const fromDir = path.join(USER_BASE_DIR, fromKey);
+            const toDir = path.join(USER_BASE_DIR, toKey);
 
-        try {
-            await fs.access(fromDir);
-            await fs.rename(fromDir, toDir);
-        } catch (_err) {
-            await fs.mkdir(toDir, { recursive: true });
-        }
+            try {
+                await fs.access(fromDir);
+                await fs.rename(fromDir, toDir);
+            } catch (_err) {
+                await fs.mkdir(toDir, { recursive: true });
+            }
 
-        roster[toKey] = {
-            ...roster[fromKey],
-            email: toKey,
-            updatedAt: Date.now()
-        };
-        delete roster[fromKey];
-        await writeRoster(roster);
+            roster[toKey] = {
+                ...roster[fromKey],
+                email: toKey,
+                updatedAt: Date.now()
+            };
+            delete roster[fromKey];
+            await writeRoster(roster);
 
-        return toKey;
+            return toKey;
+        }, { ttlMs: 15000, waitMs: 12000 });
     }
 };
 

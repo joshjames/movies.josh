@@ -4,8 +4,11 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const logger = require('./logger');
+const { connectDb, redisClient } = require('./db');
 
 const QBIT_BASE_URL = process.env.QBIT_API_URL || 'http://qbittorrent:8080/api/v2';
+const TORRENT_IMDB_PREFIX = process.env.TORRENT_IMDB_PREFIX || 'anymovie:torrent:imdb:';
+const TORRENT_USER_PREFIX = process.env.TORRENT_USER_PREFIX || 'anymovie:torrent:user:';
 
 // Simple in-memory cache for torrent hash -> IMDB ID mapping
 const torrentImdbMap = new Map();
@@ -53,6 +56,40 @@ function extractUserFromTagList(tagList = []) {
     return normalizeUserKey(userTagMap.get(userTag)) || null;
 }
 
+function buildRedisKey(prefix, hash) {
+    const cleanHash = normalizeHash(hash);
+    return cleanHash ? `${prefix}${cleanHash}` : null;
+}
+
+async function readRedisMapping(prefix, hash) {
+    const key = buildRedisKey(prefix, hash);
+    if (!key) return null;
+
+    await connectDb();
+    if (!redisClient.isOpen) return null;
+
+    try {
+        return await redisClient.get(key);
+    } catch (err) {
+        logger.warn(`⚠️ [Torrent Service] Failed reading mapping ${key}: ${err.message}`);
+        return null;
+    }
+}
+
+async function writeRedisMapping(prefix, hash, value, ttlSeconds = 604800) {
+    const key = buildRedisKey(prefix, hash);
+    if (!key || !value) return;
+
+    await connectDb();
+    if (!redisClient.isOpen) return;
+
+    try {
+        await redisClient.set(key, String(value), { EX: ttlSeconds });
+    } catch (err) {
+        logger.warn(`⚠️ [Torrent Service] Failed writing mapping ${key}: ${err.message}`);
+    }
+}
+
 class TorrentService {
     /**
      * Dispatched a formatted magnet stream download command into qBittorrent.
@@ -90,9 +127,11 @@ class TorrentService {
             const infoHashFromMagnet = extractInfoHashFromMagnet(magnetUrl);
             if (infoHashFromMagnet && imdbId) {
                 torrentImdbMap.set(infoHashFromMagnet, imdbId);
+                await writeRedisMapping(TORRENT_IMDB_PREFIX, infoHashFromMagnet, imdbId);
             }
             if (infoHashFromMagnet && addedByUser) {
                 torrentUserMap.set(infoHashFromMagnet, addedByUser);
+                await writeRedisMapping(TORRENT_USER_PREFIX, infoHashFromMagnet, addedByUser);
             }
 
             // After adding to qBittorrent, fetch the torrent info to get its hash
@@ -101,7 +140,9 @@ class TorrentService {
                     const allTorrents = await axios.get(`${QBIT_BASE_URL}/torrents/info`, { timeout: 3000 });
                     const addedTorrent = (allTorrents.data || []).find(t => t.category === targetCategory);
                     if (addedTorrent && addedTorrent.hash) {
-                        torrentImdbMap.set(addedTorrent.hash, imdbId);
+                        const cleanHash = normalizeHash(addedTorrent.hash);
+                        torrentImdbMap.set(cleanHash, imdbId);
+                        await writeRedisMapping(TORRENT_IMDB_PREFIX, cleanHash, imdbId);
                         logger.debug(`🔗 [Torrent Service] Mapped hash ${addedTorrent.hash.substring(0, 8)} -> IMDB ${imdbId}`);
                     }
                 } catch (mapErr) {
@@ -119,7 +160,9 @@ class TorrentService {
                     });
 
                     if (addedTorrent && addedTorrent.hash) {
-                        torrentUserMap.set(normalizeHash(addedTorrent.hash), addedByUser);
+                        const cleanHash = normalizeHash(addedTorrent.hash);
+                        torrentUserMap.set(cleanHash, addedByUser);
+                        await writeRedisMapping(TORRENT_USER_PREFIX, cleanHash, addedByUser);
                     }
                 } catch (mapErr) {
                     logger.warn(`⚠️ [Torrent Service] Could not map user to torrent: ${mapErr.message}`);
@@ -209,8 +252,20 @@ class TorrentService {
      * Get IMDB ID for a torrent by hash
      * @param {string} hash 
      */
-    getImdbIdByHash(hash) {
-        return torrentImdbMap.get(normalizeHash(hash)) || null;
+    async getImdbIdByHash(hash) {
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return null;
+
+        const cached = torrentImdbMap.get(cleanHash);
+        if (cached) return cached;
+
+        const redisValue = await readRedisMapping(TORRENT_IMDB_PREFIX, cleanHash);
+        if (redisValue) {
+            torrentImdbMap.set(cleanHash, redisValue);
+            return redisValue;
+        }
+
+        return null;
     }
 
     /**
@@ -218,21 +273,35 @@ class TorrentService {
      * @param {string} hash 
      * @param {string} imdbId 
      */
-    setImdbIdForHash(hash, imdbId) {
+    async setImdbIdForHash(hash, imdbId) {
         const cleanHash = normalizeHash(hash);
         if (!cleanHash) return;
         torrentImdbMap.set(cleanHash, imdbId);
+        await writeRedisMapping(TORRENT_IMDB_PREFIX, cleanHash, imdbId);
     }
 
-    getAddedByUserByHash(hash) {
-        return normalizeUserKey(torrentUserMap.get(normalizeHash(hash))) || null;
+    async getAddedByUserByHash(hash) {
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return null;
+
+        const cached = normalizeUserKey(torrentUserMap.get(cleanHash));
+        if (cached) return cached;
+
+        const redisValue = normalizeUserKey(await readRedisMapping(TORRENT_USER_PREFIX, cleanHash));
+        if (redisValue) {
+            torrentUserMap.set(cleanHash, redisValue);
+            return redisValue;
+        }
+
+        return null;
     }
 
-    setAddedByUserForHash(hash, userKey) {
+    async setAddedByUserForHash(hash, userKey) {
         const cleanHash = normalizeHash(hash);
         const cleanUser = normalizeUserKey(userKey);
         if (!cleanHash || !cleanUser) return;
         torrentUserMap.set(cleanHash, cleanUser);
+        await writeRedisMapping(TORRENT_USER_PREFIX, cleanHash, cleanUser);
     }
 
     extractAddedByUserFromTags(tags) {
