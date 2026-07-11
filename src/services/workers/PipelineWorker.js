@@ -8,6 +8,7 @@ const LibraryScanner = require('../LibraryScanner');
 const { getLibrary } = require('../db');
 const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
 const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
+const MetadataRegistry = require('../MetadataRegistry');
 const {
     userGroup,
     mergeLibraryGroups,
@@ -98,11 +99,21 @@ function normalizeQueueContext(existingContext, torrentName, imdbId) {
         ? sourceTypeRaw
         : (episode ? 'episode' : (season ? 'pack' : null));
 
+    const addedByUser = normalizeUserKey(context.addedByUser || context.userKey || context.userId);
+    const inferredGroup = userGroup(addedByUser);
+    const libraryGroups = mergeLibraryGroups(
+        context.libraryGroups || [],
+        inferredGroup ? [inferredGroup] : [],
+        { addGlobalIfMissing: false }
+    );
+
     return {
         imdbId: normalizeImdbId(context.imdbId || imdbId) || null,
         season,
         episode,
-        sourceType
+        sourceType,
+        addedByUser: addedByUser || null,
+        libraryGroups
     };
 }
 
@@ -142,7 +153,7 @@ function mergeStorage(existingStorage = {}, incomingStorage = {}) {
     };
 }
 
-function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
+async function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
     const targetFolderPath =
         patchData.folderPath ||
         patchData.cleanPath ||
@@ -164,15 +175,7 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
     if (!stat.isDirectory()) return null;
 
     const metadataPath = path.join(targetFolderPath, 'metadata.json');
-    let existing = {};
-
-    if (fs.existsSync(metadataPath)) {
-        try {
-            existing = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-        } catch (_err) {
-            existing = {};
-        }
-    }
+    const existing = await MetadataRegistry.read(metadataPath, folderBaseName);
 
     const folderBaseName = path.basename(targetFolderPath);
     const inferredYearMatch = folderBaseName.match(/\b(19|20)\d{2}\b/);
@@ -256,7 +259,7 @@ function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
     delete merged.rawPath;
     delete merged.payload;
 
-    fs.writeFileSync(metadataPath, JSON.stringify(merged, null, 4));
+    await MetadataRegistry.writeAndCommit(metadataPath, folderBaseName, merged);
     return metadataPath;
 }
 
@@ -309,9 +312,18 @@ async function enqueueCompletedTorrent(torrent) {
         }
     }
 
+    const addedByUser =
+        TorrentService.extractAddedByUserFromTags(torrent.tags) ||
+        await TorrentService.getAddedByUserByHash(torrent.hash) ||
+        null;
+
     const rawPath = resolveTorrentDownloadPath(torrent);
     const resolvedFolderName = rawPath ? path.basename(rawPath) : (torrent.name || null);
-    const torrentQueueContext = normalizeQueueContext(null, resolvedFolderName || torrent.name, imdbId || null);
+    const torrentQueueContext = normalizeQueueContext(
+        { addedByUser },
+        resolvedFolderName || torrent.name,
+        imdbId || null
+    );
 
     const pendingJob = findPendingDownloadJob(torrent);
     if (pendingJob) {
@@ -326,7 +338,10 @@ async function enqueueCompletedTorrent(torrent) {
                 cleanPath: null,
                 videoFile: null,
                 queueContext: normalizeQueueContext(
-                    pendingJob.payload?.queueContext,
+                    {
+                        ...(pendingJob.payload?.queueContext || {}),
+                        addedByUser: pendingJob.payload?.queueContext?.addedByUser || addedByUser || null
+                    },
                     torrent.name || pendingJob.payload?.torrentName,
                     pendingJob.imdbId || imdbId || null
                 )
@@ -355,7 +370,10 @@ async function enqueueCompletedTorrent(torrent) {
                 torrentName: torrent.name || existingJob.payload?.torrentName || existingJob.id,
                 rawPath: rawPath || existingJob.payload?.rawPath || null,
                 queueContext: normalizeQueueContext(
-                    existingJob.payload?.queueContext,
+                    {
+                        ...(existingJob.payload?.queueContext || {}),
+                        addedByUser: existingJob.payload?.queueContext?.addedByUser || addedByUser || null
+                    },
                     torrent.name || existingJob.payload?.torrentName,
                     existingJob.imdbId || imdbId || null
                 )
@@ -484,7 +502,7 @@ async function processNextJob(job) {
             imdbId: resolvedImdbId
         };
 
-        const metadataPath = persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId);
+        const metadataPath = await persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId);
         if (metadataPath) {
             logger.debug(`📝 [Queue] Persisted metadata snapshot for job ${job.id} at ${metadataPath}`);
         }

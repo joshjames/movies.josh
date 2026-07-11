@@ -19,6 +19,7 @@ const {
 
 const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
+const MetadataRegistry = require('../services/MetadataRegistry');
 const { 
     createJob, 
     getAllJobs, 
@@ -165,7 +166,8 @@ async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
     }
 
     const metadataPath = path.join(existingItem.sourcePath, 'metadata.json');
-    const metadata = safelyReadJson(metadataPath, {});
+    const folderName = path.basename(existingItem.sourcePath);
+    const metadata = await MetadataRegistry.read(metadataPath, folderName);
     const targetGroup = userGroup(cleanUser);
 
     metadata.libraryGroups = mergeLibraryGroups(
@@ -179,7 +181,7 @@ async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
         cleanUser
     ])).sort();
 
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 4));
+    await MetadataRegistry.writeAndCommit(metadataPath, folderName, metadata);
     await runLibraryScanSweep();
 
     return {
@@ -759,7 +761,7 @@ router.get('/pipeline/status', async (req, res) => {
         const torrents = await TorrentService.getActivePipelineTorrents(
             viewerUser ? { addedByUser: viewerUser } : {}
         );
-        torrents.forEach(torrent => {
+        for (const torrent of torrents) {
             let displayStatus = 'Downloading';
             if (torrent.progress === 1) displayStatus = 'Finalizing...';
             if (torrent.state.includes('paused') || torrent.state.includes('queued')) displayStatus = 'Queued';
@@ -783,7 +785,7 @@ router.get('/pipeline/status', async (req, res) => {
                 stage: 'downloading',
                 addedByUser: torrentOwner
             });
-        });
+        }
 
         // 2. Get active jobs from queue system
         const allJobs = getAllJobs();

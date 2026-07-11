@@ -4,6 +4,8 @@ const path = require('path');
 const HOME_FEED_FILE = path.join(__dirname, '../../metadata/home_feed.json');
 const RECENT_FEED_FILE = path.join(__dirname, '../../metadata/recent_feed.json');
 const FALLBACK_LIBRARY_FILE = path.join(__dirname, '../../metadata/fallback_library.json');
+let homeFeedCache = null;
+let recentFeedCache = null;
 
 function safeNumber(value) {
     const parsed = parseFloat(value);
@@ -134,30 +136,36 @@ function buildRecentFeed(library = {}) {
 function saveHomeFeed(feed) {
     fs.mkdirSync(path.dirname(HOME_FEED_FILE), { recursive: true });
     fs.writeFileSync(HOME_FEED_FILE, JSON.stringify(feed, null, 4), 'utf-8');
+    homeFeedCache = feed;
     return HOME_FEED_FILE;
 }
 
 function saveRecentFeed(feed) {
     fs.mkdirSync(path.dirname(RECENT_FEED_FILE), { recursive: true });
     fs.writeFileSync(RECENT_FEED_FILE, JSON.stringify(feed, null, 4), 'utf-8');
+    recentFeedCache = feed;
     return RECENT_FEED_FILE;
 }
 
 function loadHomeFeed() {
+    if (homeFeedCache) return homeFeedCache;
     if (!fs.existsSync(HOME_FEED_FILE)) return null;
 
     try {
-        return JSON.parse(fs.readFileSync(HOME_FEED_FILE, 'utf-8'));
+        homeFeedCache = JSON.parse(fs.readFileSync(HOME_FEED_FILE, 'utf-8'));
+        return homeFeedCache;
     } catch (_err) {
         return null;
     }
 }
 
 function loadRecentFeed() {
+    if (recentFeedCache) return recentFeedCache;
     if (!fs.existsSync(RECENT_FEED_FILE)) return null;
 
     try {
-        return JSON.parse(fs.readFileSync(RECENT_FEED_FILE, 'utf-8'));
+        recentFeedCache = JSON.parse(fs.readFileSync(RECENT_FEED_FILE, 'utf-8'));
+        return recentFeedCache;
     } catch (_err) {
         return null;
     }

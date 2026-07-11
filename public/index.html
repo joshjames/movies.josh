@@ -390,6 +390,7 @@
 
         .slider-wrapper {
             position: relative;
+            overflow: visible;
         }
 
         .movie-slider {
@@ -420,7 +421,7 @@
 
         .slider-card:hover {
             transform: scale(1.06);
-            z-index: 10;
+            z-index: 8;
             box-shadow: 0 18px 24px -8px rgba(0, 0, 0, 0.65);
         }
 
@@ -477,8 +478,8 @@
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            width: 34px;
-            height: 64px;
+            width: 46px;
+            height: 84px;
             border: none;
             background: rgba(15, 23, 42, 0.78);
             color: #fff;
@@ -486,17 +487,19 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 5;
+            z-index: 30;
             cursor: pointer;
             transition: background 0.2s, color 0.2s, opacity 0.2s;
             user-select: none;
             border-radius: 8px;
             opacity: 0.95;
+            pointer-events: auto;
+            box-shadow: 0 6px 16px rgba(2, 6, 23, 0.45);
         }
 
         .arrow__btn:hover { background: rgba(15, 23, 42, 0.98); color: #e50914; }
-        .left-arrow { left: 8px; }
-        .right-arrow { right: 8px; }
+        .left-arrow { left: -10px; }
+        .right-arrow { right: -10px; }
 
         .collection-empty {
             color: #64748b;

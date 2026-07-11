@@ -2369,7 +2369,8 @@
                         parentalRating: document.getElementById(`parentalRating-${folder}`)?.value || '',
                         popularity: document.getElementById(`popularity-${folder}`)?.value || '',
                         plot: document.getElementById('plot-' + folder).value,
-                        storage: { location: 'remote' } // Force state mapping update down pipe
+                        storage: { location: 'remote' }, // Force state mapping update down pipe
+                        deferCloudSync: true
                     })
                 });
                 
@@ -2378,6 +2379,18 @@
                     alert("❌ Channel rejected payload sync: " + data.error);
                     document.getElementById(`sync-container-${folder}`).style.display = 'none';
                     activeSyncFolder = null;
+                    return;
+                }
+
+                if (data.cloudSyncDeferred) {
+                    document.getElementById(`progress-bar-${folder}`).style.width = '20%';
+                    document.getElementById(`progress-txt-${folder}`).textContent = 'Cloud sync queued in worker. You can continue using admin.';
+                    showToast(`Cloud sync queued for ${folder}.`, 'success', 3200);
+                    activeSyncFolder = null;
+                    setTimeout(() => {
+                        const holder = document.getElementById(`sync-container-${folder}`);
+                        if (holder) holder.style.display = 'none';
+                    }, 1800);
                 }
             } catch (err) {
                 alert("❌ Connection lost during multipart streaming allocation request.");

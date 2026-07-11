@@ -71,6 +71,24 @@ function scanDirectory(basePath, contentType) {
             popularity: meta.popularity || meta.metadata?.popularity || 'N/A',
             popularitySource: meta.enrichment?.popularitySource || meta.metadata?.enrichment?.popularitySource || ''
         };
+        const statUpdatedAt = (() => {
+            try {
+                return fs.statSync(itemPath).mtime.toISOString();
+            } catch (_err) {
+                return null;
+            }
+        })();
+        const normalizedUpdatedAt =
+            meta.updatedAt ||
+            meta.pipelineState?.lastUpdated ||
+            meta.metadata?.updatedAt ||
+            statUpdatedAt ||
+            null;
+        const normalizedAddedAt =
+            meta.addedAt ||
+            meta.metadata?.addedAt ||
+            normalizedUpdatedAt ||
+            null;
 
         // Treat the item as remote when either explicit location is remote or we have synced remote keys.
         const isRemote = meta.storage?.location === 'remote' || remoteProfiles.length > 0;
@@ -112,7 +130,8 @@ function scanDirectory(basePath, contentType) {
 
                 // Keep the raw block intact just in case other services need it
                 storage: normalizedStorage,
-                updatedAt: new Date().toISOString(),
+                addedAt: normalizedAddedAt,
+                updatedAt: normalizedUpdatedAt,
                 sourcePath: itemPath
             });
         } else {

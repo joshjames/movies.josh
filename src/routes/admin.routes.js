@@ -1904,7 +1904,8 @@ router.post('/override-metadata', async (req, res) => {
         groupMode,
         targetUser,
         libraryGroups,
-        replaceGroups
+        replaceGroups,
+        deferCloudSync
     } = req.body;
     
     // Ensure custom dashboard panel modifications write metadata out to the true folder mounts
@@ -2063,30 +2064,57 @@ router.post('/override-metadata', async (req, res) => {
         if (triggerCloudSync) {
             logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5004...`);
 
-            const cloudSyncRes = await axios.post('http://127.0.0.1:5004/process', {
-                folderPath: folderPath,
-                folderName: folder,
-                forceActualUpload: true
-            }, { timeout: 1800000 }).catch(err => {
-                logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
-                throw err;
-            });
+            if (deferCloudSync === true) {
+                axios.post('http://127.0.0.1:5004/process', {
+                    folderPath: folderPath,
+                    folderName: folder,
+                    forceActualUpload: true
+                }, { timeout: 1800000 })
+                    .then(async (cloudSyncRes) => {
+                        const patchData = cloudSyncRes.data?.patchData || {};
+                        const nextMeta = {
+                            ...metadata,
+                            ...patchData,
+                            storage: mergeStorage(metadata.storage, patchData.storage || {}),
+                            pipelineState: patchData.pipelineState || metadata.pipelineState
+                        };
+                        fs.writeFileSync(metaFilePath, JSON.stringify(nextMeta, null, 4), 'utf-8');
+                        await LibraryScanner.runLibraryScanSweep();
+                    })
+                    .catch((err) => {
+                        logger.error(`❌ [Orchestrator Bridge] Deferred CloudSync failed for [${folder}]: ${err.message}`);
+                    });
+            } else {
+                const cloudSyncRes = await axios.post('http://127.0.0.1:5004/process', {
+                    folderPath: folderPath,
+                    folderName: folder,
+                    forceActualUpload: true
+                }, { timeout: 1800000 }).catch(err => {
+                    logger.error(`❌ [Orchestrator Bridge] Failed to wake CloudSync Worker at endpoint: ${err.message}`);
+                    throw err;
+                });
 
-            const patchData = cloudSyncRes.data?.patchData || {};
-            metadata = {
-                ...metadata,
-                ...patchData,
-                storage: mergeStorage(metadata.storage, patchData.storage || {}),
-                pipelineState: patchData.pipelineState || metadata.pipelineState
-            };
+                const patchData = cloudSyncRes.data?.patchData || {};
+                metadata = {
+                    ...metadata,
+                    ...patchData,
+                    storage: mergeStorage(metadata.storage, patchData.storage || {}),
+                    pipelineState: patchData.pipelineState || metadata.pipelineState
+                };
 
-            fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+                fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
+            }
         }
 
         // Refresh database record tracking arrays automatically
         await LibraryScanner.runLibraryScanSweep();
 
-        return res.json({ success: true, libraryLocation: metadata.storage.location });
+        return res.json({
+            success: true,
+            libraryLocation: metadata.storage.location,
+            cloudSyncTriggered: triggerCloudSync,
+            cloudSyncDeferred: triggerCloudSync && deferCloudSync === true
+        });
 
     } catch (err) {
         console.error(err);
