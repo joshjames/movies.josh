@@ -19,6 +19,14 @@ function parseSeasonEpisode(fileName = '', fallbackSeason = null) {
     }
 
     if (fallbackSeason) {
+        const phaseFromName = String(fileName).match(/\bphase[\s._-]?(\d{1,3})\b/i);
+        if (phaseFromName) {
+            return {
+                season: fallbackSeason,
+                episode: parseInt(phaseFromName[1], 10)
+            };
+        }
+
         const epFromName = String(fileName).match(/\b(?:ep|episode)[\s._-]?(\d{1,3})\b/i);
         if (epFromName) {
             return {
