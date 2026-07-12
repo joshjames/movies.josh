@@ -1,5 +1,3 @@
-version: '3.8'
-
 x-app-common: &app-common
   image: simple-streamer:v2
   build:
@@ -22,9 +20,9 @@ x-app-common: &app-common
       condition: service_healthy
 
 services:
-  movie-streamer-web:
+  movie-streamer:
     <<: *app-common
-    container_name: movie-streamer-web
+    container_name: movie-streamer-v2-test
     cpus: "4.0"
     environment:
       ENABLE_WEB_SERVER: "true"
