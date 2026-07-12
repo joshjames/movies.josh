@@ -33,8 +33,8 @@ services:
       ENABLE_SUBTITLE_WORKER: "false"
       ENABLE_TRANSCODER_WORKER: "false"
       ENABLE_CLOUDSYNC_WORKER: "false"
-    ports:
-      - "${APP_HTTP_HOST_PORT:-3000}:3000"
+    expose:
+      - "3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
