@@ -560,9 +560,34 @@
         }
 
         .group-manager-item-actions {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 8px;
+        }
+
+        .group-action-button {
+            min-height: 34px;
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            border-radius: 8px;
+            background: linear-gradient(180deg, #334155, #1e293b);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+        }
+
+        .group-action-button.user-add {
+            background: linear-gradient(180deg, #166534, #14532d);
+        }
+
+        .group-action-button.user-remove {
+            background: linear-gradient(180deg, #9a3412, #7c2d12);
+        }
+
+        .group-action-button.user-only {
+            background: linear-gradient(180deg, #7c3aed, #5b21b6);
+        }
+
+        .group-action-button:hover {
+            filter: brightness(1.08);
         }
 
         .group-manager-pagination {
@@ -1060,7 +1085,11 @@
                 body: JSON.stringify(body)
             });
 
-            return res.json();
+            const data = await res.json();
+            if (!res.ok || data.success === false) {
+                throw new Error(data.error || `Request failed with status ${res.status}`);
+            }
+            return data;
         }
 
         async function runGroupManagerActionOnRow(folder, contentType, action) {
@@ -1114,8 +1143,9 @@
                 </div>
                 ${rows.map((item) => {
                     const groups = Array.isArray(item.metadata?.libraryGroups) ? item.metadata.libraryGroups : [];
-                    const folderJs = JSON.stringify(String(item.folder || ''));
-                    const contentTypeJs = JSON.stringify(String(item.contentType || 'movies'));
+                    const folderAttr = escapeHtml(String(item.folder || ''));
+                    const contentTypeAttr = escapeHtml(String(item.contentType || 'movies'));
+                    const selectedUserLabel = shortGroupManagerLabel(groupManagerState.selectedUserLabel || groupManagerState.selectedUser || 'selected user');
                     const chips = groups.length
                         ? groups.map((group) => {
                             const cls = String(group).startsWith('user:') ? 'user' : (group === 'global' ? 'global' : '');
@@ -1136,16 +1166,26 @@
                             </div>
                             <div class="group-chip-row">${chips}</div>
                             <div class="group-manager-item-actions">
-                                <button type="button" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'add-global')">Add Global</button>
-                                <button type="button" style="background:#475569;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'remove-global')">Remove Global</button>
-                                <button type="button" style="background:#166534;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'add-user')">Add User</button>
-                                <button type="button" style="background:#7c2d12;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'remove-user')">Remove User</button>
-                                <button type="button" style="background:#7c3aed;" onclick="runGroupManagerActionOnRow(${folderJs}, ${contentTypeJs}, 'set-user-only')">Set User-Only</button>
+                                <button type="button" class="group-action-button" data-group-action="add-global" data-folder="${folderAttr}" data-content-type="${contentTypeAttr}">Add Global</button>
+                                <button type="button" class="group-action-button" data-group-action="remove-global" data-folder="${folderAttr}" data-content-type="${contentTypeAttr}">Remove Global</button>
+                                <button type="button" class="group-action-button user-add" data-group-action="add-user" data-folder="${folderAttr}" data-content-type="${contentTypeAttr}">Add to ${escapeHtml(selectedUserLabel)}</button>
+                                <button type="button" class="group-action-button user-remove" data-group-action="remove-user" data-folder="${folderAttr}" data-content-type="${contentTypeAttr}">Remove from ${escapeHtml(selectedUserLabel)}</button>
+                                <button type="button" class="group-action-button user-only" data-group-action="set-user-only" data-folder="${folderAttr}" data-content-type="${contentTypeAttr}">${escapeHtml(selectedUserLabel)} only</button>
                             </div>
                         </div>
                     `;
                 }).join('')}
             `;
+
+            body.querySelectorAll('[data-group-action]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    runGroupManagerActionOnRow(
+                        String(button.dataset.folder || ''),
+                        String(button.dataset.contentType || 'movies'),
+                        String(button.dataset.groupAction || '')
+                    );
+                });
+            });
 
             const selectAll = document.getElementById('group-select-all');
             if (selectAll) {
