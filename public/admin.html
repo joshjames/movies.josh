@@ -797,7 +797,8 @@
             items: [],
             users: [],
             availableGroups: ['any'],
-            selectedUser: ''
+            selectedUser: '',
+            selectedUserLabel: ''
         };
 
         const WORKER_PORTS = {
@@ -999,6 +1000,8 @@
             if (current && rows.some((row) => String(row.username || '').trim().toLowerCase() === current)) {
                 select.value = current;
                 groupManagerState.selectedUser = current;
+                const match = rows.find((row) => String(row.username || '').trim().toLowerCase() === current);
+                groupManagerState.selectedUserLabel = match?.displayName ? `${match.displayName} (${current})` : current;
             }
         }
 
@@ -1006,11 +1009,21 @@
             const select = document.getElementById('group-manager-user-select');
             const value = String(select?.value || groupManagerState.selectedUser || '').trim().toLowerCase();
             groupManagerState.selectedUser = value;
+            groupManagerState.selectedUserLabel = String(select?.selectedOptions?.[0]?.textContent || '').trim() || value;
             const status = document.getElementById('group-manager-user-status');
             if (status) {
-                status.textContent = `Active user: ${value || 'none'}`;
+                status.textContent = `Active user: ${groupManagerState.selectedUserLabel || value || 'none'}`;
             }
             return value;
+        }
+
+        function shortGroupManagerLabel(label) {
+            const text = String(label || '').trim();
+            if (!text) return 'selected user';
+            const match = text.match(/^(.+?)\s*\((.+)\)$/);
+            if (match) return match[1].trim();
+            if (text.length > 20 && text.includes('@')) return `${text.slice(0, 18).trim()}…`;
+            return text;
         }
 
         async function loadGroupManagerUsers() {
