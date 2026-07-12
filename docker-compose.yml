@@ -3,6 +3,7 @@ x-app-common: &app-common
   build:
     context: .
     dockerfile: Dockerfile
+    network: host
   restart: unless-stopped
   env_file:
     - .env
