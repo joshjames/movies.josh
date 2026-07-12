@@ -153,6 +153,20 @@ function getJobOwner(job) {
     );
 }
 
+function inferRetryStep(job) {
+    const validSteps = new Set(['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC']);
+    const current = String(job?.currentStep || '').toUpperCase();
+    if (validSteps.has(current)) return current;
+
+    const history = Array.isArray(job?.history) ? job.history : [];
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+        const step = String(history[i]?.step || '').toUpperCase();
+        if (validSteps.has(step)) return step;
+    }
+
+    return 'INGEST';
+}
+
 async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
     const cleanUser = normalizeUserKey(activeUser);
     if (!cleanUser || cleanUser === 'guest') {
@@ -922,17 +936,34 @@ router.post('/job/:jobId/retry', async (req, res) => {
             return res.status(400).json({ error: 'Only failed jobs can be retried' });
         }
 
-        // Reset job to QUEUED state at the failed step
+        const retryStep = inferRetryStep(job);
+        const fallbackImdbId = normalizeImdbId(
+            job.imdbId ||
+            job.payload?.imdbId ||
+            job.payload?.queueContext?.imdbId
+        ) || null;
+
+        // Reset job to QUEUED state at the last actionable step.
         const retried = updateJob(job, {
             status: 'QUEUED',
+            currentStep: retryStep,
+            imdbId: fallbackImdbId,
+            payload: {
+                ...job.payload,
+                imdbId: fallbackImdbId,
+                queueContext: {
+                    ...(job.payload?.queueContext || {}),
+                    imdbId: fallbackImdbId || job.payload?.queueContext?.imdbId || null
+                }
+            },
             error: null,
             history: [
                 ...(job.history || []),
-                { step: 'RETRY', timestamp: new Date().toISOString() }
+                { step: `RETRY:${retryStep}`, timestamp: new Date().toISOString() }
             ]
         });
 
-        logger.info(`🔄 [Queue] Job ${job.id} retrying from step ${job.currentStep}`);
+        logger.info(`🔄 [Queue] Job ${job.id} retrying from step ${retryStep} (imdbId=${fallbackImdbId || 'unknown'})`);
         return res.json({ success: true, message: 'Job queued for retry', job: retried });
     } catch (err) {
         logger.error('[Queue API] Retry job error: ' + err.message);

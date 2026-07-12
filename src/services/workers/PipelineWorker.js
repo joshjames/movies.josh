@@ -18,6 +18,7 @@ const {
     createJob,
     getAllJobs,
     getJob,
+    getNextRunnableJob,
     getJobSnapshot,
     updateJob,
     removeJob
@@ -174,10 +175,10 @@ async function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdb
     }
     if (!stat.isDirectory()) return null;
 
+    const folderBaseName = path.basename(targetFolderPath);
     const metadataPath = path.join(targetFolderPath, 'metadata.json');
     const existing = await MetadataRegistry.read(metadataPath, folderBaseName);
 
-    const folderBaseName = path.basename(targetFolderPath);
     const inferredYearMatch = folderBaseName.match(/\b(19|20)\d{2}\b/);
     const inferredYear = inferredYearMatch ? inferredYearMatch[0] : '';
     const inferredTitle = folderBaseName
@@ -417,6 +418,12 @@ async function processNextJob(job) {
         });
     }
 
+    const resolvedJobImdbId = normalizeImdbId(
+        job.imdbId ||
+        job.payload?.imdbId ||
+        job.payload?.queueContext?.imdbId
+    ) || null;
+
     const stepMap = {
         INGEST: {
             workerUrl: 'http://127.0.0.1:5000/process',
@@ -424,7 +431,7 @@ async function processNextJob(job) {
                 folderPath: job.payload?.rawPath || job.payload?.cleanPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (path.basename(job.payload?.rawPath || '') || job.payload?.torrentName || job.id),
                 contentType: job.contentType || 'movie',
-                imdbId: job.imdbId || job.payload?.queueContext?.imdbId || null,
+                imdbId: resolvedJobImdbId,
                 queueContext: job.payload?.queueContext || null
             }
         },
@@ -434,14 +441,14 @@ async function processNextJob(job) {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id),
                 contentType: job.contentType || 'movie',
-                manualImdbId: job.imdbId || null
+                manualImdbId: resolvedJobImdbId
             }
         },
         SUBTITLES: {
             workerUrl: 'http://127.0.0.1:5002/process',
             payload: {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
-                imdbId: job.imdbId || null,
+                imdbId: resolvedJobImdbId,
                 contentType: job.contentType || 'movie',
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id)
             }
@@ -458,7 +465,7 @@ async function processNextJob(job) {
             payload: {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id),
-                imdbId: job.imdbId || null,
+                imdbId: resolvedJobImdbId,
                 contentType: job.contentType || 'movie'
             }
         }
@@ -485,7 +492,12 @@ async function processNextJob(job) {
             CLOUDSYNC: 'COMPLETE'
         }[job.currentStep] || 'COMPLETE';
 
-        const resolvedImdbId = normalizeImdbId(patchData.imdbId || job.imdbId || job.payload?.imdbId) || null;
+        const resolvedImdbId = normalizeImdbId(
+            patchData.imdbId ||
+            resolvedJobImdbId ||
+            job.payload?.imdbId ||
+            job.payload?.queueContext?.imdbId
+        ) || null;
 
         const mergedPayload = {
             ...job.payload,
@@ -580,6 +592,19 @@ async function checkPipelineCompletions() {
     if (isProcessingPipeline) return;
 
     try {
+        const queuedJob = getNextRunnableJob();
+        if (queuedJob) {
+            isProcessingPipeline = true;
+            await withDistributedLock(`pipeline:job:${queuedJob.id}`, async () => {
+                const freshQueuedJob = getJob(queuedJob.id);
+                if (!freshQueuedJob || freshQueuedJob.status !== 'QUEUED') return;
+                logger.debug(`🚦 [Queue] Processing queued job ${freshQueuedJob.id} from scheduler tick.`);
+                await processNextJob(freshQueuedJob);
+            }, { ttlMs: 15000, waitMs: 2000 });
+            isProcessingPipeline = false;
+            return;
+        }
+
         // Fetch current active torrent tracking pools from qBittorrent
         const qbitRes = await axios.get(`${QBIT_URL}/api/v2/torrents/info`, { timeout: 4000 });
         const torrents = qbitRes.data || [];
