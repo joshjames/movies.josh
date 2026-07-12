@@ -354,6 +354,72 @@ const ProfileService = {
         return rows;
     },
 
+    async getWatchLater(username, options = {}) {
+        const cleanUser = normalizeIdentity(username);
+        const limit = Math.max(1, Math.min(parseInt(options.limit, 10) || 500, 2000));
+        const data = await this.readData(cleanUser, 'watch_later', { items: [] });
+        const rows = Array.isArray(data.items) ? data.items : [];
+        return rows
+            .filter((row) => row && row.id)
+            .sort((a, b) => new Date(b.updatedAt || b.addedAt || 0) - new Date(a.updatedAt || a.addedAt || 0))
+            .slice(0, limit);
+    },
+
+    async addWatchLaterItem(username, item = {}) {
+        const cleanUser = normalizeIdentity(username);
+        const cleanId = String(item.id || '').trim();
+        if (!cleanUser || !cleanId) return { success: false, error: 'Missing user or media id.' };
+
+        return await withDistributedLock(`profile:user:${cleanUser}:watch-later`, async () => {
+            const data = await this.readData(cleanUser, 'watch_later', { items: [] });
+            const list = Array.isArray(data.items) ? data.items : [];
+            const nowIso = new Date().toISOString();
+            const next = {
+                id: cleanId,
+                title: String(item.title || cleanId),
+                contentType: String(item.contentType || 'movie'),
+                cover: String(item.cover || ''),
+                href: String(item.href || ''),
+                imdbId: String(item.imdbId || ''),
+                addedAt: item.addedAt || nowIso,
+                updatedAt: nowIso
+            };
+
+            const existingIndex = list.findIndex((row) => String(row.id || '') === cleanId);
+            if (existingIndex >= 0) {
+                list[existingIndex] = { ...list[existingIndex], ...next, addedAt: list[existingIndex].addedAt || nowIso };
+            } else {
+                list.unshift(next);
+            }
+
+            const deduped = [];
+            const seen = new Set();
+            for (const row of list) {
+                const key = String(row.id || '').trim();
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                deduped.push(row);
+            }
+
+            await this.writeData(cleanUser, 'watch_later', { items: deduped.slice(0, 2000) });
+            return { success: true, count: deduped.length };
+        }, { ttlMs: 5000, waitMs: 4000 });
+    },
+
+    async removeWatchLaterItem(username, mediaId) {
+        const cleanUser = normalizeIdentity(username);
+        const cleanId = String(mediaId || '').trim();
+        if (!cleanUser || !cleanId) return { success: false, error: 'Missing user or media id.' };
+
+        return await withDistributedLock(`profile:user:${cleanUser}:watch-later`, async () => {
+            const data = await this.readData(cleanUser, 'watch_later', { items: [] });
+            const list = Array.isArray(data.items) ? data.items : [];
+            const next = list.filter((row) => String(row.id || '') !== cleanId);
+            await this.writeData(cleanUser, 'watch_later', { items: next });
+            return { success: true, count: next.length };
+        }, { ttlMs: 5000, waitMs: 4000 });
+    },
+
     // --- TELEMETRY SECURITY HISTORY TRACKS ---
     async updateLoginHistory(username, ipAddress) {
         const cleanUser = normalizeIdentity(username);

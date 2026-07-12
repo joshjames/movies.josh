@@ -9,6 +9,8 @@ const { getLibrary } = require('../db');
 const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
 const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
 const MetadataRegistry = require('../MetadataRegistry');
+const ProfileService = require('../ProfileService');
+const MailerService = require('../MailerService');
 const { buildDefaultWorkerEndpoints } = require('../WorkerEndpoints');
 const {
     userGroup,
@@ -155,6 +157,83 @@ function mergeStorage(existingStorage = {}, incomingStorage = {}) {
             ...(incomingStorage.files || {})
         }
     };
+}
+
+function getJobQueueOptions(job) {
+    const options = (job?.payload && typeof job.payload.queueOptions === 'object') ? job.payload.queueOptions : {};
+    return {
+        notifyOnComplete: Boolean(options.notifyOnComplete),
+        addToWatchLaterOnComplete: Boolean(options.addToWatchLaterOnComplete)
+    };
+}
+
+function getJobOwner(job) {
+    const payload = (job && typeof job.payload === 'object') ? job.payload : {};
+    const queueContext = (payload && typeof payload.queueContext === 'object') ? payload.queueContext : {};
+    return normalizeUserKey(
+        queueContext.addedByUser ||
+        queueContext.userKey ||
+        queueContext.userId ||
+        payload.addedByUser
+    );
+}
+
+function buildLibraryHref(item, contentType) {
+    if (!item || !item.id) return '/';
+    if (contentType === 'series') {
+        return `/series.html?id=${encodeURIComponent(item.id)}`;
+    }
+    return `/player.html?id=${encodeURIComponent(item.id)}`;
+}
+
+async function runQueueCompletionHooks(job, libraryItem) {
+    const owner = getJobOwner(job);
+    if (!owner) return;
+
+    const options = getJobQueueOptions(job);
+    if (!options.notifyOnComplete && !options.addToWatchLaterOnComplete) return;
+
+    const config = await ProfileService.readData(owner, 'config', {});
+    const mediaTitle = libraryItem?.title || job.payload?.torrentName || 'Your queued title';
+    const contentType = job.contentType === 'series' ? 'series' : 'movie';
+
+    if (options.addToWatchLaterOnComplete && libraryItem?.id) {
+        await ProfileService.addWatchLaterItem(owner, {
+            id: libraryItem.id,
+            title: libraryItem.title || mediaTitle,
+            contentType,
+            cover: libraryItem.cover || '',
+            href: buildLibraryHref(libraryItem, contentType),
+            imdbId: job.imdbId || libraryItem.imdbId || ''
+        });
+    }
+
+    if (options.notifyOnComplete) {
+        const targetEmail = String(config.email || owner || '').trim();
+        if (targetEmail.includes('@')) {
+            const appUrl = process.env.APP_URL || 'https://anymovie.online';
+            const displayName = config.displayName || config.name || config.username || owner;
+            const destination = `${appUrl}${buildLibraryHref(libraryItem || {}, contentType)}`;
+
+            await MailerService.sendTemplateEmail({
+                toEmail: targetEmail,
+                toName: displayName,
+                subject: `${mediaTitle} is ready in AnyMovie`,
+                templateName: 'queue-complete-email.html',
+                variables: {
+                    title: 'Queue Item Completed',
+                    preheader: `${mediaTitle} finished processing and is ready to watch.`,
+                    username: displayName,
+                    mediaTitle,
+                    mediaType: contentType === 'series' ? 'TV series' : 'movie',
+                    watchUrl: destination,
+                    supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
+                    appUrl,
+                    senderName: process.env.SENDER_NAME || 'AnyMovie Admin'
+                }
+            });
+        }
+    }
 }
 
 async function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId) {
@@ -559,6 +638,12 @@ async function processNextJob(job) {
                             addedAt: libraryItem.addedAt || new Date().toISOString()
                         }));
                         logger.debug(`🆕 [Queue] Recent feed updated for ${folderName}`);
+                    }
+
+                    try {
+                        await runQueueCompletionHooks(updated, libraryItem || null);
+                    } catch (completionErr) {
+                        logger.warn(`⚠️ [Queue] Completion hooks failed for ${updated.id}: ${completionErr.message}`);
                     }
                 }
             } catch (scanErr) {

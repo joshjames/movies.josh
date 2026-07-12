@@ -307,6 +307,55 @@ class TorrentService {
     extractAddedByUserFromTags(tags) {
         return extractUserFromTagList(parseTags(tags));
     }
+
+    async pauseTorrentByHash(hash) {
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return { success: false, error: 'Missing torrent hash.' };
+
+        try {
+            await axios.post(`${QBIT_BASE_URL}/torrents/pause`, `hashes=${encodeURIComponent(cleanHash)}`, {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 5000
+            });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async resumeTorrentByHash(hash) {
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return { success: false, error: 'Missing torrent hash.' };
+
+        try {
+            await axios.post(`${QBIT_BASE_URL}/torrents/resume`, `hashes=${encodeURIComponent(cleanHash)}`, {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 5000
+            });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async deleteTorrentByHash(hash, { deleteFiles = false } = {}) {
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return { success: false, error: 'Missing torrent hash.' };
+
+        try {
+            await axios.post(
+                `${QBIT_BASE_URL}/torrents/delete`,
+                `hashes=${encodeURIComponent(cleanHash)}&deleteFiles=${deleteFiles ? 'true' : 'false'}`,
+                {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    timeout: 5000
+                }
+            );
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
 }
 
 module.exports = new TorrentService();

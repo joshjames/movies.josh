@@ -20,6 +20,57 @@ const SERIES_SCAN_PATHS = [
     '/home/epic/movies/series'
 ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
+const REQUIRE_METADATA_FOR_MOVIE_SCAN = !['false', '0', 'no'].includes(
+    String(process.env.REQUIRE_METADATA_FOR_MOVIE_SCAN || 'true').trim().toLowerCase()
+);
+const REQUIRE_METADATA_FOR_SERIES_SCAN = ['true', '1', 'yes'].includes(
+    String(process.env.REQUIRE_METADATA_FOR_SERIES_SCAN || 'false').trim().toLowerCase()
+);
+
+function normalizeImdbId(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return '';
+    return `tt${cleaned}`;
+}
+
+function findImdbMarkerFile(itemPath) {
+    try {
+        const entries = fs.readdirSync(itemPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (!entry.isFile()) continue;
+            const match = String(entry.name || '').match(/^metadata\.(tt)?(\d{5,10})$/i);
+            if (!match) continue;
+            return normalizeImdbId(match[2]);
+        }
+    } catch (_err) {
+        return '';
+    }
+    return '';
+}
+
+function hasPartialDownloadMarkers(itemPath) {
+    try {
+        const entries = fs.readdirSync(itemPath, { withFileTypes: true });
+        return entries.some((entry) => {
+            const name = String(entry.name || '').toLowerCase();
+            if (!name) return false;
+            if (entry.isDirectory()) {
+                return name === '.unwanted' || name === '.incomplete' || name === '__incomplete';
+            }
+            return (
+                name.endsWith('.!qb') ||
+                name.endsWith('.part') ||
+                name.endsWith('.partial') ||
+                name.endsWith('.tmp') ||
+                name.endsWith('.crdownload') ||
+                name.endsWith('.pieces')
+            );
+        });
+    } catch (_err) {
+        return false;
+    }
+}
+
 function scanDirectory(basePath, contentType) {
     const registry = [];
     if (!fs.existsSync(basePath)) {
@@ -36,14 +87,19 @@ function scanDirectory(basePath, contentType) {
         const metaPath = path.join(itemPath, 'metadata.json');
         let meta = { title: folder, year: '', plot: '', genre: '', contentType };
 
+        const hasMetadataFile = fs.existsSync(metaPath);
         // Read metadata if it exists
-        if (fs.existsSync(metaPath)) {
+        if (hasMetadataFile) {
             try {
                 meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
             } catch (e) {
                 logger.warn(`Mangled metadata configuration block at: ${folder}`);
             }
         }
+
+        const metadataImdbId = normalizeImdbId(meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '');
+        const markerImdbId = findImdbMarkerFile(itemPath);
+        const effectiveImdbId = metadataImdbId || markerImdbId;
 
         const remoteProfiles = Object.values(meta.storage?.files || {}).filter(fileBlock =>
             fileBlock && fileBlock.status === 'synced' && Boolean(fileBlock.remoteKey)
@@ -53,7 +109,7 @@ function scanDirectory(basePath, contentType) {
         const normalizedYear = meta.year || meta.metadata?.year || '';
         const normalizedPlot = meta.plot || meta.metadata?.plot || '';
         const normalizedGenre = meta.genre || meta.metadata?.genre || '';
-        const normalizedImdbId = meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '';
+        const normalizedImdbId = effectiveImdbId || '';
         const normalizedLibraryGroups = normalizeGroups(
             meta.libraryGroups || meta.metadata?.libraryGroups || [],
             { addGlobalIfMissing: true }
@@ -104,6 +160,27 @@ function scanDirectory(basePath, contentType) {
         let mediaFiles = [];
         if (fs.existsSync(itemPath)) {
             mediaFiles = fs.readdirSync(itemPath).filter(f => f.endsWith('.mp4') || f.endsWith('.mkv'));
+        }
+
+        const hasPartialMarkers = hasPartialDownloadMarkers(itemPath);
+        const mustHaveMetadata = contentType === 'series'
+            ? REQUIRE_METADATA_FOR_SERIES_SCAN
+            : REQUIRE_METADATA_FOR_MOVIE_SCAN;
+        const hasImdbReference = Boolean(effectiveImdbId);
+
+        if (!isRemote && mustHaveMetadata && !hasMetadataFile && !markerImdbId) {
+            logger.debug(`⏭️ Skipping unmanaged ${contentType} folder (missing metadata.json or metadata.<IMDBID> marker): ${folder}`);
+            continue;
+        }
+
+        if (!isRemote && mustHaveMetadata && !hasImdbReference) {
+            logger.debug(`⏭️ Skipping unmanaged ${contentType} folder (missing IMDb reference in metadata.json or metadata.<IMDBID>): ${folder}`);
+            continue;
+        }
+
+        if (hasPartialMarkers) {
+            logger.debug(`⏭️ Skipping partial/incomplete folder from scan: ${folder}`);
+            continue;
         }
 
         if (mediaFiles.length > 0 || isRemote || contentType === 'series') {

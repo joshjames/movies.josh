@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue Manager | AnyMovie</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Sora:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-a: #08111b;
+            --bg-b: #10273d;
+            --card: rgba(8, 18, 28, 0.76);
+            --card-border: rgba(125, 211, 252, 0.26);
+            --text-main: #eff6ff;
+            --text-muted: #a7bdd4;
+            --accent: #0ea5e9;
+            --ok: #22c55e;
+            --warn: #f59e0b;
+            --bad: #ef4444;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text-main);
+            font-family: 'Space Grotesk', sans-serif;
+            background:
+                radial-gradient(1000px 500px at -10% -10%, rgba(14, 165, 233, 0.22), transparent 55%),
+                radial-gradient(900px 600px at 110% 0%, rgba(34, 197, 94, 0.16), transparent 45%),
+                linear-gradient(150deg, var(--bg-a), var(--bg-b));
+            padding: 18px;
+        }
+
+        .shell {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero {
+            border: 1px solid var(--card-border);
+            background: var(--card);
+            backdrop-filter: blur(12px);
+            border-radius: 18px;
+            padding: 18px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .hero-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .title {
+            margin: 0;
+            font-family: 'Sora', sans-serif;
+            font-size: clamp(1.35rem, 4vw, 2rem);
+            letter-spacing: 0.4px;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .chip-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .queue-grid {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .queue-card {
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            background: rgba(3, 12, 20, 0.82);
+            padding: 14px;
+            display: grid;
+            gap: 10px;
+            animation: rise 220ms ease;
+        }
+
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .name {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .meta {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.83rem;
+        }
+
+        .progress-wrap {
+            display: grid;
+            gap: 6px;
+        }
+
+        .prefs {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .switch-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .empty {
+            border: 1px dashed rgba(148, 163, 184, 0.5);
+            border-radius: 14px;
+            padding: 18px;
+            color: var(--text-muted);
+            text-align: center;
+            background: rgba(2, 6, 23, 0.48);
+        }
+
+        .error-note {
+            color: #fecaca;
+            font-size: 0.82rem;
+            background: rgba(127, 29, 29, 0.45);
+            border: 1px solid rgba(239, 68, 68, 0.38);
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        @media (min-width: 880px) {
+            body { padding: 24px; }
+            .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+    </style>
+    <script type="module" src="https://esm.run/@material/web/all.js"></script>
+</head>
+<body>
+    <main class="shell">
+        <section class="hero">
+            <div class="hero-top">
+                <div>
+                    <h1 class="title">Queue Manager</h1>
+                    <p class="subtitle" id="scopeLabel">Showing your personal acquisition and processing queue.</p>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <a href="/" style="text-decoration:none;"><md-outlined-button>Back Home</md-outlined-button></a>
+                    <md-filled-tonal-button id="refreshBtn">Refresh</md-filled-tonal-button>
+                </div>
+            </div>
+            <div class="chip-row">
+                <md-assist-chip id="chipActive" label="Active: 0"></md-assist-chip>
+                <md-assist-chip id="chipQueued" label="Queued: 0"></md-assist-chip>
+                <md-assist-chip id="chipBlocked" label="Needs attention: 0"></md-assist-chip>
+            </div>
+        </section>
+
+        <section class="queue-grid" id="queueGrid"></section>
+    </main>
+
+    <script>
+        const queueGrid = document.getElementById('queueGrid');
+        const refreshBtn = document.getElementById('refreshBtn');
+
+        function stageLabel(rawStage, rawStatus) {
+            const stage = String(rawStage || '').toLowerCase();
+            const status = String(rawStatus || '').toLowerCase();
+
+            if (status.includes('failed')) return 'Needs Attention';
+            if (status.includes('paused')) return 'Paused';
+            if (stage === 'downloading') return 'Acquiring';
+            if (stage === 'ingest') return 'Ingesting';
+            if (stage === 'metadata') return 'Obtaining Details';
+            if (stage === 'subtitles') return 'Preparing Captions';
+            if (stage === 'transcode') return 'Optimizing Playback';
+            if (stage === 'queued') return 'Queued';
+            if (stage === 'processing') return 'Processing';
+            return 'Processing';
+        }
+
+        function cleanProgress(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return 0;
+            if (n < 0) return 0;
+            if (n > 100) return 100;
+            return n;
+        }
+
+        function toItemKey(item) {
+            return String(item.jobId || item.torrentHash || item.title || Math.random());
+        }
+
+        async function loadProfileLabel() {
+            try {
+                const res = await fetch('/api/account/profile', { credentials: 'include' });
+                const data = await res.json();
+                if (data.success && data.user) {
+                    const name = data.user.displayName || data.user.userKey || 'You';
+                    const node = document.getElementById('scopeLabel');
+                    if (node) {
+                        node.textContent = `${name}, this page only shows your queue.`;
+                    }
+                }
+            } catch (_err) {
+                // Keep default label.
+            }
+        }
+
+        async function postAction(url) {
+            const res = await fetch(url, { method: 'POST', credentials: 'include' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.success === false) {
+                throw new Error(data.error || 'Action failed.');
+            }
+            return data;
+        }
+
+        async function saveOptions(jobId, options) {
+            const res = await fetch(`/api/job/${encodeURIComponent(jobId)}/options`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(options)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.success === false) {
+                throw new Error(data.error || 'Unable to save options.');
+            }
+            return data;
+        }
+
+        function renderStats(items, failures) {
+            const active = items.filter(i => !String(i.status || '').toLowerCase().includes('paused')).length;
+            const queued = items.filter(i => {
+                const status = String(i.status || '').toLowerCase();
+                return status.includes('queue') || status.includes('waiting');
+            }).length;
+            const blocked = (failures || []).length;
+
+            document.getElementById('chipActive')?.setAttribute('label', `Active: ${active}`);
+            document.getElementById('chipQueued')?.setAttribute('label', `Queued: ${queued}`);
+            document.getElementById('chipBlocked')?.setAttribute('label', `Needs attention: ${blocked}`);
+        }
+
+        function createActionButton(label, style, onClick) {
+            const button = document.createElement(style || 'md-outlined-button');
+            button.textContent = label;
+            button.addEventListener('click', onClick);
+            return button;
+        }
+
+        function mountQueue(items, failures) {
+            renderStats(items, failures);
+
+            const merged = [
+                ...items.map(item => ({ ...item, _failed: false })),
+                ...(failures || []).map(item => ({
+                    ...item,
+                    progress: 0,
+                    stage: 'failed',
+                    _failed: true,
+                    canPause: false,
+                    canResume: false,
+                    canCancel: false
+                }))
+            ];
+
+            if (!merged.length) {
+                queueGrid.innerHTML = '<div class="empty">Your queue is clear. New requests will appear here.</div>';
+                return;
+            }
+
+            queueGrid.innerHTML = '';
+
+            for (const item of merged) {
+                const key = toItemKey(item);
+                const progress = cleanProgress(item.progress);
+                const label = stageLabel(item.stage, item.status);
+                const card = document.createElement('article');
+                card.className = 'queue-card';
+                card.dataset.itemKey = key;
+
+                const top = document.createElement('div');
+                top.className = 'row';
+                top.innerHTML = `
+                    <div>
+                        <h3 class="name"></h3>
+                        <p class="meta"></p>
+                    </div>
+                    <md-assist-chip label="${label}"></md-assist-chip>
+                `;
+                top.querySelector('.name').textContent = String(item.title || 'Queue Item');
+                top.querySelector('.meta').textContent = item._failed
+                    ? `Issue: ${item.error || 'Unknown problem'}`
+                    : `Status: ${item.status || 'Processing'}${item.size ? ` · ${item.size}` : ''}`;
+                card.appendChild(top);
+
+                const progressWrap = document.createElement('div');
+                progressWrap.className = 'progress-wrap';
+                progressWrap.innerHTML = `
+                    <md-linear-progress value="${progress / 100}"></md-linear-progress>
+                    <div class="meta">Completion: ${progress.toFixed(0)}%</div>
+                `;
+                card.appendChild(progressWrap);
+
+                const prefs = document.createElement('div');
+                prefs.className = 'prefs';
+
+                const canEditPrefs = Boolean(item.jobId) && !item._failed;
+                if (canEditPrefs) {
+                    const notifyWrap = document.createElement('label');
+                    notifyWrap.className = 'switch-item';
+                    const notifySwitch = document.createElement('md-switch');
+                    notifySwitch.selected = Boolean(item.queueOptions?.notifyOnComplete);
+                    notifySwitch.addEventListener('change', async () => {
+                        try {
+                            await saveOptions(item.jobId, {
+                                notifyOnComplete: notifySwitch.selected,
+                                addToWatchLaterOnComplete: watchLaterSwitch.selected
+                            });
+                        } catch (err) {
+                            notifySwitch.selected = !notifySwitch.selected;
+                            alert(err.message);
+                        }
+                    });
+                    notifyWrap.appendChild(notifySwitch);
+                    notifyWrap.appendChild(document.createTextNode('Email me when this is ready'));
+                    prefs.appendChild(notifyWrap);
+
+                    const watchWrap = document.createElement('label');
+                    watchWrap.className = 'switch-item';
+                    const watchLaterSwitch = document.createElement('md-switch');
+                    watchLaterSwitch.selected = Boolean(item.queueOptions?.addToWatchLaterOnComplete);
+                    watchLaterSwitch.addEventListener('change', async () => {
+                        try {
+                            await saveOptions(item.jobId, {
+                                notifyOnComplete: notifySwitch.selected,
+                                addToWatchLaterOnComplete: watchLaterSwitch.selected
+                            });
+                        } catch (err) {
+                            watchLaterSwitch.selected = !watchLaterSwitch.selected;
+                            alert(err.message);
+                        }
+                    });
+                    watchWrap.appendChild(watchLaterSwitch);
+                    watchWrap.appendChild(document.createTextNode('Add to Watch Later when complete'));
+                    prefs.appendChild(watchWrap);
+                }
+                card.appendChild(prefs);
+
+                const actions = document.createElement('div');
+                actions.className = 'actions';
+
+                if (item.canPause && item.jobId) {
+                    actions.appendChild(createActionButton('Pause', 'md-outlined-button', async () => {
+                        try {
+                            await postAction(`/api/job/${encodeURIComponent(item.jobId)}/pause`);
+                            await refreshQueue();
+                        } catch (err) {
+                            alert(err.message);
+                        }
+                    }));
+                }
+
+                if (item.canResume && item.jobId) {
+                    actions.appendChild(createActionButton('Resume', 'md-filled-tonal-button', async () => {
+                        try {
+                            await postAction(`/api/job/${encodeURIComponent(item.jobId)}/resume`);
+                            await refreshQueue();
+                        } catch (err) {
+                            alert(err.message);
+                        }
+                    }));
+                }
+
+                if (item.canCancel && item.jobId) {
+                    actions.appendChild(createActionButton('Cancel', 'md-filled-button', async () => {
+                        const ok = window.confirm('Cancel this queue item?');
+                        if (!ok) return;
+                        try {
+                            await postAction(`/api/job/${encodeURIComponent(item.jobId)}/cancel`);
+                            await refreshQueue();
+                        } catch (err) {
+                            alert(err.message);
+                        }
+                    }));
+                }
+
+                if (item._failed && item.jobId) {
+                    actions.appendChild(createActionButton('Retry', 'md-filled-tonal-button', async () => {
+                        try {
+                            await postAction(`/api/job/${encodeURIComponent(item.jobId)}/retry`);
+                            await refreshQueue();
+                        } catch (err) {
+                            alert(err.message);
+                        }
+                    }));
+                }
+
+                if (actions.children.length > 0) {
+                    card.appendChild(actions);
+                }
+
+                if (item._failed && item.error) {
+                    const errorNote = document.createElement('div');
+                    errorNote.className = 'error-note';
+                    errorNote.textContent = item.error;
+                    card.appendChild(errorNote);
+                }
+
+                queueGrid.appendChild(card);
+            }
+        }
+
+        async function refreshQueue() {
+            refreshBtn?.setAttribute('disabled', 'true');
+            try {
+                const [statusRes, failedRes] = await Promise.all([
+                    fetch('/api/pipeline/status', { credentials: 'include' }),
+                    fetch('/api/jobs/failed', { credentials: 'include' })
+                ]);
+
+                const status = await statusRes.json();
+                const failed = await failedRes.json().catch(() => ({ success: true, jobs: [] }));
+
+                if (!statusRes.ok || status.success === false) {
+                    throw new Error(status.error || 'Unable to load queue.');
+                }
+
+                const pipelineItems = Array.isArray(status.pipeline) ? status.pipeline : [];
+                const failedItems = Array.isArray(status.failures) ? status.failures : (Array.isArray(failed.jobs) ? failed.jobs : []);
+                mountQueue(pipelineItems, failedItems);
+            } catch (err) {
+                queueGrid.innerHTML = `<div class="empty">${err.message}</div>`;
+            } finally {
+                refreshBtn?.removeAttribute('disabled');
+            }
+        }
+
+        refreshBtn?.addEventListener('click', refreshQueue);
+
+        loadProfileLabel();
+        refreshQueue();
+        setInterval(refreshQueue, 10000);
+    </script>
+</body>
+</html>

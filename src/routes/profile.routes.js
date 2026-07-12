@@ -96,4 +96,59 @@ router.get('/watch-history', async (req, res) => {
     }
 });
 
+// GET: /api/profile/watch-later
+router.get('/watch-later', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        const limit = parseInt(req.query.limit, 10) || 500;
+
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const items = await ProfileService.getWatchLater(username, { limit });
+        return res.json({ success: true, userKey: username, count: items.length, items });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/profile/watch-later
+router.post('/watch-later', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        const item = req.body || {};
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const result = await ProfileService.addWatchLaterItem(username, item);
+        if (!result.success) {
+            return res.status(400).json(result);
+        }
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// DELETE: /api/profile/watch-later/:mediaId
+router.delete('/watch-later/:mediaId', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const mediaId = decodeURIComponent(String(req.params.mediaId || ''));
+        const result = await ProfileService.removeWatchLaterItem(username, mediaId);
+        if (!result.success) {
+            return res.status(400).json(result);
+        }
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 module.exports = router;

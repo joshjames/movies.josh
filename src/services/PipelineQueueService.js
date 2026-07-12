@@ -33,6 +33,32 @@ let redisConnected = false;
 
 const jobs = new Map();
 
+async function hydrateJobsFromRedis() {
+  if (!redisConnected || !redisClient) return;
+
+  try {
+    let loaded = 0;
+    for await (const key of redisClient.scanIterator({ MATCH: `${JOB_PREFIX}*`, COUNT: 200 })) {
+      try {
+        const raw = await redisClient.get(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.id) continue;
+        jobs.set(parsed.id, parsed);
+        loaded += 1;
+      } catch (entryErr) {
+        logger.warn(`⚠️ Failed hydrating queue entry ${key}: ${entryErr.message}`);
+      }
+    }
+
+    if (loaded > 0) {
+      logger.info(`♻️ Queue state restored from Redis: ${loaded} job(s) rehydrated.`);
+    }
+  } catch (err) {
+    logger.warn(`⚠️ Queue rehydration skipped: ${err.message}`);
+  }
+}
+
 // Initialize Redis connection (non-blocking, optional)
 async function initRedis() {
   if (!isRedisFeatureEnabled()) {
@@ -58,6 +84,7 @@ async function initRedis() {
             redisConnected = true;
         });
         await redisClient.connect();
+        await hydrateJobsFromRedis();
     } catch (err) {
         logger.warn(`⚠️ Redis initialization skipped: ${err.message}. Queue operating in memory-only mode.`);
         redisClient = null;

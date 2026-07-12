@@ -27,7 +27,8 @@ const {
     getAllJobs, 
     getFailedJobs, 
     getJob,
-    updateJob
+    updateJob,
+    removeJob
 } = require('../services/PipelineQueueService');
 
 const MOVIES_DIR = process.env.MOVIES_DIR || (fs.existsSync('/app/movies') ? '/app/movies' : '/home/epic/movies');
@@ -167,6 +168,29 @@ function inferRetryStep(job) {
     }
 
     return 'INGEST';
+}
+
+function parseBoolean(value, fallback = false) {
+    if (typeof value === 'boolean') return value;
+    if (value === undefined || value === null || value === '') return fallback;
+    const normalized = String(value).trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
+}
+
+function getJobQueueOptions(job) {
+    const options = (job?.payload && typeof job.payload.queueOptions === 'object') ? job.payload.queueOptions : {};
+    return {
+        notifyOnComplete: parseBoolean(options.notifyOnComplete, false),
+        addToWatchLaterOnComplete: parseBoolean(options.addToWatchLaterOnComplete, false)
+    };
+}
+
+function canManageJob(viewerUser, jobOwner) {
+    if (!viewerUser) return false;
+    if (isPrivilegedUser(viewerUser)) return true;
+    return Boolean(jobOwner && jobOwner === viewerUser);
 }
 
 async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
@@ -822,6 +846,17 @@ router.get('/pipeline/status', async (req, res) => {
         let pipeline = [];
         let failedJobs = [];
 
+        const allJobs = getAllJobs();
+        const waitingByHash = new Map();
+        allJobs.forEach((job) => {
+            const hash = String(job?.payload?.torrentHash || '').trim().toLowerCase();
+            if (!hash) return;
+            if (job.status !== 'WAITING_DOWNLOAD' && job.status !== 'PAUSED_DOWNLOAD') return;
+            if (!waitingByHash.has(hash)) {
+                waitingByHash.set(hash, job);
+            }
+        });
+
         // 1. Get active downloads from qBittorrent
         const torrents = await TorrentService.getActivePipelineTorrents(
             viewerUser ? { addedByUser: viewerUser } : {}
@@ -841,6 +876,12 @@ router.get('/pipeline/status', async (req, res) => {
                 torrentOwner = viewerUser;
             }
 
+            const linkedJob = waitingByHash.get(String(torrent.hash || '').toLowerCase()) || null;
+            const queueOptions = linkedJob ? getJobQueueOptions(linkedJob) : {
+                notifyOnComplete: false,
+                addToWatchLaterOnComplete: false
+            };
+
             pipeline.push({
                 title: torrent.name.replace(/[._-]/g, ' '),
                 progress: (torrent.progress * 100).toFixed(1),
@@ -848,17 +889,25 @@ router.get('/pipeline/status', async (req, res) => {
                 eta: torrent.eta, 
                 size: (torrent.size / (1024 ** 3)).toFixed(2) + ' GB',
                 stage: 'downloading',
-                addedByUser: torrentOwner
+                addedByUser: torrentOwner,
+                torrentHash: torrent.hash,
+                state: torrent.state,
+                jobId: linkedJob?.id || null,
+                queueOptions,
+                canPause: Boolean(linkedJob?.id),
+                canResume: linkedJob?.status === 'PAUSED_DOWNLOAD',
+                canCancel: Boolean(linkedJob?.id)
             });
         }
 
         // 2. Get active jobs from queue system
-        const allJobs = getAllJobs();
         allJobs.forEach(job => {
             const jobOwner = getJobOwner(job);
             if (viewerUser && (!jobOwner || jobOwner !== viewerUser)) {
                 return;
             }
+
+            const queueOptions = getJobQueueOptions(job);
 
             // Collect failed jobs separately
             if (job.status === 'FAILED') {
@@ -870,7 +919,47 @@ router.get('/pipeline/status', async (req, res) => {
                     stage: job.currentStep,
                     imdbId: job.imdbId,
                     failedAt: job.updatedAt,
-                    addedByUser: jobOwner
+                    addedByUser: jobOwner,
+                    queueOptions,
+                    canRetry: canManageJob(activeUser, jobOwner)
+                });
+                return;
+            }
+
+            if (job.status === 'PAUSED_DOWNLOAD') {
+                pipeline.push({
+                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    progress: 0,
+                    status: 'Paused in Acquisition Queue',
+                    eta: 'Paused',
+                    size: 'Awaiting resume',
+                    stage: 'downloading',
+                    imdbId: job.imdbId,
+                    jobId: job.id,
+                    addedByUser: jobOwner,
+                    queueOptions,
+                    canPause: false,
+                    canResume: canManageJob(activeUser, jobOwner),
+                    canCancel: canManageJob(activeUser, jobOwner)
+                });
+                return;
+            }
+
+            if (job.status === 'PAUSED') {
+                pipeline.push({
+                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    progress: 0,
+                    status: 'Paused in Processing Queue',
+                    eta: 'Paused',
+                    size: 'Awaiting resume',
+                    stage: 'queued',
+                    imdbId: job.imdbId,
+                    jobId: job.id,
+                    addedByUser: jobOwner,
+                    queueOptions,
+                    canPause: false,
+                    canResume: canManageJob(activeUser, jobOwner),
+                    canCancel: canManageJob(activeUser, jobOwner)
                 });
                 return;
             }
@@ -897,7 +986,11 @@ router.get('/pipeline/status', async (req, res) => {
                     stage: 'downloading',
                     imdbId: job.imdbId,
                     jobId: job.id,
-                    addedByUser: jobOwner
+                    addedByUser: jobOwner,
+                    queueOptions,
+                    canPause: canManageJob(activeUser, jobOwner),
+                    canResume: false,
+                    canCancel: canManageJob(activeUser, jobOwner)
                 });
                 return;
             }
@@ -917,7 +1010,11 @@ router.get('/pipeline/status', async (req, res) => {
                 stage: stepInfo.stage,
                 imdbId: job.imdbId,
                 jobId: job.id,
-                addedByUser: jobOwner
+                addedByUser: jobOwner,
+                queueOptions,
+                canPause: canManageJob(activeUser, jobOwner),
+                canResume: false,
+                canCancel: canManageJob(activeUser, jobOwner)
             });
         });
 
@@ -931,6 +1028,173 @@ router.get('/pipeline/status', async (req, res) => {
     } catch (err) {
         logger.error('Pipeline Status Error: ' + err.message);
         return res.status(500).json({ error: "Failed to assemble pipeline matrix state structures." });
+    }
+});
+
+// PATCH: /api/job/:jobId/options - Save per-job completion options
+router.patch('/job/:jobId/options', async (req, res) => {
+    try {
+        const viewerUser = normalizeUserKey(getActiveUser(req));
+        if (!viewerUser || viewerUser === 'guest') {
+            return res.status(401).json({ success: false, error: 'Authentication required.' });
+        }
+
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        const jobOwner = getJobOwner(job);
+        if (!canManageJob(viewerUser, jobOwner)) {
+            return res.status(403).json({ success: false, error: 'You cannot edit this queue item.' });
+        }
+
+        const current = getJobQueueOptions(job);
+        const payload = req.body || {};
+        const nextOptions = {
+            notifyOnComplete: parseBoolean(payload.notifyOnComplete, current.notifyOnComplete),
+            addToWatchLaterOnComplete: parseBoolean(payload.addToWatchLaterOnComplete, current.addToWatchLaterOnComplete)
+        };
+
+        const updated = updateJob(job, {
+            payload: {
+                ...job.payload,
+                queueOptions: nextOptions
+            }
+        });
+
+        return res.json({ success: true, jobId: updated.id, queueOptions: nextOptions });
+    } catch (err) {
+        logger.error('[Queue API] Update options error: ' + err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/job/:jobId/pause - Pause a queued job
+router.post('/job/:jobId/pause', async (req, res) => {
+    try {
+        const viewerUser = normalizeUserKey(getActiveUser(req));
+        if (!viewerUser || viewerUser === 'guest') {
+            return res.status(401).json({ success: false, error: 'Authentication required.' });
+        }
+
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        const jobOwner = getJobOwner(job);
+        if (!canManageJob(viewerUser, jobOwner)) {
+            return res.status(403).json({ success: false, error: 'You cannot pause this queue item.' });
+        }
+
+        if (job.status === 'WAITING_DOWNLOAD') {
+            const hash = String(job.payload?.torrentHash || '').trim();
+            if (!hash) {
+                return res.status(400).json({ success: false, error: 'Missing torrent hash for this item.' });
+            }
+
+            const paused = await TorrentService.pauseTorrentByHash(hash);
+            if (!paused.success) {
+                return res.status(502).json({ success: false, error: paused.error || 'Failed to pause torrent.' });
+            }
+
+            const updated = updateJob(job, { status: 'PAUSED_DOWNLOAD' });
+            return res.json({ success: true, jobId: updated.id, status: updated.status });
+        }
+
+        if (job.status === 'QUEUED') {
+            const updated = updateJob(job, { status: 'PAUSED' });
+            return res.json({ success: true, jobId: updated.id, status: updated.status });
+        }
+
+        return res.status(409).json({ success: false, error: `Cannot pause item in status ${job.status}.` });
+    } catch (err) {
+        logger.error('[Queue API] Pause job error: ' + err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/job/:jobId/resume - Resume a paused job
+router.post('/job/:jobId/resume', async (req, res) => {
+    try {
+        const viewerUser = normalizeUserKey(getActiveUser(req));
+        if (!viewerUser || viewerUser === 'guest') {
+            return res.status(401).json({ success: false, error: 'Authentication required.' });
+        }
+
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        const jobOwner = getJobOwner(job);
+        if (!canManageJob(viewerUser, jobOwner)) {
+            return res.status(403).json({ success: false, error: 'You cannot resume this queue item.' });
+        }
+
+        if (job.status === 'PAUSED_DOWNLOAD') {
+            const hash = String(job.payload?.torrentHash || '').trim();
+            if (!hash) {
+                return res.status(400).json({ success: false, error: 'Missing torrent hash for this item.' });
+            }
+
+            const resumed = await TorrentService.resumeTorrentByHash(hash);
+            if (!resumed.success) {
+                return res.status(502).json({ success: false, error: resumed.error || 'Failed to resume torrent.' });
+            }
+
+            const updated = updateJob(job, { status: 'WAITING_DOWNLOAD' });
+            return res.json({ success: true, jobId: updated.id, status: updated.status });
+        }
+
+        if (job.status === 'PAUSED') {
+            const updated = updateJob(job, { status: 'QUEUED' });
+            return res.json({ success: true, jobId: updated.id, status: updated.status });
+        }
+
+        return res.status(409).json({ success: false, error: `Cannot resume item in status ${job.status}.` });
+    } catch (err) {
+        logger.error('[Queue API] Resume job error: ' + err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/job/:jobId/cancel - Cancel and remove a queue item
+router.post('/job/:jobId/cancel', async (req, res) => {
+    try {
+        const viewerUser = normalizeUserKey(getActiveUser(req));
+        if (!viewerUser || viewerUser === 'guest') {
+            return res.status(401).json({ success: false, error: 'Authentication required.' });
+        }
+
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        const jobOwner = getJobOwner(job);
+        if (!canManageJob(viewerUser, jobOwner)) {
+            return res.status(403).json({ success: false, error: 'You cannot cancel this queue item.' });
+        }
+
+        const torrentHash = String(job.payload?.torrentHash || '').trim();
+        if (torrentHash) {
+            const paused = await TorrentService.pauseTorrentByHash(torrentHash);
+            if (!paused.success) {
+                logger.warn(`[Queue API] Could not pause torrent prior to cancel for job ${job.id}: ${paused.error}`);
+            }
+            const removed = await TorrentService.deleteTorrentByHash(torrentHash, { deleteFiles: false });
+            if (!removed.success) {
+                logger.warn(`[Queue API] Could not remove torrent for job ${job.id}: ${removed.error}`);
+            }
+        }
+
+        removeJob(job.id);
+        return res.json({ success: true, jobId: job.id, status: 'CANCELLED' });
+    } catch (err) {
+        logger.error('[Queue API] Cancel job error: ' + err.message);
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
