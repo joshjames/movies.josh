@@ -552,6 +552,105 @@ function repairStorageProfiles(storage = {}, contentType = 'movie', folder = '',
     return { storage: nextStorage, changed };
 }
 
+function detectLocalProfilePath(folderPath, profileName = '', existingLocalPath = '') {
+    const explicit = String(existingLocalPath || '').trim();
+    if (explicit) {
+        const explicitPath = path.join(folderPath, explicit);
+        if (fs.existsSync(explicitPath)) return explicit;
+    }
+
+    const filesOnDisk = fs.existsSync(folderPath) ? fs.readdirSync(folderPath) : [];
+    const profile = String(profileName || '').toLowerCase();
+
+    if (profile === '1080p') {
+        return filesOnDisk.find((f) => f.endsWith('.web.mp4') || /1080p/i.test(f)) || '';
+    }
+    if (profile === '720p') {
+        return filesOnDisk.find((f) => /720p/i.test(f) && /\.mp4$/i.test(f)) || '';
+    }
+    if (profile === '480p') {
+        return filesOnDisk.find((f) => /480p/i.test(f) && /\.mp4$/i.test(f)) || '';
+    }
+
+    return '';
+}
+
+async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', contentType = 'movie', folder = '') {
+    const normalizedType = String(contentType || '').toLowerCase() === 'series' ? 'series' : 'movie';
+    const baseRepair = repairStorageProfiles(
+        metadata.storage || {},
+        normalizedType,
+        folder,
+        metadata.imdbId || metadata.imdb_id || ''
+    );
+
+    const storage = baseRepair.storage;
+    const files = storage.files || {};
+    const bucket = storage.bucket || process.env.B2_BUCKET || process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
+    const s3Client = getArchiveS3Client();
+    let changed = Boolean(baseRepair.changed);
+    const verification = [];
+
+    for (const profile of Object.keys(files)) {
+        const block = files[profile] || {};
+        const localPath = detectLocalProfilePath(folderPath, profile, block.localPath || '');
+        const remoteKey = cleanRemoteKey(block.remoteKey || '');
+
+        let cloudExists = false;
+        if (remoteKey) {
+            try {
+                await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: remoteKey }));
+                cloudExists = true;
+            } catch (_err) {
+                cloudExists = false;
+            }
+        }
+
+        let nextStatus = block.status;
+        if (cloudExists) {
+            nextStatus = 'synced';
+        } else if (localPath) {
+            nextStatus = 'pending';
+        } else {
+            nextStatus = 'waiting';
+        }
+
+        const nextBlock = {
+            ...block,
+            status: nextStatus,
+            localPath: localPath || null,
+            remoteKey: remoteKey || null
+        };
+
+        if (
+            nextBlock.status !== block.status ||
+            String(nextBlock.localPath || '') !== String(block.localPath || '') ||
+            String(nextBlock.remoteKey || '') !== String(block.remoteKey || '')
+        ) {
+            files[profile] = nextBlock;
+            changed = true;
+        }
+
+        verification.push({
+            profile,
+            status: nextBlock.status,
+            localPath: nextBlock.localPath,
+            remoteKey: nextBlock.remoteKey,
+            cloudExists
+        });
+    }
+
+    storage.files = files;
+    metadata.storage = storage;
+
+    return {
+        storage,
+        changed,
+        bucket,
+        verification
+    };
+}
+
 function sanitizeArchiveName(name = '') {
     return String(name || '')
         .trim()
@@ -2404,23 +2503,81 @@ router.post('/repair-storage-profiles', async (req, res) => {
         }
 
         const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        const repaired = repairStorageProfiles(
-            metadata.storage || {},
-            normalizedType,
-            folder,
-            metadata.imdbId || metadata.imdb_id || ''
-        );
+        const repaired = await verifyAndRepairStorageProfiles(metadata, folderPath, normalizedType, folder);
 
         metadata.storage = repaired.storage;
         await persistMetadataFile(metaPath, metadata);
         await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
 
         return res.json({
             success: true,
             folder,
             contentType: normalizedType,
             changed: repaired.changed,
-            storage: metadata.storage
+            storage: metadata.storage,
+            verification: repaired.verification
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/repair-storage-profiles-bulk', async (req, res) => {
+    try {
+        const { contentType = 'movie', onlyRemote = true } = req.body || {};
+        const normalizedType = String(contentType || '').toLowerCase() === 'series' ? 'series' : 'movie';
+        const onlyRemoteMode = onlyRemote !== false;
+
+        const library = await getLibrary();
+        const rows = normalizedType === 'series'
+            ? (library.shows || [])
+            : (library.movies || []);
+
+        let scanned = 0;
+        let updated = 0;
+        const changedFolders = [];
+
+        for (const row of rows) {
+            const folder = normalizedType === 'series'
+                ? String(row.id || '').replace(/^series\//i, '')
+                : decodeURIComponent(String(row.id || ''));
+            if (!folder) continue;
+
+            const folderPath = normalizedType === 'series'
+                ? resolveSeriesFolderPath(folder)
+                : resolveMovieFolderPath(folder);
+            const metaPath = path.join(folderPath, 'metadata.json');
+            if (!fs.existsSync(metaPath)) continue;
+
+            const metadata = readMetadataIfExists(metaPath);
+            if (!metadata) continue;
+            scanned += 1;
+
+            const location = String(metadata?.storage?.location || '').toLowerCase();
+            if (onlyRemoteMode && location !== 'remote') continue;
+
+            const repaired = await verifyAndRepairStorageProfiles(metadata, folderPath, normalizedType, folder);
+
+            if (!repaired.changed) continue;
+
+            metadata.storage = repaired.storage;
+            await persistMetadataFile(metaPath, metadata);
+            updated += 1;
+            changedFolders.push(folder);
+        }
+
+        if (updated > 0) {
+            await LibraryScanner.runLibraryScanSweep();
+            await refreshLibraryFeeds();
+        }
+
+        return res.json({
+            success: true,
+            contentType: normalizedType,
+            scanned,
+            updated,
+            changedFolders: changedFolders.slice(0, 100)
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

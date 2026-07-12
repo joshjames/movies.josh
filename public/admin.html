@@ -677,6 +677,7 @@
                         <option value="60">60 / page</option>
                     </select>
                     <button type="button" onclick="fetchLibraryData(true)">Apply</button>
+                    <button type="button" style="background:#0891b2;" onclick="repairCloudStateBulk()">Repair Cloud State (Bulk)</button>
                     <button type="button" style="background:#334155;" onclick="resetAdminFilters()">Reset</button>
                 </div>
                 <div id="catalog-list">Loading localized digital storage lists...</div>
@@ -1703,6 +1704,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'refetch')">Refresh Metadata from OMDb</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'sync')">Sync Item to Redis Snapshot</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
+                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repaircloud')">Repair Cloud State</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
@@ -1995,6 +1997,7 @@
             if (action === 'refetch') return refetchMetadata(folder, type);
             if (action === 'sync') return syncItemNow(folder, type);
             if (action === 'repair') return repairMetadataNow(folder, type);
+            if (action === 'repaircloud') return repairCloudStateNow(folder, type);
             if (action === 'profiles') return generateStreamingProfilesNow(folder, type);
             if (action === 'worker') return runWorkerNow(folder, type);
             if (action === 'rename') return renameMediaNow(folder, type);
@@ -2179,6 +2182,62 @@
                 fetchLibraryData();
             } catch (_err) {
                 showToast('Repair request failed.', 'error', 4200);
+            }
+        }
+
+        async function repairCloudStateNow(folder, type) {
+            try {
+                showToast(`Repairing cloud state for ${folder}...`, 'info', 2600);
+                const res = await fetch('/api/admin/repair-storage-profiles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Cloud state repair failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                const profileSummary = Object.entries((data.storage && data.storage.files) || {})
+                    .map(([profile, block]) => `${profile}:${block && block.status ? block.status : 'unknown'}`)
+                    .join(' | ');
+
+                showToast(
+                    data.changed
+                        ? `Cloud state repaired. ${profileSummary}`
+                        : `Cloud state already consistent. ${profileSummary}`,
+                    'success',
+                    5200
+                );
+                fetchLibraryData();
+            } catch (_err) {
+                showToast('Cloud state repair request failed.', 'error', 4200);
+            }
+        }
+
+        async function repairCloudStateBulk() {
+            const type = currentTabMode === 'series' ? 'series' : 'movie';
+            const proceed = confirm(`Repair cloud state for all ${type} items?\n\nThis fixes broken synced/waiting keys caused by partial cloud push state updates.`);
+            if (!proceed) return;
+
+            try {
+                showToast(`Running bulk cloud state repair for ${type}...`, 'info', 3400);
+                const res = await fetch('/api/admin/repair-storage-profiles-bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contentType: type, onlyRemote: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Bulk cloud repair failed: ' + (data.error || 'Unknown error'), 'error', 4600);
+                    return;
+                }
+
+                showToast(`Bulk cloud repair complete. Scanned ${data.scanned}, updated ${data.updated}.`, 'success', 5200);
+                fetchLibraryData(true);
+            } catch (_err) {
+                showToast('Bulk cloud repair request failed.', 'error', 4600);
             }
         }
 
@@ -2373,7 +2432,7 @@
                         popularity: document.getElementById(`popularity-${folder}`)?.value || '',
                         plot: document.getElementById('plot-' + folder).value,
                         storage: { location: 'remote' }, // Force state mapping update down pipe
-                        deferCloudSync: true,
+                        deferCloudSync: false,
                         forceCloudSync: true
                     })
                 });
