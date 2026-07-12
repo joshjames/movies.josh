@@ -15,6 +15,7 @@ const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Im
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
 const LibraryScanner = require('../services/LibraryScanner'); 
 const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed, loadHomeFeedWithFallback } = require('../services/HomeFeedService');
+const { buildDefaultWorkerEndpoints, processToHealthUrl } = require('../services/WorkerEndpoints');
 
 const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
 const WORKER_HEALTH = {
@@ -31,7 +32,6 @@ const metadataService = require('../services/MetadataService');
 const metadataProvider = require('../services/MetadataProvider');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
-const { buildDefaultWorkerEndpoints, processToHealthUrl } = require('../services/WorkerEndpoints');
 const {
     getPrimaryMovieRoot,
     getPrimarySeriesRoot,
