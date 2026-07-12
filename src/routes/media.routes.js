@@ -1128,11 +1128,25 @@ router.get('/home-feed', (req, res) => {
 
     return getLibrary()
         .then((library) => {
+            const validLibraryIds = new Set([
+                ...(Array.isArray(library?.movies) ? library.movies : []),
+                ...(Array.isArray(library?.shows) ? library.shows : [])
+            ].map(item => String(item?.id || '')).filter(Boolean));
+
             const myLibraryCollection = buildMyLibraryCollection(library, activeUser, { limit: 18 });
             myLibraryCollection.cards = (myLibraryCollection.cards || []).map((item) => normalizeCard(item));
 
             const existing = Array.isArray(homeFeed.collections) ? homeFeed.collections : [];
-            const withoutExistingMyShelf = existing.filter((collection) => collection.id !== 'my-library-row');
+            const withoutExistingMyShelf = existing
+                .filter((collection) => collection.id !== 'my-library-row')
+                .map((collection) => {
+                    if (collection.id !== 'recently-added-row') return collection;
+                    const cards = Array.isArray(collection.cards) ? collection.cards : [];
+                    return {
+                        ...collection,
+                        cards: cards.filter((card) => validLibraryIds.has(String(card?.id || '')))
+                    };
+                });
             const first = withoutExistingMyShelf[0] || null;
             const tail = withoutExistingMyShelf.slice(1);
 

@@ -846,11 +846,12 @@
             const genreText = media.genre || media.enrichment?.genre || '';
             const scoreText = media.imdbScore || media.rating || media.enrichment?.imdbScore || '';
             const metaBits = [media.year || '', genreText, scoreText ? `IMDb ${scoreText}` : ''].filter(Boolean).join(' · ');
+            const cover = sanitizeImageSrc(media.cover);
 
             return `
                 <a class="slider-card" href="${targetEndpoint}?id=${media.id}">
                     ${badgeHtml}
-                    <img src="${media.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
+                    <img src="${cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
                     <div class="slider-card-overlay">
                         <div class="title">${media.title}</div>
                         <div class="meta-line">${metaBits}</div>
@@ -884,11 +885,12 @@
                 ? collection.cards.map(card => {
                     const badgeHtml = card.badge ? '<span class="slider-badge">TV Show</span>' : '';
                     const metaBits = [card.year || '', card.genre || '', card.imdbScore ? `IMDb ${card.imdbScore}` : ''].filter(Boolean).join(' · ');
+                    const cover = sanitizeImageSrc(card.cover);
 
                     return `
                         <a class="slider-card" href="${card.href}">
                             ${badgeHtml}
-                            <img src="${card.cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${card.title}">
+                            <img src="${cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${card.title}">
                             <div class="slider-card-overlay">
                                 <div class="title">${card.title}</div>
                                 <div class="meta-line">${metaBits}</div>
@@ -1128,7 +1130,7 @@
             if (!raw) return '';
 
             if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('/') || raw.startsWith('data:image/')) {
-                return raw.replace(/"/g, '%22');
+                return encodeURI(raw.replace(/"/g, '%22'));
             }
 
             return '';
