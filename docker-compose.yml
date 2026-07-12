@@ -34,7 +34,7 @@ services:
       ENABLE_TRANSCODER_WORKER: "false"
       ENABLE_CLOUDSYNC_WORKER: "false"
     ports:
-      - "3000:3000"
+      - "${APP_HTTP_HOST_PORT:-3000}:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -89,7 +89,7 @@ services:
     cpus: "1.0"
     command: ["node", "src/services/workers/CloudSyncWorker.js"]
     ports:
-      - "5004:5004"
+      - "${APP_CLOUDSYNC_HOST_PORT:-5004}:5004"
 
   # --- 🧠 HIGH-PERFORMANCE MEMORY DATA ENGINE ---
   redis:
