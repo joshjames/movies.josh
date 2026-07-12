@@ -16,14 +16,13 @@ const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Im
 const LibraryScanner = require('../services/LibraryScanner'); 
 const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed, loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 
-// Route map to local worker microservices ports running in the container
-const WORKER_PORTS = {
-    orchestrator: 3000,
-    sanitizer: 5000,
-    metadata: 5001,
-    subtitle: 5002,
-    transcoder: 5003,
-    cloudsync: 5004
+const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
+const WORKER_HEALTH = {
+    sanitizer: processToHealthUrl(WORKER_ENDPOINTS.INGEST),
+    metadata: processToHealthUrl(WORKER_ENDPOINTS.METADATA),
+    subtitle: processToHealthUrl(WORKER_ENDPOINTS.SUBTITLES),
+    transcoder: processToHealthUrl(WORKER_ENDPOINTS.TRANSCODE),
+    cloudsync: processToHealthUrl(WORKER_ENDPOINTS.CLOUDSYNC)
 };
 
 const pipelineOrchestrator = require('../../Orchestrator');
@@ -32,6 +31,7 @@ const metadataService = require('../services/MetadataService');
 const metadataProvider = require('../services/MetadataProvider');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
+const { buildDefaultWorkerEndpoints, processToHealthUrl } = require('../services/WorkerEndpoints');
 const {
     getPrimaryMovieRoot,
     getPrimarySeriesRoot,
@@ -695,12 +695,12 @@ router.use(requireAdmin);
 
 router.get('/health-check/:service', async (req, res) => {
     const serviceName = req.params.service;
-    const port = WORKER_PORTS[serviceName];
-    
-    if (!port) return res.status(404).json({ alive: false });
+    const healthUrl = WORKER_HEALTH[serviceName];
+
+    if (!healthUrl) return res.status(404).json({ alive: false });
     
     try {
-        await axios.get(`http://127.0.0.1:${port}/health`, { timeout: 1000 });
+        await axios.get(healthUrl, { timeout: 1000 });
         return res.json({ alive: true });
     } catch (e) {
         if (e.code !== 'ECONNREFUSED') {
@@ -1163,7 +1163,7 @@ router.post('/repair-metadata', async (req, res) => {
         if (runCloudSync && metadata.storage.location === 'remote') {
             const hasPendingUpload = profiles.some(profile => metadata.storage.files[profile]?.status === 'pending');
             if (hasPendingUpload) {
-                const cloudSyncRes = await axios.post('http://127.0.0.1:5004/process', {
+                const cloudSyncRes = await axios.post(WORKER_ENDPOINTS.CLOUDSYNC, {
                     folderPath,
                     folderName: folder,
                     contentType: contentType || metadata.contentType || 'movie',
@@ -1212,11 +1212,11 @@ router.post('/manual-worker-run', async (req, res) => {
 
         const cleanWorker = String(worker).toUpperCase();
         const workerMap = {
-            INGEST: 'http://127.0.0.1:5000/process',
-            METADATA: 'http://127.0.0.1:5001/process',
-            SUBTITLES: 'http://127.0.0.1:5002/process',
-            TRANSCODE: 'http://127.0.0.1:5003/process',
-            CLOUDSYNC: 'http://127.0.0.1:5004/process'
+            INGEST: WORKER_ENDPOINTS.INGEST,
+            METADATA: WORKER_ENDPOINTS.METADATA,
+            SUBTITLES: WORKER_ENDPOINTS.SUBTITLES,
+            TRANSCODE: WORKER_ENDPOINTS.TRANSCODE,
+            CLOUDSYNC: WORKER_ENDPOINTS.CLOUDSYNC
         };
 
         const workerUrl = workerMap[cleanWorker];
@@ -1301,7 +1301,7 @@ router.post('/generate-streaming-profiles', async (req, res) => {
 
         // Ensure the 1080p master exists first; low-res worker requires it.
         if (!hasWeb1080) {
-            const baseResponse = await axios.post('http://127.0.0.1:5003/process', {
+            const baseResponse = await axios.post(WORKER_ENDPOINTS.TRANSCODE, {
                 folderPath,
                 folderName: folder
             }, { timeout: 1800000 });
@@ -1314,7 +1314,7 @@ router.post('/generate-streaming-profiles', async (req, res) => {
             }
         }
 
-        const lowResResponse = await axios.post('http://127.0.0.1:5003/process-low-res', {
+        const lowResResponse = await axios.post(`${String(WORKER_ENDPOINTS.TRANSCODE).replace(/\/process$/, '')}/process-low-res`, {
             folderPath,
             folderName: folder
         }, { timeout: 1800000 });
@@ -2051,7 +2051,7 @@ router.post('/override-metadata', async (req, res) => {
             logger.info(`📡 [Orchestrator Bridge] Allocation changed to Cloud for [${folder}]. Triggering CloudSync Worker on port 5004...`);
 
             if (deferCloudSync === true) {
-                axios.post('http://127.0.0.1:5004/process', {
+                axios.post(WORKER_ENDPOINTS.CLOUDSYNC, {
                     folderPath: folderPath,
                     folderName: folder,
                     forceActualUpload: true
@@ -2071,7 +2071,7 @@ router.post('/override-metadata', async (req, res) => {
                         logger.error(`❌ [Orchestrator Bridge] Deferred CloudSync failed for [${folder}]: ${err.message}`);
                     });
             } else {
-                const cloudSyncRes = await axios.post('http://127.0.0.1:5004/process', {
+                const cloudSyncRes = await axios.post(WORKER_ENDPOINTS.CLOUDSYNC, {
                     folderPath: folderPath,
                     folderName: folder,
                     forceActualUpload: true

@@ -1,37 +1,96 @@
 version: '3.8'
 
+x-app-common: &app-common
+  image: simple-streamer:v2
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  env_file:
+    - .env
+  volumes:
+    - /home/epic/movies:/app/storage/movies
+    - /data/blockchain/media/Series:/app/storage/series
+    - /home/epic/movie-streamer-data:/app/metadata
+    - /home/epic/movie-streamer/metadata:/app/catalog-metadata:ro
+    - /home/epic/tobedel:/app/archive
+    - /home/epic/.config/subliminal:/root/.config/subliminal:ro
+  networks:
+    - needmonero_needmonero
+  depends_on:
+    redis:
+      condition: service_healthy
+
 services:
-  # --- 🍿 THE CORE APPLICATION CONTAINER ENGINE ---
-  movie-streamer:
-    container_name: movie-streamer-v2-test
-    image: simple-streamer:v2
-    build:
-      context: .
-      dockerfile: Dockerfile
-      network: host
-    restart: unless-stopped
-    cpus: "6.0"
-    env_file:
-      - .env
+  movie-streamer-web:
+    <<: *app-common
+    container_name: movie-streamer-web
+    cpus: "4.0"
+    environment:
+      ENABLE_WEB_SERVER: "true"
+      ENABLE_PIPELINE_WATCHER: "false"
+      ENABLE_INGEST_WORKER: "false"
+      ENABLE_METADATA_WORKER: "false"
+      ENABLE_SUBTITLE_WORKER: "false"
+      ENABLE_TRANSCODER_WORKER: "false"
+      ENABLE_CLOUDSYNC_WORKER: "false"
     ports:
-      - "5000:5000"
-      - "5004:5004"
-    volumes:
-      - /home/epic/movies:/app/storage/movies
-      - /data/blockchain/media/Series:/app/storage/series
-      - /home/epic/movie-streamer-data:/app/metadata
-      - /home/epic/movie-streamer/metadata:/app/catalog-metadata:ro
-      - /home/epic/tobedel:/app/archive
-      - /home/epic/.config/subliminal:/root/.config/subliminal:ro
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  pipeline-runner:
+    <<: *app-common
+    container_name: movie-streamer-pipeline-runner
+    cpus: "1.0"
+    command: ["node", "src/services/workers/PipelineRunner.js"]
+    environment:
+      ENABLE_PIPELINE_WATCHER: "false"
     depends_on:
       redis:
         condition: service_healthy
       qbittorrent:
         condition: service_started
-    networks:
-      - needmonero_needmonero
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+
+  ingest-worker:
+    <<: *app-common
+    container_name: movie-streamer-ingest-worker
+    cpus: "1.0"
+    command: ["node", "src/services/workers/IngestSanitizerWorker.js"]
+    ports:
+      - "5000:5000"
+
+  metadata-worker:
+    <<: *app-common
+    container_name: movie-streamer-metadata-worker
+    cpus: "1.0"
+    command: ["node", "src/services/workers/MetadataWorker.js"]
+    ports:
+      - "5001:5001"
+
+  subtitle-worker:
+    <<: *app-common
+    container_name: movie-streamer-subtitle-worker
+    cpus: "1.0"
+    command: ["node", "src/services/workers/SubtitleWorker.js"]
+    ports:
+      - "5002:5002"
+
+  transcoder-worker:
+    <<: *app-common
+    container_name: movie-streamer-transcoder-worker
+    cpus: "2.0"
+    command: ["node", "src/services/workers/TranscoderWorker.js"]
+    ports:
+      - "5003:5003"
+
+  cloudsync-worker:
+    <<: *app-common
+    container_name: movie-streamer-cloudsync-worker
+    cpus: "1.0"
+    command: ["node", "src/services/workers/CloudSyncWorker.js"]
+    ports:
+      - "5004:5004"
 
   # --- 🧠 HIGH-PERFORMANCE MEMORY DATA ENGINE ---
   redis:

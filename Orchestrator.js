@@ -6,14 +6,16 @@ const path = require('path');
 const axios = require('axios');
 const logger = require('./src/services/logger');
 const LibraryScanner = require('./src/services/LibraryScanner'); 
+const { buildDefaultWorkerEndpoints } = require('./src/services/WorkerEndpoints');
 const MOVIES_DIR = process.env.MOVIES_DIR || '/app/movies';
+const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
 
 const WORKERS = {
-    INGEST:    process.env.WORKER_URL_INGEST    || 'http://movie-streamer-v2-test:5000/process',
-    METADATA:  process.env.WORKER_URL_METADATA  || 'http://movie-streamer-v2-test:5001/process',
-    SUBTITLES: process.env.WORKER_URL_SUBTITLES || 'http://movie-streamer-v2-test:5002/process',
-    TRANSCODE: process.env.WORKER_URL_TRANSCODE || 'http://movie-streamer-v2-test:5003/process',
-    UPLOAD:    process.env.WORKER_URL_UPLOAD    || 'http://movie-streamer-v2-test:5004/process'
+    INGEST: WORKER_ENDPOINTS.INGEST,
+    METADATA: WORKER_ENDPOINTS.METADATA,
+    SUBTITLES: WORKER_ENDPOINTS.SUBTITLES,
+    TRANSCODE: WORKER_ENDPOINTS.TRANSCODE,
+    UPLOAD: WORKER_ENDPOINTS.CLOUDSYNC
 };
 
 const activeJobs = new Set();

@@ -9,6 +9,7 @@ const { getLibrary } = require('../db');
 const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
 const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
 const MetadataRegistry = require('../MetadataRegistry');
+const { buildDefaultWorkerEndpoints } = require('../WorkerEndpoints');
 const {
     userGroup,
     mergeLibraryGroups,
@@ -26,6 +27,8 @@ const {
 const { withDistributedLock } = require('../DistributedLockService');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
+const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
+const CLOUDSYNC_REQUIRED_FOR_COMPLETE = ['1', 'true', 'yes'].includes(String(process.env.REQUIRE_CLOUDSYNC_BEFORE_COMPLETE || '').trim().toLowerCase());
 
 let isProcessingPipeline = false;
 
@@ -426,7 +429,7 @@ async function processNextJob(job) {
 
     const stepMap = {
         INGEST: {
-            workerUrl: 'http://127.0.0.1:5000/process',
+            workerUrl: WORKER_ENDPOINTS.INGEST,
             payload: {
                 folderPath: job.payload?.rawPath || job.payload?.cleanPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (path.basename(job.payload?.rawPath || '') || job.payload?.torrentName || job.id),
@@ -436,7 +439,7 @@ async function processNextJob(job) {
             }
         },
         METADATA: {
-            workerUrl: 'http://127.0.0.1:5001/process',
+            workerUrl: WORKER_ENDPOINTS.METADATA,
             payload: {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id),
@@ -445,7 +448,7 @@ async function processNextJob(job) {
             }
         },
         SUBTITLES: {
-            workerUrl: 'http://127.0.0.1:5002/process',
+            workerUrl: WORKER_ENDPOINTS.SUBTITLES,
             payload: {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 imdbId: resolvedJobImdbId,
@@ -454,14 +457,14 @@ async function processNextJob(job) {
             }
         },
         TRANSCODE: {
-            workerUrl: 'http://127.0.0.1:5003/process',
+            workerUrl: WORKER_ENDPOINTS.TRANSCODE,
             payload: {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id)
             }
         },
         CLOUDSYNC: {
-            workerUrl: 'http://127.0.0.1:5004/process',
+            workerUrl: WORKER_ENDPOINTS.CLOUDSYNC,
             payload: {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id),
@@ -488,7 +491,7 @@ async function processNextJob(job) {
             INGEST: 'METADATA',
             METADATA: 'SUBTITLES',
             SUBTITLES: 'TRANSCODE',
-            TRANSCODE: 'COMPLETE',
+            TRANSCODE: CLOUDSYNC_REQUIRED_FOR_COMPLETE ? 'CLOUDSYNC' : 'COMPLETE',
             CLOUDSYNC: 'COMPLETE'
         }[job.currentStep] || 'COMPLETE';
 
