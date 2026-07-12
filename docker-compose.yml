@@ -7,6 +7,12 @@ x-app-common: &app-common
   restart: unless-stopped
   env_file:
     - .env
+  environment:
+    WORKER_URL_INGEST: "http://ingest-worker:5000/process"
+    WORKER_URL_METADATA: "http://metadata-worker:5001/process"
+    WORKER_URL_SUBTITLES: "http://subtitle-worker:5002/process"
+    WORKER_URL_TRANSCODE: "http://transcoder-worker:5003/process"
+    WORKER_URL_CLOUDSYNC: "http://cloudsync-worker:5004/process"
   volumes:
     - /home/epic/movies:/app/storage/movies
     - /data/blockchain/media/Series:/app/storage/series
@@ -48,8 +54,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      qbittorrent:
-        condition: service_started
 
   ingest-worker:
     <<: *app-common
@@ -106,28 +110,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  # --- 📥 SYSTEM DOWNSTREAM INGESTION ENGINE ---
-  qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: anymovie-qbittorrent
-    restart: unless-stopped
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - WEBUI_PORT=8080
-    ports:
-      - "6881:6881"
-      - "6881:6881/udp"
-      # Note: 8080/tcp is available directly inside the 'needmonero_needmonero' network 
-      # for your node API pipeline requests. No public port exposure needed if proxied.
-    volumes:
-      - /home/epic/qbittorrent/config:/config
-      - /home/epic/movies:/downloads
-      - /data/blockchain/media:/series-media
-    networks:
-      - needmonero_needmonero
 
 networks:
   needmonero_needmonero:

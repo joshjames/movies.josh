@@ -695,6 +695,11 @@ router.use(requireAdmin);
 
 router.get('/health-check/:service', async (req, res) => {
     const serviceName = req.params.service;
+
+    if (serviceName === 'orchestrator') {
+        return res.json({ alive: true });
+    }
+
     const healthUrl = WORKER_HEALTH[serviceName];
 
     if (!healthUrl) return res.status(404).json({ alive: false });
