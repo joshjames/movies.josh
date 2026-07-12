@@ -664,7 +664,7 @@
                         audioTrackSelect.disabled = true;
                     } else {
                         currentRemoteStreamUrl = '';
-                        allowLocalFallbackMode = false;
+                        allowLocalFallbackMode = movie.fallbackReason === 'remote_unavailable';
                         remoteFallbackTriggered = false;
                         cloudFallbackFile = '';
                         currentPlaybackFile = deriveFileNameFromPath(targetStreamUrl);
