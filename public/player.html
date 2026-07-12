@@ -273,6 +273,9 @@
         let subtitleTracks = [];
         let currentPlaybackFile = '';
         let currentRemoteStreamUrl = '';
+        let allowLocalFallbackMode = false;
+        let cloudFallbackFile = '';
+        let remoteFallbackTriggered = false;
         let isSeekingWithOverlay = false;
 
         videoEl.controls = true;
@@ -395,6 +398,9 @@
             }
             if (currentPlaybackFile && currentPlaybackFile !== 'remote-playback') {
                 query.set('file', currentPlaybackFile);
+            }
+            if (allowLocalFallbackMode) {
+                query.set('allowLocalFallback', '1');
             }
             return query;
         }
@@ -620,6 +626,7 @@
                     const response = await fetch(`/api/movies/${movieId}`);
                     const movie = await response.json();
                     let targetStreamUrl = '';
+                    let localFallbackUrl = '';
                     
                     // Helper function to safely map local assets without touching cloud signatures
                     const resolveStreamSource = (fileUrl) => {
@@ -634,23 +641,32 @@
 
                     if (speedMbps < 2.5 && movie.file480p) {
                         targetStreamUrl = resolveStreamSource(movie.file480p);
+                        localFallbackUrl = resolveStreamSource(movie.localFallback480p || '');
                         qualityTag.innerText = "SD 480P (LOW BANDWIDTH)";
                     } else if (speedMbps < 6.0 && movie.file720p) {
                         targetStreamUrl = resolveStreamSource(movie.file720p);
+                        localFallbackUrl = resolveStreamSource(movie.localFallback720p || movie.localFallback1080p || '');
                         qualityTag.innerText = "HD 720P (BALANCED)";
                     } else {
                         const fallbackFile = movie.file1080p || movie.fileSource || '';
                         targetStreamUrl = resolveStreamSource(fallbackFile);
+                        localFallbackUrl = resolveStreamSource(movie.localFallback1080p || '');
                         qualityTag.innerText = "FHD 1080P (SOURCE)";
                     }
 
                     if (/^https?:\/\//i.test(targetStreamUrl)) {
                         currentRemoteStreamUrl = targetStreamUrl;
                         currentPlaybackFile = '';
+                        allowLocalFallbackMode = false;
+                        remoteFallbackTriggered = false;
+                        cloudFallbackFile = deriveFileNameFromPath(localFallbackUrl || '');
                         audioTrackSelect.value = 'auto';
                         audioTrackSelect.disabled = true;
                     } else {
                         currentRemoteStreamUrl = '';
+                        allowLocalFallbackMode = false;
+                        remoteFallbackTriggered = false;
+                        cloudFallbackFile = '';
                         currentPlaybackFile = deriveFileNameFromPath(targetStreamUrl);
                     }
 
@@ -663,6 +679,25 @@
                     qualityTag.innerText = "STREAM CORRUPTED";
                 }
 }
+
+        videoEl.addEventListener('error', async () => {
+            if (!currentRemoteStreamUrl || remoteFallbackTriggered || !cloudFallbackFile) {
+                return;
+            }
+
+            remoteFallbackTriggered = true;
+            currentRemoteStreamUrl = '';
+            currentPlaybackFile = cloudFallbackFile;
+            allowLocalFallbackMode = true;
+            qualityTag.innerText = 'LOCAL FALLBACK (CLOUD ERROR)';
+            qualityTag.style.background = '#b45309';
+
+            applyVideoSource(false);
+            await refreshAudioTracks();
+            await refreshSubtitleTracks();
+            loadSubtitles();
+            videoEl.play().catch(() => {});
+        });
 
         /**
          * Finds the index of the next available episode file in the sequence matrix

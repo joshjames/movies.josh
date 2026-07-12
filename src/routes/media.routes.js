@@ -1000,6 +1000,26 @@ function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile
     return sourceVideo ? path.join(folderPath, sourceVideo) : null;
 }
 
+function readMovieMetadataIfPresent(mediaId) {
+    const movieFolder = resolveMovieFolderPath(mediaId);
+    if (!movieFolder || !fs.existsSync(movieFolder)) return null;
+
+    const metaFilePath = path.join(movieFolder, 'metadata.json');
+    if (!fs.existsSync(metaFilePath)) return null;
+
+    try {
+        return JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+    } catch (_err) {
+        return null;
+    }
+}
+
+function isRemoteAllocatedMovie(mediaId) {
+    if (String(mediaId || '').startsWith('series/')) return false;
+    const metadata = readMovieMetadataIfPresent(mediaId);
+    return String(metadata?.storage?.location || '').toLowerCase() === 'remote';
+}
+
 function isAllowedRemoteStreamUrl(inputUrl) {
     try {
         const parsed = new URL(String(inputUrl || ''));
@@ -1635,7 +1655,10 @@ router.get('/movies/:id', async (req, res) => {
         title: movieId.replace(/\./g, ' '), 
         file1080p: null,
         file720p: null,
-        file480p: null
+        file480p: null,
+        localFallback1080p: null,
+        localFallback720p: null,
+        localFallback480p: null
     };
 
     // Unpack local details if configured inside the storage path
@@ -1684,25 +1707,38 @@ router.get('/movies/:id', async (req, res) => {
                 const { local1080, local720, local480 } = pickBestLocalFiles(files);
 
                 streamPayload.title = metaData.title || streamPayload.title;
+                streamPayload.localFallback1080p = local1080 ? `/movie-assets/${movieId}/${local1080}` : null;
+                streamPayload.localFallback720p = local720 ? `/movie-assets/${movieId}/${local720}` : null;
+                streamPayload.localFallback480p = local480 ? `/movie-assets/${movieId}/${local480}` : null;
                 streamPayload.file1080p = await MediaService.getPlaybackUrl(
                     metaData,
                     '1080p',
-                    local1080 ? `/movie-assets/${movieId}/${local1080}` : null
+                    null
                 );
                 streamPayload.file720p = await MediaService.getPlaybackUrl(
                     metaData,
                     '720p',
-                    local720 ? `/movie-assets/${movieId}/${local720}` : null
+                    null
                 );
                 streamPayload.file480p = await MediaService.getPlaybackUrl(
                     metaData,
                     '480p',
-                    local480 ? `/movie-assets/${movieId}/${local480}` : null
+                    null
                 );
 
                 if (streamPayload.file1080p || streamPayload.file720p || streamPayload.file480p) {
                     return res.json(streamPayload);
                 }
+
+                if (streamPayload.localFallback1080p || streamPayload.localFallback720p || streamPayload.localFallback480p) {
+                    streamPayload.file1080p = streamPayload.localFallback1080p;
+                    streamPayload.file720p = streamPayload.localFallback720p;
+                    streamPayload.file480p = streamPayload.localFallback480p;
+                    streamPayload.fallbackReason = 'remote_unavailable';
+                    return res.json(streamPayload);
+                }
+
+                return res.status(503).json({ success: false, error: 'No remote or local playable profile is currently available.' });
             }
         }
     } catch (err) {
@@ -2088,6 +2124,14 @@ router.get('/raw-file/:id', async (req, res) => {
 router.get('/audio-tracks/:id', async (req, res) => {
     try {
         const mediaId = normalizeMediaIdInput(req.params.id);
+        const allowLocalFallback = ['1', 'true', 'yes'].includes(String(req.query.allowLocalFallback || '').toLowerCase());
+        if (isRemoteAllocatedMovie(mediaId) && !allowLocalFallback) {
+            return res.status(409).json({
+                success: false,
+                error: 'This title is cloud-allocated. Audio track introspection is only available for local playback sources.'
+            });
+        }
+
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
@@ -2139,6 +2183,14 @@ router.get('/playback/:id', async (req, res) => {
     
     try {
         const mediaId = normalizeMediaIdInput(req.params.id);
+        const allowLocalFallback = ['1', 'true', 'yes'].includes(String(req.query.allowLocalFallback || '').toLowerCase());
+        if (isRemoteAllocatedMovie(mediaId) && !allowLocalFallback) {
+            return res.status(409).json({
+                success: false,
+                error: 'This title is cloud-allocated. Use the remote playback URL from /api/movies/:id.'
+            });
+        }
+
         const season = parseInt(req.query.season, 10);
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');

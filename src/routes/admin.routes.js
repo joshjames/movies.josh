@@ -53,6 +53,8 @@ const SERIES_DIR = getPrimarySeriesRoot();
 
 const ARCHIVE_DIR = process.env.ARCHIVE_DIR || '/app/archive';
 const ARCHIVE_RETENTION_DAYS = Number(process.env.ARCHIVE_RETENTION_DAYS || 10);
+const ARCHIVE_REMOTE_POLICY = String(process.env.ARCHIVE_REMOTE_POLICY || 'all_synced').trim().toLowerCase();
+const ARCHIVE_SOURCE_PROFILE = String(process.env.ARCHIVE_SOURCE_PROFILE || '1080p').trim().toLowerCase();
 
 const B2_ENDPOINT = process.env.B2_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com';
 let archiveS3Client = null;
@@ -558,47 +560,177 @@ function gatherArchiveCandidates(folderPath, metadata) {
     });
 }
 
-async function verifyRemoteCloudCopy(metadata) {
+function sanitizeArchivePolicy(value = '') {
+    const policy = String(value || '').trim().toLowerCase();
+    if (policy === 'source_synced' || policy === 'any_synced' || policy === 'all_synced') return policy;
+    return 'all_synced';
+}
+
+function listStorageProfiles(storageFiles = {}) {
+    return Object.keys(storageFiles || {})
+        .map((profile) => String(profile || '').trim())
+        .filter(Boolean);
+}
+
+function getProfileBlock(storageFiles = {}, profileName = '') {
+    const target = String(profileName || '').trim().toLowerCase();
+    if (!target) return null;
+    const profile = Object.keys(storageFiles || {}).find((name) => String(name || '').trim().toLowerCase() === target);
+    if (!profile) return null;
+    return { profile, block: storageFiles[profile] || {} };
+}
+
+function getPendingProfiles(storageFiles = {}) {
+    return listStorageProfiles(storageFiles).filter((profile) => {
+        const block = storageFiles[profile] || {};
+        const remoteKey = cleanRemoteKey(block.remoteKey || '');
+        return block.status !== 'synced' || !remoteKey;
+    });
+}
+
+async function verifyRemoteCloudCopy(metadata, options = {}) {
     const storage = metadata?.storage || {};
     const files = storage.files || {};
-    const requiredProfiles = Object.keys(files);
+    const requiredProfiles = listStorageProfiles(files);
+    const policy = sanitizeArchivePolicy(options.policy || ARCHIVE_REMOTE_POLICY);
+    const sourceProfile = String(options.sourceProfile || ARCHIVE_SOURCE_PROFILE || '1080p').trim().toLowerCase();
 
     if (storage.location !== 'remote') {
-        return { ok: false, reason: 'Storage location is not set to remote.' };
+        return { ok: false, reason: 'Storage location is not set to remote.', policy, sourceProfile };
     }
 
     if (requiredProfiles.length === 0) {
-        return { ok: false, reason: 'No storage profiles available to verify.' };
+        return { ok: false, reason: 'No storage profiles available to verify.', policy, sourceProfile };
     }
 
     if (!process.env.BBkeyID || !process.env.BBapplicationKey) {
-        return { ok: false, reason: 'Cloud credentials are not available in environment.' };
+        return { ok: false, reason: 'Cloud credentials are not available in environment.', policy, sourceProfile };
     }
 
     const bucket = storage.bucket || process.env.B2_BUCKET || 'joshflixmedia';
     const s3Client = getArchiveS3Client();
     const verified = [];
 
-    for (const profile of requiredProfiles) {
-        const block = files[profile] || {};
+    const verifyProfile = async (profile, block) => {
         const remoteKey = cleanRemoteKey(block.remoteKey || '');
-
-        if (block.status !== 'synced' || !remoteKey) {
-            return { ok: false, reason: `Profile ${profile} is not confirmed synced with remote key.` };
-        }
-
+        if (!remoteKey) return { ok: false, reason: `Profile ${profile} is missing remote key.` };
         try {
             await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: remoteKey }));
             verified.push({ profile, remoteKey });
+            return { ok: true };
         } catch (err) {
             return {
                 ok: false,
                 reason: `Cloud object check failed for ${profile} (${remoteKey}): ${err.name || err.message}`
             };
         }
+    };
+
+    if (policy === 'source_synced') {
+        const preferredProfiles = [sourceProfile, '1080p', ...requiredProfiles].filter(Boolean);
+        const candidate = preferredProfiles
+            .map((profile) => getProfileBlock(files, profile))
+            .find((entry) => entry && entry.block && entry.block.status === 'synced' && cleanRemoteKey(entry.block.remoteKey || ''));
+
+        if (!candidate) {
+            return {
+                ok: false,
+                reason: `No synced source profile found (looked for ${sourceProfile}).`,
+                policy,
+                sourceProfile,
+                pendingProfiles: getPendingProfiles(files)
+            };
+        }
+
+        const verifiedSource = await verifyProfile(candidate.profile, candidate.block);
+        if (!verifiedSource.ok) {
+            return {
+                ok: false,
+                reason: verifiedSource.reason,
+                policy,
+                sourceProfile,
+                pendingProfiles: getPendingProfiles(files)
+            };
+        }
+
+        return {
+            ok: true,
+            bucket,
+            policy,
+            sourceProfile: candidate.profile,
+            verified,
+            pendingProfiles: getPendingProfiles(files)
+        };
     }
 
-    return { ok: true, bucket, verified };
+    if (policy === 'any_synced') {
+        const syncedProfiles = requiredProfiles
+            .map((profile) => ({ profile, block: files[profile] || {} }))
+            .filter(({ block }) => block.status === 'synced' && cleanRemoteKey(block.remoteKey || ''));
+
+        if (syncedProfiles.length === 0) {
+            return {
+                ok: false,
+                reason: 'No synced profiles available for cloud verification.',
+                policy,
+                sourceProfile,
+                pendingProfiles: getPendingProfiles(files)
+            };
+        }
+
+        const verifiedAny = await verifyProfile(syncedProfiles[0].profile, syncedProfiles[0].block);
+        if (!verifiedAny.ok) {
+            return {
+                ok: false,
+                reason: verifiedAny.reason,
+                policy,
+                sourceProfile,
+                pendingProfiles: getPendingProfiles(files)
+            };
+        }
+
+        return {
+            ok: true,
+            bucket,
+            policy,
+            sourceProfile,
+            verified,
+            pendingProfiles: getPendingProfiles(files)
+        };
+    }
+
+    for (const profile of requiredProfiles) {
+        const block = files[profile] || {};
+        if (block.status !== 'synced') {
+            return {
+                ok: false,
+                reason: `Profile ${profile} is not confirmed synced with remote key.`,
+                policy,
+                sourceProfile,
+                pendingProfiles: getPendingProfiles(files)
+            };
+        }
+
+        const verifiedProfile = await verifyProfile(profile, block);
+        if (!verifiedProfile.ok) {
+            return {
+                ok: false,
+                reason: verifiedProfile.reason,
+                policy,
+                sourceProfile,
+                pendingProfiles: getPendingProfiles(files)
+            };
+        }
+    }
+
+    return {
+        ok: true,
+        bucket,
+        policy,
+        sourceProfile,
+        verified,
+        pendingProfiles: getPendingProfiles(files)
+    };
 }
 
 async function persistMetadataFile(metaPath, metadata) {
@@ -1493,7 +1625,13 @@ router.post('/rename-media', async (req, res) => {
 
 router.post('/archive-local-media', async (req, res) => {
     try {
-        const { folder, contentType, retentionDays = ARCHIVE_RETENTION_DAYS } = req.body || {};
+        const {
+            folder,
+            contentType,
+            retentionDays = ARCHIVE_RETENTION_DAYS,
+            archivePolicy,
+            sourceProfile
+        } = req.body || {};
         if (!folder) {
             return res.status(400).json({ success: false, error: 'Missing folder.' });
         }
@@ -1512,7 +1650,10 @@ router.post('/archive-local-media', async (req, res) => {
             return res.status(409).json({ success: false, error: 'Item is already quarantined in archive.' });
         }
 
-        const remoteCheck = await verifyRemoteCloudCopy(metadata);
+        const remoteCheck = await verifyRemoteCloudCopy(metadata, {
+            policy: archivePolicy,
+            sourceProfile
+        });
         if (!remoteCheck.ok) {
             return res.status(409).json({ success: false, error: remoteCheck.reason });
         }
@@ -1589,7 +1730,10 @@ router.post('/archive-local-media', async (req, res) => {
             cloudVerifiedAt: archivedAt,
             cloudVerification: {
                 bucket: remoteCheck.bucket,
-                verified: remoteCheck.verified
+                policy: remoteCheck.policy,
+                sourceProfile: remoteCheck.sourceProfile,
+                verified: remoteCheck.verified,
+                pendingProfiles: remoteCheck.pendingProfiles || []
             }
         };
 
@@ -1602,7 +1746,73 @@ router.post('/archive-local-media', async (req, res) => {
             archiveRoot,
             movedCount: movedFiles.length,
             reclaimedBytes,
-            purgeAfter
+            purgeAfter,
+            cloudVerification: metadata.localArchive.cloudVerification
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/archive-readiness', async (req, res) => {
+    try {
+        const { folder, contentType, archivePolicy, sourceProfile } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const folderPath = contentType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+
+        if (!fs.existsSync(folderPath) || !fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'Target metadata folder not found.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const candidates = gatherArchiveCandidates(folderPath, metadata);
+        const reclaimableBytes = candidates.reduce((sum, item) => {
+            const sourcePath = path.join(folderPath, item.fileName);
+            if (!fs.existsSync(sourcePath)) return sum;
+            try {
+                return sum + fs.statSync(sourcePath).size;
+            } catch (_err) {
+                return sum;
+            }
+        }, 0);
+
+        const cloudCheck = await verifyRemoteCloudCopy(metadata, {
+            policy: archivePolicy,
+            sourceProfile
+        });
+
+        const storageFiles = metadata?.storage?.files || {};
+        const storageProfiles = listStorageProfiles(storageFiles).map((profile) => {
+            const block = storageFiles[profile] || {};
+            return {
+                profile,
+                status: block.status || 'unknown',
+                hasRemoteKey: Boolean(cleanRemoteKey(block.remoteKey || '')),
+                hasLocalPath: Boolean(String(block.localPath || '').trim())
+            };
+        });
+
+        return res.json({
+            success: true,
+            folder,
+            contentType: contentType === 'series' ? 'series' : 'movie',
+            readyToArchive: cloudCheck.ok && candidates.length > 0,
+            cloudCheck,
+            localCandidates: {
+                count: candidates.length,
+                reclaimableBytes,
+                files: candidates
+            },
+            storage: {
+                location: metadata?.storage?.location || 'local',
+                profiles: storageProfiles
+            }
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

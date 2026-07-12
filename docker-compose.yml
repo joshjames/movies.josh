@@ -37,6 +37,8 @@ services:
       WORKER_URL_SUBTITLES: "http://subtitle-worker:5002/process"
       WORKER_URL_TRANSCODE: "http://transcoder-worker:5003/process"
       WORKER_URL_CLOUDSYNC: "http://cloudsync-worker:5004/process"
+      ARCHIVE_REMOTE_POLICY: "source_synced"
+      ARCHIVE_SOURCE_PROFILE: "1080p"
       ENABLE_WEB_SERVER: "true"
       ENABLE_PIPELINE_WATCHER: "false"
       ENABLE_INGEST_WORKER: "false"

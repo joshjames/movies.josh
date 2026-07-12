@@ -1587,6 +1587,11 @@
                 const hasQuarantinedArchive = localArchiveState === 'quarantined';
                 const hasAnyLocalPath = profiles.some(p => storageMeta.files[p] && storageMeta.files[p].localPath);
                 const canArchive = storageLoc === 'remote' && !hasQuarantinedArchive && hasAnyLocalPath;
+                const storageBadgeHtml = storageLoc === 'remote'
+                    ? (hasAnyLocalPath
+                        ? '<span class="badge cloud-badge">☁️ Cloud Primary + Local Cache</span>'
+                        : '<span class="badge cloud-badge">☁️ Cloud Storage (B2/R2)</span>')
+                    : '<span class="badge local-badge">💾 NVMe Array Local</span>';
                 const activeGroups = Array.isArray(item.metadata?.libraryGroups) ? item.metadata.libraryGroups : [];
                 const shouldEnsureGlobal = activeGroups.length === 0 || activeGroups.includes('global');
 
@@ -1614,9 +1619,7 @@
                                 ${isInSync
                                     ? '<span class="badge" style="background:#14532d;color:#86efac;border:1px solid #166534;">● Redis Sync</span>'
                                     : '<span class="badge" style="background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b;">● Out of Sync</span>'}
-                                ${storageLoc === 'remote' 
-                                    ? '<span class="badge cloud-badge">☁️ Cloud Storage (B2/R2)</span>' 
-                                    : '<span class="badge local-badge">💾 NVMe Array Local</span>'}
+                                ${storageBadgeHtml}
                                 ${hasQuarantinedArchive
                                     ? '<span class="badge" style="background:#1e3a8a;color:#bfdbfe;border:1px solid #1d4ed8;">📦 Local Archived</span>'
                                     : ''}
