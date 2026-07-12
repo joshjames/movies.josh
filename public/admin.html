@@ -629,6 +629,7 @@
             </select>
             <button type="button" onclick="loadGroupManagerPage(1)">Refresh</button>
         </div>
+        <div id="group-manager-user-status" style="font-size:0.8rem;color:#94a3b8;margin:-2px 0 10px;">Active user: none</div>
         <div class="group-manager-body" id="group-manager-body">
             <div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Open Group Manager to load items.</div>
         </div>
@@ -770,7 +771,8 @@
             limit: 24,
             items: [],
             users: [],
-            availableGroups: ['any']
+            availableGroups: ['any'],
+            selectedUser: ''
         };
 
         const WORKER_PORTS = {
@@ -960,7 +962,7 @@
         function renderGroupUserSelect() {
             const select = document.getElementById('group-manager-user-select');
             if (!select) return;
-            const current = select.value || '';
+            const current = groupManagerState.selectedUser || select.value || '';
             const rows = Array.isArray(groupManagerState.users) ? groupManagerState.users : [];
             select.innerHTML = `<option value="">Select user...</option>${rows
                 .map((row) => {
@@ -971,7 +973,19 @@
                 .join('')}`;
             if (current && rows.some((row) => String(row.username || '').trim().toLowerCase() === current)) {
                 select.value = current;
+                groupManagerState.selectedUser = current;
             }
+        }
+
+        function getGroupManagerSelectedUser() {
+            const select = document.getElementById('group-manager-user-select');
+            const value = String(select?.value || groupManagerState.selectedUser || '').trim().toLowerCase();
+            groupManagerState.selectedUser = value;
+            const status = document.getElementById('group-manager-user-status');
+            if (status) {
+                status.textContent = `Active user: ${value || 'none'}`;
+            }
+            return value;
         }
 
         async function loadGroupManagerUsers() {
@@ -1052,7 +1066,7 @@
         async function runGroupManagerActionOnRow(folder, contentType, action) {
             const filters = readGroupManagerFilters();
             const needsUser = action === 'add-user' || action === 'remove-user' || action === 'set-user-only';
-            const targetUser = needsUser ? filters.targetUser : '';
+            const targetUser = needsUser ? getGroupManagerSelectedUser() : '';
             if (needsUser && !targetUser) {
                 showToast('Pick a user in Group Manager first.', 'error', 3000);
                 return;
@@ -1065,7 +1079,8 @@
                     return;
                 }
 
-                showToast('Group updated.', 'success', 2200);
+                const targetLabel = targetUser ? ` for ${targetUser}` : '';
+                showToast(`Group updated${targetLabel}.`, 'success', 2200);
                 loadGroupManagerPage(groupManagerState.page || 1);
                 fetchLibraryData(false);
             } catch (_err) {
@@ -1212,7 +1227,7 @@
 
             const filters = readGroupManagerFilters();
             const needsUser = action === 'add-user' || action === 'remove-user' || action === 'set-user-only';
-            const targetUser = needsUser ? filters.targetUser : '';
+            const targetUser = needsUser ? getGroupManagerSelectedUser() : '';
             if (needsUser && !targetUser) {
                 showToast('Select a user first for this bulk action.', 'error', 3000);
                 return;
@@ -2748,6 +2763,8 @@
         const groupManagerUserSelect = document.getElementById('group-manager-user-select');
         if (groupManagerUserSelect) {
             groupManagerUserSelect.addEventListener('change', () => {
+                groupManagerState.selectedUser = String(groupManagerUserSelect.value || '').trim().toLowerCase();
+                getGroupManagerSelectedUser();
                 const drawerOpen = document.getElementById('group-manager-drawer')?.classList.contains('show');
                 if (drawerOpen) {
                     showToast('Selected user applied for Add/Remove User and Set User-Only actions.', 'info', 1800);
