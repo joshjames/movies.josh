@@ -197,6 +197,19 @@ function canUseQueueAdminTools(viewerUser) {
     return Boolean(viewerUser && isPrivilegedUser(viewerUser));
 }
 
+async function hasQueueAdminAccess(userKey) {
+    const cleanUser = normalizeUserKey(userKey);
+    if (!cleanUser || cleanUser === 'guest') return false;
+    if (isPrivilegedUser(cleanUser)) return true;
+
+    try {
+        const config = await ProfileService.readData(cleanUser, 'config', {});
+        return config?.isAdmin === true;
+    } catch (_err) {
+        return false;
+    }
+}
+
 async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
     const cleanUser = normalizeUserKey(activeUser);
     if (!cleanUser || cleanUser === 'guest') {
@@ -844,7 +857,7 @@ router.get('/pipeline/status', async (req, res) => {
     try {
         const activeUser = normalizeUserKey(getActiveUser(req));
         const requestScope = String(req.query.scope || '').trim().toLowerCase();
-        const includeAll = requestScope === 'all' && isPrivilegedUser(activeUser);
+        const includeAll = requestScope === 'all' && await hasQueueAdminAccess(activeUser);
         const viewerUser = includeAll ? null : activeUser;
 
         let pipeline = [];
@@ -1049,7 +1062,8 @@ router.patch('/job/:jobId/options', async (req, res) => {
         }
 
         const jobOwner = getJobOwner(job);
-        if (!canManageJob(viewerUser, jobOwner)) {
+        const canAdmin = await hasQueueAdminAccess(viewerUser);
+        if (!canAdmin && !canManageJob(viewerUser, jobOwner)) {
             return res.status(403).json({ success: false, error: 'You cannot edit this queue item.' });
         }
 
@@ -1088,7 +1102,8 @@ router.post('/job/:jobId/pause', async (req, res) => {
         }
 
         const jobOwner = getJobOwner(job);
-        if (!canManageJob(viewerUser, jobOwner)) {
+        const canAdmin = await hasQueueAdminAccess(viewerUser);
+        if (!canAdmin && !canManageJob(viewerUser, jobOwner)) {
             return res.status(403).json({ success: false, error: 'You cannot pause this queue item.' });
         }
 
@@ -1133,7 +1148,8 @@ router.post('/job/:jobId/resume', async (req, res) => {
         }
 
         const jobOwner = getJobOwner(job);
-        if (!canManageJob(viewerUser, jobOwner)) {
+        const canAdmin = await hasQueueAdminAccess(viewerUser);
+        if (!canAdmin && !canManageJob(viewerUser, jobOwner)) {
             return res.status(403).json({ success: false, error: 'You cannot resume this queue item.' });
         }
 
@@ -1178,7 +1194,8 @@ router.post('/job/:jobId/cancel', async (req, res) => {
         }
 
         const jobOwner = getJobOwner(job);
-        if (!canManageJob(viewerUser, jobOwner)) {
+        const canAdmin = await hasQueueAdminAccess(viewerUser);
+        if (!canAdmin && !canManageJob(viewerUser, jobOwner)) {
             return res.status(403).json({ success: false, error: 'You cannot cancel this queue item.' });
         }
 
@@ -1206,7 +1223,7 @@ router.post('/job/:jobId/cancel', async (req, res) => {
 router.patch('/admin/queue/job/:jobId', async (req, res) => {
     try {
         const viewerUser = normalizeUserKey(getActiveUser(req));
-        if (!canUseQueueAdminTools(viewerUser)) {
+        if (!await hasQueueAdminAccess(viewerUser)) {
             return res.status(403).json({ success: false, error: 'Admin queue tools require privileged access.' });
         }
 
@@ -1291,7 +1308,7 @@ router.patch('/admin/queue/job/:jobId', async (req, res) => {
 router.post('/admin/queue/job/:jobId/alternate-source', async (req, res) => {
     try {
         const viewerUser = normalizeUserKey(getActiveUser(req));
-        if (!canUseQueueAdminTools(viewerUser)) {
+        if (!await hasQueueAdminAccess(viewerUser)) {
             return res.status(403).json({ success: false, error: 'Admin queue tools require privileged access.' });
         }
 

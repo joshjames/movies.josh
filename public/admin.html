@@ -1212,6 +1212,7 @@
 
             list.innerHTML = rows.map((item) => {
                 const badgeClass = queueBadgeClass(item);
+                const hasJobId = Boolean(String(item.jobId || '').trim());
                 return `
                     <div class="admin-queue-card">
                         <div class="admin-queue-head">
@@ -1226,7 +1227,9 @@
                             <span>Job: ${escapeHtml(item.jobId || '-')}</span>
                         </div>
                         <div class="admin-queue-actions">
-                            <button type="button" style="background:#334155;padding:6px 10px;font-size:0.76rem;" onclick="openAdminQueueDetail('${escapeHtml(item.jobId || '')}')">Inspect/Edit</button>
+                            ${hasJobId
+                                ? `<button type="button" style="background:#334155;padding:6px 10px;font-size:0.76rem;" onclick="openAdminQueueDetail('${escapeHtml(item.jobId || '')}')">Inspect/Edit</button>`
+                                : `<button type="button" style="background:#475569;padding:6px 10px;font-size:0.76rem;" onclick="showToast('This torrent is not linked to a queue job yet. It can be monitored but not edited from this panel.', 'info', 3600)">No Job Link</button>`}
                             ${item.canPause && item.jobId ? `<button type="button" style="background:#b45309;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','pause')">Pause</button>` : ''}
                             ${item.canResume && item.jobId ? `<button type="button" style="background:#0f766e;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','resume')">Resume</button>` : ''}
                             ${item.canCancel && item.jobId ? `<button type="button" style="background:#b91c1c;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','cancel')">Cancel</button>` : ''}
