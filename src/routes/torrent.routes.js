@@ -193,6 +193,10 @@ function canManageJob(viewerUser, jobOwner) {
     return Boolean(jobOwner && jobOwner === viewerUser);
 }
 
+function canUseQueueAdminTools(viewerUser) {
+    return Boolean(viewerUser && isPrivilegedUser(viewerUser));
+}
+
 async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
     const cleanUser = normalizeUserKey(activeUser);
     if (!cleanUser || cleanUser === 'guest') {
@@ -1194,6 +1198,194 @@ router.post('/job/:jobId/cancel', async (req, res) => {
         return res.json({ success: true, jobId: job.id, status: 'CANCELLED' });
     } catch (err) {
         logger.error('[Queue API] Cancel job error: ' + err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// PATCH: /api/admin/queue/job/:jobId - Admin-only queue item patching for manual fixes
+router.patch('/admin/queue/job/:jobId', async (req, res) => {
+    try {
+        const viewerUser = normalizeUserKey(getActiveUser(req));
+        if (!canUseQueueAdminTools(viewerUser)) {
+            return res.status(403).json({ success: false, error: 'Admin queue tools require privileged access.' });
+        }
+
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        const body = req.body || {};
+        const nextPayload = { ...(job.payload || {}) };
+        const nextQueueContext = { ...(nextPayload.queueContext || {}) };
+
+        if (body.title !== undefined) {
+            const cleanTitle = String(body.title || '').trim();
+            if (cleanTitle) {
+                nextPayload.torrentName = cleanTitle;
+            }
+        }
+
+        if (body.imdbId !== undefined) {
+            const cleanImdb = normalizeImdbId(body.imdbId);
+            nextPayload.imdbId = cleanImdb || null;
+            nextQueueContext.imdbId = cleanImdb || null;
+        }
+
+        if (body.torrentHash !== undefined) {
+            const cleanHash = String(body.torrentHash || '').trim().toLowerCase();
+            nextPayload.torrentHash = cleanHash || null;
+        }
+
+        if (body.addedByUser !== undefined) {
+            const cleanOwner = normalizeUserKey(body.addedByUser);
+            nextPayload.addedByUser = cleanOwner || null;
+            nextQueueContext.addedByUser = cleanOwner || null;
+        }
+
+        const validStatus = new Set(['WAITING_DOWNLOAD', 'QUEUED', 'PAUSED', 'PAUSED_DOWNLOAD', 'FAILED', 'COMPLETE']);
+        const validSteps = new Set(['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC', 'COMPLETE', 'FAILED']);
+
+        const nextStatus = body.status !== undefined
+            ? String(body.status || '').trim().toUpperCase()
+            : job.status;
+        const nextStep = body.currentStep !== undefined
+            ? String(body.currentStep || '').trim().toUpperCase()
+            : job.currentStep;
+
+        if (!validStatus.has(String(nextStatus || '').toUpperCase())) {
+            return res.status(400).json({ success: false, error: `Invalid status: ${nextStatus}` });
+        }
+        if (!validSteps.has(String(nextStep || '').toUpperCase())) {
+            return res.status(400).json({ success: false, error: `Invalid currentStep: ${nextStep}` });
+        }
+
+        if (body.queueOptions && typeof body.queueOptions === 'object') {
+            nextPayload.queueOptions = {
+                notifyOnComplete: parseBoolean(body.queueOptions.notifyOnComplete, false),
+                addToWatchLaterOnComplete: parseBoolean(body.queueOptions.addToWatchLaterOnComplete, false)
+            };
+        }
+
+        nextPayload.queueContext = nextQueueContext;
+        const updated = updateJob(job, {
+            status: nextStatus,
+            currentStep: nextStep,
+            error: body.error !== undefined ? String(body.error || '').trim() || null : job.error,
+            imdbId: nextPayload.imdbId || job.imdbId || null,
+            payload: nextPayload,
+            history: [
+                ...(job.history || []),
+                { step: 'ADMIN_PATCH', timestamp: new Date().toISOString() }
+            ]
+        });
+
+        return res.json({ success: true, job: updated });
+    } catch (err) {
+        logger.error('[Queue API] Admin patch job error: ' + err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/queue/job/:jobId/alternate-source - Admin-only alternate source enqueue
+router.post('/admin/queue/job/:jobId/alternate-source', async (req, res) => {
+    try {
+        const viewerUser = normalizeUserKey(getActiveUser(req));
+        if (!canUseQueueAdminTools(viewerUser)) {
+            return res.status(403).json({ success: false, error: 'Admin queue tools require privileged access.' });
+        }
+
+        const job = getJob(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        const magnetUrl = String(req.body?.magnetUrl || '').trim();
+        if (!magnetUrl) {
+            return res.status(400).json({ success: false, error: 'Missing magnetUrl.' });
+        }
+
+        let parsedMagnet;
+        try {
+            parsedMagnet = new URL(magnetUrl);
+        } catch (_err) {
+            return res.status(400).json({ success: false, error: 'Invalid magnet URL.' });
+        }
+
+        const contentType = String(req.body?.contentType || job.contentType || 'movie').toLowerCase() === 'series' ? 'series' : 'movie';
+        const category = contentType === 'series' ? 'series-streamer' : 'movie-streamer';
+        const replacementImdbId = normalizeImdbId(req.body?.imdbId || job.imdbId || job.payload?.imdbId || job.payload?.queueContext?.imdbId);
+        const owner = normalizeUserKey(req.body?.addedByUser || getJobOwner(job) || job.payload?.addedByUser || viewerUser);
+        const replaceExisting = parseBoolean(req.body?.replaceExisting, false);
+
+        await TorrentService.addMagnet(magnetUrl, category, replacementImdbId, {
+            addedByUser: owner || viewerUser || null
+        });
+
+        const torrentName = parsedMagnet.searchParams.get('dn') || job.payload?.torrentName || 'Alternate source';
+        const infoHash = (() => {
+            const xt = parsedMagnet.searchParams.get('xt') || '';
+            return xt.includes('btih:') ? xt.split('btih:')[1].trim().toLowerCase() : null;
+        })();
+
+        const derivedQueueContext = {
+            ...(job.payload?.queueContext || {}),
+            imdbId: replacementImdbId || null,
+            addedByUser: owner || null
+        };
+
+        const replacementJob = createJob({
+            status: 'WAITING_DOWNLOAD',
+            currentStep: 'INGEST',
+            imdbId: replacementImdbId || null,
+            contentType,
+            payload: {
+                torrentHash: infoHash,
+                torrentName,
+                rawPath: null,
+                cleanPath: null,
+                videoFile: null,
+                magnetUrl,
+                imdbId: replacementImdbId || null,
+                addedByUser: owner || null,
+                queueContext: derivedQueueContext,
+                queueOptions: {
+                    ...getJobQueueOptions(job)
+                }
+            }
+        });
+
+        if (replaceExisting) {
+            const hash = String(job.payload?.torrentHash || '').trim();
+            if (hash) {
+                const paused = await TorrentService.pauseTorrentByHash(hash);
+                if (!paused.success) {
+                    logger.warn(`[Queue API] Could not pause old torrent during alternate source swap for ${job.id}: ${paused.error}`);
+                }
+                const removed = await TorrentService.deleteTorrentByHash(hash, { deleteFiles: false });
+                if (!removed.success) {
+                    logger.warn(`[Queue API] Could not remove old torrent during alternate source swap for ${job.id}: ${removed.error}`);
+                }
+            }
+            removeJob(job.id);
+        } else {
+            updateJob(job, {
+                history: [
+                    ...(job.history || []),
+                    { step: 'ALT_SOURCE_ADDED', timestamp: new Date().toISOString() }
+                ]
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: replaceExisting
+                ? 'Alternate source queued and original item replaced.'
+                : 'Alternate source queued alongside current item.',
+            replacementJob
+        });
+    } catch (err) {
+        logger.error('[Queue API] Alternate source enqueue error: ' + err.message);
         return res.status(500).json({ success: false, error: err.message });
     }
 });

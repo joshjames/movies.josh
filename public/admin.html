@@ -600,6 +600,152 @@
             background: #0f172a;
         }
 
+        .admin-queue-drawer {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: min(1180px, 98vw);
+            height: 100vh;
+            background: #0b1220;
+            border-left: 1px solid #334155;
+            box-shadow: -16px 0 36px rgba(0, 0, 0, 0.38);
+            transform: translateX(102%);
+            transition: transform 0.22s ease;
+            z-index: 1280;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .admin-queue-drawer.show { transform: translateX(0); }
+
+        .admin-queue-toolbar {
+            display: grid;
+            grid-template-columns: 1fr 220px auto;
+            gap: 8px;
+            padding: 12px 14px;
+            border-bottom: 1px solid #1e293b;
+            background: #0f172a;
+        }
+
+        .admin-queue-toolbar input,
+        .admin-queue-toolbar select,
+        .admin-queue-toolbar button {
+            min-height: 36px;
+        }
+
+        .admin-queue-layout {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 12px;
+            padding: 12px 14px 14px 14px;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .admin-queue-list {
+            overflow: auto;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #020617;
+            padding: 10px;
+            min-height: 0;
+        }
+
+        .admin-queue-card {
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #0b1220;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .admin-queue-card:last-child { margin-bottom: 0; }
+
+        .admin-queue-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .admin-queue-title {
+            color: #f8fafc;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .admin-queue-meta {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .admin-queue-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .admin-queue-detail {
+            overflow: auto;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #020617;
+            padding: 12px;
+            min-height: 0;
+            display: grid;
+            gap: 10px;
+            align-content: start;
+        }
+
+        .admin-queue-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .admin-queue-form-grid .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .admin-queue-badge {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: 1px solid #334155;
+            background: #1e293b;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .admin-queue-badge.failed {
+            border-color: #991b1b;
+            background: #450a0a;
+            color: #fca5a5;
+        }
+
+        .admin-queue-badge.active {
+            border-color: #1d4ed8;
+            background: #172554;
+            color: #93c5fd;
+        }
+
+        @media(max-width: 1100px) {
+            .admin-queue-layout {
+                grid-template-columns: 1fr;
+            }
+            .admin-queue-toolbar {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media(max-width: 960px) {
             .group-manager-toolbar {
                 grid-template-columns: 1fr 1fr;
@@ -666,6 +812,34 @@
             </div>
         </div>
     </aside>
+    <div id="admin-queue-backdrop" class="subtitle-drawer-backdrop"></div>
+    <aside id="admin-queue-drawer" class="admin-queue-drawer" aria-hidden="true">
+        <div class="subtitle-drawer-header">
+            <div>
+                <div class="subtitle-drawer-title">Admin Queue Manager</div>
+                <div class="subtitle-drawer-subtitle" id="admin-queue-subtitle">All users queue visibility and manual recovery controls.</div>
+            </div>
+            <button type="button" style="background:#1e293b;" onclick="closeAdminQueueManager()">Close</button>
+        </div>
+        <div class="admin-queue-toolbar">
+            <input type="search" id="admin-queue-search" placeholder="Search title, user, imdb, job id...">
+            <select id="admin-queue-filter">
+                <option value="all">All Items</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="failed">Failed</option>
+            </select>
+            <button type="button" onclick="loadAdminQueueItems()">Refresh</button>
+        </div>
+        <div class="admin-queue-layout">
+            <div id="admin-queue-list" class="admin-queue-list">
+                <div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Open Admin Queue Manager to load queue items.</div>
+            </div>
+            <div id="admin-queue-detail" class="admin-queue-detail">
+                <div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Select a queue item to inspect and edit metadata.</div>
+            </div>
+        </div>
+    </aside>
     <div class="container">
         <h1>🛠️ Joshflix Library Override Desk</h1>
         
@@ -674,6 +848,7 @@
             <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
             <button class="btn-trigger" style="background:#1d4ed8;" onclick="backfillGlobalGroups()">Backfill Global + All-Media</button>
             <button class="btn-trigger" style="background:#4f46e5;" onclick="openGroupManager()">Open Group Manager</button>
+            <button class="btn-trigger" style="background:#0f766e;" onclick="openAdminQueueManager()">Open Queue Manager</button>
             <a href="/feed-diagnostics.html" style="background:#334155; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Feed Diagnostics</a>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
@@ -799,6 +974,11 @@
             availableGroups: ['any'],
             selectedUser: '',
             selectedUserLabel: ''
+        };
+        const adminQueueState = {
+            items: [],
+            detailJobId: '',
+            detailJob: null
         };
 
         const WORKER_PORTS = {
@@ -965,6 +1145,335 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function openAdminQueueManager() {
+            const drawer = document.getElementById('admin-queue-drawer');
+            const backdrop = document.getElementById('admin-queue-backdrop');
+            if (!drawer || !backdrop) return;
+            drawer.classList.add('show');
+            backdrop.classList.add('show');
+            drawer.setAttribute('aria-hidden', 'false');
+            loadAdminQueueItems();
+        }
+
+        function closeAdminQueueManager() {
+            const drawer = document.getElementById('admin-queue-drawer');
+            const backdrop = document.getElementById('admin-queue-backdrop');
+            if (drawer) drawer.classList.remove('show');
+            if (backdrop) backdrop.classList.remove('show');
+            if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        function queueBadgeClass(item) {
+            const status = String(item.status || '').toLowerCase();
+            if (status.includes('fail')) return 'failed';
+            if (status.includes('download') || status.includes('queue') || status.includes('ingest') || status.includes('metadata') || status.includes('transcode')) return 'active';
+            return '';
+        }
+
+        function filterAdminQueueItems(items) {
+            const query = (document.getElementById('admin-queue-search')?.value || '').trim().toLowerCase();
+            const mode = (document.getElementById('admin-queue-filter')?.value || 'all').trim();
+
+            return (items || []).filter((item) => {
+                const status = String(item.status || '').toLowerCase();
+                if (mode === 'active' && (status.includes('fail') || status.includes('paused'))) return false;
+                if (mode === 'paused' && !status.includes('paused')) return false;
+                if (mode === 'failed' && !status.includes('fail')) return false;
+
+                if (!query) return true;
+                const haystack = [
+                    item.title,
+                    item.addedByUser,
+                    item.imdbId,
+                    item.jobId,
+                    item.status,
+                    item.stage
+                ].map((part) => String(part || '').toLowerCase()).join(' ');
+                return haystack.includes(query);
+            });
+        }
+
+        function renderAdminQueueList() {
+            const list = document.getElementById('admin-queue-list');
+            const subtitle = document.getElementById('admin-queue-subtitle');
+            if (!list) return;
+
+            const rows = filterAdminQueueItems(adminQueueState.items);
+            if (subtitle) {
+                subtitle.textContent = `${rows.length} item(s) shown from ${adminQueueState.items.length} total queue records.`;
+            }
+
+            if (!rows.length) {
+                list.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">No queue items match your filter.</div>';
+                return;
+            }
+
+            list.innerHTML = rows.map((item) => {
+                const badgeClass = queueBadgeClass(item);
+                return `
+                    <div class="admin-queue-card">
+                        <div class="admin-queue-head">
+                            <div class="admin-queue-title">${escapeHtml(item.title || 'Queue Item')}</div>
+                            <span class="admin-queue-badge ${badgeClass}">${escapeHtml(item.stage || item.status || 'queue')}</span>
+                        </div>
+                        <div class="admin-queue-meta">
+                            <span>User: ${escapeHtml(item.addedByUser || 'unknown')}</span>
+                            <span>Status: ${escapeHtml(item.status || '-')}</span>
+                            <span>Progress: ${escapeHtml(String(item.progress ?? '0'))}%</span>
+                            <span>IMDb: ${escapeHtml(item.imdbId || '-')}</span>
+                            <span>Job: ${escapeHtml(item.jobId || '-')}</span>
+                        </div>
+                        <div class="admin-queue-actions">
+                            <button type="button" style="background:#334155;padding:6px 10px;font-size:0.76rem;" onclick="openAdminQueueDetail('${escapeHtml(item.jobId || '')}')">Inspect/Edit</button>
+                            ${item.canPause && item.jobId ? `<button type="button" style="background:#b45309;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','pause')">Pause</button>` : ''}
+                            ${item.canResume && item.jobId ? `<button type="button" style="background:#0f766e;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','resume')">Resume</button>` : ''}
+                            ${item.canCancel && item.jobId ? `<button type="button" style="background:#b91c1c;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','cancel')">Cancel</button>` : ''}
+                            ${item._failed && item.jobId ? `<button type="button" style="background:#1d4ed8;padding:6px 10px;font-size:0.76rem;" onclick="runAdminQueueAction('${escapeHtml(item.jobId)}','retry')">Retry</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadAdminQueueItems() {
+            const list = document.getElementById('admin-queue-list');
+            if (list) {
+                list.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Loading all users queue state...</div>';
+            }
+
+            try {
+                const [statusRes, failedRes] = await Promise.all([
+                    fetch('/api/pipeline/status?scope=all', { credentials: 'include' }),
+                    fetch('/api/jobs/failed', { credentials: 'include' })
+                ]);
+                const statusData = await statusRes.json();
+                const failedData = await failedRes.json().catch(() => ({ success: true, jobs: [] }));
+
+                if (!statusRes.ok || statusData.success === false) {
+                    throw new Error(statusData.error || 'Unable to load pipeline status.');
+                }
+
+                const pipelineRows = Array.isArray(statusData.pipeline) ? statusData.pipeline : [];
+                const failureRows = Array.isArray(statusData.failures)
+                    ? statusData.failures
+                    : (Array.isArray(failedData.jobs) ? failedData.jobs : []);
+
+                const normalizedFailures = failureRows.map((row) => ({
+                    ...row,
+                    progress: Number(row.progress || 0),
+                    _failed: true,
+                    canPause: false,
+                    canResume: false,
+                    canCancel: false,
+                    status: row.status || 'FAILED'
+                }));
+
+                adminQueueState.items = [...pipelineRows, ...normalizedFailures];
+                renderAdminQueueList();
+
+                if (adminQueueState.detailJobId) {
+                    const stillExists = adminQueueState.items.some((item) => String(item.jobId || '') === String(adminQueueState.detailJobId));
+                    if (stillExists) {
+                        openAdminQueueDetail(adminQueueState.detailJobId, { silent: true });
+                    }
+                }
+            } catch (err) {
+                if (list) {
+                    list.innerHTML = `<div style="color:#fca5a5;border:1px solid #7f1d1d;background:rgba(127,29,29,.18);border-radius:8px;padding:14px;">${escapeHtml(err.message || 'Failed to load queue.')}</div>`;
+                }
+            }
+        }
+
+        async function runAdminQueueAction(jobId, action) {
+            const cleanJobId = String(jobId || '').trim();
+            if (!cleanJobId) return;
+
+            const endpoint = action === 'retry'
+                ? `/api/job/${encodeURIComponent(cleanJobId)}/retry`
+                : `/api/job/${encodeURIComponent(cleanJobId)}/${encodeURIComponent(action)}`;
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.success === false) {
+                    throw new Error(data.error || `Unable to ${action} job.`);
+                }
+
+                showToast(`Queue action complete: ${action}.`, 'success', 2400);
+                await loadAdminQueueItems();
+            } catch (err) {
+                showToast(err.message || `Queue action failed: ${action}.`, 'error', 3600);
+            }
+        }
+
+        async function openAdminQueueDetail(jobId, options = {}) {
+            const detail = document.getElementById('admin-queue-detail');
+            const cleanJobId = String(jobId || '').trim();
+            if (!detail || !cleanJobId) return;
+
+            adminQueueState.detailJobId = cleanJobId;
+            if (!options.silent) {
+                detail.innerHTML = '<div style="color:#94a3b8;border:1px dashed #334155;border-radius:8px;padding:16px;text-align:center;">Loading queue details...</div>';
+            }
+
+            try {
+                const res = await fetch(`/api/job/${encodeURIComponent(cleanJobId)}`, { credentials: 'include' });
+                const data = await res.json();
+                if (!res.ok || !data.success || !data.job) {
+                    throw new Error(data.error || 'Unable to load queue detail.');
+                }
+
+                const job = data.job;
+                adminQueueState.detailJob = job;
+                const optionsState = job.payload?.queueOptions || {};
+
+                detail.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                        <div style="font-weight:700;color:#f8fafc;">Queue Detail: ${escapeHtml(job.id)}</div>
+                        <span class="admin-queue-badge ${queueBadgeClass(job)}">${escapeHtml(job.status || 'UNKNOWN')}</span>
+                    </div>
+                    <div class="admin-queue-form-grid">
+                        <div>
+                            <label>Title</label>
+                            <input type="text" id="admin-queue-title" value="${escapeHtml(job.payload?.torrentName || '')}">
+                        </div>
+                        <div>
+                            <label>Owner User</label>
+                            <input type="text" id="admin-queue-owner" value="${escapeHtml(job.payload?.queueContext?.addedByUser || job.payload?.addedByUser || '')}">
+                        </div>
+                        <div>
+                            <label>IMDb ID</label>
+                            <input type="text" id="admin-queue-imdb" value="${escapeHtml(job.imdbId || job.payload?.imdbId || '')}">
+                        </div>
+                        <div>
+                            <label>Torrent Hash</label>
+                            <input type="text" id="admin-queue-hash" value="${escapeHtml(job.payload?.torrentHash || '')}">
+                        </div>
+                        <div>
+                            <label>Status</label>
+                            <select id="admin-queue-status">
+                                ${['WAITING_DOWNLOAD', 'QUEUED', 'PAUSED', 'PAUSED_DOWNLOAD', 'FAILED', 'COMPLETE'].map((status) => `<option value="${status}" ${status === String(job.status || '').toUpperCase() ? 'selected' : ''}>${status}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Current Step</label>
+                            <select id="admin-queue-step">
+                                ${['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC', 'FAILED', 'COMPLETE'].map((step) => `<option value="${step}" ${step === String(job.currentStep || '').toUpperCase() ? 'selected' : ''}>${step}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="full-width">
+                            <label>Error / Note</label>
+                            <textarea id="admin-queue-error" rows="2">${escapeHtml(job.error || '')}</textarea>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="admin-queue-notify" ${optionsState.notifyOnComplete ? 'checked' : ''}> Notify on complete
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="admin-queue-watchlater" ${optionsState.addToWatchLaterOnComplete ? 'checked' : ''}> Add to watch later on complete
+                            </label>
+                        </div>
+                        <div class="full-width" style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" style="background:#0f766e;" onclick="saveAdminQueueDetail('${escapeHtml(job.id)}')">Save Queue Patch</button>
+                            <button type="button" style="background:#1d4ed8;" onclick="runAdminQueueAction('${escapeHtml(job.id)}','retry')">Retry</button>
+                            <button type="button" style="background:#b45309;" onclick="runAdminQueueAction('${escapeHtml(job.id)}','pause')">Pause</button>
+                            <button type="button" style="background:#0f766e;" onclick="runAdminQueueAction('${escapeHtml(job.id)}','resume')">Resume</button>
+                            <button type="button" style="background:#b91c1c;" onclick="runAdminQueueAction('${escapeHtml(job.id)}','cancel')">Cancel</button>
+                        </div>
+                    </div>
+                    <div style="border-top:1px solid #1e293b;padding-top:10px;display:grid;gap:8px;">
+                        <div style="font-weight:700;color:#93c5fd;">Add Alternate Source</div>
+                        <textarea id="admin-queue-alt-magnet" rows="2" placeholder="Paste magnet URL for replacement/alternate source"></textarea>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="admin-queue-alt-replace" checked>
+                                Replace current queue item
+                            </label>
+                            <button type="button" style="background:#7c3aed;" onclick="addAdminAlternateSource('${escapeHtml(job.id)}')">Queue Alternate Source</button>
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                detail.innerHTML = `<div style="color:#fca5a5;border:1px solid #7f1d1d;background:rgba(127,29,29,.18);border-radius:8px;padding:14px;">${escapeHtml(err.message || 'Failed to load detail.')}</div>`;
+            }
+        }
+
+        async function saveAdminQueueDetail(jobId) {
+            const cleanJobId = String(jobId || '').trim();
+            if (!cleanJobId) return;
+
+            const payload = {
+                title: document.getElementById('admin-queue-title')?.value || '',
+                addedByUser: document.getElementById('admin-queue-owner')?.value || '',
+                imdbId: document.getElementById('admin-queue-imdb')?.value || '',
+                torrentHash: document.getElementById('admin-queue-hash')?.value || '',
+                status: document.getElementById('admin-queue-status')?.value || '',
+                currentStep: document.getElementById('admin-queue-step')?.value || '',
+                error: document.getElementById('admin-queue-error')?.value || '',
+                queueOptions: {
+                    notifyOnComplete: Boolean(document.getElementById('admin-queue-notify')?.checked),
+                    addToWatchLaterOnComplete: Boolean(document.getElementById('admin-queue-watchlater')?.checked)
+                }
+            };
+
+            try {
+                const res = await fetch(`/api/admin/queue/job/${encodeURIComponent(cleanJobId)}`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.success === false) {
+                    throw new Error(data.error || 'Queue patch failed.');
+                }
+
+                showToast('Queue item updated.', 'success', 2200);
+                await loadAdminQueueItems();
+                await openAdminQueueDetail(cleanJobId, { silent: true });
+            } catch (err) {
+                showToast(err.message || 'Queue patch failed.', 'error', 3600);
+            }
+        }
+
+        async function addAdminAlternateSource(jobId) {
+            const cleanJobId = String(jobId || '').trim();
+            if (!cleanJobId) return;
+
+            const magnetUrl = String(document.getElementById('admin-queue-alt-magnet')?.value || '').trim();
+            const replaceExisting = Boolean(document.getElementById('admin-queue-alt-replace')?.checked);
+            const imdbId = String(document.getElementById('admin-queue-imdb')?.value || '').trim();
+            const addedByUser = String(document.getElementById('admin-queue-owner')?.value || '').trim();
+
+            if (!magnetUrl) {
+                showToast('Paste a magnet URL first.', 'error', 2800);
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/queue/job/${encodeURIComponent(cleanJobId)}/alternate-source`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ magnetUrl, replaceExisting, imdbId, addedByUser })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.success === false) {
+                    throw new Error(data.error || 'Alternate source enqueue failed.');
+                }
+
+                showToast(data.message || 'Alternate source queued.', 'success', 3400);
+                await loadAdminQueueItems();
+            } catch (err) {
+                showToast(err.message || 'Alternate source enqueue failed.', 'error', 4200);
+            }
         }
 
         function readGroupManagerFilters() {
@@ -1321,6 +1830,11 @@
         const groupManagerBackdrop = document.getElementById('group-manager-backdrop');
         if (groupManagerBackdrop) {
             groupManagerBackdrop.addEventListener('click', closeGroupManager);
+        }
+
+        const adminQueueBackdrop = document.getElementById('admin-queue-backdrop');
+        if (adminQueueBackdrop) {
+            adminQueueBackdrop.addEventListener('click', closeAdminQueueManager);
         }
 
         async function openSubtitleManager(folder, contentType) {
@@ -2825,9 +3339,28 @@
             });
         }
 
+        const adminQueueSearch = document.getElementById('admin-queue-search');
+        if (adminQueueSearch) {
+            adminQueueSearch.addEventListener('input', debounce(() => {
+                renderAdminQueueList();
+            }, 220));
+        }
+
+        const adminQueueFilter = document.getElementById('admin-queue-filter');
+        if (adminQueueFilter) {
+            adminQueueFilter.addEventListener('change', () => {
+                renderAdminQueueList();
+            });
+        }
+
         checkWorkerHealth();
         setInterval(checkWorkerHealth, 5000);
         setInterval(fetchFailedJobs, 7000);
+        setInterval(() => {
+            if (document.getElementById('admin-queue-drawer')?.classList.contains('show')) {
+                loadAdminQueueItems();
+            }
+        }, 10000);
     </script>
 </body>
 </html>
