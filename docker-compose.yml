@@ -32,6 +32,11 @@ services:
     container_name: movie-streamer-v2-test
     cpus: "4.0"
     environment:
+      WORKER_URL_INGEST: "http://ingest-worker:5000/process"
+      WORKER_URL_METADATA: "http://metadata-worker:5001/process"
+      WORKER_URL_SUBTITLES: "http://subtitle-worker:5002/process"
+      WORKER_URL_TRANSCODE: "http://transcoder-worker:5003/process"
+      WORKER_URL_CLOUDSYNC: "http://cloudsync-worker:5004/process"
       ENABLE_WEB_SERVER: "true"
       ENABLE_PIPELINE_WATCHER: "false"
       ENABLE_INGEST_WORKER: "false"
@@ -50,6 +55,11 @@ services:
     cpus: "1.0"
     command: ["node", "src/services/workers/PipelineRunner.js"]
     environment:
+      WORKER_URL_INGEST: "http://ingest-worker:5000/process"
+      WORKER_URL_METADATA: "http://metadata-worker:5001/process"
+      WORKER_URL_SUBTITLES: "http://subtitle-worker:5002/process"
+      WORKER_URL_TRANSCODE: "http://transcoder-worker:5003/process"
+      WORKER_URL_CLOUDSYNC: "http://cloudsync-worker:5004/process"
       ENABLE_PIPELINE_WATCHER: "false"
     depends_on:
       redis:
