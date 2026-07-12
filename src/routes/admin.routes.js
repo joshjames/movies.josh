@@ -502,6 +502,56 @@ function cleanRemoteKey(key = '') {
     return String(key || '').replace(/\\+/g, '/').replace(/\/+/g, '/').replace(/^\//, '').trim();
 }
 
+function repairStorageProfiles(storage = {}, contentType = 'movie', folder = '', imdbId = '') {
+    const nextStorage = {
+        ...(storage || {}),
+        files: {
+            ...((storage && storage.files) || {})
+        }
+    };
+
+    const files = nextStorage.files || {};
+    const normalizedContentType = String(contentType || '').toLowerCase() === 'series' ? 'series' : 'movie';
+    const directoryId = String(imdbId || '').trim() && String(imdbId || '').trim().toLowerCase() !== 'n/a'
+        ? String(imdbId || '').trim()
+        : String(folder || '').trim();
+
+    let changed = false;
+    Object.keys(files).forEach((profile) => {
+        const block = files[profile] || {};
+        const localPath = String(block.localPath || '').trim();
+        const cleanedRemoteKey = cleanRemoteKey(block.remoteKey || '');
+        const normalizedProfile = String(profile || '').trim().toLowerCase();
+
+        let derivedRemoteKey = cleanedRemoteKey;
+        if (!derivedRemoteKey && localPath && directoryId) {
+            const base = normalizedContentType === 'series' ? 'series' : 'movies';
+            if (normalizedProfile === '1080p' || normalizedProfile === '720p' || normalizedProfile === '480p') {
+                derivedRemoteKey = `${base}/${directoryId}/${normalizedProfile}.mp4`;
+            } else {
+                derivedRemoteKey = `${base}/${directoryId}/${localPath}`;
+            }
+        }
+
+        let nextStatus = block.status;
+        if (block.status === 'synced' && !derivedRemoteKey) {
+            nextStatus = localPath ? 'pending' : 'waiting';
+        }
+
+        if (derivedRemoteKey !== cleanedRemoteKey || nextStatus !== block.status) {
+            files[profile] = {
+                ...block,
+                status: nextStatus,
+                remoteKey: derivedRemoteKey || null
+            };
+            changed = true;
+        }
+    });
+
+    nextStorage.files = files;
+    return { storage: nextStorage, changed };
+}
+
 function sanitizeArchiveName(name = '') {
     return String(name || '')
         .trim()
@@ -2260,6 +2310,16 @@ router.post('/override-metadata', async (req, res) => {
             }
         }
 
+        if (metadata.storage && metadata.storage.files) {
+            const repaired = repairStorageProfiles(
+                metadata.storage,
+                contentType,
+                folder,
+                metadata.imdbId || metadata.imdb_id || ''
+            );
+            metadata.storage = repaired.storage;
+        }
+
         fs.writeFileSync(metaFilePath, JSON.stringify(metadata, null, 4), 'utf-8');
 
         if (triggerCloudSync) {
@@ -2322,6 +2382,47 @@ router.post('/override-metadata', async (req, res) => {
 
     } catch (err) {
         console.error(err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/repair-storage-profiles', async (req, res) => {
+    try {
+        const { folder, contentType } = req.body || {};
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const normalizedType = String(contentType || '').toLowerCase() === 'series' ? 'series' : 'movie';
+        const folderPath = normalizedType === 'series'
+            ? resolveSeriesFolderPath(folder)
+            : resolveMovieFolderPath(folder);
+        const metaPath = path.join(folderPath, 'metadata.json');
+
+        if (!fs.existsSync(metaPath)) {
+            return res.status(404).json({ success: false, error: 'metadata.json not found for target.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const repaired = repairStorageProfiles(
+            metadata.storage || {},
+            normalizedType,
+            folder,
+            metadata.imdbId || metadata.imdb_id || ''
+        );
+
+        metadata.storage = repaired.storage;
+        await persistMetadataFile(metaPath, metadata);
+        await LibraryScanner.runLibraryScanSweep();
+
+        return res.json({
+            success: true,
+            folder,
+            contentType: normalizedType,
+            changed: repaired.changed,
+            storage: metadata.storage
+        });
+    } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
 });
