@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const AccountService = require('../services/AccountService');
 const ProfileService = require('../services/ProfileService');
+const AcquisitionQuotaService = require('../services/AcquisitionQuotaService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
 const { config: squareConfig } = require('../config/square');
 
@@ -54,6 +55,7 @@ router.get('/status', requireAuth, async (req, res) => {
     const graceEndsMs = config.gracePeriodEndsAt ? new Date(config.gracePeriodEndsAt).getTime() : 0;
     const inTrial = trialEndsMs > now;
     const inGrace = graceEndsMs > now;
+    const quota = await AcquisitionQuotaService.getQuotaSnapshot(userKey, config);
     
     // Default guest metadata contract
     if (!config || config.subscriptionStatus !== 'ACTIVE') {
@@ -62,7 +64,8 @@ router.get('/status', requireAuth, async (req, res) => {
           success: true,
           subscriptionStatus: 'TRIAL',
           trialEndsAt: config.trialEndsAt,
-          trialDays: Number(config.trialDays || 0)
+          trialDays: Number(config.trialDays || 0),
+          quota
         });
       }
 
@@ -71,7 +74,8 @@ router.get('/status', requireAuth, async (req, res) => {
           success: true,
           subscriptionStatus: 'GRACE',
           gracePeriodEndsAt: config.gracePeriodEndsAt,
-          gracePeriodDays: Number(config.gracePeriodDays || 0)
+          gracePeriodDays: Number(config.gracePeriodDays || 0),
+          quota
         });
       }
 
@@ -79,7 +83,8 @@ router.get('/status', requireAuth, async (req, res) => {
         success: true,
         subscriptionStatus: config.subscriptionStatus || 'GUEST',
         trialEndsAt: config.trialEndsAt || null,
-        gracePeriodEndsAt: config.gracePeriodEndsAt || null
+        gracePeriodEndsAt: config.gracePeriodEndsAt || null,
+        quota
       });
     }
 
@@ -95,7 +100,8 @@ router.get('/status', requireAuth, async (req, res) => {
       nextBillingCycle: cycleDate,
       subscribedAt: config.subscribedAt || null,
       trialEndsAt: config.trialEndsAt || null,
-      gracePeriodEndsAt: config.gracePeriodEndsAt || null
+      gracePeriodEndsAt: config.gracePeriodEndsAt || null,
+      quota
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Database tracking synchronization drop.' });
@@ -127,6 +133,7 @@ router.get('/profile', requireAuth, async (req, res) => {
   try {
     const userKey = getActiveUser(req);
     const config = await ProfileService.readData(userKey, 'config', {});
+    const quota = await AcquisitionQuotaService.getQuotaSnapshot(userKey, config);
     return res.json({
       success: true,
       user: {
@@ -135,7 +142,8 @@ router.get('/profile', requireAuth, async (req, res) => {
         displayName: config.displayName || config.name || config.username || userKey,
         name: config.name || config.displayName || config.username || userKey,
         avatar: config.avatar || 'avatar_001.png',
-        subscriptionStatus: config.subscriptionStatus || 'GUEST'
+        subscriptionStatus: config.subscriptionStatus || 'GUEST',
+        quota
       }
     });
   } catch (err) {

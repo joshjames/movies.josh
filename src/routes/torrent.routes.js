@@ -10,6 +10,8 @@ const axios = require('axios');
 const { getLibrary } = require('../services/db');
 const { runLibraryScanSweep } = require('../services/LibraryScanner');
 const { getActiveUser } = require('../middleware/auth');
+const ProfileService = require('../services/ProfileService');
+const AcquisitionQuotaService = require('../services/AcquisitionQuotaService');
 const {
     userGroup,
     normalizeGroups,
@@ -204,6 +206,19 @@ async function attachExistingMediaToUserLibrary({ imdbId, activeUser }) {
         title: existingItem.title || existingItem.id,
         metadataPath
     };
+}
+
+function isMovieAcquisitionCategory(category = '') {
+    return !String(category || '').trim().toLowerCase().includes('series');
+}
+
+async function reserveMovieAcquisitionQuota({ userKey, targetCategory }) {
+    if (!isMovieAcquisitionCategory(targetCategory)) {
+        return { allowed: true, skipped: true };
+    }
+
+    const config = await ProfileService.readData(userKey, 'config', {});
+    return AcquisitionQuotaService.reserveDailyAcquisition(userKey, config);
 }
 
 function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
@@ -644,13 +659,31 @@ router.post('/downloader/add', async (req, res) => {
             }
         }
 
+        const quotaReservation = await reserveMovieAcquisitionQuota({ userKey: activeUser, targetCategory });
+        if (!quotaReservation.allowed) {
+            return res.status(quotaReservation.reason === 'missing_user' ? 401 : 429).json({
+                success: false,
+                error: quotaReservation.reason === 'missing_user'
+                    ? 'Authentication required.'
+                    : 'Daily acquisition limit reached.',
+                quota: quotaReservation
+            });
+        }
+
         const effectiveQueueContext = {
             ...normalizedQueueContext,
             imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
         };
-        await TorrentService.addMagnet(magnetUrl, targetCategory, effectiveImdbId, {
-            addedByUser: effectiveQueueContext.addedByUser || activeUser || null
-        });
+        try {
+            await TorrentService.addMagnet(magnetUrl, targetCategory, effectiveImdbId, {
+                addedByUser: effectiveQueueContext.addedByUser || activeUser || null
+            });
+        } catch (err) {
+            if (quotaReservation.token) {
+                await AcquisitionQuotaService.releaseDailyAcquisition(activeUser, quotaReservation.token);
+            }
+            throw err;
+        }
         
         // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
@@ -713,13 +746,31 @@ router.post('/yts/add', async (req, res) => {
             }
         }
 
+        const quotaReservation = await reserveMovieAcquisitionQuota({ userKey: activeUser, targetCategory: 'movie-streamer' });
+        if (!quotaReservation.allowed) {
+            return res.status(quotaReservation.reason === 'missing_user' ? 401 : 429).json({
+                success: false,
+                error: quotaReservation.reason === 'missing_user'
+                    ? 'Authentication required.'
+                    : 'Daily acquisition limit reached.',
+                quota: quotaReservation
+            });
+        }
+
         const effectiveQueueContext = {
             ...normalizedQueueContext,
             imdbId: effectiveImdbId || normalizedQueueContext.imdbId || null
         };
-        await TorrentService.addMagnet(magnetUrl, 'movie-streamer', effectiveImdbId, {
-            addedByUser: effectiveQueueContext.addedByUser || activeUser || null
-        });
+        try {
+            await TorrentService.addMagnet(magnetUrl, 'movie-streamer', effectiveImdbId, {
+                addedByUser: effectiveQueueContext.addedByUser || activeUser || null
+            });
+        } catch (err) {
+            if (quotaReservation.token) {
+                await AcquisitionQuotaService.releaseDailyAcquisition(activeUser, quotaReservation.token);
+            }
+            throw err;
+        }
         
         // Create a placeholder queue job to track intent while download is in progress.
         const torrentName = new URL(magnetUrl).searchParams.get('dn') || 'Unknown';
