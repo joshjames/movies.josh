@@ -9,16 +9,25 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Sora:wght@500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-a: #08111b;
-            --bg-b: #10273d;
-            --card: rgba(8, 18, 28, 0.76);
-            --card-border: rgba(125, 211, 252, 0.26);
-            --text-main: #eff6ff;
-            --text-muted: #a7bdd4;
-            --accent: #0ea5e9;
+            --bg-a: #f4f8ff;
+            --bg-b: #e6f0ff;
+            --card: rgba(255, 255, 255, 0.88);
+            --card-border: rgba(30, 64, 175, 0.25);
+            --text-main: #0f172a;
+            --text-muted: #334155;
+            --accent: #1d4ed8;
             --ok: #22c55e;
             --warn: #f59e0b;
             --bad: #ef4444;
+
+            --md-sys-color-primary: #1d4ed8;
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-secondary: #2563eb;
+            --md-sys-color-on-secondary: #ffffff;
+            --md-sys-color-surface: #ffffff;
+            --md-sys-color-on-surface: #0f172a;
+            --md-sys-color-surface-variant: #e2e8f0;
+            --md-sys-color-outline: #64748b;
         }
 
         * { box-sizing: border-box; }
@@ -29,10 +38,51 @@
             color: var(--text-main);
             font-family: 'Space Grotesk', sans-serif;
             background:
-                radial-gradient(1000px 500px at -10% -10%, rgba(14, 165, 233, 0.22), transparent 55%),
-                radial-gradient(900px 600px at 110% 0%, rgba(34, 197, 94, 0.16), transparent 45%),
+                radial-gradient(1000px 500px at -10% -10%, rgba(37, 99, 235, 0.16), transparent 55%),
+                radial-gradient(900px 600px at 110% 0%, rgba(14, 165, 233, 0.12), transparent 45%),
                 linear-gradient(150deg, var(--bg-a), var(--bg-b));
             padding: 18px;
+        }
+
+        md-outlined-button,
+        md-filled-tonal-button,
+        md-filled-button,
+        md-assist-chip,
+        md-switch,
+        md-linear-progress {
+            --md-sys-color-surface: #ffffff;
+            --md-sys-color-on-surface: #0f172a;
+        }
+
+        md-assist-chip {
+            --md-assist-chip-label-text-color: #0f172a;
+            --md-assist-chip-outline-color: #94a3b8;
+            --md-assist-chip-container-color: #eef2ff;
+        }
+
+        md-outlined-button {
+            --md-outlined-button-label-text-color: #1e3a8a;
+            --md-outlined-button-outline-color: #94a3b8;
+        }
+
+        md-filled-tonal-button {
+            --md-filled-tonal-button-label-text-color: #ffffff;
+            --md-filled-tonal-button-container-color: #2563eb;
+        }
+
+        md-filled-button {
+            --md-filled-button-label-text-color: #ffffff;
+            --md-filled-button-container-color: #b91c1c;
+        }
+
+        md-switch {
+            --md-switch-selected-track-color: #2563eb;
+            --md-switch-selected-handle-color: #ffffff;
+        }
+
+        md-linear-progress {
+            --md-linear-progress-track-color: #dbeafe;
+            --md-linear-progress-active-indicator-color: #2563eb;
         }
 
         .shell {
@@ -44,6 +94,7 @@
             border: 1px solid var(--card-border);
             background: var(--card);
             backdrop-filter: blur(12px);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
             border-radius: 18px;
             padding: 18px;
             display: grid;
@@ -87,11 +138,12 @@
         .queue-card {
             border: 1px solid var(--card-border);
             border-radius: 14px;
-            background: rgba(3, 12, 20, 0.82);
+            background: rgba(255, 255, 255, 0.94);
             padding: 14px;
             display: grid;
             gap: 10px;
             animation: rise 220ms ease;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
         }
 
         @keyframes rise {
@@ -151,7 +203,7 @@
             padding: 18px;
             color: var(--text-muted);
             text-align: center;
-            background: rgba(2, 6, 23, 0.48);
+            background: rgba(255, 255, 255, 0.75);
         }
 
         .error-note {
