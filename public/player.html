@@ -584,12 +584,51 @@
         // Trigger timestamp restorations right as the stream asset tracks align completely
         videoEl.addEventListener('loadedmetadata', applyResumeMarker);
 
+        function resolveSubscribeReasonFromStatus(statusPayload) {
+            const status = String(statusPayload?.subscriptionStatus || '').toUpperCase();
+            if (status === 'TRIAL' || status === 'ACTIVE' || status === 'GRACE') {
+                return null;
+            }
+
+            const trialEndsAt = statusPayload?.trialEndsAt ? Date.parse(statusPayload.trialEndsAt) : NaN;
+            if (Number.isFinite(trialEndsAt) && trialEndsAt <= Date.now()) {
+                return 'trial_expired';
+            }
+
+            return 'access_restricted';
+        }
+
+        async function enforcePlaybackAccess() {
+            try {
+                const response = await fetch('/api/account/status', { credentials: 'include' });
+                const statusPayload = await response.json();
+                if (!response.ok || !statusPayload?.success) {
+                    return true;
+                }
+
+                const reason = resolveSubscribeReasonFromStatus(statusPayload);
+                if (!reason) return true;
+
+                const params = new URLSearchParams({
+                    reason,
+                    from: 'player'
+                });
+                window.location.href = `/subscribe.html?${params.toString()}`;
+                return false;
+            } catch (_err) {
+                return true;
+            }
+        }
+
         async function initializePremiumStream() {
             if (!movieId) {
                 alert("No media identifier provided.");
                 window.location.href = "/";
                 return;
             }
+
+            const canPlay = await enforcePlaybackAccess();
+            if (!canPlay) return;
 
             if (seasonParam && episodeParam) {
                 try {

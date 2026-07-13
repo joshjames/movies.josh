@@ -37,6 +37,51 @@ router.get('/square-config', requireAuth, (req, res) => {
   });
 });
 
+router.get('/checkout-config', requireAuth, (req, res) => {
+  const hasRuntime = Boolean(squareConfig.applicationId && squareConfig.locationId);
+  const rawPrice = Number(process.env.SQUARE_SUBSCRIPTION_PRICE_CENTS);
+  const planPriceCents = Number.isFinite(rawPrice) && rawPrice > 0 ? Math.floor(rawPrice) : 999;
+  const currency = String(process.env.SQUARE_CURRENCY || 'USD').trim().toUpperCase() || 'USD';
+  const planLabel = String(process.env.SUBSCRIPTION_PLAN_LABEL || 'Premium Stream Access').trim() || 'Premium Stream Access';
+
+  const patreonJoinUrl = String(
+    process.env.PATREON_JOIN_URL ||
+    process.env.PATREON_URL ||
+    'https://www.patreon.com/'
+  ).trim();
+
+  return res.json({
+    success: true,
+    plan: {
+      id: 'premium-monthly',
+      label: planLabel,
+      priceCents: planPriceCents,
+      currency,
+      interval: 'month'
+    },
+    square: {
+      enabled: hasRuntime,
+      hasRuntime,
+      applicationId: squareConfig.applicationId || null,
+      locationId: squareConfig.locationId || null,
+      isProduction: Boolean(squareConfig.isProduction)
+    },
+    paymentOptions: {
+      square: {
+        enabled: hasRuntime,
+        label: 'Credit or Debit Card',
+        provider: 'Square'
+      },
+      patreon: {
+        enabled: Boolean(patreonJoinUrl),
+        label: 'Patreon Membership',
+        provider: 'Patreon',
+        joinUrl: patreonJoinUrl
+      }
+    }
+  });
+});
+
 // Add this helper endpoint to your src/routes/account.routes.js pipeline
 router.get('/status', requireAuth, async (req, res) => {
   try {

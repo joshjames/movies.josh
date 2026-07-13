@@ -676,7 +676,7 @@
                         <button class="btn btn-success" id="subscribeBtn">Upgrade Now</button>
                     `;
                     document.getElementById('subscribeBtn').addEventListener('click', () => {
-                        window.location.href = '/subscribe.html';
+                        window.location.href = '/subscribe.html?reason=upgrade_from_trial';
                     });
                 } else if (data.success && data.subscriptionStatus === 'GRACE') {
                     container.innerHTML = `
@@ -687,12 +687,12 @@
                         <button class="btn btn-success" id="subscribeBtn">Reactivate Subscription</button>
                     `;
                     document.getElementById('subscribeBtn').addEventListener('click', () => {
-                        window.location.href = '/subscribe.html';
+                        window.location.href = '/subscribe.html?reason=trial_expired';
                     });
                 } else {
                     // Fallback baseline layout mapping for guest levels (Attach redirect route helper)
                     document.getElementById('subscribeBtn').addEventListener('click', () => {
-                        window.location.href = '/subscribe.html';
+                        window.location.href = '/subscribe.html?reason=default_signup';
                     });
                 }
             } catch (_err) {
