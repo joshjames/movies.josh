@@ -845,6 +845,7 @@
         
         <div class="controls">
             <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
+            <button class="btn-trigger" style="background:#0284c7;" onclick="runLibrarySweepNow()">Run Library Sweep</button>
             <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
             <button class="btn-trigger" style="background:#1d4ed8;" onclick="backfillGlobalGroups()">Backfill Global + All-Media</button>
             <button class="btn-trigger" style="background:#4f46e5;" onclick="openGroupManager()">Open Group Manager</button>
@@ -1989,6 +1990,34 @@
                 showToast(`Home feed ready. ${data.collections} collections / ${data.totalItems} items.`, 'success', 4500);
             } catch (err) {
                 showToast('Home feed rebuild request failed.', 'error', 4500);
+            }
+        }
+
+        async function runLibrarySweepNow() {
+            try {
+                showToast('Running full library sweep...', 'info', 2800);
+                const res = await fetch('/api/admin/sync-item', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    showToast('Library sweep failed: ' + (data.error || 'Unknown error'), 'error', 4600);
+                    return;
+                }
+
+                const movieCount = data.summary?.movies;
+                const showCount = data.summary?.shows;
+                const countTail = (typeof movieCount === 'number' && typeof showCount === 'number')
+                    ? ` Movies: ${movieCount}, Shows: ${showCount}.`
+                    : '';
+
+                showToast(`Library sweep complete.${countTail}`, 'success', 4200);
+                fetchLibraryData(true);
+            } catch (_err) {
+                showToast('Library sweep request failed.', 'error', 4600);
             }
         }
 

@@ -38,9 +38,21 @@ function findImdbMarkerFile(itemPath) {
         const entries = fs.readdirSync(itemPath, { withFileTypes: true });
         for (const entry of entries) {
             if (!entry.isFile()) continue;
-            const match = String(entry.name || '').match(/^metadata\.(tt)?(\d{5,10})$/i);
+            const fileName = String(entry.name || '');
+            const match = fileName.match(/^metadata\.(tt)?(\d{5,10})$/i);
             if (!match) continue;
             return normalizeImdbId(match[2]);
+        }
+
+        // Alternate marker format: a file named metadata.imdbid containing tt1234567 (or 1234567)
+        const contentMarker = entries.find((entry) => entry.isFile() && String(entry.name || '').toLowerCase() === 'metadata.imdbid');
+        if (contentMarker) {
+            const markerPath = path.join(itemPath, contentMarker.name);
+            const markerValue = fs.readFileSync(markerPath, 'utf-8');
+            const match = String(markerValue || '').match(/(?:tt)?(\d{5,10})/i);
+            if (match) {
+                return normalizeImdbId(match[1]);
+            }
         }
     } catch (_err) {
         return '';
