@@ -389,7 +389,7 @@
         function renderCatalogResultCards(items) {
             return (items || []).map((item) => {
                 const encodedTitle = encodeURIComponent(String(item.title || ''));
-                const localCover = item.localId ? `/movie-assets/${encodeURIComponent(item.localId)}/cover.jpg` : '';
+                const localCover = item.localCover || (item.localId ? `/movie-assets/${encodeURIComponent(item.localId)}/cover.jpg` : '');
                 const cachedCover = item.cover || '';
                 const remoteCover = item.imdbId ? `/api/catalogs/movies/cover/${encodeURIComponent(item.imdbId)}` : '';
                 const primaryCover = item.inLibrary && localCover

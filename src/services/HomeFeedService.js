@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { versionCoverUrl } = require('./CoverUrlService');
 
 const HOME_FEED_FILE = path.join(__dirname, '../../metadata/home_feed.json');
 const RECENT_FEED_FILE = path.join(__dirname, '../../metadata/recent_feed.json');
@@ -33,10 +34,17 @@ function normalizeCard(media) {
         genre: media.genre || media.enrichment?.genre || '',
         imdbScore: media.imdbScore || media.rating || media.enrichment?.imdbScore || '',
         contentType: media.contentType || 'movie',
-        cover: media.cover || '',
+        cover: versionCoverUrl(media.cover || ''),
         href: `${targetEndpoint}?id=${media.id}`,
         badge: media.contentType === 'series' ? 'TV Show' : '',
         addedAt: media.addedAt || media.updatedAt || null
+    };
+}
+
+function normalizeCollection(collection = {}) {
+    return {
+        ...collection,
+        cards: Array.isArray(collection.cards) ? collection.cards.map(normalizeCard) : []
     };
 }
 
@@ -199,8 +207,12 @@ function loadHomeFeedWithFallback() {
 
     if (cached || cachedRecent) {
         const collections = [];
-        if (cachedRecent?.collection) collections.push(cachedRecent.collection);
-        if (cached?.collections?.length) collections.push(...cached.collections.filter(c => c.id !== 'recently-added-row'));
+        if (cachedRecent?.collection) collections.push(normalizeCollection(cachedRecent.collection));
+        if (cached?.collections?.length) {
+            collections.push(...cached.collections
+                .filter(c => c.id !== 'recently-added-row')
+                .map(normalizeCollection));
+        }
         return {
             generatedAt: new Date().toISOString(),
             totalItems: Math.max(cached?.totalItems || 0, cachedRecent?.totalItems || 0),

@@ -21,6 +21,7 @@ const {
     canUserSeeMedia,
     getGroupsFromMedia
 } = require('../services/LibraryAccessService');
+const { versionCoverUrl } = require('../services/CoverUrlService');
 const {
     getSeriesRoots,
     resolveMovieFolderPath,
@@ -168,7 +169,7 @@ function getCatalogCoverUrl(imdbId = '') {
     if (!normalized) return '';
     const coverPath = path.join(CATALOG_COVER_DIR, `${normalized}.jpg`);
     if (fs.existsSync(coverPath)) {
-        return `/images/catalog-covers/${normalized}.jpg`;
+        return versionCoverUrl(`/images/catalog-covers/${normalized}.jpg`);
     }
     return '';
 }
@@ -255,7 +256,7 @@ function buildLocalMovieCatalogRows(library) {
                 title: item.title || item.id || 'Unknown',
                 year: item.year || '',
                 imdbId,
-                cover: item.cover || '',
+                cover: versionCoverUrl(item.cover || ''),
                 href: `/player.html?id=${encodeURIComponent(item.id || '')}`,
                 contentType: 'movie',
                 source: 'local-library'
@@ -1557,6 +1558,7 @@ router.get('/catalogs/movies/:slug', async (req, res) => {
                 votes: item.votes,
                 genres: Array.isArray(item.genres) ? item.genres : [],
                 cover: getCatalogCoverUrl(imdbId),
+                localCover: localMatch?.id ? versionCoverUrl(`/movie-assets/${encodeURIComponent(localMatch.id)}/cover.jpg`) : '',
                 inLibrary: Boolean(localMatch),
                 localId: localMatch?.id || null,
                 localHref: localMatch?.id ? `/player.html?id=${encodeURIComponent(localMatch.id)}` : null
