@@ -2146,7 +2146,7 @@
 
             container.innerHTML = `${seriesTools}${collection.map(item => {
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
-                const posterSrc = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
+                const posterSrc = buildCoverUrl(urlPath);
                 const syncState = item.syncState || {};
                 const isInSync = syncState.inSync === true;
                 const effectiveStorageLocation =
@@ -3089,6 +3089,12 @@
             document.getElementById(`text-${folder}`).style.display = 'block';
         }
 
+        function buildCoverUrl(urlPath) {
+            const cleanPath = String(urlPath || '').replace(/^\/+/, '').replace(/\/+$/g, '');
+            if (!cleanPath) return '';
+            return `/movie-assets/${cleanPath}/cover.jpg?v=${Date.now()}`;
+        }
+
         function handleDragOver(e, folder) { e.preventDefault(); document.getElementById(`dropzone-${folder}`).classList.add('dragover'); }
         function handleDragLeave(e, folder) { e.preventDefault(); document.getElementById(`dropzone-${folder}`).classList.remove('dragover'); }
 
@@ -3117,7 +3123,7 @@
                 if (resData.success) {
                     const img = document.getElementById(`img-${folder}`);
                     const urlPath = type === 'series' ? `series/${folder}` : folder;
-                    img.src = `/movie-assets/${urlPath}/cover.jpg?t=${new Date().getTime()}`;
+                    img.src = buildCoverUrl(urlPath);
                     img.style.display = 'block';
                     document.getElementById(`text-${folder}`).style.display = 'none';
                 }
