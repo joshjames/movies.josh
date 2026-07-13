@@ -1074,7 +1074,21 @@
                 const res = await fetch('/api/home-feed');
                 const data = await res.json();
                 const collections = data?.feed?.collections || [];
-                homeSearchCards = collections.flatMap((collection) => Array.isArray(collection.cards) ? collection.cards : []);
+                const flattenedCards = collections.flatMap((collection) => Array.isArray(collection.cards) ? collection.cards : []);
+                const dedupedCards = new Map();
+                for (const card of flattenedCards) {
+                    if (!card || typeof card !== 'object') continue;
+                    const dedupeKey = String(
+                        card.id ||
+                        card.href ||
+                        `${card.title || ''}|${card.year || ''}|${card.imdbId || ''}`
+                    ).trim();
+                    if (!dedupeKey) continue;
+                    if (!dedupedCards.has(dedupeKey)) {
+                        dedupedCards.set(dedupeKey, card);
+                    }
+                }
+                homeSearchCards = Array.from(dedupedCards.values());
 
                 if (collections.length > 0) {
                     grid.innerHTML = collections.map(renderFeedRow).join('');
@@ -1123,6 +1137,8 @@
 
         function sanitizeSearchText(value) {
             return String(value || '')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/no\s*cover\s*(?:&quot;|"|'|>|&gt;|&#39;)+/gi, '')
                 .replace(/no\s*cover\s*(?:&quot;|["'>])+?/gi, '')
                 .replace(/no\s*cover/gi, '')
                 .replace(/\s+/g, ' ')
