@@ -13,6 +13,7 @@ const {
     getPrimarySeriesRoot,
     resolveSeriesFolderPath
 } = require('../StoragePathResolver');
+const SeriesFolderResolver = require('../SeriesFolderResolver');
 
 const app = express();
 app.use(express.json());
@@ -167,9 +168,7 @@ function analyzeDirectoryContents(dirPath) {
 }
 
 function normalizeImdbId(value) {
-    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
-    if (!/^\d{5,10}$/.test(cleaned)) return '';
-    return `tt${cleaned}`;
+    return SeriesFolderResolver.normalizeImdbId(value);
 }
 
 function findExistingShowFolder(cleanTitle, targetSeriesDir) {
@@ -207,31 +206,8 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
 }
 
 function findExistingShowFolderByImdbId(imdbId, targetSeriesDir) {
-    const cleanImdb = normalizeImdbId(imdbId);
-    if (!cleanImdb) return null;
-    const targetRoots = Array.isArray(targetSeriesDir) ? targetSeriesDir : [targetSeriesDir];
-
-    for (const root of targetRoots) {
-        if (!root || !fs.existsSync(root)) continue;
-        const currentFolders = fs.readdirSync(root);
-
-        for (const folder of currentFolders) {
-            const metaPath = path.join(root, folder, 'metadata.json');
-            if (!fs.existsSync(metaPath)) continue;
-
-            try {
-                const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-                const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
-                if (metaImdb && metaImdb === cleanImdb) {
-                    return folder;
-                }
-            } catch (_err) {
-                // Ignore malformed metadata and keep scanning.
-            }
-        }
-    }
-
-    return null;
+    const found = SeriesFolderResolver.findSeriesFolderByImdbId(imdbId);
+    return found?.folderName || null;
 }
 
 function moveSeriesFilesIntoSeasonFolder(sourcePath, showRootPath, showFolder, seasonNumber, episodeItems = []) {
@@ -275,6 +251,37 @@ function deriveSeriesTitleFromEpisodeName(fileName, fallbackTitle) {
     if (!candidate) candidate = fallbackTitle || '';
     const cleaned = cleanReleaseName(candidate).title;
     return cleaned || fallbackTitle || 'Unknown.Series';
+}
+
+async function resolveCanonicalSeriesTitle(imdbId, titleHint = '') {
+    const cleanImdb = normalizeImdbId(imdbId);
+    const safeHint = cleanReleaseName(String(titleHint || '')).title || String(titleHint || '').trim();
+
+    if (!OMDB_API_KEY) {
+        return safeHint;
+    }
+
+    try {
+        let lookupUrl = '';
+        if (cleanImdb) {
+            lookupUrl = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${encodeURIComponent(cleanImdb)}&type=series`;
+        } else if (safeHint) {
+            lookupUrl = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(safeHint)}&type=series`;
+        }
+
+        if (!lookupUrl) {
+            return safeHint;
+        }
+
+        const response = await axios.get(lookupUrl, { timeout: 5000 });
+        if (response.data && response.data.Response === 'True' && response.data.Title) {
+            return String(response.data.Title).trim();
+        }
+    } catch (_err) {
+        // Keep ingest resilient on metadata lookup failures.
+    }
+
+    return safeHint;
 }
 
 function flattenSingleChildMovieFolder(folderPath) {
@@ -643,10 +650,13 @@ app.post('/process', async (req, res) => {
                 ? deriveSeriesTitleFromEpisodeName(seasonEpisodes[0].fileName, cleanTitle)
                 : cleanTitle;
             const showTitleHint = titleFromEpisode || cleanTitle;
-            const showDotTitle = showTitleHint.replace(/\s+/g, '.');
-            const showFolder = findExistingShowFolderByImdbId(requestImdbId, SERIES_ROOTS)
-                || findExistingShowFolder(showTitleHint, SERIES_ROOTS)
-                || showDotTitle;
+            const canonicalSeriesTitle = await resolveCanonicalSeriesTitle(requestImdbId, showTitleHint);
+            const targetShowTitle = canonicalSeriesTitle || showTitleHint || cleanTitle;
+            const hintedShowFolder = String(queueContext?.targetShowFolder || '').trim();
+            const showFolder = (hintedShowFolder && resolveSeriesFolderPath(hintedShowFolder, { mustExist: true }) ? hintedShowFolder : null)
+                || findExistingShowFolderByImdbId(requestImdbId, SERIES_ROOTS)
+                || findExistingShowFolder(targetShowTitle, SERIES_ROOTS)
+                || targetShowTitle.replace(/\s+/g, '.');
             const showRootPath = resolveSeriesFolderPath(showFolder, { mustExist: true })
                 || path.join(getPrimarySeriesRoot(), showFolder);
 
@@ -684,7 +694,7 @@ app.post('/process', async (req, res) => {
 
                 const showMetadataPath = path.join(showRootPath, 'metadata.json');
                 let showMeta = {
-                    title: titleFromEpisode,
+                    title: targetShowTitle,
                     year: parsedYear || '',
                     plot: '',
                     genre: '',
@@ -700,7 +710,7 @@ app.post('/process', async (req, res) => {
                     }
                 }
 
-                showMeta.title = showMeta.title || titleFromEpisode;
+                showMeta.title = showMeta.title || targetShowTitle;
                 showMeta.contentType = 'series';
                 showMeta.imdbId = showMeta.imdbId || requestImdbId || null;
                 showMeta.imdb_id = showMeta.imdb_id || requestImdbId || null;
@@ -710,6 +720,17 @@ app.post('/process', async (req, res) => {
                     error: null
                 };
                 fs.writeFileSync(showMetadataPath, JSON.stringify(showMeta, null, 4), 'utf-8');
+
+                if (requestImdbId) {
+                    try {
+                        SeriesFolderResolver.ensureSeriesMetadataImdb(showRootPath, {
+                            imdbId: requestImdbId,
+                            title: showMeta.title || targetShowTitle
+                        });
+                    } catch (resolverErr) {
+                        logger.warn(`⚠️ [Ingest] Failed to persist series IMDb resolver metadata for ${showFolder}: ${resolverErr.message}`);
+                    }
+                }
 
                 logger.debug(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
                 if (path.resolve(finalPath) === path.resolve(showRootPath)) {
@@ -733,16 +754,24 @@ app.post('/process', async (req, res) => {
             }
 
             logger.debug(`📺 Mapping deep TV configuration manifests for series structural tree: [${showFolder}]`);
-            let mainMeta = { title: titleFromEpisode, year: parsedYear || '', plot: '', genre: '', contentType: 'series', imdbId: requestImdbId || null, imdb_id: requestImdbId || null };
+            let mainMeta = { title: targetShowTitle, year: parsedYear || '', plot: '', genre: '', contentType: 'series', imdbId: requestImdbId || null, imdb_id: requestImdbId || null };
             let totalSeasons = 1;
 
             try {
-                const showRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(titleFromEpisode)}&type=series`, { timeout: 5000 });
+                const showLookupParam = requestImdbId
+                    ? `i=${encodeURIComponent(requestImdbId)}`
+                    : `t=${encodeURIComponent(targetShowTitle)}`;
+                const showRes = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&${showLookupParam}&type=series`, { timeout: 5000 });
                 if (showRes.data && showRes.data.Response === "True") {
                     mainMeta.title = showRes.data.Title;
                     mainMeta.year = showRes.data.Year;
                     mainMeta.plot = showRes.data.Plot;
                     mainMeta.genre = showRes.data.Genre;
+                    const resolvedImdbId = normalizeImdbId(showRes.data.imdbID || requestImdbId || mainMeta.imdbId || '');
+                    if (resolvedImdbId) {
+                        mainMeta.imdbId = resolvedImdbId;
+                        mainMeta.imdb_id = resolvedImdbId;
+                    }
                     totalSeasons = parseInt(showRes.data.totalSeasons, 10) || 1;
                 }
             } catch (err) {
@@ -807,6 +836,19 @@ app.post('/process', async (req, res) => {
                 const metaFilePath = path.join(showRootPath, 'metadata.json');
                 mainMeta.pipelineState = { currentStep: 'METADATA', lastUpdated: new Date().toISOString() };
                 fs.writeFileSync(metaFilePath, JSON.stringify(mainMeta, null, 4));
+
+                const resolvedImdbId = normalizeImdbId(mainMeta.imdbId || mainMeta.imdb_id || requestImdbId || '');
+                if (resolvedImdbId) {
+                    try {
+                        SeriesFolderResolver.ensureSeriesMetadataImdb(showRootPath, {
+                            imdbId: resolvedImdbId,
+                            title: mainMeta.title || targetShowTitle
+                        });
+                    } catch (resolverErr) {
+                        logger.warn(`⚠️ [Ingest] Failed to persist series IMDb resolver metadata for ${showFolder}: ${resolverErr.message}`);
+                    }
+                }
+
                 logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${showFolder} and advanced pipeline to METADATA.`);
 
                 if (finalPath !== showRootPath && fs.existsSync(finalPath)) {
@@ -823,6 +865,7 @@ app.post('/process', async (req, res) => {
                 patchData: {
                     folderPath: showRootPath,
                     folderName: showFolder,
+                    imdbId: normalizeImdbId(mainMeta.imdbId || mainMeta.imdb_id || requestImdbId || ''),
                     pipelineState: { currentStep: 'METADATA', lastUpdated: new Date().toISOString() }
                 }
             });

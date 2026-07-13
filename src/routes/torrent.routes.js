@@ -680,14 +680,24 @@ router.post('/downloader/add', async (req, res) => {
 
     try {
         const activeUser = normalizeUserKey(getActiveUser(req));
-        const targetCategory = category || 'series-streamer';
+        const normalizedCategory = String(category || 'series-streamer').trim().toLowerCase();
         const normalizedQueueContext = normalizeQueueContext({
             ...(queueContext || {}),
             addedByUser: activeUser || null
         }, magnetUrl);
+        const hasSeriesQueueHints = Boolean(
+            normalizedQueueContext?.season ||
+            normalizedQueueContext?.episode ||
+            normalizedQueueContext?.sourceType === 'pack' ||
+            normalizedQueueContext?.sourceType === 'episode'
+        );
+        const isSeriesRequest = normalizedCategory === 'series' || normalizedCategory === 'series-streamer' || hasSeriesQueueHints;
+        const targetCategory = isSeriesRequest ? 'series-streamer' : 'movie-streamer';
         const effectiveImdbId = normalizeImdbId(imdbId || normalizedQueueContext.imdbId);
 
-        if (effectiveImdbId) {
+        // Only short-circuit already-available requests for movies.
+        // TV requests should still enqueue magnets so missing episodes/seasons can be acquired.
+        if (effectiveImdbId && !isSeriesRequest) {
             const attached = await attachExistingMediaToUserLibrary({ imdbId: effectiveImdbId, activeUser });
             if (attached.attached) {
                 return res.status(200).json({

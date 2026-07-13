@@ -11,6 +11,7 @@ const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
 const MetadataRegistry = require('../MetadataRegistry');
 const ProfileService = require('../ProfileService');
 const MailerService = require('../MailerService');
+const SeriesFolderResolver = require('../SeriesFolderResolver');
 const { buildDefaultWorkerEndpoints } = require('../WorkerEndpoints');
 const {
     userGroup,
@@ -128,7 +129,8 @@ function normalizeQueueContext(existingContext, torrentName, imdbId) {
         episode,
         sourceType,
         addedByUser: addedByUser || null,
-        libraryGroups
+        libraryGroups,
+        targetShowFolder: context.targetShowFolder ? String(context.targetShowFolder) : null
     };
 }
 
@@ -519,6 +521,18 @@ async function processNextJob(job) {
         job.payload?.queueContext?.imdbId
     ) || null;
 
+    const resolvedSeriesFolder = (() => {
+        if ((job.contentType || '') !== 'series' || !resolvedJobImdbId) return null;
+        const found = SeriesFolderResolver.findSeriesFolderByImdbId(resolvedJobImdbId);
+        return found?.folderName || null;
+    })();
+
+    const resolvedQueueContext = {
+        ...(job.payload?.queueContext || {}),
+        imdbId: resolvedJobImdbId || job.payload?.queueContext?.imdbId || null,
+        targetShowFolder: resolvedSeriesFolder || job.payload?.queueContext?.targetShowFolder || null
+    };
+
     const stepMap = {
         INGEST: {
             workerUrl: WORKER_ENDPOINTS.INGEST,
@@ -527,7 +541,7 @@ async function processNextJob(job) {
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (path.basename(job.payload?.rawPath || '') || job.payload?.torrentName || job.id),
                 contentType: job.contentType || 'movie',
                 imdbId: resolvedJobImdbId,
-                queueContext: job.payload?.queueContext || null
+                queueContext: resolvedQueueContext
             }
         },
         METADATA: {
