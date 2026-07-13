@@ -203,20 +203,121 @@ function mergeSeriesTreeContents(sourceDir, targetDir) {
 }
 
 function buildSeriesRenameMetadata(existingMetadata, folderPath, targetFolderName, imdbId, title) {
+    const normalizeImdbId = (value) => {
+        const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+        if (!/^\d{5,10}$/.test(cleaned)) return '';
+        return `tt${cleaned}`;
+    };
+
+    const resolvedImdbId = normalizeImdbId(
+        imdbId ||
+        existingMetadata.imdbId ||
+        existingMetadata.imdb_id ||
+        existingMetadata.imdbID ||
+        existingMetadata.metadata?.imdbId ||
+        existingMetadata.metadata?.imdb_id ||
+        existingMetadata.metadata?.imdbID ||
+        ''
+    ) || null;
+
     return {
         ...existingMetadata,
         title: title || existingMetadata.title || targetFolderName.replace(/[._-]/g, ' '),
         contentType: 'series',
         folderName: targetFolderName,
         folderPath,
-        imdbId: imdbId || existingMetadata.imdbId || existingMetadata.imdbID || null,
-        imdb_id: imdbId || existingMetadata.imdb_id || existingMetadata.imdbId || existingMetadata.imdbID || null,
+        imdbId: resolvedImdbId,
+        imdb_id: resolvedImdbId,
+        metadata: {
+            ...(existingMetadata.metadata || {}),
+            imdbId: resolvedImdbId,
+            imdb_id: resolvedImdbId
+        },
         pipelineState: {
             ...(existingMetadata.pipelineState || {}),
             currentStep: 'COMPLETED',
             lastUpdated: new Date().toISOString(),
             error: null
         }
+    };
+}
+
+async function migrateSeriesReferencesForUsers({ oldFolderName, newFolderName, imdbId }) {
+    const oldId = `series/${String(oldFolderName || '').trim()}`;
+    const newId = `series/${String(newFolderName || '').trim()}`;
+    if (!oldFolderName || !newFolderName || oldId === newId) {
+        return { usersScanned: 0, watchLaterUpdated: 0, playbackUpdated: 0 };
+    }
+
+    const cleanImdb = String(imdbId || '').trim().toLowerCase();
+    const users = await ProfileService.listUsers();
+    let watchLaterUpdated = 0;
+    let playbackUpdated = 0;
+
+    for (const userKey of users) {
+        // Migrate watch-later IDs/hrefs.
+        try {
+            const watchLater = await ProfileService.readData(userKey, 'watch_later', { items: [] });
+            const rows = Array.isArray(watchLater.items) ? watchLater.items : [];
+            let changed = false;
+
+            const nextRows = rows.map((row) => {
+                const rowId = String(row?.id || '').trim();
+                const rowImdb = String(row?.imdbId || '').trim().toLowerCase();
+                const rowType = String(row?.contentType || '').toLowerCase();
+                const imdbMatch = Boolean(cleanImdb && rowImdb && rowImdb === cleanImdb && rowType === 'series');
+                const idMatch = rowId === oldId;
+                if (!idMatch && !imdbMatch) return row;
+
+                changed = true;
+                return {
+                    ...row,
+                    id: newId,
+                    href: `/series.html?id=${encodeURIComponent(newId)}`,
+                    updatedAt: new Date().toISOString()
+                };
+            });
+
+            if (changed) {
+                const deduped = [];
+                const seen = new Set();
+                for (const row of nextRows) {
+                    const key = String(row?.id || '').trim();
+                    if (!key || seen.has(key)) continue;
+                    seen.add(key);
+                    deduped.push(row);
+                }
+
+                await ProfileService.writeData(userKey, 'watch_later', { items: deduped.slice(0, 2000) });
+                watchLaterUpdated += 1;
+            }
+        } catch (_err) {
+            // Keep migration best-effort; do not block normalization.
+        }
+
+        // Migrate playback progress key.
+        try {
+            const playback = await ProfileService.readData(userKey, 'playback', {});
+            if (!playback || typeof playback !== 'object') continue;
+            if (!Object.prototype.hasOwnProperty.call(playback, oldId)) continue;
+
+            const nextPlayback = { ...playback };
+            if (!Object.prototype.hasOwnProperty.call(nextPlayback, newId)) {
+                nextPlayback[newId] = nextPlayback[oldId];
+            }
+            delete nextPlayback[oldId];
+
+            await ProfileService.writeData(userKey, 'playback', nextPlayback);
+            playbackUpdated += 1;
+        } catch (_err) {
+            // Keep migration best-effort; do not block normalization.
+        }
+    }
+
+    return {
+        usersScanned: Array.isArray(users) ? users.length : 0,
+        watchLaterUpdated,
+        playbackUpdated
     };
 }
 
@@ -1246,6 +1347,11 @@ router.post('/series/normalize-folder', async (req, res) => {
 
         const scanSummary = await LibraryScanner.runLibraryScanSweep();
         await refreshLibraryFeeds();
+        const userReferenceMigration = await migrateSeriesReferencesForUsers({
+            oldFolderName: cleanFolder,
+            newFolderName: finalFolderName,
+            imdbId: nextMetadata.imdbId || cleanImdbId || ''
+        });
 
         return res.json({
             success: true,
@@ -1255,6 +1361,7 @@ router.post('/series/normalize-folder', async (req, res) => {
             renameMode,
             mergeSummary,
             reorgSummary,
+            userReferenceMigration,
             totalSeasons: seriesManifest.totalSeasons,
             scanSummary
         });
