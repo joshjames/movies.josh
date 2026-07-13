@@ -181,13 +181,14 @@ function scanDirectory(basePath, contentType) {
         const hasImdbReference = Boolean(effectiveImdbId);
 
         if (!isRemote && mustHaveMetadata && !hasMetadataFile && !markerImdbId) {
-            logger.debug(`⏭️ Skipping unmanaged ${contentType} folder (missing metadata.json or metadata.<IMDBID> marker): ${folder}`);
+            logger.debug(`⏭️ Skipping unmanaged ${contentType} folder (missing metadata.json, metadata.<IMDBID>, or metadata.imdbid marker): ${folder}`);
             continue;
         }
 
-        if (!isRemote && mustHaveMetadata && !hasImdbReference) {
-            logger.debug(`⏭️ Skipping unmanaged ${contentType} folder (missing IMDb reference in metadata.json or metadata.<IMDBID>): ${folder}`);
-            continue;
+        // Keep managed folders visible even when imdbId is temporarily blank.
+        // This prevents sweep-based disappearance for local items that already have metadata.json.
+        if (!isRemote && mustHaveMetadata && !hasImdbReference && hasMetadataFile) {
+            logger.debug(`ℹ️ ${contentType} folder missing IMDb id but retained because metadata.json exists: ${folder}`);
         }
 
         if (hasPartialMarkers) {
