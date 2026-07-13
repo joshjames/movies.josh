@@ -33,31 +33,108 @@ function normalizeImdbId(value) {
     return `tt${cleaned}`;
 }
 
-function findImdbMarkerFile(itemPath) {
+function normalizeFolderTitle(folderName = '') {
+    return String(folderName || '')
+        .replace(/\.[^.]+$/g, '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function consumeImdbMarker(itemPath, folder, metaPath, meta, hasMetadataFile) {
+    let markerPath = '';
+    let markerImdbId = '';
+
     try {
         const entries = fs.readdirSync(itemPath, { withFileTypes: true });
+
         for (const entry of entries) {
             if (!entry.isFile()) continue;
             const fileName = String(entry.name || '');
             const match = fileName.match(/^metadata\.(tt)?(\d{5,10})$/i);
             if (!match) continue;
-            return normalizeImdbId(match[2]);
+            markerImdbId = normalizeImdbId(match[2]);
+            markerPath = path.join(itemPath, entry.name);
+            break;
         }
 
-        // Alternate marker format: a file named metadata.imdbid containing tt1234567 (or 1234567)
-        const contentMarker = entries.find((entry) => entry.isFile() && String(entry.name || '').toLowerCase() === 'metadata.imdbid');
-        if (contentMarker) {
-            const markerPath = path.join(itemPath, contentMarker.name);
-            const markerValue = fs.readFileSync(markerPath, 'utf-8');
-            const match = String(markerValue || '').match(/(?:tt)?(\d{5,10})/i);
-            if (match) {
-                return normalizeImdbId(match[1]);
+        if (!markerImdbId) {
+            const contentMarker = entries.find((entry) => entry.isFile() && String(entry.name || '').toLowerCase() === 'metadata.imdbid');
+            if (contentMarker) {
+                markerPath = path.join(itemPath, contentMarker.name);
+                const markerValue = fs.readFileSync(markerPath, 'utf-8');
+                const match = String(markerValue || '').match(/(?:tt)?(\d{5,10})/i);
+                if (match) {
+                    markerImdbId = normalizeImdbId(match[1]);
+                }
             }
         }
+
+        if (!markerImdbId) {
+            return '';
+        }
     } catch (_err) {
-        return '';
+        return markerImdbId || '';
     }
-    return '';
+
+    const existingImdb = normalizeImdbId(meta?.imdbId || meta?.imdb_id || meta?.metadata?.imdbId || meta?.metadata?.imdb_id || '');
+    if (existingImdb) {
+        try {
+            if (markerPath && fs.existsSync(markerPath)) {
+                fs.unlinkSync(markerPath);
+                logger.info(`🧹 Consumed redundant IMDb marker for ${folder}: ${path.basename(markerPath)}`);
+            }
+        } catch (_err) {
+            logger.warn(`⚠️ Failed removing redundant IMDb marker for ${folder}: ${_err.message}`);
+        }
+        return existingImdb;
+    }
+
+    const baseMeta = (meta && typeof meta === 'object') ? { ...meta } : {};
+    const mergedMeta = {
+        ...baseMeta,
+        title: baseMeta.title || baseMeta.metadata?.title || normalizeFolderTitle(folder),
+        year: baseMeta.year || baseMeta.metadata?.year || '',
+        genre: baseMeta.genre || baseMeta.metadata?.genre || '',
+        plot: baseMeta.plot || baseMeta.metadata?.plot || '',
+        contentType: baseMeta.contentType || baseMeta.metadata?.contentType || 'movie',
+        imdbId: markerImdbId,
+        imdb_id: markerImdbId,
+        metadata: {
+            ...(baseMeta.metadata || {}),
+            imdbId: markerImdbId,
+            imdb_id: markerImdbId,
+            title: (baseMeta.metadata || {}).title || baseMeta.title || normalizeFolderTitle(folder),
+            year: (baseMeta.metadata || {}).year || baseMeta.year || '',
+            genre: (baseMeta.metadata || {}).genre || baseMeta.genre || '',
+            plot: (baseMeta.metadata || {}).plot || baseMeta.plot || ''
+        },
+        pipelineState: {
+            ...(baseMeta.pipelineState || {}),
+            currentStep: baseMeta.pipelineState?.currentStep || 'METADATA',
+            lastUpdated: new Date().toISOString(),
+            error: null
+        }
+    };
+
+    try {
+        fs.writeFileSync(metaPath, JSON.stringify(mergedMeta, null, 4), 'utf-8');
+        logger.info(`🧭 Consumed IMDb marker for ${folder}; metadata.json updated with ${markerImdbId}.`);
+    } catch (writeErr) {
+        logger.warn(`⚠️ Failed writing metadata.json from IMDb marker for ${folder}: ${writeErr.message}`);
+    }
+
+    try {
+        if (markerPath && fs.existsSync(markerPath)) {
+            fs.unlinkSync(markerPath);
+            logger.info(`🧹 Removed consumed IMDb marker token for ${folder}: ${path.basename(markerPath)}`);
+        }
+    } catch (_err) {
+        logger.warn(`⚠️ Failed removing consumed IMDb marker token for ${folder}: ${_err.message}`);
+    }
+
+    // Return marker IMDb even if metadata write failed so the current sweep can still include the item.
+    return markerImdbId;
 }
 
 function hasPartialDownloadMarkers(itemPath) {
@@ -110,8 +187,16 @@ function scanDirectory(basePath, contentType) {
         }
 
         const metadataImdbId = normalizeImdbId(meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '');
-        const markerImdbId = findImdbMarkerFile(itemPath);
+        const markerImdbId = consumeImdbMarker(itemPath, folder, metaPath, meta, hasMetadataFile);
         const effectiveImdbId = metadataImdbId || markerImdbId;
+
+        if (markerImdbId && !metadataImdbId && fs.existsSync(metaPath)) {
+            try {
+                meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            } catch (_err) {
+                // Keep scan resilient if refresh read fails.
+            }
+        }
 
         const remoteProfiles = Object.values(meta.storage?.files || {}).filter(fileBlock =>
             fileBlock && fileBlock.status === 'synced' && Boolean(fileBlock.remoteKey)
@@ -185,10 +270,9 @@ function scanDirectory(basePath, contentType) {
             continue;
         }
 
-        // Keep managed folders visible even when imdbId is temporarily blank.
-        // This prevents sweep-based disappearance for local items that already have metadata.json.
-        if (!isRemote && mustHaveMetadata && !hasImdbReference && hasMetadataFile) {
-            logger.debug(`ℹ️ ${contentType} folder missing IMDb id but retained because metadata.json exists: ${folder}`);
+        if (!isRemote && mustHaveMetadata && !hasImdbReference) {
+            logger.debug(`⏭️ Skipping unmanaged ${contentType} folder (missing IMDb reference in metadata.json, metadata.<IMDBID>, or metadata.imdbid): ${folder}`);
+            continue;
         }
 
         if (hasPartialMarkers) {

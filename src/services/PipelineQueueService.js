@@ -38,16 +38,24 @@ async function hydrateJobsFromRedis() {
 
   try {
     let loaded = 0;
-    for await (const key of redisClient.scanIterator({ MATCH: `${JOB_PREFIX}*`, COUNT: 200 })) {
-      try {
-        const raw = await redisClient.get(key);
-        if (!raw) continue;
-        const parsed = JSON.parse(raw);
-        if (!parsed || !parsed.id) continue;
-        jobs.set(parsed.id, parsed);
-        loaded += 1;
-      } catch (entryErr) {
-        logger.warn(`⚠️ Failed hydrating queue entry ${key}: ${entryErr.message}`);
+    for await (const scanEntry of redisClient.scanIterator({ MATCH: `${JOB_PREFIX}*`, COUNT: 200 })) {
+      const keys = Array.isArray(scanEntry) ? scanEntry : [scanEntry];
+      for (const key of keys) {
+        if (typeof key !== 'string') {
+          logger.warn(`⚠️ Failed hydrating queue entry (non-string key): ${JSON.stringify(key)}`);
+          continue;
+        }
+
+        try {
+          const raw = await redisClient.get(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (!parsed || !parsed.id) continue;
+          jobs.set(parsed.id, parsed);
+          loaded += 1;
+        } catch (entryErr) {
+          logger.warn(`⚠️ Failed hydrating queue entry ${key}: ${entryErr.message}`);
+        }
       }
     }
 

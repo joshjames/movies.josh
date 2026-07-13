@@ -10,11 +10,42 @@ const FALLBACK_FILE = path.join(__dirname, '../../metadata/fallback_library.json
 const DEFAULT_REDIS_HOST = process.env.REDIS_HOST || 'redis';
 const DEFAULT_REDIS_PORT = process.env.REDIS_PORT || '6379';
 const REDIS_URL = process.env.REDIS_URL || `redis://${DEFAULT_REDIS_HOST}:${DEFAULT_REDIS_PORT}/3`;
-const redisClient = createClient({ url: REDIS_URL });
+const REDIS_ENABLED = !['false', '0', 'no'].includes(
+    String(process.env.ENABLE_REDIS || 'true').trim().toLowerCase()
+);
 
-redisClient.on('error', (err) => logger.error(`🚨 Redis Hub Error: ${err.message}`));
+function createDisabledRedisClient() {
+    return {
+        isOpen: false,
+        async connect() { return; },
+        async set() { return; },
+        async get() { return null; },
+        async del() { return 0; },
+        async hGetAll() { return {}; },
+        async hSet() { return 0; },
+        async sendCommand() { return null; }
+    };
+}
+
+const redisClient = REDIS_ENABLED
+    ? createClient({
+        url: REDIS_URL,
+        socket: {
+            connectTimeout: 1000,
+            reconnectStrategy: () => false
+        }
+    })
+    : createDisabledRedisClient();
+
+if (REDIS_ENABLED) {
+    redisClient.on('error', (err) => logger.error(`🚨 Redis Hub Error: ${err.message}`));
+}
 
 async function connectDb() {
+    if (!REDIS_ENABLED) {
+        return;
+    }
+
     try {
         if (!redisClient.isOpen) {
             await redisClient.connect();
