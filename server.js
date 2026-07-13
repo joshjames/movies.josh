@@ -10,7 +10,7 @@ const cookieParser = require('cookie-parser');
 // All relative imports explicitly point down into the src/ directory tree
 const logger = require('./src/services/logger');
 const LibraryScanner = require('./src/services/LibraryScanner');
-const { startPipelineWorker } = require('./src/services/workers/PipelineWorker');
+const { startPipelineWorker, reconcileQueueStartupState } = require('./src/services/workers/PipelineWorker');
 const { initRedis } = require('./src/services/PipelineQueueService');
 const ProfileService = require('./src/services/ProfileService');
 
@@ -160,6 +160,7 @@ app.use('/api/*', (req, res) => {
     }
     
     if (ENABLE_PIPELINE_WATCHER) {
+        await reconcileQueueStartupState().catch(err => logger.warn(`Queue startup reconciliation note: ${err.message}`));
         logger.info('Queue-driven pipeline active; waiting for torrent completion events.');
         startPipelineWorker(10000);
     } else {

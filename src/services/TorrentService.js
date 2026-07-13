@@ -15,6 +15,9 @@ const torrentImdbMap = new Map();
 const torrentUserMap = new Map();
 const userTagMap = new Map();
 
+const OWNER_TAG_PREFIX = 'owner-';
+const IMDB_TAG_PREFIX = 'imdb-';
+
 function normalizeUserKey(value) {
     const clean = String(value || '').trim().toLowerCase();
     if (!clean || clean === 'guest') return null;
@@ -26,6 +29,37 @@ function buildUserTag(userKey) {
     if (!clean) return null;
     const encoded = clean.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     return encoded ? `user-${encoded}` : null;
+}
+
+function encodeTagToken(value) {
+    return Buffer.from(String(value || ''), 'utf8').toString('base64url');
+}
+
+function decodeTagToken(value) {
+    try {
+        const decoded = Buffer.from(String(value || ''), 'base64url').toString('utf8');
+        return decoded || '';
+    } catch (_err) {
+        return '';
+    }
+}
+
+function buildOwnerRecoveryTag(userKey) {
+    const clean = normalizeUserKey(userKey);
+    if (!clean) return null;
+    const encoded = encodeTagToken(clean);
+    return encoded ? `${OWNER_TAG_PREFIX}${encoded}` : null;
+}
+
+function normalizeImdbId(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return null;
+    return `tt${cleaned}`;
+}
+
+function buildImdbRecoveryTag(imdbId) {
+    const clean = normalizeImdbId(imdbId);
+    return clean ? `${IMDB_TAG_PREFIX}${clean}` : null;
 }
 
 function normalizeHash(value) {
@@ -51,9 +85,22 @@ function extractInfoHashFromMagnet(magnetUrl) {
 }
 
 function extractUserFromTagList(tagList = []) {
+    const ownerTag = tagList.find(tag => tag.startsWith(OWNER_TAG_PREFIX));
+    if (ownerTag) {
+        const encoded = ownerTag.slice(OWNER_TAG_PREFIX.length);
+        const decoded = normalizeUserKey(decodeTagToken(encoded));
+        if (decoded) return decoded;
+    }
+
     const userTag = tagList.find(tag => tag.startsWith('user-'));
     if (!userTag) return null;
     return normalizeUserKey(userTagMap.get(userTag)) || null;
+}
+
+function extractImdbFromTagList(tagList = []) {
+    const imdbTag = tagList.find(tag => tag.startsWith(IMDB_TAG_PREFIX));
+    if (!imdbTag) return null;
+    return normalizeImdbId(imdbTag.slice(IMDB_TAG_PREFIX.length));
 }
 
 function buildRedisKey(prefix, hash) {
@@ -113,10 +160,12 @@ class TorrentService {
             const targetTag = targetCategory === 'series-streamer' ? 'series-streamer' : 'movie-streamer';
             const addedByUser = normalizeUserKey(options.addedByUser || options.userKey || options.username);
             const userTag = buildUserTag(addedByUser);
+            const ownerTag = buildOwnerRecoveryTag(addedByUser);
+            const imdbTag = buildImdbRecoveryTag(imdbId);
             if (userTag && addedByUser) {
                 userTagMap.set(userTag, addedByUser);
             }
-            form.append('tags', [targetTag, userTag].filter(Boolean).join(','));
+            form.append('tags', [targetTag, userTag, ownerTag, imdbTag].filter(Boolean).join(','));
 
             const endpoint = `${QBIT_BASE_URL}/torrents/add`;
             await axios.post(endpoint, form, {
@@ -169,7 +218,7 @@ class TorrentService {
                 }
             }
 
-            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] payload with tags [${[targetTag, userTag].filter(Boolean).join(',')}].`);
+            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] payload with tags [${[targetTag, userTag, ownerTag, imdbTag].filter(Boolean).join(',')}].`);
             return { success: true };
         } catch (err) {
             logger.error(`❌ [Torrent Service] Failed to add magnet to qBit: ${err.message}`);
@@ -212,6 +261,16 @@ class TorrentService {
             return activeTorrents.filter((torrent) => {
                 const tags = parseTags(torrent.tags);
                 if (tags.includes(requiredUserTag)) return true;
+
+                const recoveredUser = extractUserFromTagList(tags);
+                if (recoveredUser && recoveredUser === requestedUser) {
+                    const hash = normalizeHash(torrent.hash);
+                    if (hash) {
+                        torrentUserMap.set(hash, recoveredUser);
+                        writeRedisMapping(TORRENT_USER_PREFIX, hash, recoveredUser).catch(() => {});
+                    }
+                    return true;
+                }
 
                 const hash = normalizeHash(torrent.hash);
                 if (!hash) return false;
@@ -268,6 +327,28 @@ class TorrentService {
         return null;
     }
 
+    async recoverMappingsFromTorrent(torrent = {}) {
+        const cleanHash = normalizeHash(torrent.hash);
+        const tags = parseTags(torrent.tags);
+        const recoveredUser = extractUserFromTagList(tags);
+        const recoveredImdbId = extractImdbFromTagList(tags);
+
+        if (cleanHash && recoveredUser) {
+            torrentUserMap.set(cleanHash, recoveredUser);
+            await writeRedisMapping(TORRENT_USER_PREFIX, cleanHash, recoveredUser);
+        }
+
+        if (cleanHash && recoveredImdbId) {
+            torrentImdbMap.set(cleanHash, recoveredImdbId);
+            await writeRedisMapping(TORRENT_IMDB_PREFIX, cleanHash, recoveredImdbId);
+        }
+
+        return {
+            addedByUser: recoveredUser,
+            imdbId: recoveredImdbId
+        };
+    }
+
     /**
      * Store IMDB ID for a torrent hash
      * @param {string} hash 
@@ -306,6 +387,10 @@ class TorrentService {
 
     extractAddedByUserFromTags(tags) {
         return extractUserFromTagList(parseTags(tags));
+    }
+
+    extractImdbIdFromTags(tags) {
+        return extractImdbFromTagList(parseTags(tags));
     }
 
     async pauseTorrentByHash(hash) {

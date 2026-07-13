@@ -39,6 +39,15 @@ function normalizeTags(tags) {
     return Array.isArray(tags) ? tags.join(',') : String(tags);
 }
 
+function isPipelineTorrentTagString(tagStr) {
+    return (
+        tagStr.includes('movie-streamer') ||
+        tagStr.includes('series-streamer') ||
+        tagStr.includes('movie-streamer-processed') ||
+        tagStr.includes('series-streamer-processed')
+    );
+}
+
 function inferContentType(tagStr) {
     return tagStr.includes('series-streamer') ? 'series' : 'movie';
 }
@@ -384,9 +393,13 @@ async function enqueueCompletedTorrent(torrent) {
     if (!tagStr.includes('movie-streamer') && !tagStr.includes('series-streamer')) return null;
     if (tagStr.includes('-processed')) return null;
 
+    await TorrentService.recoverMappingsFromTorrent(torrent);
+
     // Retrieve IMDB ID from TorrentService mapping
     const isSeries = tagStr.includes('series-streamer');
-    let imdbId = normalizeImdbId(await TorrentService.getImdbIdByHash(torrent.hash));
+    let imdbId = normalizeImdbId(
+        TorrentService.extractImdbIdFromTags(torrent.tags) || await TorrentService.getImdbIdByHash(torrent.hash)
+    );
     if (!imdbId && isSeries) {
         imdbId = inferSeriesImdbIdFromTorrentName(torrent.name);
         if (imdbId) {
@@ -765,11 +778,95 @@ async function checkPipelineCompletions() {
     }
 }
 
+function hasUsableJobPath(job) {
+    const candidatePaths = [job?.payload?.cleanPath, job?.payload?.rawPath]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+    return candidatePaths.some((candidatePath) => {
+        try {
+            return fs.existsSync(candidatePath);
+        } catch (_err) {
+            return false;
+        }
+    });
+}
+
+async function reconcileQueueStartupState() {
+    logger.info('🧰 [Queue] Running startup reconciliation for torrent ownership and queue alignment...');
+
+    try {
+        const qbitRes = await axios.get(`${QBIT_URL}/api/v2/torrents/info`, { timeout: 8000 });
+        const allTorrents = Array.isArray(qbitRes.data) ? qbitRes.data : [];
+        const pipelineTorrents = allTorrents.filter((torrent) => isPipelineTorrentTagString(normalizeTags(torrent.tags)));
+
+        let recoveredMappings = 0;
+        for (const torrent of pipelineTorrents) {
+            const recovered = await TorrentService.recoverMappingsFromTorrent(torrent);
+            if (recovered.addedByUser || recovered.imdbId) {
+                recoveredMappings += 1;
+            }
+        }
+
+        const liveHashes = new Set(
+            pipelineTorrents
+                .map((torrent) => String(torrent.hash || '').trim().toLowerCase())
+                .filter(Boolean)
+        );
+        const liveNames = new Set(
+            pipelineTorrents
+                .map((torrent) => String(torrent.name || '').trim())
+                .filter(Boolean)
+        );
+
+        let removedStaleJobs = 0;
+        const jobs = getAllJobs();
+        for (const job of jobs) {
+            const jobHash = String(job?.payload?.torrentHash || '').trim().toLowerCase();
+            const jobName = String(job?.payload?.torrentName || '').trim();
+            const linkedToLiveTorrent = Boolean(
+                (jobHash && liveHashes.has(jobHash)) ||
+                (jobName && liveNames.has(jobName))
+            );
+
+            const waitingLike = ['WAITING_DOWNLOAD', 'PAUSED_DOWNLOAD'].includes(String(job?.status || '').toUpperCase());
+            const failedWithoutPath = String(job?.status || '').toUpperCase() === 'FAILED' && !hasUsableJobPath(job);
+            const queuedWithoutPath = String(job?.status || '').toUpperCase() === 'QUEUED' && !hasUsableJobPath(job);
+
+            if (linkedToLiveTorrent) continue;
+
+            if (waitingLike || failedWithoutPath || queuedWithoutPath) {
+                logger.warn(`🧹 [Queue] Removing stale startup job ${job.id} | status=${job.status} | name=${jobName || 'unknown'} | hash=${jobHash || 'none'}`);
+                removeJob(job.id);
+                removedStaleJobs += 1;
+            }
+        }
+
+        logger.info(`🧰 [Queue] Startup reconciliation complete. pipelineTorrents=${pipelineTorrents.length} recoveredMappings=${recoveredMappings} removedStaleJobs=${removedStaleJobs}`);
+        return {
+            success: true,
+            pipelineTorrents: pipelineTorrents.length,
+            recoveredMappings,
+            removedStaleJobs
+        };
+    } catch (err) {
+        logger.warn(`⚠️ [Queue] Startup reconciliation skipped: ${err.message}`);
+        return {
+            success: false,
+            error: err.message,
+            pipelineTorrents: 0,
+            recoveredMappings: 0,
+            removedStaleJobs: 0
+        };
+    }
+}
+
 module.exports = {
     startPipelineWorker(intervalMs = 10000) {
         logger.debug(`⚙️  Autonomous pipeline queue manager active. Monitoring completions every ${intervalMs}ms...`);
         setInterval(checkPipelineCompletions, intervalMs);
     },
+    reconcileQueueStartupState,
     createJob,
     getJob,
     getAllJobs,

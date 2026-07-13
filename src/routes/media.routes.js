@@ -15,7 +15,12 @@ const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
 const ProfileService = require('../services/ProfileService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
-const { buildMyLibraryCollection } = require('../services/LibraryAccessService');
+const {
+    GROUP_GLOBAL,
+    buildMyLibraryCollection,
+    canUserSeeMedia,
+    getGroupsFromMedia
+} = require('../services/LibraryAccessService');
 const {
     getSeriesRoots,
     resolveMovieFolderPath,
@@ -1148,10 +1153,22 @@ router.get('/home-feed', (req, res) => {
 
     return getLibrary()
         .then((library) => {
-            const validLibraryIds = new Set([
+            const allLibraryRows = [
                 ...(Array.isArray(library?.movies) ? library.movies : []),
                 ...(Array.isArray(library?.shows) ? library.shows : [])
-            ].map(item => String(item?.id || '')).filter(Boolean));
+            ];
+
+            const validLibraryIds = new Set(allLibraryRows.map(item => String(item?.id || '')).filter(Boolean));
+
+            const visibleLibraryRows = allLibraryRows.filter((item) => canUserSeeMedia(item, activeUser));
+            const visibleLibraryIds = new Set(visibleLibraryRows.map((item) => String(item?.id || '')).filter(Boolean));
+
+            const globalLibraryIds = new Set(
+                allLibraryRows
+                    .filter((item) => getGroupsFromMedia(item).includes(GROUP_GLOBAL))
+                    .map((item) => String(item?.id || ''))
+                    .filter(Boolean)
+            );
 
             const myLibraryCollection = buildMyLibraryCollection(library, activeUser, { limit: 18 });
             myLibraryCollection.cards = (myLibraryCollection.cards || []).map((item) => normalizeCard(item));
@@ -1160,11 +1177,24 @@ router.get('/home-feed', (req, res) => {
             const withoutExistingMyShelf = existing
                 .filter((collection) => collection.id !== 'my-library-row')
                 .map((collection) => {
-                    if (collection.id !== 'recently-added-row') return collection;
                     const cards = Array.isArray(collection.cards) ? collection.cards : [];
+
+                    if (collection.id === 'recently-added-row') {
+                        return {
+                            ...collection,
+                            cards: cards.filter((card) => {
+                                const cardId = String(card?.id || '');
+                                return validLibraryIds.has(cardId) && globalLibraryIds.has(cardId);
+                            })
+                        };
+                    }
+
                     return {
                         ...collection,
-                        cards: cards.filter((card) => validLibraryIds.has(String(card?.id || '')))
+                        cards: cards.filter((card) => {
+                            const cardId = String(card?.id || '');
+                            return validLibraryIds.has(cardId) && visibleLibraryIds.has(cardId);
+                        })
                     };
                 });
             const first = withoutExistingMyShelf[0] || null;
@@ -1299,8 +1329,9 @@ router.get('/movies', async (req, res) => {
     try {
         // Safe extraction from your actual hot-cache database layout
         const library = await getLibrary();
-        const cachedMovies = library.movies || [];
-        const cachedShows = library.shows || [];
+        const activeUser = getActiveUser(req);
+        const cachedMovies = (library.movies || []).filter((item) => canUserSeeMedia(item, activeUser));
+        const cachedShows = (library.shows || []).filter((item) => canUserSeeMedia(item, activeUser));
 
         // Normalize data flags: ensure TV Shows have their flag set for index.html mapping
         const normalizedShows = cachedShows.map(show => ({
