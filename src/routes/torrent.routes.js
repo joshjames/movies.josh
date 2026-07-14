@@ -877,6 +877,36 @@ router.get('/pipeline/status', async (req, res) => {
         let failedJobs = [];
 
         const allJobs = getAllJobs();
+
+        // Build a full pipeline hash index from qBittorrent so stale placeholders can be reconciled.
+        let knownPipelineHashes = new Set();
+        let activePipelineHashes = new Set();
+        let reconciliationReady = false;
+        try {
+            const qbitBase = process.env.QBIT_API_URL || 'http://qbittorrent:8080/api/v2';
+            const qbitSnapshot = await axios.get(`${qbitBase}/torrents/info`, { timeout: 3500 });
+            const pipelineTorrents = (qbitSnapshot.data || []).filter((torrent) => {
+                const tags = String(torrent?.tags || '');
+                return tags.includes('movie-streamer') || tags.includes('series-streamer');
+            });
+
+            knownPipelineHashes = new Set(
+                pipelineTorrents
+                    .map(torrent => String(torrent?.hash || '').trim().toLowerCase())
+                    .filter(Boolean)
+            );
+
+            activePipelineHashes = new Set(
+                pipelineTorrents
+                    .filter((torrent) => !String(torrent?.tags || '').includes('-processed'))
+                    .map(torrent => String(torrent?.hash || '').trim().toLowerCase())
+                    .filter(Boolean)
+            );
+            reconciliationReady = true;
+        } catch (snapshotErr) {
+            logger.warn(`[Queue API] qBittorrent reconciliation skipped: ${snapshotErr.message}`);
+        }
+
         const waitingByHash = new Map();
         allJobs.forEach((job) => {
             const hash = String(job?.payload?.torrentHash || '').trim().toLowerCase();
@@ -884,8 +914,31 @@ router.get('/pipeline/status', async (req, res) => {
             if (job.status !== 'WAITING_DOWNLOAD' && job.status !== 'PAUSED_DOWNLOAD') return;
             if (!waitingByHash.has(hash)) {
                 waitingByHash.set(hash, job);
+                return;
             }
+
+            const existing = waitingByHash.get(hash);
+            const existingTs = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
+            const incomingTs = new Date(job?.updatedAt || job?.createdAt || 0).getTime();
+            if (incomingTs >= existingTs) waitingByHash.set(hash, job);
         });
+
+        // Remove orphaned waiting placeholders that no longer exist in qBittorrent.
+        if (reconciliationReady) {
+            for (const [hash, waitingJob] of waitingByHash.entries()) {
+                const isWaiting = waitingJob.status === 'WAITING_DOWNLOAD' || waitingJob.status === 'PAUSED_DOWNLOAD';
+                if (!isWaiting) continue;
+                if (knownPipelineHashes.has(hash)) continue;
+
+                // If qBittorrent is reachable and this hash is absent from the full snapshot,
+                // prune the stale placeholder to avoid ghost rows in queue UI.
+                removeJob(waitingJob.id);
+                waitingByHash.delete(hash);
+                logger.info(`[Queue API] Pruned stale waiting job ${waitingJob.id} (hash ${hash.slice(0, 8)} not found in qBittorrent).`);
+            }
+        }
+
+        const displayJobs = reconciliationReady ? getAllJobs() : allJobs;
 
         // 1. Get active downloads from qBittorrent
         const torrents = await TorrentService.getActivePipelineTorrents(
@@ -931,7 +984,7 @@ router.get('/pipeline/status', async (req, res) => {
         }
 
         // 2. Get active jobs from queue system
-        allJobs.forEach(job => {
+        displayJobs.forEach(job => {
             const jobOwner = getJobOwner(job);
             if (viewerUser && (!jobOwner || jobOwner !== viewerUser)) {
                 return;
@@ -957,6 +1010,10 @@ router.get('/pipeline/status', async (req, res) => {
             }
 
             if (job.status === 'PAUSED_DOWNLOAD') {
+                const hash = String(job?.payload?.torrentHash || '').trim().toLowerCase();
+                if (hash && activePipelineHashes.has(hash)) {
+                    return;
+                }
                 pipeline.push({
                     title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
                     progress: 0,
@@ -1007,6 +1064,11 @@ router.get('/pipeline/status', async (req, res) => {
             };
 
             if (job.status === 'WAITING_DOWNLOAD') {
+                const hash = String(job?.payload?.torrentHash || '').trim().toLowerCase();
+                if (hash && activePipelineHashes.has(hash)) {
+                    // qBittorrent row already represents this in-progress download.
+                    return;
+                }
                 pipeline.push({
                     title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
                     progress: 0,
