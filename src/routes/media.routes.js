@@ -186,12 +186,9 @@ function buildLibraryMovieIndexes(localRows = []) {
 
         const titleKey = normalizeSearchText(item.title || '');
         const yearKey = String(item.year || '').trim();
-        if (titleKey) {
-            if (!byTitleYear.has(titleKey)) byTitleYear.set(titleKey, item);
-            if (yearKey) {
-                const fullKey = `${titleKey}|${yearKey}`;
-                if (!byTitleYear.has(fullKey)) byTitleYear.set(fullKey, item);
-            }
+        if (titleKey && yearKey) {
+            const fullKey = `${titleKey}|${yearKey}`;
+            if (!byTitleYear.has(fullKey)) byTitleYear.set(fullKey, item);
         }
     }
 
@@ -274,9 +271,8 @@ function indexLocalMovieKeys(localRows = []) {
 
         const titleKey = normalizeSearchText(item.title || '');
         const yearKey = String(item.year || '').trim();
-        if (titleKey) {
-            titleYearSet.add(titleKey);
-            if (yearKey) titleYearSet.add(`${titleKey}|${yearKey}`);
+        if (titleKey && yearKey) {
+            titleYearSet.add(`${titleKey}|${yearKey}`);
         }
     });
 
@@ -1435,7 +1431,6 @@ router.get('/movies/search/unified', async (req, res) => {
                 const yearKey = String(movie.year || '').trim();
                 const inLibrary = Boolean(
                     (imdbId && localKeys.imdbSet.has(imdbId))
-                    || (titleKey && localKeys.titleYearSet.has(titleKey))
                     || (titleKey && yearKey && localKeys.titleYearSet.has(`${titleKey}|${yearKey}`))
                 );
 
@@ -1547,8 +1542,7 @@ router.get('/catalogs/movies/:slug', async (req, res) => {
             const titleKey = normalizeSearchText(title);
             const byImdb = imdbId ? index.byImdb.get(imdbId) : null;
             const byTitleYear = titleKey && year ? index.byTitleYear.get(`${titleKey}|${year}`) : null;
-            const byTitle = titleKey ? index.byTitleYear.get(titleKey) : null;
-            const localMatch = byImdb || byTitleYear || byTitle || null;
+            const localMatch = byImdb || byTitleYear || null;
 
             return {
                 imdbId,
