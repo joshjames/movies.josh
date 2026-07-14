@@ -46,7 +46,8 @@ function normalizeText(value) {
 
 function parseSeasonEpisodeFromTitle(title) {
     const raw = String(title || '');
-    const sxe = raw.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+    const sxeMatches = Array.from(raw.matchAll(/s(\d{1,2})\s*e(\d{1,2})/gi));
+    const sxe = sxeMatches.length ? sxeMatches[sxeMatches.length - 1] : null;
     if (sxe) {
         return {
             season: parseInt(sxe[1], 10),
@@ -727,7 +728,8 @@ router.post('/downloader/add', async (req, res) => {
         };
         try {
             await TorrentService.addMagnet(magnetUrl, targetCategory, effectiveImdbId, {
-                addedByUser: effectiveQueueContext.addedByUser || activeUser || null
+                addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
+                queueContext: effectiveQueueContext
             });
         } catch (err) {
             if (quotaReservation.token) {
@@ -814,7 +816,8 @@ router.post('/yts/add', async (req, res) => {
         };
         try {
             await TorrentService.addMagnet(magnetUrl, 'movie-streamer', effectiveImdbId, {
-                addedByUser: effectiveQueueContext.addedByUser || activeUser || null
+                addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
+                queueContext: effectiveQueueContext
             });
         } catch (err) {
             if (quotaReservation.token) {

@@ -17,6 +17,9 @@ const userTagMap = new Map();
 
 const OWNER_TAG_PREFIX = 'owner-';
 const IMDB_TAG_PREFIX = 'imdb-';
+const SERIES_SEASON_TAG_PREFIX = 'series-season-';
+const SERIES_EPISODE_TAG_PREFIX = 'series-episode-';
+const SERIES_SOURCE_TAG_PREFIX = 'series-source-';
 
 function normalizeUserKey(value) {
     const clean = String(value || '').trim().toLowerCase();
@@ -72,6 +75,41 @@ function parseTags(tags) {
         .split(',')
         .map(tag => tag.trim())
         .filter(Boolean);
+}
+
+function normalizePositiveInt(value) {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function sanitizeSourceType(value) {
+    const source = String(value || '').trim().toLowerCase();
+    if (source === 'episode' || source === 'pack') return source;
+    return null;
+}
+
+function buildSeriesQueueContextTags(queueContext = {}) {
+    const season = normalizePositiveInt(queueContext?.season);
+    const episode = normalizePositiveInt(queueContext?.episode);
+    const sourceType = sanitizeSourceType(queueContext?.sourceType);
+
+    const tags = [];
+    if (season) tags.push(`${SERIES_SEASON_TAG_PREFIX}${season}`);
+    if (episode) tags.push(`${SERIES_EPISODE_TAG_PREFIX}${episode}`);
+    if (sourceType) tags.push(`${SERIES_SOURCE_TAG_PREFIX}${sourceType}`);
+    return tags;
+}
+
+function extractSeriesQueueContextFromTagList(tagList = []) {
+    const seasonTag = tagList.find(tag => tag.startsWith(SERIES_SEASON_TAG_PREFIX));
+    const episodeTag = tagList.find(tag => tag.startsWith(SERIES_EPISODE_TAG_PREFIX));
+    const sourceTag = tagList.find(tag => tag.startsWith(SERIES_SOURCE_TAG_PREFIX));
+
+    return {
+        season: normalizePositiveInt(seasonTag ? seasonTag.slice(SERIES_SEASON_TAG_PREFIX.length) : null),
+        episode: normalizePositiveInt(episodeTag ? episodeTag.slice(SERIES_EPISODE_TAG_PREFIX.length) : null),
+        sourceType: sanitizeSourceType(sourceTag ? sourceTag.slice(SERIES_SOURCE_TAG_PREFIX.length) : null)
+    };
 }
 
 function extractInfoHashFromMagnet(magnetUrl) {
@@ -162,10 +200,13 @@ class TorrentService {
             const userTag = buildUserTag(addedByUser);
             const ownerTag = buildOwnerRecoveryTag(addedByUser);
             const imdbTag = buildImdbRecoveryTag(imdbId);
+            const seriesQueueTags = targetCategory === 'series-streamer'
+                ? buildSeriesQueueContextTags(options.queueContext || {})
+                : [];
             if (userTag && addedByUser) {
                 userTagMap.set(userTag, addedByUser);
             }
-            form.append('tags', [targetTag, userTag, ownerTag, imdbTag].filter(Boolean).join(','));
+            form.append('tags', [targetTag, userTag, ownerTag, imdbTag, ...seriesQueueTags].filter(Boolean).join(','));
 
             const endpoint = `${QBIT_BASE_URL}/torrents/add`;
             await axios.post(endpoint, form, {
@@ -218,7 +259,7 @@ class TorrentService {
                 }
             }
 
-            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] payload with tags [${[targetTag, userTag, ownerTag, imdbTag].filter(Boolean).join(',')}].`);
+            logger.info(`📥 [Torrent Service] Successfully queued [${targetCategory}] payload with tags [${[targetTag, userTag, ownerTag, imdbTag, ...seriesQueueTags].filter(Boolean).join(',')}].`);
             return { success: true };
         } catch (err) {
             logger.error(`❌ [Torrent Service] Failed to add magnet to qBit: ${err.message}`);
@@ -332,6 +373,7 @@ class TorrentService {
         const tags = parseTags(torrent.tags);
         const recoveredUser = extractUserFromTagList(tags);
         const recoveredImdbId = extractImdbFromTagList(tags);
+        const recoveredQueueContext = extractSeriesQueueContextFromTagList(tags);
 
         if (cleanHash && recoveredUser) {
             torrentUserMap.set(cleanHash, recoveredUser);
@@ -345,7 +387,8 @@ class TorrentService {
 
         return {
             addedByUser: recoveredUser,
-            imdbId: recoveredImdbId
+            imdbId: recoveredImdbId,
+            queueContext: recoveredQueueContext
         };
     }
 
@@ -391,6 +434,10 @@ class TorrentService {
 
     extractImdbIdFromTags(tags) {
         return extractImdbFromTagList(parseTags(tags));
+    }
+
+    extractQueueContextFromTags(tags) {
+        return extractSeriesQueueContextFromTagList(parseTags(tags));
     }
 
     async pauseTorrentByHash(hash) {

@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 function parseSeasonEpisode(fileName = '', fallbackSeason = null) {
-    const sxe = String(fileName).match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
+    const sxeMatches = Array.from(String(fileName).matchAll(/[Ss](\d{1,2})[Ee](\d{1,3})/g));
+    const sxe = sxeMatches.length ? sxeMatches[sxeMatches.length - 1] : null;
     if (sxe) {
         return {
             season: parseInt(sxe[1], 10),

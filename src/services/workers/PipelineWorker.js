@@ -55,7 +55,8 @@ function inferContentType(tagStr) {
 
 function parseSeasonEpisodeFromName(name) {
     const raw = String(name || '');
-    const sxe = raw.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+    const sxeMatches = Array.from(raw.matchAll(/s(\d{1,2})\s*e(\d{1,2})/gi));
+    const sxe = sxeMatches.length ? sxeMatches[sxeMatches.length - 1] : null;
     if (sxe) {
         return {
             season: parseInt(sxe[1], 10),
@@ -395,7 +396,7 @@ async function enqueueCompletedTorrent(torrent) {
     if (!tagStr.includes('movie-streamer') && !tagStr.includes('series-streamer')) return null;
     if (tagStr.includes('-processed')) return null;
 
-    await TorrentService.recoverMappingsFromTorrent(torrent);
+    const recoveredMappings = await TorrentService.recoverMappingsFromTorrent(torrent);
 
     // Retrieve IMDB ID from TorrentService mapping
     const isSeries = tagStr.includes('series-streamer');
@@ -411,6 +412,7 @@ async function enqueueCompletedTorrent(torrent) {
     }
 
     const addedByUser =
+        recoveredMappings?.addedByUser ||
         TorrentService.extractAddedByUserFromTags(torrent.tags) ||
         await TorrentService.getAddedByUserByHash(torrent.hash) ||
         null;
@@ -418,7 +420,10 @@ async function enqueueCompletedTorrent(torrent) {
     const rawPath = resolveTorrentDownloadPath(torrent);
     const resolvedFolderName = rawPath ? path.basename(rawPath) : (torrent.name || null);
     const torrentQueueContext = normalizeQueueContext(
-        { addedByUser },
+        {
+            ...(recoveredMappings?.queueContext || {}),
+            addedByUser
+        },
         resolvedFolderName || torrent.name,
         imdbId || null
     );
@@ -437,6 +442,7 @@ async function enqueueCompletedTorrent(torrent) {
                 videoFile: null,
                 queueContext: normalizeQueueContext(
                     {
+                        ...(recoveredMappings?.queueContext || {}),
                         ...(pendingJob.payload?.queueContext || {}),
                         addedByUser: pendingJob.payload?.queueContext?.addedByUser || addedByUser || null
                     },
@@ -469,6 +475,7 @@ async function enqueueCompletedTorrent(torrent) {
                 rawPath: rawPath || existingJob.payload?.rawPath || null,
                 queueContext: normalizeQueueContext(
                     {
+                        ...(recoveredMappings?.queueContext || {}),
                         ...(existingJob.payload?.queueContext || {}),
                         addedByUser: existingJob.payload?.queueContext?.addedByUser || addedByUser || null
                     },

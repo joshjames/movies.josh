@@ -341,7 +341,8 @@ function normalizeEpisodeToken(value = '') {
 }
 
 function parseSeasonEpisodeFromName(name = '') {
-    const match = String(name || '').match(/[Ss](\d{1,2})[Ee](\d{1,3})/);
+    const matches = Array.from(String(name || '').matchAll(/[Ss](\d{1,2})[Ee](\d{1,3})/g));
+    const match = matches.length ? matches[matches.length - 1] : null;
     if (!match) return null;
     return {
         season: parseInt(match[1], 10),
