@@ -360,20 +360,52 @@ async function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdb
 
 async function removeCompletedTorrentFromClient(job) {
     const torrentHash = String(job.payload?.torrentHash || '').trim();
-    if (!torrentHash) return;
+    if (!torrentHash) return false;
 
     const deleteParams = new URLSearchParams();
     deleteParams.append('hashes', torrentHash);
     deleteParams.append('deleteFiles', 'false');
 
+    let primaryError = null;
     try {
         await axios.post(`${QBIT_URL}/api/v2/torrents/delete`, deleteParams.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             timeout: 5000
         });
         logger.info(`🧹 [Queue] Removed completed torrent from qBittorrent (kept data): ${torrentHash.substring(0, 8)}`);
+        return true;
     } catch (err) {
-        logger.warn(`⚠️ [Queue] Could not remove completed torrent ${torrentHash.substring(0, 8)}: ${err.message}`);
+        primaryError = err;
+    }
+
+    try {
+        const fallback = await TorrentService.deleteTorrentByHash(torrentHash, { deleteFiles: false });
+        if (fallback?.success) {
+            logger.info(`🧹 [Queue] Removed completed torrent via fallback API path (kept data): ${torrentHash.substring(0, 8)}`);
+            return true;
+        }
+        const fallbackError = fallback?.error || 'Unknown fallback delete error';
+        logger.warn(`⚠️ [Queue] Could not remove completed torrent ${torrentHash.substring(0, 8)}: ${(primaryError && primaryError.message) || 'primary delete failed'} | fallback=${fallbackError}`);
+        return false;
+    } catch (fallbackErr) {
+        logger.warn(`⚠️ [Queue] Could not remove completed torrent ${torrentHash.substring(0, 8)}: ${(primaryError && primaryError.message) || 'primary delete failed'} | fallbackException=${fallbackErr.message}`);
+        return false;
+    }
+}
+
+async function retryCompletedTorrentCleanup() {
+    const completedJobs = getAllJobs().filter((job) => {
+        const status = String(job?.status || '').toUpperCase();
+        const step = String(job?.currentStep || '').toUpperCase();
+        return status === 'COMPLETE' || step === 'COMPLETE';
+    });
+
+    for (const job of completedJobs) {
+        const cleaned = await removeCompletedTorrentFromClient(job);
+        if (cleaned) {
+            removeJob(job.id);
+            logger.debug(`✅ [Queue] Completed cleanup retry succeeded for job ${job.id}; removing queue record.`);
+        }
     }
 }
 
@@ -686,7 +718,16 @@ async function processNextJob(job) {
         }
 
         if (updated.status === 'COMPLETE' || updated.currentStep === 'COMPLETE') {
-            await removeCompletedTorrentFromClient(updated);
+            const removedFromClient = await removeCompletedTorrentFromClient(updated);
+            if (!removedFromClient) {
+                logger.warn(`⚠️ [Queue] Job ${updated.id} completed but torrent delete failed; retaining COMPLETE job for cleanup retry.`);
+                return updateJob(updated, {
+                    status: 'COMPLETE',
+                    currentStep: 'COMPLETE',
+                    error: 'Completed pipeline, pending qBittorrent cleanup retry.'
+                });
+            }
+
             removeJob(updated.id);
             logger.debug(`✅ [Queue] Job ${updated.id} finalized and removed from active queue map.`);
             return updated;
@@ -714,6 +755,8 @@ async function checkPipelineCompletions() {
     if (isProcessingPipeline) return;
 
     try {
+        await retryCompletedTorrentCleanup();
+
         const queuedJob = getNextRunnableJob();
         if (queuedJob) {
             isProcessingPipeline = true;

@@ -49,13 +49,13 @@ const PROTECTED_ROOTS = new Set(
 function cleanReleaseName(folderName) {
     let title = folderName.replace(/\[.*?\]/g, '').replace(/\((.*?)\)/g, '$1').replace(/\/+$/, '');
     
-    title = title.replace(/^www\.[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
-    title = title.replace(/^[a-zA-Z0-9-]+\.[a-block|org|net|com|cc|tv|me]+\s*-\s*/i, '');
+    title = title.replace(/^www\.[a-zA-Z0-9-]+\.(?:org|net|com|cc|tv|me)\s*-\s*/i, '');
+    title = title.replace(/^[a-zA-Z0-9-]+\.(?:org|net|com|cc|tv|me)\s*-\s*/i, '');
 
     const junkPatterns = [
-        /[._-]v\d+/i, /[._-]v[eE]r\d+/i, /720p|1080p|2160p|4k/i,
-        /HDTS|CAM|TS|TC|HDRip|WEBRip|BluRay|BRRip/i,
-        /x264|x265|h264|hevc|AVC|AAC|MP3|DDP5\.1/i,
+        /[._-]v\d+/i, /[._-]v[eE]r\d+/i, /\b(?:720p|1080p|2160p|4k)\b/i,
+        /\b(?:HDTS|CAM|TS|TC|HDRip|WEBRip|BluRay|BRRip)\b/i,
+        /\b(?:x264|x265|h264|hevc|AVC|AAC|MP3|DDP5\.1)\b/i,
         /\bMeGusta\b/i,
         /\bingest\b/i,
         /\b(yts|yts\.mx|yts\.am|yts\.gg|yts\.bz)\b/i, 
