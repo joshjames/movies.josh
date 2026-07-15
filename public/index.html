@@ -918,6 +918,29 @@
             `;
         }
 
+        function getCollectionViewAllHref(collection) {
+            const id = String(collection?.id || '').trim();
+            const title = String(collection?.title || '').trim();
+            const encodeQueryValue = (value) => encodeURIComponent(String(value || '').trim());
+
+            if (!id) return '';
+            if (id === 'my-library-row') return '';
+            if (id === 'recently-added-row') {
+                return `/gridview.html?title=${encodeQueryValue('Recently Added')}&sort=recent`;
+            }
+            if (id === 'top-rated-row') {
+                return `/gridview.html?title=${encodeQueryValue('Top Rated')}&sort=score&minScore=8`;
+            }
+            if (id === 'series-row') {
+                return `/gridview.html?title=${encodeQueryValue('TV Shows')}&type=series&sort=title`;
+            }
+            if (id.startsWith('genre-') && title) {
+                return `/gridview.html?title=${encodeQueryValue(title)}&genre=${encodeQueryValue(title)}&sort=title`;
+            }
+
+            return `/gridview.html?title=${encodeQueryValue(title || 'Grid View')}&sort=recent`;
+        }
+
         function renderFeedRow(collection) {
             const cards = Array.isArray(collection.cards) && collection.cards.length > 0
                 ? collection.cards.map(card => {
@@ -938,11 +961,19 @@
                 }).join('')
                 : '<div class="collection-empty">No titles found for this collection.</div>';
 
+            const viewAllHref = getCollectionViewAllHref(collection);
+            const viewAllHtml = viewAllHref
+                ? `<a class="view-all-link" href="${viewAllHref}">View all</a>`
+                : '';
+
             return `
                 <section class="collection-row">
                     <div class="scroller-title">
-                        <h2>${collection.title || 'Collection'}</h2>
-                        ${collection.subtitle ? `<span>${collection.subtitle}</span>` : ''}
+                        <div class="scroller-title-main">
+                            <h2>${collection.title || 'Collection'}</h2>
+                            ${collection.subtitle ? `<span>${collection.subtitle}</span>` : ''}
+                        </div>
+                        ${viewAllHtml}
                     </div>
                     <div class="slider-wrapper">
                         <button class="arrow__btn left-arrow" type="button" onclick="scrollSlider('${collection.id}', -1)">‹</button>
