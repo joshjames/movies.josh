@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Library Grid View</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 16px;
+            background: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .container {
+            max-width: 1360px;
+            margin: 0 auto;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .back-link {
+            color: #93c5fd;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        .back-link:hover {
+            color: #dbeafe;
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.35rem;
+            color: #f8fafc;
+        }
+        .meta-line {
+            color: #94a3b8;
+            font-size: 0.82rem;
+            margin: 4px 0 12px 0;
+        }
+        .toolbar {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 10px;
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+        .toolbar input,
+        .toolbar select,
+        .toolbar button {
+            background: #0b1220;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 9px 10px;
+            font-size: 0.82rem;
+            outline: none;
+        }
+        .toolbar input:focus,
+        .toolbar select:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .toolbar .query { grid-column: span 4; }
+        .toolbar .type { grid-column: span 2; }
+        .toolbar .genre { grid-column: span 2; }
+        .toolbar .sort { grid-column: span 2; }
+        .toolbar .score { grid-column: span 1; }
+        .toolbar .apply { grid-column: span 1; background: #1d4ed8; border-color: #2563eb; font-weight: 700; cursor: pointer; }
+        .toolbar .apply:hover { background: #1e40af; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 14px;
+        }
+        .card {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(2, 6, 23, 0.45);
+        }
+        .cover {
+            width: 100%;
+            aspect-ratio: 2 / 3;
+            object-fit: cover;
+            background: #020617;
+        }
+        .info {
+            padding: 10px;
+            display: grid;
+            gap: 4px;
+        }
+        .title {
+            font-size: 0.86rem;
+            font-weight: 700;
+            line-height: 1.25;
+            color: #f8fafc;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .sub {
+            font-size: 0.74rem;
+            color: #94a3b8;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .badge {
+            display: inline-block;
+            margin-top: 4px;
+            background: #1e3a8a;
+            color: #dbeafe;
+            border: 1px solid #2563eb;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            padding: 2px 7px;
+            width: fit-content;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .empty {
+            border: 1px dashed #334155;
+            border-radius: 10px;
+            padding: 24px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        @media (max-width: 900px) {
+            .toolbar .query { grid-column: span 6; }
+            .toolbar .type { grid-column: span 3; }
+            .toolbar .genre { grid-column: span 3; }
+            .toolbar .sort { grid-column: span 4; }
+            .toolbar .score { grid-column: span 4; }
+            .toolbar .apply { grid-column: span 4; }
+        }
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+            .topbar { flex-direction: column; align-items: flex-start; }
+            .toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .toolbar .query,
+            .toolbar .type,
+            .toolbar .genre,
+            .toolbar .sort,
+            .toolbar .score,
+            .toolbar .apply { grid-column: span 2; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="topbar">
+            <a href="/" class="back-link">← Back to Home</a>
+            <h1 id="page-title">Grid View</h1>
+        </div>
+        <div class="meta-line" id="meta-line">Loading...</div>
+
+        <form class="toolbar" id="filter-form">
+            <input class="query" id="query" type="text" placeholder="Search title, genre, year, IMDb...">
+            <select class="type" id="type">
+                <option value="all">All Types</option>
+                <option value="movie">Movies</option>
+                <option value="series">TV Shows</option>
+            </select>
+            <input class="genre" id="genre" type="text" placeholder="Genre (optional)">
+            <select class="sort" id="sort">
+                <option value="recent">Sort: Recently Updated</option>
+                <option value="title">Sort: Title A-Z</option>
+                <option value="score">Sort: IMDb Score</option>
+                <option value="year">Sort: Year</option>
+            </select>
+            <input class="score" id="minScore" type="number" min="0" max="10" step="0.1" placeholder="Min IMDb">
+            <button class="apply" type="submit">Apply</button>
+        </form>
+
+        <div class="grid" id="grid"></div>
+    </div>
+
+    <script>
+        const NO_COVER_DATA_URI = "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'200'%20height%3D'300'%3E%3Crect%20width%3D'100%25'%20height%3D'100%25'%20fill%3D'%23020617'%2F%3E%3Ctext%20x%3D'50%25'%20y%3D'50%25'%20dominant-baseline%3D'middle'%20text-anchor%3D'middle'%20fill%3D'%23475569'%3ENo%20Cover%3C%2Ftext%3E%3C%2Fsvg%3E";
+
+        let allItems = [];
+
+        function safeNumber(value) {
+            const parsed = parseFloat(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        function normalizeSearchText(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function sanitizeImageSrc(value) {
+            const clean = String(value || '').trim();
+            return clean ? clean.replace(/"/g, '%22').replace(/\s/g, '%20') : NO_COVER_DATA_URI;
+        }
+
+        function getScore(item) {
+            return safeNumber(item.imdbScore || item.rating || item.enrichment?.imdbScore);
+        }
+
+        async function fetchAllMovies() {
+            const pageSize = 100;
+            let page = 1;
+            let totalPages = 1;
+            const all = [];
+
+            while (page <= totalPages) {
+                const res = await fetch(`/api/movies?page=${page}&limit=${pageSize}`);
+                const data = await res.json();
+                if (!data || !Array.isArray(data.movies)) break;
+
+                all.push(...data.movies);
+                totalPages = data.totalPages || 1;
+                page += 1;
+            }
+
+            return all;
+        }
+
+        function parseParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                title: params.get('title') || 'Grid View',
+                q: params.get('q') || '',
+                type: params.get('type') || 'all',
+                genre: params.get('genre') || '',
+                sort: params.get('sort') || 'recent',
+                minScore: params.get('minScore') || ''
+            };
+        }
+
+        function applyParamsToForm(state) {
+            document.getElementById('page-title').textContent = state.title;
+            document.getElementById('query').value = state.q;
+            document.getElementById('type').value = state.type;
+            document.getElementById('genre').value = state.genre;
+            document.getElementById('sort').value = state.sort;
+            document.getElementById('minScore').value = state.minScore;
+        }
+
+        function readFormState() {
+            return {
+                title: document.getElementById('page-title').textContent || 'Grid View',
+                q: document.getElementById('query').value.trim(),
+                type: document.getElementById('type').value,
+                genre: document.getElementById('genre').value.trim(),
+                sort: document.getElementById('sort').value,
+                minScore: document.getElementById('minScore').value.trim()
+            };
+        }
+
+        function buildHref(item) {
+            const targetEndpoint = (item.contentType === 'series') ? 'series.html' : 'player.html';
+            return `/${targetEndpoint}?id=${encodeURIComponent(item.id)}`;
+        }
+
+        function filterAndSort(items, state) {
+            const queryNorm = normalizeSearchText(state.q);
+            const genreNorm = normalizeSearchText(state.genre);
+            const minScore = state.minScore !== '' ? safeNumber(state.minScore) : null;
+
+            let rows = items.filter((item) => {
+                if (state.type === 'movie' && item.contentType === 'series') return false;
+                if (state.type === 'series' && item.contentType !== 'series') return false;
+
+                const titleNorm = normalizeSearchText(item.title || '');
+                const genreText = String(item.genre || item.enrichment?.genre || '');
+                const genreTextNorm = normalizeSearchText(genreText);
+                const yearText = String(item.year || '').trim();
+                const imdbText = String(item.imdbId || item.imdb_id || '').toLowerCase();
+
+                if (queryNorm) {
+                    const hay = [titleNorm, genreTextNorm, normalizeSearchText(yearText), normalizeSearchText(imdbText)].join(' ');
+                    if (!hay.includes(queryNorm)) return false;
+                }
+
+                if (genreNorm && !genreTextNorm.includes(genreNorm)) return false;
+
+                const score = getScore(item);
+                if (minScore !== null && (score === null || score < minScore)) return false;
+
+                return true;
+            });
+
+            rows.sort((a, b) => {
+                if (state.sort === 'title') {
+                    return String(a.title || '').localeCompare(String(b.title || ''));
+                }
+
+                if (state.sort === 'score') {
+                    const aScore = getScore(a) || -1;
+                    const bScore = getScore(b) || -1;
+                    return bScore - aScore;
+                }
+
+                if (state.sort === 'year') {
+                    const aYear = parseInt(a.year, 10) || 0;
+                    const bYear = parseInt(b.year, 10) || 0;
+                    return bYear - aYear;
+                }
+
+                const aTime = new Date(a.updatedAt || 0).getTime();
+                const bTime = new Date(b.updatedAt || 0).getTime();
+                return bTime - aTime;
+            });
+
+            return rows;
+        }
+
+        function renderGrid(items, state) {
+            const grid = document.getElementById('grid');
+            const meta = document.getElementById('meta-line');
+
+            meta.textContent = `${items.length} result${items.length === 1 ? '' : 's'} • Type: ${state.type === 'all' ? 'all' : state.type}`;
+
+            if (!items.length) {
+                grid.innerHTML = '<div class="empty">No titles matched this filter. Try broadening your query.</div>';
+                return;
+            }
+
+            grid.innerHTML = items.map((item) => {
+                const score = getScore(item);
+                const scoreText = score === null ? 'IMDb N/A' : `IMDb ${score.toFixed(1)}`;
+                const metaBits = [item.year || '', item.genre || item.enrichment?.genre || '', scoreText]
+                    .filter(Boolean)
+                    .join(' · ');
+
+                return `
+                    <a class="card" href="${buildHref(item)}">
+                        <img class="cover" src="${sanitizeImageSrc(item.cover)}" alt="${String(item.title || 'Title')}" onerror="this.onerror=null; this.src='${NO_COVER_DATA_URI}'">
+                        <div class="info">
+                            <div class="title">${String(item.title || 'Unknown')}</div>
+                            <div class="sub">${metaBits}</div>
+                            <span class="badge">${item.contentType === 'series' ? 'TV Show' : 'Movie'}</span>
+                        </div>
+                    </a>
+                `;
+            }).join('');
+        }
+
+        function updateUrl(state) {
+            const params = new URLSearchParams();
+            if (state.title) params.set('title', state.title);
+            if (state.q) params.set('q', state.q);
+            if (state.type && state.type !== 'all') params.set('type', state.type);
+            if (state.genre) params.set('genre', state.genre);
+            if (state.sort && state.sort !== 'recent') params.set('sort', state.sort);
+            if (state.minScore) params.set('minScore', state.minScore);
+            const query = params.toString();
+            const nextUrl = query ? `/gridview.html?${query}` : '/gridview.html';
+            window.history.replaceState({}, '', nextUrl);
+        }
+
+        function applyAndRender() {
+            const state = readFormState();
+            updateUrl(state);
+            const rows = filterAndSort(allItems, state);
+            renderGrid(rows, state);
+        }
+
+        async function init() {
+            const state = parseParams();
+            applyParamsToForm(state);
+
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '<div class="empty">Loading library items...</div>';
+
+            try {
+                allItems = await fetchAllMovies();
+                applyAndRender();
+            } catch (_err) {
+                grid.innerHTML = '<div class="empty" style="color:#fca5a5;">Failed loading catalog data.</div>';
+            }
+
+            document.getElementById('filter-form').addEventListener('submit', (event) => {
+                event.preventDefault();
+                applyAndRender();
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>

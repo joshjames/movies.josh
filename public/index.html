@@ -372,9 +372,17 @@
         .scroller-title {
             display: flex;
             align-items: baseline;
+            justify-content: space-between;
             gap: 12px;
             margin: 0 0 10px 0;
             padding: 0 4px;
+        }
+
+        .scroller-title-main {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            min-width: 0;
         }
 
         .scroller-title h2 {
@@ -386,6 +394,24 @@
         .scroller-title span {
             color: #94a3b8;
             font-size: 0.8rem;
+        }
+
+        .view-all-link {
+            color: #93c5fd;
+            text-decoration: none;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+            border: 1px solid #334155;
+            border-radius: 999px;
+            padding: 4px 10px;
+            background: #111827;
+        }
+
+        .view-all-link:hover {
+            color: #dbeafe;
+            border-color: #3b82f6;
+            background: #0f1b31;
         }
 
         .slider-wrapper {
@@ -865,16 +891,23 @@
             `;
         }
 
-        function renderSliderRow(title, subtitle, items, rowId) {
+        function renderSliderRow(title, subtitle, items, rowId, options = {}) {
             const cards = items.length > 0
                 ? items.map(buildSliderCard).join('')
                 : '<div class="collection-empty">No titles found for this collection.</div>';
+            const viewAllHref = String(options.viewAllHref || '').trim();
+            const viewAllHtml = viewAllHref
+                ? `<a class="view-all-link" href="${viewAllHref}">View all</a>`
+                : '';
 
             return `
                 <section class="collection-row">
                     <div class="scroller-title">
-                        <h2>${title}</h2>
-                        ${subtitle ? `<span>${subtitle}</span>` : ''}
+                        <div class="scroller-title-main">
+                            <h2>${title}</h2>
+                            ${subtitle ? `<span>${subtitle}</span>` : ''}
+                        </div>
+                        ${viewAllHtml}
                     </div>
                     <div class="slider-wrapper">
                         <button class="arrow__btn left-arrow" type="button" onclick="scrollSlider('${rowId}', -1)">‹</button>
@@ -923,21 +956,32 @@
         function buildCollectionRows(mediaList) {
             const rows = [];
 
+            const encodeQueryValue = (value) => encodeURIComponent(String(value || '').trim());
+            const recentHref = `/gridview.html?title=${encodeQueryValue('Recently Added')}&sort=recent`;
+            const topRatedHref = `/gridview.html?title=${encodeQueryValue('Top Rated')}&sort=score&minScore=8`;
+            const tvHref = `/gridview.html?title=${encodeQueryValue('TV Shows')}&type=series&sort=title`;
+
             const recent = [...mediaList].sort((a, b) => {
                 const aTime = new Date(a.updatedAt || 0).getTime();
                 const bTime = new Date(b.updatedAt || 0).getTime();
                 return bTime - aTime;
             });
-            rows.push(renderSliderRow('Recently Added', 'newest items first', recent.slice(0, 18), 'recently-added-row'));
+            rows.push(renderSliderRow('Recently Added', 'newest items first', recent.slice(0, 18), 'recently-added-row', {
+                viewAllHref: recentHref
+            }));
 
             const topRated = [...mediaList]
                 .filter(media => getScore(media) !== null && getScore(media) >= 8)
                 .sort((a, b) => (getScore(b) || 0) - (getScore(a) || 0));
-            rows.push(renderSliderRow('Top Rated', 'IMDb score 8.0 and up', topRated.slice(0, 18), 'top-rated-row'));
+            rows.push(renderSliderRow('Top Rated', 'IMDb score 8.0 and up', topRated.slice(0, 18), 'top-rated-row', {
+                viewAllHref: topRatedHref
+            }));
 
             const shows = mediaList.filter(media => media.contentType === 'series');
             if (shows.length > 0) {
-                rows.push(renderSliderRow('TV Shows', 'series collection', shows.slice(0, 18), 'series-row'));
+                rows.push(renderSliderRow('TV Shows', 'series collection', shows.slice(0, 18), 'series-row', {
+                    viewAllHref: tvHref
+                }));
             }
 
             const genreMap = new Map();
@@ -952,7 +996,10 @@
                 .sort((a, b) => b[1].length - a[1].length)
                 .slice(0, 3)
                 .forEach(([genre, items]) => {
-                    rows.push(renderSliderRow(genre, 'genre collection', items.slice(0, 18), `genre-${genre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`));
+                    const genreHref = `/gridview.html?title=${encodeQueryValue(genre)}&genre=${encodeQueryValue(genre)}&sort=title`;
+                    rows.push(renderSliderRow(genre, 'genre collection', items.slice(0, 18), `genre-${genre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, {
+                        viewAllHref: genreHref
+                    }));
                 });
 
             return rows.join('');
