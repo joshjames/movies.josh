@@ -6,47 +6,71 @@ const AccountService = require('../services/AccountService');
 const logger = require('../services/logger');
 
 function resolveWebhookConfig(req) {
-  const fallbackUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const requestProto = forwardedProto || req.protocol;
+  const requestHost = forwardedHost || req.get('host');
+  const fallbackUrl = `${requestProto}://${requestHost}${req.originalUrl}`;
+
+  const configuredUrls = [
+    process.env.SUBSCRIPTION_NOTIFICATION_URL,
+    process.env.SUBSCRIPTION_SANDBOX_WEBHOOK_URL,
+    process.env.SUBSCRIPTION_SANBOX_WEBHOOK_URL,
+    fallbackUrl
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  const signatureKeys = [
+    process.env.SQUARE_WEBHOOK_SIGNATURE_KEY,
+    process.env.SQUARE_SIGNATURE_KEY,
+    process.env.SQUARE_SANDBOX_SIGNATURE_KEY
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
   return {
-    signatureKey: String(
-      process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ||
-      process.env.SQUARE_SIGNATURE_KEY ||
-      process.env.SQUARE_SANDBOX_SIGNATURE_KEY ||
-      ''
-    ).trim(),
-    notificationUrl: String(
-      process.env.SUBSCRIPTION_NOTIFICATION_URL ||
-      process.env.SUBSCRIPTION_SANBOX_WEBHOOK_URL ||
-      fallbackUrl
-    ).trim()
+    signatureKeys,
+    notificationUrls: Array.from(new Set(configuredUrls)),
+    fallbackUrl
   };
+}
+
+function signaturesMatch(candidate, provided) {
+  const lhs = Buffer.from(String(provided || ''));
+  const rhs = Buffer.from(String(candidate || ''));
+  if (lhs.length !== rhs.length) return false;
+  return crypto.timingSafeEqual(lhs, rhs);
 }
 
 async function handleSubscriptionWebhook(req, res) {
   const signature = String(req.headers['x-square-signature'] || '');
-  const { signatureKey: webhookSignatureKey, notificationUrl } = resolveWebhookConfig(req);
+  const { signatureKeys, notificationUrls, fallbackUrl } = resolveWebhookConfig(req);
 
-  if (!webhookSignatureKey) {
-    logger.error('[SQUARE WEBHOOK] Missing SQUARE_WEBHOOK_SIGNATURE_KEY.');
+  if (!signatureKeys.length) {
+    logger.error('[SQUARE WEBHOOK] Missing webhook signature keys.');
     return res.status(500).send('Webhook signature key missing');
   }
 
-  // 1. Verify the signature to ensure it's actually Square calling, not a hacker
-  const body = req.body.toString('utf8');
-  const stringToSign = notificationUrl + body;
-  const hmac = crypto.createHmac('sha256', webhookSignatureKey);
-  hmac.update(stringToSign);
-  const expectedSignature = hmac.digest('base64');
+  if (!signature) {
+    return res.status(401).send('Missing signature handshake');
+  }
 
-  const signatureMatches = (() => {
-    const lhs = Buffer.from(signature);
-    const rhs = Buffer.from(expectedSignature);
-    if (lhs.length !== rhs.length) return false;
-    return crypto.timingSafeEqual(lhs, rhs);
-  })();
+  // 1. Verify the signature to ensure it's actually Square calling.
+  const body = req.body.toString('utf8');
+  const signatureMatches = signatureKeys.some((key) => {
+    return notificationUrls.some((url) => {
+      const hmac = crypto.createHmac('sha256', key);
+      hmac.update(url + body);
+      const expected = hmac.digest('base64');
+      return signaturesMatch(expected, signature);
+    });
+  });
 
   if (!signatureMatches) {
-    logger.warn('[SQUARE WEBHOOK] Signature mismatch.');
+    logger.warn(
+      `[SQUARE WEBHOOK] Signature mismatch for requestUrl=${fallbackUrl} candidates=${notificationUrls.join('|')}`
+    );
     return res.status(401).send('Invalid signature handshake');
   }
 
