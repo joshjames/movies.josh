@@ -175,6 +175,11 @@ async function writeRedisMapping(prefix, hash, value, ttlSeconds = 604800) {
     }
 }
 
+function parseNumericInt(value, fallback = 0) {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 class TorrentService {
     /**
      * Dispatched a formatted magnet stream download command into qBittorrent.
@@ -487,6 +492,82 @@ class TorrentService {
         } catch (err) {
             return { success: false, error: err.message };
         }
+    }
+
+    async startSearch({ query, category = 'all', plugins = 'enabled' } = {}) {
+        const cleanQuery = String(query || '').trim();
+        if (!cleanQuery) {
+            throw new Error('Search query is required.');
+        }
+
+        const payload = new URLSearchParams();
+        payload.set('pattern', cleanQuery);
+        payload.set('category', String(category || 'all').trim() || 'all');
+        payload.set('plugins', String(plugins || 'enabled').trim() || 'enabled');
+
+        const response = await axios.post(`${QBIT_BASE_URL}/search/start`, payload.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 10000
+        });
+
+        return {
+            id: parseNumericInt(response?.data?.id, null),
+            raw: response?.data || null
+        };
+    }
+
+    async getSearchStatus(id = null) {
+        const params = {};
+        if (id !== null && id !== undefined && String(id).trim() !== '') {
+            params.id = String(id).trim();
+        }
+
+        const response = await axios.get(`${QBIT_BASE_URL}/search/status`, {
+            params,
+            timeout: 10000
+        });
+
+        return Array.isArray(response?.data) ? response.data : [];
+    }
+
+    async getSearchResults(id, { limit = 200, offset = 0 } = {}) {
+        const cleanId = parseNumericInt(id, null);
+        if (cleanId === null) {
+            throw new Error('Search id is required.');
+        }
+
+        const response = await axios.get(`${QBIT_BASE_URL}/search/results`, {
+            params: {
+                id: cleanId,
+                limit: Math.max(1, parseNumericInt(limit, 200)),
+                offset: Math.max(0, parseNumericInt(offset, 0))
+            },
+            timeout: 12000
+        });
+
+        const payload = response?.data || {};
+        return {
+            status: String(payload.status || '').toLowerCase() || 'unknown',
+            total: parseNumericInt(payload.total, 0),
+            results: Array.isArray(payload.results) ? payload.results : []
+        };
+    }
+
+    async deleteSearch(id = 'all') {
+        const payload = new URLSearchParams();
+        payload.set('id', String(id || 'all').trim() || 'all');
+
+        await axios.post(`${QBIT_BASE_URL}/search/delete`, payload.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 10000
+        });
+
+        return { success: true, id: payload.get('id') };
+    }
+
+    async getSearchPlugins() {
+        const response = await axios.get(`${QBIT_BASE_URL}/search/plugins`, { timeout: 10000 });
+        return Array.isArray(response?.data) ? response.data : [];
     }
 }
 
