@@ -240,7 +240,7 @@
                         </select>
                     </label>
                     <label>Plugins
-                        <input class="field" id="pluginsIn" value="enabled" placeholder="enabled or plugin names">
+                        <input class="field" id="pluginsIn" value="all" placeholder="all, enabled, or plugin names">
                     </label>
                 </div>
 
@@ -544,7 +544,7 @@
                     body: JSON.stringify({
                         query,
                         category: value('categoryIn') || 'all',
-                        plugins: value('pluginsIn') || 'enabled'
+                        plugins: value('pluginsIn') || 'all'
                     })
                 });
 
