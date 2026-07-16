@@ -715,7 +715,10 @@ function searchErrorResponse(err) {
                 success: false,
                 error: 'qBittorrent API unreachable from this runtime.',
                 code: String(err?.code || 'UPSTREAM_UNAVAILABLE'),
-                qbitApiUrl: resolveQbitApiUrl()
+                qbitApiUrl: resolveQbitApiUrl(),
+                upstreamStatus: err?.upstreamStatus || null,
+                upstreamAction: err?.upstreamAction || null,
+                upstreamMessage: String(err?.message || '')
             }
         };
     }

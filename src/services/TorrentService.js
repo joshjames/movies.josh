@@ -183,6 +183,15 @@ function parseNumericInt(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function buildUpstreamError(action, err) {
+    const wrapped = new Error(err?.message || `qBittorrent ${action} failed.`);
+    wrapped.code = err?.code || null;
+    wrapped.upstreamStatus = err?.response?.status || null;
+    wrapped.upstreamData = err?.response?.data || null;
+    wrapped.upstreamAction = action;
+    return wrapped;
+}
+
 class TorrentService {
     /**
      * Dispatched a formatted magnet stream download command into qBittorrent.
@@ -508,10 +517,15 @@ class TorrentService {
         payload.set('category', String(category || 'all').trim() || 'all');
         payload.set('plugins', String(plugins || 'enabled').trim() || 'enabled');
 
-        const response = await axios.post(`${QBIT_BASE_URL}/search/start`, payload.toString(), {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            timeout: 10000
-        });
+        let response;
+        try {
+            response = await axios.post(`${QBIT_BASE_URL}/search/start`, payload.toString(), {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 10000
+            });
+        } catch (err) {
+            throw buildUpstreamError('search/start', err);
+        }
 
         return {
             id: parseNumericInt(response?.data?.id, null),
@@ -525,10 +539,15 @@ class TorrentService {
             params.id = String(id).trim();
         }
 
-        const response = await axios.get(`${QBIT_BASE_URL}/search/status`, {
-            params,
-            timeout: 10000
-        });
+        let response;
+        try {
+            response = await axios.get(`${QBIT_BASE_URL}/search/status`, {
+                params,
+                timeout: 10000
+            });
+        } catch (err) {
+            throw buildUpstreamError('search/status', err);
+        }
 
         return Array.isArray(response?.data) ? response.data : [];
     }
@@ -539,14 +558,19 @@ class TorrentService {
             throw new Error('Search id is required.');
         }
 
-        const response = await axios.get(`${QBIT_BASE_URL}/search/results`, {
-            params: {
-                id: cleanId,
-                limit: Math.max(1, parseNumericInt(limit, 200)),
-                offset: Math.max(0, parseNumericInt(offset, 0))
-            },
-            timeout: 12000
-        });
+        let response;
+        try {
+            response = await axios.get(`${QBIT_BASE_URL}/search/results`, {
+                params: {
+                    id: cleanId,
+                    limit: Math.max(1, parseNumericInt(limit, 200)),
+                    offset: Math.max(0, parseNumericInt(offset, 0))
+                },
+                timeout: 12000
+            });
+        } catch (err) {
+            throw buildUpstreamError('search/results', err);
+        }
 
         const payload = response?.data || {};
         return {
@@ -560,16 +584,25 @@ class TorrentService {
         const payload = new URLSearchParams();
         payload.set('id', String(id || 'all').trim() || 'all');
 
-        await axios.post(`${QBIT_BASE_URL}/search/delete`, payload.toString(), {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            timeout: 10000
-        });
+        try {
+            await axios.post(`${QBIT_BASE_URL}/search/delete`, payload.toString(), {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 10000
+            });
+        } catch (err) {
+            throw buildUpstreamError('search/delete', err);
+        }
 
         return { success: true, id: payload.get('id') };
     }
 
     async getSearchPlugins() {
-        const response = await axios.get(`${QBIT_BASE_URL}/search/plugins`, { timeout: 10000 });
+        let response;
+        try {
+            response = await axios.get(`${QBIT_BASE_URL}/search/plugins`, { timeout: 10000 });
+        } catch (err) {
+            throw buildUpstreamError('search/plugins', err);
+        }
         return Array.isArray(response?.data) ? response.data : [];
     }
 }

@@ -122,6 +122,18 @@
         .status.warn { color: #7c2d12; }
         .status.bad { color: #7f1d1d; border-color: #fca5a5; background: #fef2f2; }
 
+        .diagnostics {
+            display: none;
+            margin-top: 8px;
+            border: 1px solid #fed7aa;
+            background: #fff7ed;
+            color: #7c2d12;
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 0.82rem;
+            white-space: pre-wrap;
+        }
+
         .stats {
             display: flex;
             gap: 8px;
@@ -292,6 +304,7 @@
                 </div>
 
                 <div id="statusBox" class="status warn">No active search yet.</div>
+                <div id="diagnosticsBox" class="diagnostics"></div>
             </aside>
 
             <section class="panel">
@@ -347,6 +360,7 @@
         };
 
         const statusBox = document.getElementById('statusBox');
+        const diagnosticsBox = document.getElementById('diagnosticsBox');
         const statsPills = document.getElementById('statsPills');
         const filteredBody = document.getElementById('filteredBody');
         const rawBody = document.getElementById('rawBody');
@@ -359,6 +373,19 @@
         function setStatus(text, level = 'warn') {
             statusBox.className = `status ${level}`;
             statusBox.textContent = text;
+        }
+
+        function setDiagnostics(payload) {
+            if (!payload) {
+                diagnosticsBox.style.display = 'none';
+                diagnosticsBox.textContent = '';
+                return;
+            }
+
+            diagnosticsBox.style.display = 'block';
+            diagnosticsBox.textContent = typeof payload === 'string'
+                ? payload
+                : JSON.stringify(payload, null, 2);
         }
 
         function filterQueryString() {
@@ -550,11 +577,15 @@
                 const statusPayload = await statusRes.json();
 
                 if (!resultRes.ok || resultPayload.success === false) {
+                    setDiagnostics(resultPayload);
                     throw new Error(resultPayload.error || `Results HTTP ${resultRes.status}`);
                 }
                 if (!statusRes.ok || statusPayload.success === false) {
+                    setDiagnostics(statusPayload);
                     throw new Error(statusPayload.error || `Status HTTP ${statusRes.status}`);
                 }
+
+                setDiagnostics(null);
 
                 const statusRows = statusPayload.statuses || [];
                 const activeStatus = statusRows.find(s => Number(s.id) === Number(state.searchId));
