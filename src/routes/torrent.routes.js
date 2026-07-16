@@ -690,8 +690,11 @@ function rankSearchRows(rows, filters) {
 }
 
 function resolveQbitApiUrl() {
-    const raw = String(process.env.QBIT_API_URL || process.env.QBIT_URL || 'http://qbittorrent:8080').trim();
-    return raw.endsWith('/api/v2') ? raw : `${raw.replace(/\/+$/, '')}/api/v2`;
+    let raw = String(process.env.QBIT_SEARCH_URL || process.env.QBIT_API_URL || process.env.QBIT_URL || 'http://qbittorrent:8080').trim();
+    raw = raw.replace(/\/+$/, '');
+    if (raw.endsWith('/api/v2')) return raw;
+    if (raw.endsWith('/search')) raw = raw.slice(0, -('/search'.length));
+    return `${raw}/api/v2`;
 }
 
 function isQbitUpstreamError(err) {
@@ -708,6 +711,25 @@ function isQbitUpstreamError(err) {
 }
 
 function searchErrorResponse(err) {
+    const upstreamStatus = parseIntSafe(err?.upstreamStatus, 0);
+    const upstreamAction = String(err?.upstreamAction || '');
+
+    if (upstreamStatus === 404 && (upstreamAction === 'search/status' || upstreamAction === 'search/results')) {
+        return {
+            status: 502,
+            payload: {
+                success: false,
+                error: 'qBittorrent started a search id but does not track it (status/results return 404).',
+                code: 'QBIT_SEARCH_JOB_NOT_TRACKED',
+                upstreamStatus,
+                upstreamAction,
+                qbitApiUrl: resolveQbitApiUrl(),
+                upstreamMessage: String(err?.message || ''),
+                hint: 'Check qBittorrent Execution Log for search engine/plugin failures. Search plugins can be installed/enabled but still fail at runtime and jobs may disappear immediately.'
+            }
+        };
+    }
+
     if (isQbitUpstreamError(err)) {
         return {
             status: 503,

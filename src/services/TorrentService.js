@@ -6,10 +6,27 @@ const FormData = require('form-data');
 const logger = require('./logger');
 const { connectDb, redisClient } = require('./db');
 
+function normalizeQbitApiBase(rawValue, fallbackValue) {
+    let raw = String(rawValue || '').trim();
+    if (!raw) raw = String(fallbackValue || '').trim();
+    if (!raw) raw = 'http://qbittorrent:8080';
+
+    raw = raw.replace(/\/+$/, '');
+    if (raw.endsWith('/api/v2')) return raw;
+    if (raw.endsWith('/search')) raw = raw.slice(0, -('/search'.length));
+    return `${raw}/api/v2`;
+}
+
 const RAW_QBIT_URL = String(process.env.QBIT_API_URL || process.env.QBIT_URL || 'http://qbittorrent:8080').trim();
-const QBIT_BASE_URL = RAW_QBIT_URL.endsWith('/api/v2')
-    ? RAW_QBIT_URL
-    : `${RAW_QBIT_URL.replace(/\/+$/, '')}/api/v2`;
+const RAW_QBIT_SEARCH_URL = String(process.env.QBIT_SEARCH_URL || '').trim();
+const QBIT_BASE_URL = normalizeQbitApiBase(RAW_QBIT_URL, 'http://qbittorrent:8080');
+const QBIT_SEARCH_BASE_URL = normalizeQbitApiBase(RAW_QBIT_SEARCH_URL, QBIT_BASE_URL);
+const QBIT_SEARCH_USER = String(process.env.QBIT_SEARCH_USER || process.env.HOST_QBITTORRENT_USER || '').trim();
+const QBIT_SEARCH_PASSWORD = String(process.env.QBIT_SEARCH_PASSWORD || process.env.HOST_QBITTORRENT_PW || '').trim();
+const QBIT_SEARCH_SESSION_TTL_MS = 25 * 60 * 1000;
+
+let qbitSearchSessionCookie = null;
+let qbitSearchSessionAt = 0;
 const TORRENT_IMDB_PREFIX = process.env.TORRENT_IMDB_PREFIX || 'anymovie:torrent:imdb:';
 const TORRENT_USER_PREFIX = process.env.TORRENT_USER_PREFIX || 'anymovie:torrent:user:';
 
@@ -190,6 +207,79 @@ function buildUpstreamError(action, err) {
     wrapped.upstreamData = err?.response?.data || null;
     wrapped.upstreamAction = action;
     return wrapped;
+}
+
+async function getSearchAuthHeaders(forceRefresh = false) {
+    if (!QBIT_SEARCH_USER || !QBIT_SEARCH_PASSWORD) return {};
+
+    const sessionFresh = (Date.now() - qbitSearchSessionAt) < QBIT_SEARCH_SESSION_TTL_MS;
+    if (!forceRefresh && qbitSearchSessionCookie && sessionFresh) {
+        return { Cookie: qbitSearchSessionCookie };
+    }
+
+    const payload = new URLSearchParams();
+    payload.set('username', QBIT_SEARCH_USER);
+    payload.set('password', QBIT_SEARCH_PASSWORD);
+
+    const login = await axios.post(`${QBIT_SEARCH_BASE_URL}/auth/login`, payload.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 10000,
+        validateStatus: () => true
+    });
+
+    const cookieHeader = Array.isArray(login?.headers?.['set-cookie'])
+        ? login.headers['set-cookie'].find(value => String(value).startsWith('SID='))
+        : null;
+    const sidCookie = cookieHeader ? String(cookieHeader).split(';')[0] : '';
+
+    if (login.status !== 200 || !sidCookie) {
+        const err = new Error(`qBittorrent auth/login failed with status ${login.status}`);
+        err.response = login;
+        throw err;
+    }
+
+    qbitSearchSessionCookie = sidCookie;
+    qbitSearchSessionAt = Date.now();
+    return { Cookie: sidCookie };
+}
+
+async function requestSearch({ method = 'get', path, params, data, headers = {}, timeout = 10000 }, action) {
+    const run = async (forceRefresh = false) => {
+        const authHeaders = await getSearchAuthHeaders(forceRefresh);
+        return axios({
+            method,
+            url: `${QBIT_SEARCH_BASE_URL}${path}`,
+            params,
+            data,
+            headers: { ...headers, ...authHeaders },
+            timeout,
+            validateStatus: () => true
+        });
+    };
+
+    try {
+        let response = await run(false);
+
+        if (
+            response.status === 403 &&
+            QBIT_SEARCH_USER &&
+            QBIT_SEARCH_PASSWORD
+        ) {
+            qbitSearchSessionCookie = null;
+            qbitSearchSessionAt = 0;
+            response = await run(true);
+        }
+
+        if (response.status >= 400) {
+            const err = new Error(`qBittorrent ${action} failed with status ${response.status}`);
+            err.response = response;
+            throw err;
+        }
+
+        return response;
+    } catch (err) {
+        throw buildUpstreamError(action, err);
+    }
 }
 
 class TorrentService {
@@ -517,15 +607,16 @@ class TorrentService {
         payload.set('category', String(category || 'all').trim() || 'all');
         payload.set('plugins', String(plugins || 'enabled').trim() || 'enabled');
 
-        let response;
-        try {
-            response = await axios.post(`${QBIT_BASE_URL}/search/start`, payload.toString(), {
+        const response = await requestSearch(
+            {
+                method: 'post',
+                path: '/search/start',
+                data: payload.toString(),
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 timeout: 10000
-            });
-        } catch (err) {
-            throw buildUpstreamError('search/start', err);
-        }
+            },
+            'search/start'
+        );
 
         return {
             id: parseNumericInt(response?.data?.id, null),
@@ -539,15 +630,15 @@ class TorrentService {
             params.id = String(id).trim();
         }
 
-        let response;
-        try {
-            response = await axios.get(`${QBIT_BASE_URL}/search/status`, {
+        const response = await requestSearch(
+            {
+                method: 'get',
+                path: '/search/status',
                 params,
                 timeout: 10000
-            });
-        } catch (err) {
-            throw buildUpstreamError('search/status', err);
-        }
+            },
+            'search/status'
+        );
 
         return Array.isArray(response?.data) ? response.data : [];
     }
@@ -558,19 +649,19 @@ class TorrentService {
             throw new Error('Search id is required.');
         }
 
-        let response;
-        try {
-            response = await axios.get(`${QBIT_BASE_URL}/search/results`, {
+        const response = await requestSearch(
+            {
+                method: 'get',
+                path: '/search/results',
                 params: {
                     id: cleanId,
                     limit: Math.max(1, parseNumericInt(limit, 200)),
                     offset: Math.max(0, parseNumericInt(offset, 0))
                 },
                 timeout: 12000
-            });
-        } catch (err) {
-            throw buildUpstreamError('search/results', err);
-        }
+            },
+            'search/results'
+        );
 
         const payload = response?.data || {};
         return {
@@ -584,25 +675,29 @@ class TorrentService {
         const payload = new URLSearchParams();
         payload.set('id', String(id || 'all').trim() || 'all');
 
-        try {
-            await axios.post(`${QBIT_BASE_URL}/search/delete`, payload.toString(), {
+        await requestSearch(
+            {
+                method: 'post',
+                path: '/search/delete',
+                data: payload.toString(),
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 timeout: 10000
-            });
-        } catch (err) {
-            throw buildUpstreamError('search/delete', err);
-        }
+            },
+            'search/delete'
+        );
 
         return { success: true, id: payload.get('id') };
     }
 
     async getSearchPlugins() {
-        let response;
-        try {
-            response = await axios.get(`${QBIT_BASE_URL}/search/plugins`, { timeout: 10000 });
-        } catch (err) {
-            throw buildUpstreamError('search/plugins', err);
-        }
+        const response = await requestSearch(
+            {
+                method: 'get',
+                path: '/search/plugins',
+                timeout: 10000
+            },
+            'search/plugins'
+        );
         return Array.isArray(response?.data) ? response.data : [];
     }
 }
