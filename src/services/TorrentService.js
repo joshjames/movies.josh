@@ -6,7 +6,10 @@ const FormData = require('form-data');
 const logger = require('./logger');
 const { connectDb, redisClient } = require('./db');
 
-const QBIT_BASE_URL = process.env.QBIT_API_URL || 'http://qbittorrent:8080/api/v2';
+const RAW_QBIT_URL = String(process.env.QBIT_API_URL || process.env.QBIT_URL || 'http://qbittorrent:8080').trim();
+const QBIT_BASE_URL = RAW_QBIT_URL.endsWith('/api/v2')
+    ? RAW_QBIT_URL
+    : `${RAW_QBIT_URL.replace(/\/+$/, '')}/api/v2`;
 const TORRENT_IMDB_PREFIX = process.env.TORRENT_IMDB_PREFIX || 'anymovie:torrent:imdb:';
 const TORRENT_USER_PREFIX = process.env.TORRENT_USER_PREFIX || 'anymovie:torrent:user:';
 

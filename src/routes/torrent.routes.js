@@ -689,6 +689,46 @@ function rankSearchRows(rows, filters) {
     });
 }
 
+function resolveQbitApiUrl() {
+    const raw = String(process.env.QBIT_API_URL || process.env.QBIT_URL || 'http://qbittorrent:8080').trim();
+    return raw.endsWith('/api/v2') ? raw : `${raw.replace(/\/+$/, '')}/api/v2`;
+}
+
+function isQbitUpstreamError(err) {
+    const code = String(err?.code || '').toUpperCase();
+    const message = String(err?.message || '').toLowerCase();
+    return (
+        code === 'EAI_AGAIN' ||
+        code === 'ENOTFOUND' ||
+        code === 'ECONNREFUSED' ||
+        message.includes('eai_again') ||
+        message.includes('enotfound') ||
+        message.includes('econnrefused')
+    );
+}
+
+function searchErrorResponse(err) {
+    if (isQbitUpstreamError(err)) {
+        return {
+            status: 503,
+            payload: {
+                success: false,
+                error: 'qBittorrent API unreachable from this runtime.',
+                code: String(err?.code || 'UPSTREAM_UNAVAILABLE'),
+                qbitApiUrl: resolveQbitApiUrl()
+            }
+        };
+    }
+
+    return {
+        status: 500,
+        payload: {
+            success: false,
+            error: err.message
+        }
+    };
+}
+
 // GET: /api/torrent/search/plugins
 router.get('/search/plugins', async (_req, res) => {
     try {
@@ -696,7 +736,8 @@ router.get('/search/plugins', async (_req, res) => {
         return res.json({ success: true, count: plugins.length, plugins });
     } catch (err) {
         logger.error(`[Torrent Search] Plugin query failed: ${err.message}`);
-        return res.status(500).json({ success: false, error: err.message });
+        const out = searchErrorResponse(err);
+        return res.status(out.status).json(out.payload);
     }
 });
 
@@ -722,7 +763,8 @@ router.post('/search/start', async (req, res) => {
         });
     } catch (err) {
         logger.error(`[Torrent Search] Start failed: ${err.message}`);
-        return res.status(500).json({ success: false, error: err.message });
+        const out = searchErrorResponse(err);
+        return res.status(out.status).json(out.payload);
     }
 });
 
@@ -734,7 +776,8 @@ router.get('/search/status', async (req, res) => {
         return res.json({ success: true, statuses });
     } catch (err) {
         logger.error(`[Torrent Search] Status failed: ${err.message}`);
-        return res.status(500).json({ success: false, error: err.message });
+        const out = searchErrorResponse(err);
+        return res.status(out.status).json(out.payload);
     }
 });
 
@@ -771,7 +814,8 @@ router.get('/search/results', async (req, res) => {
         });
     } catch (err) {
         logger.error(`[Torrent Search] Results failed: ${err.message}`);
-        return res.status(500).json({ success: false, error: err.message });
+        const out = searchErrorResponse(err);
+        return res.status(out.status).json(out.payload);
     }
 });
 
@@ -783,7 +827,8 @@ router.post('/search/delete', async (req, res) => {
         return res.json({ success: true, deleted });
     } catch (err) {
         logger.error(`[Torrent Search] Delete failed: ${err.message}`);
-        return res.status(500).json({ success: false, error: err.message });
+        const out = searchErrorResponse(err);
+        return res.status(out.status).json(out.payload);
     }
 });
 
@@ -1117,7 +1162,10 @@ router.get('/pipeline/status', async (req, res) => {
         let activePipelineHashes = new Set();
         let reconciliationReady = false;
         try {
-            const qbitBase = process.env.QBIT_API_URL || 'http://qbittorrent:8080/api/v2';
+            const rawQbitBase = String(process.env.QBIT_API_URL || process.env.QBIT_URL || 'http://qbittorrent:8080').trim();
+            const qbitBase = rawQbitBase.endsWith('/api/v2')
+                ? rawQbitBase
+                : `${rawQbitBase.replace(/\/+$/, '')}/api/v2`;
             const qbitSnapshot = await axios.get(`${qbitBase}/torrents/info`, { timeout: 3500 });
             const pipelineTorrents = (qbitSnapshot.data || []).filter((torrent) => {
                 const tags = String(torrent?.tags || '');
