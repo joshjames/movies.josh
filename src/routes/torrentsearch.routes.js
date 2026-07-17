@@ -211,6 +211,12 @@ function buildFilterObject(query = {}) {
     const source = String(query.source || '').trim().toLowerCase();
     const mustContain = String(query.mustContain || '').trim().toLowerCase();
     const excludeWords = String(query.excludeWords || '').trim().toLowerCase();
+    const mediaTypeRaw = String(query.mediaType || 'auto').trim().toLowerCase();
+
+    const sourceTerms = source
+        .split(/[\s,|]+/g)
+        .map(token => token.trim())
+        .filter(Boolean);
 
     return {
         text,
@@ -222,8 +228,10 @@ function buildFilterObject(query = {}) {
         maxSizeBytes: maxSizeMb > 0 ? maxSizeMb * 1024 * 1024 : 0,
         quality: ['2160p', '1080p', '720p', '480p', 'unknown'].includes(quality) ? quality : '',
         source,
+        sourceTerms,
         mustContain,
-        excludeWords
+        excludeWords,
+        mediaType: ['movie', 'series', 'auto'].includes(mediaTypeRaw) ? mediaTypeRaw : 'auto'
     };
 }
 
@@ -245,13 +253,18 @@ function applySearchFilters(rows, filters) {
             if (!imdbHaystack.includes(imdbToken)) return false;
         }
 
-        if (filters.season && row.season !== filters.season) return false;
-        if (filters.episode && row.episode !== filters.episode) return false;
+        const shouldApplyEpisodeFilters = filters.mediaType !== 'movie';
+        if (shouldApplyEpisodeFilters && filters.season && row.season !== filters.season) return false;
+        if (shouldApplyEpisodeFilters && filters.episode && row.episode !== filters.episode) return false;
         if (filters.minSeeds && row.seeds < filters.minSeeds) return false;
         if (filters.minSizeBytes && row.sizeBytes < filters.minSizeBytes) return false;
         if (filters.maxSizeBytes && row.sizeBytes > filters.maxSizeBytes) return false;
         if (filters.quality && row.quality !== filters.quality) return false;
-        if (filters.source && !String(row.source || '').toLowerCase().includes(filters.source)) return false;
+        if (Array.isArray(filters.sourceTerms) && filters.sourceTerms.length > 0) {
+            const sourceNorm = String(row.source || '').toLowerCase();
+            const matchesAnySource = filters.sourceTerms.some(token => sourceNorm.includes(token));
+            if (!matchesAnySource) return false;
+        }
 
         return true;
     });

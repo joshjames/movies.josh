@@ -448,6 +448,7 @@
 
         function filterQueryString() {
             const params = new URLSearchParams();
+            const mediaType = String(value('queueMediaTypeIn') || '').toLowerCase() === 'movie' ? 'movie' : 'series';
             const fields = {
                 imdbId: value('imdbIn'),
                 season: value('seasonIn'),
@@ -458,7 +459,8 @@
                 quality: value('qualityIn'),
                 source: value('sourceIn'),
                 mustContain: value('mustIn'),
-                excludeWords: value('excludeIn')
+                excludeWords: value('excludeIn'),
+                mediaType
             };
 
             Object.entries(fields).forEach(([key, val]) => {
@@ -723,28 +725,58 @@
             const target = resolveTargetSeasonEpisode();
             const minConfidencePercent = Math.max(0, Math.min(100, parsePositiveInt(value('minConfidenceIn')) || 55));
             const minConfidence = minConfidencePercent / 100;
+            const desiredQuality = String(value('qualityIn') || '').trim().toLowerCase();
+            const minSizeMb = Number(value('minSizeIn') || 0);
+            const maxSizeMb = Number(value('maxSizeIn') || 0);
+            const minSizeBytes = Number.isFinite(minSizeMb) && minSizeMb > 0 ? minSizeMb * 1024 * 1024 : 0;
+            const maxSizeBytes = Number.isFinite(maxSizeMb) && maxSizeMb > 0 ? maxSizeMb * 1024 * 1024 : 0;
 
             const sourceRows = Array.isArray(payload?.filtered) && payload.filtered.length
                 ? payload.filtered
                 : (Array.isArray(payload?.raw) ? payload.raw : []);
 
-            const candidates = sourceRows
+            let candidates = sourceRows
                 .map((row) => {
                     const evalResult = calculateMatchConfidence(row.title || '', officialTitle, target.season, target.episode);
+                    let finalScore = evalResult.confidence;
+
+                    if (desiredQuality) {
+                        finalScore += String(row.quality || '').toLowerCase() === desiredQuality ? 0.22 : -0.22;
+                    }
+
+                    if ((minSizeBytes || maxSizeBytes) && Number.isFinite(Number(row.sizeBytes || 0))) {
+                        const bytes = Number(row.sizeBytes || 0);
+                        const inMin = !minSizeBytes || bytes >= minSizeBytes;
+                        const inMax = !maxSizeBytes || bytes <= maxSizeBytes;
+                        finalScore += (inMin && inMax) ? 0.08 : -0.12;
+                    }
+
+                    finalScore += Math.min(0.12, Number(row.seeds || 0) / 500);
+
                     return {
                         row,
                         confidence: evalResult.confidence,
+                        finalScore,
                         details: evalResult
                     };
                 })
                 .filter(item => item.confidence >= minConfidence)
                 .sort((a, b) => {
+                    const byFinal = b.finalScore - a.finalScore;
+                    if (byFinal !== 0) return byFinal;
                     const byConfidence = b.confidence - a.confidence;
                     if (byConfidence !== 0) return byConfidence;
                     const bySeeds = (Number(b.row?.seeds || 0) - Number(a.row?.seeds || 0));
                     if (bySeeds !== 0) return bySeeds;
                     return Number(b.row?.peers || 0) - Number(a.row?.peers || 0);
                 });
+
+            if (desiredQuality) {
+                const qualityMatches = candidates.filter(item => String(item.row?.quality || '').toLowerCase() === desiredQuality);
+                if (qualityMatches.length > 0) {
+                    candidates = qualityMatches;
+                }
+            }
 
             return {
                 officialTitle,
