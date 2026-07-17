@@ -113,6 +113,7 @@ app.use('/series', express.static(SERIES_STORAGE_DIR));
 const adminRouter = require('./src/routes/admin.routes');
 const mediaRouter = require('./src/routes/media.routes');
 const torrentRouter = require('./src/routes/torrent.routes');
+const torrentSearchRouter = require('./src/routes/torrentsearch.routes');
 const profileRouter = require('./src/routes/profile.routes');
 const subtitleRouter = require('./src/routes/subtitle.routes');
 const accountRouter = require('./src/routes/account.routes');
@@ -125,6 +126,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api', mediaRouter); 
 app.use('/api', torrentRouter); 
 app.use('/api/torrent', torrentRouter); 
+app.use('/api/torrentsearch', torrentSearchRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api', subtitleRouter);
 

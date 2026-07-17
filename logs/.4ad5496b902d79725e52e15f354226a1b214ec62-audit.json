@@ -6,11 +6,6 @@
     "auditLog": "/home/epic/movie-streamer/logs/.4ad5496b902d79725e52e15f354226a1b214ec62-audit.json",
     "files": [
         {
-            "date": 1782978974619,
-            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-02.log",
-            "hash": "b455a20725a459b045ce427bf570b5443f27c843ae9b355b7352758128c79b06"
-        },
-        {
             "date": 1783095549020,
             "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-03.log",
             "hash": "8e77f05b3f94511b71a9b34f56690b38479c7cf405be27714fc7dea810dfd812"
@@ -44,6 +39,11 @@
             "date": 1784177426567,
             "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-16.log",
             "hash": "1c7716aeb9e1b4e8fe386de878951ea50501945f869233267af71cada5478679"
+        },
+        {
+            "date": 1784250703138,
+            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-17.log",
+            "hash": "fdad65f4d0baf8264365bd42a687e3a7ec9e9215f5614d10d985af09bb99d86d"
         }
     ],
     "hashType": "sha256"

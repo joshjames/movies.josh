@@ -297,6 +297,34 @@
                     <input class="field" id="excludeIn" placeholder="cam ts telesync">
                 </label>
 
+                <hr style="border:none;border-top:1px solid rgba(148,163,184,.35);width:100%;margin:8px 0;">
+
+                <label style="display:flex;align-items:center;gap:8px;color:var(--ink);font-size:0.84rem;">
+                    <input id="metaEnabledIn" type="checkbox" checked>
+                    Include metadata when queueing selected result
+                </label>
+
+                <div class="row">
+                    <label>Queue Media Type
+                        <select class="field" id="queueMediaTypeIn">
+                            <option value="movie">movie</option>
+                            <option value="series">show / episode</option>
+                        </select>
+                    </label>
+                    <label>Queue IMDb ID
+                        <input class="field" id="queueImdbIn" placeholder="tt0944947">
+                    </label>
+                </div>
+
+                <div class="row">
+                    <label>Queue Season
+                        <input class="field" id="queueSeasonIn" type="number" min="1" placeholder="1">
+                    </label>
+                    <label>Queue Episode
+                        <input class="field" id="queueEpisodeIn" type="number" min="1" placeholder="1">
+                    </label>
+                </div>
+
                 <div class="actions">
                     <button class="btn" id="startBtn" type="button">Start Search</button>
                     <button class="btn alt" id="refreshBtn" type="button">Refresh Results</button>
@@ -419,6 +447,54 @@
                 .replaceAll("'", '&#39;');
         }
 
+        function parsePositiveInt(value) {
+            const parsed = parseInt(String(value || '').trim(), 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+        }
+
+        function normalizeImdbId(value) {
+            const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+            if (!/^\d{5,10}$/.test(cleaned)) return null;
+            return `tt${cleaned}`;
+        }
+
+        function readQueueMetadata(row) {
+            const includeMetadata = document.getElementById('metaEnabledIn').checked;
+            if (!includeMetadata) {
+                return {
+                    imdbId: null,
+                    category: 'movie-streamer',
+                    queueContext: null
+                };
+            }
+
+            const mediaType = String(value('queueMediaTypeIn') || 'movie').toLowerCase() === 'series'
+                ? 'series'
+                : 'movie';
+            const imdbId = normalizeImdbId(value('queueImdbIn'));
+            const season = parsePositiveInt(value('queueSeasonIn'));
+            const episode = parsePositiveInt(value('queueEpisodeIn'));
+            const fallbackSeason = parsePositiveInt(row?.season);
+            const fallbackEpisode = parsePositiveInt(row?.episode);
+            const resolvedSeason = season || fallbackSeason;
+            const resolvedEpisode = episode || fallbackEpisode;
+
+            const queueContext = {
+                imdbId: imdbId || null,
+                season: mediaType === 'series' ? resolvedSeason : null,
+                episode: mediaType === 'series' ? resolvedEpisode : null,
+                sourceType: mediaType === 'series'
+                    ? (resolvedEpisode ? 'episode' : (resolvedSeason ? 'pack' : null))
+                    : null
+            };
+
+            return {
+                imdbId,
+                category: mediaType === 'series' ? 'series-streamer' : 'movie-streamer',
+                queueContext
+            };
+        }
+
         function renderStats(payload) {
             if (!payload) {
                 statsPills.innerHTML = '';
@@ -485,24 +561,19 @@
                 return;
             }
 
-            const imdbId = value('imdbIn');
-            const category = (value('seasonIn') || value('episodeIn')) ? 'series-streamer' : 'movie-streamer';
+            const queueMeta = readQueueMetadata(row);
+            const payloadBody = {
+                magnetUrl: row.magnetUrl,
+                category: queueMeta.category,
+                imdbId: queueMeta.imdbId || null,
+                queueContext: queueMeta.queueContext
+            };
 
             try {
                 const r = await fetch('/api/downloader/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        magnetUrl: row.magnetUrl,
-                        category,
-                        imdbId: imdbId || null,
-                        queueContext: {
-                            imdbId: imdbId || null,
-                            season: row.season || null,
-                            episode: row.episode || null,
-                            sourceType: row.episode ? 'episode' : (row.season ? 'pack' : null)
-                        }
-                    })
+                    body: JSON.stringify(payloadBody)
                 });
 
                 const payload = await r.json();
@@ -510,7 +581,10 @@
                     throw new Error(payload.error || payload.message || `HTTP ${r.status}`);
                 }
 
-                setStatus('Queued selected result into acquisition pipeline.', 'good');
+                const metaSummary = queueMeta.queueContext
+                    ? ` | imdb=${queueMeta.queueContext.imdbId || 'n/a'} | season=${queueMeta.queueContext.season || '-'} | episode=${queueMeta.queueContext.episode || '-'}`
+                    : ' | metadata=off';
+                setStatus(`Queued selected result into acquisition pipeline (${queueMeta.category}).${metaSummary}`, 'good');
             } catch (err) {
                 setStatus(`Queue failed: ${err.message}`, 'bad');
             }
@@ -518,7 +592,7 @@
 
         async function loadPlugins() {
             try {
-                const r = await fetch('/api/torrent/search/plugins');
+                const r = await fetch('/api/torrentsearch/plugins');
                 const payload = await r.json();
                 if (!r.ok || payload.success === false) throw new Error(payload.error || `HTTP ${r.status}`);
                 state.plugins = payload.plugins || [];
@@ -538,7 +612,7 @@
 
             try {
                 setStatus('Starting qBittorrent search...', 'warn');
-                const r = await fetch('/api/torrent/search/start', {
+                const r = await fetch('/api/torrentsearch/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -569,8 +643,8 @@
 
             try {
                 const filters = filterQueryString();
-                const resultUrl = `/api/torrent/search/results?id=${encodeURIComponent(state.searchId)}&limit=300&offset=0${filters ? `&${filters}` : ''}`;
-                const statusUrl = `/api/torrent/search/status?id=${encodeURIComponent(state.searchId)}`;
+                const resultUrl = `/api/torrentsearch/results?id=${encodeURIComponent(state.searchId)}&limit=300&offset=0${filters ? `&${filters}` : ''}`;
+                const statusUrl = `/api/torrentsearch/status?id=${encodeURIComponent(state.searchId)}`;
 
                 const [resultRes, statusRes] = await Promise.all([fetch(resultUrl), fetch(statusUrl)]);
                 const resultPayload = await resultRes.json();
@@ -611,7 +685,7 @@
         async function deleteSearch() {
             const id = state.searchId || 'all';
             try {
-                const r = await fetch('/api/torrent/search/delete', {
+                const r = await fetch('/api/torrentsearch/delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id })
