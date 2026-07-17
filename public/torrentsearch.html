@@ -299,6 +299,25 @@
 
                 <hr style="border:none;border-top:1px solid rgba(148,163,184,.35);width:100%;margin:8px 0;">
 
+                <label>Official Title (for confidence scoring)
+                    <input class="field" id="officialTitleIn" placeholder="My Adventures with Superman">
+                </label>
+
+                <div class="row">
+                    <label>Target Season (confidence)
+                        <input class="field" id="targetSeasonIn" type="number" min="1" placeholder="3">
+                    </label>
+                    <label>Target Episode (confidence)
+                        <input class="field" id="targetEpisodeIn" type="number" min="1" placeholder="3">
+                    </label>
+                </div>
+
+                <label>Min Confidence %
+                    <input class="field" id="minConfidenceIn" type="number" min="0" max="100" value="55" placeholder="55">
+                </label>
+
+                <hr style="border:none;border-top:1px solid rgba(148,163,184,.35);width:100%;margin:8px 0;">
+
                 <label style="display:flex;align-items:center;gap:8px;color:var(--ink);font-size:0.84rem;">
                     <input id="metaEnabledIn" type="checkbox" checked>
                     Include metadata when queueing selected result
@@ -337,6 +356,11 @@
 
             <section class="panel">
                 <div class="stats" id="statsPills"></div>
+                <h3 style="margin:6px 0 8px;">Likely Candidate</h3>
+                <div id="likelyWrap" style="margin-bottom:12px;border:1px solid rgba(148,163,184,.35);border-radius:10px;background:#fff;padding:10px;font-size:.82rem;color:#475569;">
+                    Set official title and target S/E, then refresh to score candidates.
+                </div>
+
                 <h3 style="margin:6px 0 8px;">Filtered Results</h3>
                 <div style="overflow:auto; max-height: 380px;">
                     <table>
@@ -384,12 +408,14 @@
         const state = {
             searchId: null,
             lastResponse: null,
-            plugins: []
+            plugins: [],
+            candidates: []
         };
 
         const statusBox = document.getElementById('statusBox');
         const diagnosticsBox = document.getElementById('diagnosticsBox');
         const statsPills = document.getElementById('statsPills');
+        const likelyWrap = document.getElementById('likelyWrap');
         const filteredBody = document.getElementById('filteredBody');
         const rawBody = document.getElementById('rawBody');
         const jsonOut = document.getElementById('jsonOut');
@@ -456,6 +482,252 @@
             const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
             if (!/^\d{5,10}$/.test(cleaned)) return null;
             return `tt${cleaned}`;
+        }
+
+        function deriveOfficialTitle() {
+            const explicit = value('officialTitleIn');
+            if (explicit) return explicit;
+            const fromQuery = value('queryIn');
+            return fromQuery.replace(/s\d{1,2}\s*e\d{1,2}|season\s*\d+|episode\s*\d+/gi, '').trim();
+        }
+
+        function resolveTargetSeasonEpisode() {
+            const explicitSeason = parsePositiveInt(value('targetSeasonIn'));
+            const explicitEpisode = parsePositiveInt(value('targetEpisodeIn'));
+            const filterSeason = parsePositiveInt(value('seasonIn'));
+            const filterEpisode = parsePositiveInt(value('episodeIn'));
+            const queueSeason = parsePositiveInt(value('queueSeasonIn'));
+            const queueEpisode = parsePositiveInt(value('queueEpisodeIn'));
+
+            return {
+                season: explicitSeason || filterSeason || queueSeason || null,
+                episode: explicitEpisode || filterEpisode || queueEpisode || null
+            };
+        }
+
+        function calculateMatchConfidence(rawFileName, officialTitle, targetSeason, targetEpisode) {
+            let cleanName = String(rawFileName || '').toLowerCase();
+            const cleanTitle = String(officialTitle || '').toLowerCase();
+
+            const sToken = targetSeason ? `s${String(targetSeason).padStart(2, '0')}` : '';
+            const eToken = targetEpisode ? `e${String(targetEpisode).padStart(2, '0')}` : '';
+
+            const sceneNoise = [
+                '1080p', '720p', '2160p', '4k', 'h264', 'x264', 'x265', 'hevc', 'avc',
+                'web-dl', 'webrip', 'web', 'bluray', 'hdtv', 'ddp5', 'dd5', 'dts', 'aac',
+                'eac3', 'mp3', 'dual-audio', 'multi', 'eztv', 'rarbg', 'edith', 'megusta', 'eztvx',
+                'proper', 'repack', 'internal', 'readnfo', 'xvid'
+            ];
+
+            sceneNoise.forEach(token => {
+                cleanName = cleanName.replaceAll(token, ' ');
+            });
+
+            cleanName = cleanName.replace(/[\.\-_\[\]\(\)\+]/g, ' ').replace(/\s+/g, ' ').trim();
+
+            const fileNameTokens = cleanName.split(/\s+/).filter(t => t.length > 1);
+            const titleTokens = cleanTitle
+                .replace(/[\.\-_\[\]\(\)\+]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .split(/\s+/)
+                .filter(t => t.length > 1);
+
+            let matchCount = 0;
+            titleTokens.forEach(token => {
+                if (fileNameTokens.includes(token)) {
+                    matchCount += 1;
+                }
+            });
+
+            const titleCoverage = titleTokens.length > 0 ? (matchCount / titleTokens.length) : 0;
+
+            const rawLower = String(rawFileName || '').toLowerCase();
+            const sxExDetected = rawLower.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+            const seasonOnlyDetected = rawLower.match(/season\s*(\d{1,2})/i) || rawLower.match(/s(\d{1,2})(?!\d)/i);
+            const detectedSeason = sxExDetected ? parseInt(sxExDetected[1], 10) : (seasonOnlyDetected ? parseInt(seasonOnlyDetected[1], 10) : null);
+            const detectedEpisode = sxExDetected ? parseInt(sxExDetected[2], 10) : null;
+
+            let seasonEpisodeScore = 0;
+            if (targetSeason && targetEpisode) {
+                if (detectedSeason === targetSeason && detectedEpisode === targetEpisode) {
+                    seasonEpisodeScore = 1;
+                } else if (detectedSeason === targetSeason && detectedEpisode === null) {
+                    seasonEpisodeScore = 0.45;
+                } else if (sToken && eToken && rawLower.includes(sToken) && rawLower.includes(eToken)) {
+                    seasonEpisodeScore = 0.9;
+                }
+            } else if (targetSeason && detectedSeason === targetSeason) {
+                seasonEpisodeScore = 0.7;
+            } else {
+                seasonEpisodeScore = 0.3;
+            }
+
+            const removable = new Set([...titleTokens, sToken, eToken, 's', 'e'].filter(Boolean));
+            const extras = fileNameTokens.filter(token => !removable.has(token));
+            const extraPenalty = Math.min(0.35, extras.length * 0.03);
+
+            const confidence = Math.max(0, Math.min(1, (titleCoverage * 0.72) + (seasonEpisodeScore * 0.28) - extraPenalty));
+
+            return {
+                confidence,
+                titleCoverage,
+                seasonEpisodeScore,
+                extraPenalty,
+                matchedTitleTokens: matchCount,
+                totalTitleTokens: titleTokens.length,
+                detectedSeason,
+                detectedEpisode,
+                extras
+            };
+        }
+
+        function buildConfidenceCandidates(payload) {
+            const officialTitle = deriveOfficialTitle();
+            const target = resolveTargetSeasonEpisode();
+            const minConfidencePercent = Math.max(0, Math.min(100, parsePositiveInt(value('minConfidenceIn')) || 55));
+            const minConfidence = minConfidencePercent / 100;
+
+            const sourceRows = Array.isArray(payload?.filtered) && payload.filtered.length
+                ? payload.filtered
+                : (Array.isArray(payload?.raw) ? payload.raw : []);
+
+            const candidates = sourceRows
+                .map((row) => {
+                    const evalResult = calculateMatchConfidence(row.title || '', officialTitle, target.season, target.episode);
+                    return {
+                        row,
+                        confidence: evalResult.confidence,
+                        details: evalResult
+                    };
+                })
+                .filter(item => item.confidence >= minConfidence)
+                .sort((a, b) => {
+                    const byConfidence = b.confidence - a.confidence;
+                    if (byConfidence !== 0) return byConfidence;
+                    const bySeeds = (Number(b.row?.seeds || 0) - Number(a.row?.seeds || 0));
+                    if (bySeeds !== 0) return bySeeds;
+                    return Number(b.row?.peers || 0) - Number(a.row?.peers || 0);
+                });
+
+            return {
+                officialTitle,
+                target,
+                minConfidence,
+                candidates
+            };
+        }
+
+        function renderLikelyCandidate(payload) {
+            if (!payload) {
+                likelyWrap.textContent = 'Set official title and target S/E, then refresh to score candidates.';
+                return;
+            }
+
+            const evalPack = buildConfidenceCandidates(payload);
+            state.candidates = evalPack.candidates;
+
+            if (!evalPack.officialTitle) {
+                likelyWrap.innerHTML = 'Add an official title to compute confidence. Falling back to query can work, but a clean title is more accurate.';
+                return;
+            }
+
+            if (!evalPack.candidates.length) {
+                likelyWrap.innerHTML = `No candidates met ${Math.round(evalPack.minConfidence * 100)}% confidence for ${esc(evalPack.officialTitle)}.`;
+                return;
+            }
+
+            const best = evalPack.candidates[0];
+            const bestPct = Math.round(best.confidence * 100);
+            const topRows = evalPack.candidates.slice(0, 5).map((item, idx) => {
+                const pct = Math.round(item.confidence * 100);
+                return `<tr>
+                    <td class="title-cell">${esc(item.row.title)}</td>
+                    <td>${pct}%</td>
+                    <td>${Number(item.row.seeds || 0)}</td>
+                    <td>${esc(item.row.sizeLabel || 'N/A')}</td>
+                    <td><button class="tiny-btn" onclick="queueCandidate(${idx})">Queue</button></td>
+                </tr>`;
+            }).join('');
+
+            likelyWrap.innerHTML = `
+                <div style="margin-bottom:8px;color:#1f2937;">
+                    Best Match: <strong>${esc(best.row.title)}</strong><br>
+                    Confidence: <strong>${bestPct}%</strong> | Title Match: ${best.details.matchedTitleTokens}/${best.details.totalTitleTokens} | Seeds: ${Number(best.row.seeds || 0)}
+                </div>
+                <div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="tiny-btn" onclick="queueCandidate(0)">Queue Best Match</button>
+                    <button class="tiny-btn" onclick="showCandidateJson(0)">Inspect Best JSON</button>
+                </div>
+                <div style="overflow:auto;max-height:180px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Confidence</th>
+                                <th>Seeds</th>
+                                <th>Size</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>${topRows}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function queueRow(row) {
+            const queueMeta = readQueueMetadata(row);
+            const payloadBody = {
+                magnetUrl: row.magnetUrl,
+                category: queueMeta.category,
+                imdbId: queueMeta.imdbId || null,
+                queueContext: queueMeta.queueContext
+            };
+
+            const r = await fetch('/api/downloader/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payloadBody)
+            });
+
+            const payload = await r.json();
+            if (!r.ok || payload.success === false) {
+                throw new Error(payload.error || payload.message || `HTTP ${r.status}`);
+            }
+
+            const metaSummary = queueMeta.queueContext
+                ? ` | imdb=${queueMeta.queueContext.imdbId || 'n/a'} | season=${queueMeta.queueContext.season || '-'} | episode=${queueMeta.queueContext.episode || '-'}`
+                : ' | metadata=off';
+            setStatus(`Queued selected result into acquisition pipeline (${queueMeta.category}).${metaSummary}`, 'good');
+        }
+
+        function showCandidateJson(index) {
+            const item = Array.isArray(state.candidates) ? state.candidates[index] : null;
+            if (!item) {
+                jsonOut.textContent = 'Candidate not found.';
+                return;
+            }
+
+            jsonOut.textContent = JSON.stringify({
+                confidence: item.confidence,
+                details: item.details,
+                row: item.row
+            }, null, 2);
+        }
+
+        async function queueCandidate(index) {
+            const item = Array.isArray(state.candidates) ? state.candidates[index] : null;
+            if (!item || !item.row) {
+                setStatus('Candidate row not found.', 'bad');
+                return;
+            }
+
+            try {
+                await queueRow(item.row);
+            } catch (err) {
+                setStatus(`Queue failed: ${err.message}`, 'bad');
+            }
         }
 
         function readQueueMetadata(row) {
@@ -561,30 +833,8 @@
                 return;
             }
 
-            const queueMeta = readQueueMetadata(row);
-            const payloadBody = {
-                magnetUrl: row.magnetUrl,
-                category: queueMeta.category,
-                imdbId: queueMeta.imdbId || null,
-                queueContext: queueMeta.queueContext
-            };
-
             try {
-                const r = await fetch('/api/downloader/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payloadBody)
-                });
-
-                const payload = await r.json();
-                if (!r.ok || payload.success === false) {
-                    throw new Error(payload.error || payload.message || `HTTP ${r.status}`);
-                }
-
-                const metaSummary = queueMeta.queueContext
-                    ? ` | imdb=${queueMeta.queueContext.imdbId || 'n/a'} | season=${queueMeta.queueContext.season || '-'} | episode=${queueMeta.queueContext.episode || '-'}`
-                    : ' | metadata=off';
-                setStatus(`Queued selected result into acquisition pipeline (${queueMeta.category}).${metaSummary}`, 'good');
+                await queueRow(row);
             } catch (err) {
                 setStatus(`Queue failed: ${err.message}`, 'bad');
             }
@@ -667,6 +917,7 @@
 
                 state.lastResponse = resultPayload;
                 renderStats(resultPayload);
+                renderLikelyCandidate(resultPayload);
                 renderRows(resultPayload.filtered || [], filteredBody, true);
                 renderRows(resultPayload.raw || [], rawBody, false);
 
@@ -695,9 +946,11 @@
 
                 state.searchId = null;
                 state.lastResponse = null;
+                state.candidates = [];
                 filteredBody.innerHTML = '';
                 rawBody.innerHTML = '';
                 jsonOut.textContent = 'Search deleted. Start a new one to continue testing.';
+                renderLikelyCandidate(null);
                 renderStats(null);
                 setStatus(`Deleted search ${id}.`, 'good');
             } catch (err) {
@@ -712,6 +965,8 @@
 
         window.showJson = showJson;
         window.queueResult = queueResult;
+        window.queueCandidate = queueCandidate;
+        window.showCandidateJson = showCandidateJson;
     </script>
 </body>
 </html>
