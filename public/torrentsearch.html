@@ -935,9 +935,9 @@
                 body: JSON.stringify(payload)
             });
 
-            const payload = await r.json();
-            if (!r.ok || payload.success === false) {
-                throw new Error(payload.error || payload.message || `HTTP ${r.status}`);
+            const responsePayload = await r.json();
+            if (!r.ok || responsePayload.success === false) {
+                throw new Error(responsePayload.error || responsePayload.message || `HTTP ${r.status}`);
             }
 
             const metaSummary = queueMeta.queueContext
