@@ -1,0 +1,179 @@
+[sudo] password for epic: 
+Get:1 https://download.docker.com/linux/ubuntu noble InRelease [48.5 kB]
+Get:2 https://download.docker.com/linux/ubuntu noble/stable amd64 Packages [61.3 kB]                                                                           
+Hit:3 https://packages.redis.io/deb noble InRelease                                                  
+Hit:4 http://archive.ubuntu.com/ubuntu noble InRelease              
+Get:5 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:6 http://archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:7 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [853 kB]
+Get:8 http://archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:9 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1,113 kB]
+Get:10 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [191 kB]
+Get:11 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [44.9 kB]
+Get:12 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1,178 kB]                 
+Get:13 http://archive.ubuntu.com/ubuntu noble-updates/main Translation-en [272 kB]                    
+Get:14 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [180 kB]              
+Get:15 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.2 kB]         
+Get:16 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1,166 kB]                       
+Get:17 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [388 kB]                   
+Get:18 http://archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1,256 kB]              
+Get:19 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [268 kB]             
+Get:20 http://archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [284 kB]                   
+Get:21 http://archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:22 http://archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [5,776 B]
+Get:23 http://archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.5 kB]
+Fetched 7,777 kB in 2s (3,386 kB/s)                                  
+Reading package lists... Done
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libb2-1 libproxy1v5 libqt6core6t64 libqt6dbus6t64 libqt6network6t64 libqt6sql6-sqlite libqt6sql6t64 libqt6xml6t64 libtorrent-rasterbar2.0t64 qt6-translations-l10n
+The following NEW packages will be installed:
+  libb2-1 libproxy1v5 libqt6core6t64 libqt6dbus6t64 libqt6network6t64 libqt6sql6-sqlite libqt6sql6t64 libqt6xml6t64 libtorrent-rasterbar2.0t64 qbittorrent-nox qt6-translations-l10n
+0 upgraded, 11 newly installed, 0 to remove and 78 not upgraded.
+Need to get 13.3 MB of archives.
+After this operation, 38.9 MB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu noble/universe amd64 libb2-1 amd64 0.98.1-1.1build1 [45.0 kB]
+Get:2 http://archive.ubuntu.com/ubuntu noble/main amd64 libproxy1v5 amd64 0.5.4-4build1 [26.5 kB]
+Get:3 http://archive.ubuntu.com/ubuntu noble/universe amd64 libqt6core6t64 amd64 6.4.2+dfsg-21.1build5 [1,789 kB]
+Get:4 http://archive.ubuntu.com/ubuntu noble/universe amd64 libqt6dbus6t64 amd64 6.4.2+dfsg-21.1build5 [267 kB]
+Get:5 http://archive.ubuntu.com/ubuntu noble/universe amd64 libqt6network6t64 amd64 6.4.2+dfsg-21.1build5 [740 kB]
+Get:6 http://archive.ubuntu.com/ubuntu noble/universe amd64 libqt6sql6t64 amd64 6.4.2+dfsg-21.1build5 [141 kB]
+Get:7 http://archive.ubuntu.com/ubuntu noble/universe amd64 libqt6sql6-sqlite amd64 6.4.2+dfsg-21.1build5 [57.8 kB]
+Get:8 http://archive.ubuntu.com/ubuntu noble/universe amd64 libqt6xml6t64 amd64 6.4.2+dfsg-21.1build5 [75.9 kB]
+Get:9 http://archive.ubuntu.com/ubuntu noble/universe amd64 libtorrent-rasterbar2.0t64 amd64 2.0.10-1.1build2 [1,585 kB]
+Get:10 http://archive.ubuntu.com/ubuntu noble/universe amd64 qbittorrent-nox amd64 4.6.3-1build2 [6,766 kB]
+Get:11 http://archive.ubuntu.com/ubuntu noble/universe amd64 qt6-translations-l10n all 6.4.2-1 [1,761 kB]
+Fetched 13.3 MB in 2s (6,934 kB/s)                
+Selecting previously unselected package libb2-1:amd64.
+(Reading database ... 181994 files and directories currently installed.)
+Preparing to unpack .../00-libb2-1_0.98.1-1.1build1_amd64.deb ...
+Unpacking libb2-1:amd64 (0.98.1-1.1build1) ...
+Selecting previously unselected package libproxy1v5:amd64.
+Preparing to unpack .../01-libproxy1v5_0.5.4-4build1_amd64.deb ...
+Unpacking libproxy1v5:amd64 (0.5.4-4build1) ...
+Selecting previously unselected package libqt6core6t64:amd64.
+Preparing to unpack .../02-libqt6core6t64_6.4.2+dfsg-21.1build5_amd64.deb ...
+Unpacking libqt6core6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Selecting previously unselected package libqt6dbus6t64:amd64.
+Preparing to unpack .../03-libqt6dbus6t64_6.4.2+dfsg-21.1build5_amd64.deb ...
+Unpacking libqt6dbus6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Selecting previously unselected package libqt6network6t64:amd64.
+Preparing to unpack .../04-libqt6network6t64_6.4.2+dfsg-21.1build5_amd64.deb ...
+Unpacking libqt6network6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Selecting previously unselected package libqt6sql6t64:amd64.
+Preparing to unpack .../05-libqt6sql6t64_6.4.2+dfsg-21.1build5_amd64.deb ...
+Unpacking libqt6sql6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Selecting previously unselected package libqt6sql6-sqlite:amd64.
+Preparing to unpack .../06-libqt6sql6-sqlite_6.4.2+dfsg-21.1build5_amd64.deb ...
+Unpacking libqt6sql6-sqlite:amd64 (6.4.2+dfsg-21.1build5) ...
+Selecting previously unselected package libqt6xml6t64:amd64.
+Preparing to unpack .../07-libqt6xml6t64_6.4.2+dfsg-21.1build5_amd64.deb ...
+Unpacking libqt6xml6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Selecting previously unselected package libtorrent-rasterbar2.0t64:amd64.
+Preparing to unpack .../08-libtorrent-rasterbar2.0t64_2.0.10-1.1build2_amd64.deb ...
+Unpacking libtorrent-rasterbar2.0t64:amd64 (2.0.10-1.1build2) ...
+Selecting previously unselected package qbittorrent-nox.
+Preparing to unpack .../09-qbittorrent-nox_4.6.3-1build2_amd64.deb ...
+Unpacking qbittorrent-nox (4.6.3-1build2) ...
+Selecting previously unselected package qt6-translations-l10n.
+Preparing to unpack .../10-qt6-translations-l10n_6.4.2-1_all.deb ...
+Unpacking qt6-translations-l10n (6.4.2-1) ...
+Setting up libb2-1:amd64 (0.98.1-1.1build1) ...
+Setting up libqt6core6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Setting up libproxy1v5:amd64 (0.5.4-4build1) ...
+Setting up libtorrent-rasterbar2.0t64:amd64 (2.0.10-1.1build2) ...
+Setting up libqt6sql6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Setting up libqt6dbus6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Setting up libqt6xml6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Setting up qt6-translations-l10n (6.4.2-1) ...
+Setting up libqt6sql6-sqlite:amd64 (6.4.2+dfsg-21.1build5) ...
+Setting up libqt6network6t64:amd64 (6.4.2+dfsg-21.1build5) ...
+Setting up qbittorrent-nox (4.6.3-1build2) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.7) ...
+Scanning processes...                                                                                                                                                                                                                                                                                                                                                           
+Scanning candidates...                                                                                                                                                                                                                                                                                                                                                          
+Scanning processor microcode...                                                                                                                                                                                                                                                                                                                                                 
+Scanning linux images...                                                                                                                                                                                                                                                                                                                                                        
+
+Pending kernel upgrade!
+Running kernel version:
+  6.8.0-124-generic
+Diagnostics:
+  The currently running kernel version is not the expected kernel version 6.8.0-134-generic.
+
+Restarting the system to load the new kernel will not be handled automatically, so you should consider rebooting.
+
+The processor microcode seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ epic @ session #1: login[5424]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+
+qbittorrent-nox --help | head -n 80
+
+
+mkdir -p /home/epic/qbit-hostsearch-profile
+
+
+
+qbittorrent-nox --profile=/home/epic/qbit-hostsearch-profile --webui-port=18080 --torrenting-port=16881
+
+
+
+node - <<'NODE'
+const axios=require('axios');
+(async()=>{
+  const base='http://127.0.0.1:18080/api/v2';
+  const c=axios.create({baseURL:base,timeout:15000,validateStatus:()=>true});
+  const login=await c.post('/auth/login','username=admin&password=FVTXrhYDb',{headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const sid=(login.headers['set-cookie']||[]).find(v=>String(v).startsWith('SID='));
+  const cookie=sid?sid.split(';')[0]:'';
+  console.log('login',login.status,JSON.stringify(login.data),'cookie?',Boolean(cookie));
+  const h=cookie?{Cookie:cookie}:{};
+  const p=await c.get('/search/plugins',{headers:h});
+  console.log('plugins',p.status,Array.isArray(p.data)?p.data.length:JSON.stringify(p.data));
+  const start=await c.post('/search/start','pattern=ubuntu&plugins=all&category=all',{headers:{'Content-Type':'application/x-www-form-urlencoded',...h}});
+  const id=start.data&&start.data.id;
+  console.log('start',start.status,JSON.stringify(start.data));
+  const st=await c.get('/search/status',{params:{id},headers:h});
+  console.log('status',st.status,JSON.stringify(st.data));
+  const rs=await c.get('/search/results',{params:{id,limit:5,offset:0},headers:h});
+  console.log('results',rs.status,JSON.stringify(rs.data).slice(0,400));
+})();
+NODE
+Great progress: this host instance behaves correctly (status/results work). I’ll now configure credentials, install search plugins into this host instance, and verify you can retrieve real result rows/magnets.
+
+Confirmed. The host install path works, and this isolates the problem from the existing container search runtime.
+
+What I did:
+
+Installed qbittorrent-nox on the host (Ubuntu apt package, version 4.6.3).
+Started a dedicated host instance with isolated profile and non-conflicting ports:
+WebUI: http://localhost:18080
+Torrenting port: 16881
+Logged in and configured a permanent WebUI admin password.
+Installed search plugins on the host instance.
+Ran direct API lifecycle tests against the host instance:
+search start works
+search status/results work
+returned real magnet/hash results
+Working result proof:
+
+Plugin list now present and enabled on host instance (piratebay, eztv).
+Search for last of us returned stopped state with total 100 and real magnet result rows.
+Why this matters:
+
+Your original container qBittorrent search runtime was dropping jobs immediately.
+Host qBittorrent search runtime is healthy and returns usable data.
+This gives you the exact POC path you asked for: use host qBittorrent search to obtain magnets, then pass magnets into your downloader pipeline.
