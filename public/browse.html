@@ -335,6 +335,57 @@
                 .trim();
         }
 
+        function normalizeImdbId(value = '') {
+            const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+            if (!/^\d{5,10}$/.test(cleaned)) return '';
+            return `tt${cleaned}`;
+        }
+
+        function buildSeriesSearchQuery(showTitle, season = null, episode = null) {
+            const title = String(showTitle || '').replace(/[._-]/g, ' ').replace(/\s+/g, ' ').trim();
+            const s = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
+            const e = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
+            if (s && e) return `${title} S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+            if (s) return `${title} S${String(s).padStart(2, '0')}`;
+            return title;
+        }
+
+        function openTorrentSearchForShow(showTitle, imdbId, season = null, episode = null, sourceType = 'episode') {
+            const normalizedImdb = normalizeImdbId(imdbId);
+            const mediaType = 'series';
+            const query = buildSeriesSearchQuery(showTitle, season, episode);
+            const params = new URLSearchParams();
+            params.set('query', query);
+            params.set('officialTitle', String(showTitle || '').trim());
+            params.set('mediaType', mediaType);
+            params.set('queueMediaType', mediaType);
+            params.set('autoStart', '1');
+            params.set('autoResolve', '1');
+            if (normalizedImdb) {
+                params.set('imdbId', normalizedImdb);
+                params.set('queueImdbId', normalizedImdb);
+            }
+
+            const s = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
+            const e = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
+
+            if (s) {
+                params.set('season', String(s));
+                params.set('targetSeason', String(s));
+                params.set('queueSeason', String(s));
+            }
+            if (e) {
+                params.set('episode', String(e));
+                params.set('targetEpisode', String(e));
+                params.set('queueEpisode', String(e));
+            }
+            if (sourceType) {
+                params.set('sourceType', String(sourceType));
+            }
+
+            window.open(`/torrentsearch.html?${params.toString()}`, '_blank', 'noopener,noreferrer');
+        }
+
         function setCatalogActiveLabel(text) {
             const el = document.getElementById('catalogs-active-label');
             if (!el) return;
@@ -678,6 +729,9 @@
                 const rating = Number(show.averageRating || 0).toFixed(1);
                 const safeTitle = String(show.title || '').replace(/'/g, "\\'");
                 tvCoverByImdb[String(show.imdbId || '')] = show.cover || '';
+                const openBtn = show.inLibrary && show.localHref
+                    ? `<a class="open-btn" style="margin-bottom:6px;" href="${show.localHref}">Open in Library</a>`
+                    : '';
 
                 return `
                     <div class="card">
@@ -685,7 +739,7 @@
                             <img src="${show.cover}" onerror="handleImageFallback(this)">
                             <div class="badge-row">
                                 <span class="rating-badge">⭐ ${rating}</span>
-                                <span class="size-badge">${votes} votes</span>
+                                <span class="size-badge">${show.inLibrary ? 'In Library' : `${votes} votes`}</span>
                             </div>
                         </div>
                         <div class="card-info">
@@ -693,6 +747,7 @@
                                 <div class="title" title="${show.title}">${show.title}</div>
                                 <div class="meta">${yearLabel} • ${show.genres || 'Unknown genres'}</div>
                             </div>
+                            ${openBtn}
                             <button class="add-btn" style="background:#10b981;" onclick="loadShowTorrents('${show.imdbId}', '${safeTitle}')">Browse Episodes</button>
                         </div>
                     </div>
@@ -819,10 +874,18 @@
             return { episodes, packs: packRows };
         }
 
-        function renderEpisodeTableRows(rows) {
+        function renderEpisodeTableRows(rows, options = {}) {
+            const availableEpisodeSet = options.availableEpisodeSet instanceof Set ? options.availableEpisodeSet : new Set();
+            const showTitle = String(options.showTitle || '').replace(/'/g, "\\'");
+            const imdbId = String(options.imdbId || '');
+
             return rows.map(row => {
-                const season = String(parseInt(row.season, 10)).padStart(2, '0');
-                const episode = String(parseInt(row.episode, 10)).padStart(2, '0');
+                const seasonNum = parseInt(row.season, 10) || 0;
+                const episodeNum = parseInt(row.episode, 10) || 0;
+                const season = String(seasonNum).padStart(2, '0');
+                const episode = String(episodeNum).padStart(2, '0');
+                const key = `${seasonNum}-${episodeNum}`;
+                const inLibrary = availableEpisodeSet.has(key);
                 return `
                     <tr>
                         <td>
@@ -831,14 +894,23 @@
                         </td>
                         <td>${escapeHtml(row.size || 'N/A')}</td>
                         <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
-                        <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${parseInt(row.season, 10) || 0}, ${parseInt(row.episode, 10) || 0}, 'episode')">Ingest Episode</button></td>
+                        <td class="episode-add">
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Ingest Episode'}</button>
+                                <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">Smart Search</button>
+                            </div>
+                        </td>
                     </tr>
                 `;
             }).join('');
         }
 
-        function renderPackRows(rows) {
+        function renderPackRows(rows, options = {}) {
             if (!rows.length) return '';
+            const showTitle = String(options.showTitle || '').replace(/'/g, "\\'");
+            const imdbId = String(options.imdbId || '');
+            const completeSeasonSet = options.completeSeasonSet instanceof Set ? options.completeSeasonSet : new Set();
+
             return `
                 <div class="season-panel">
                     <div class="season-summary"><strong>Season Packs</strong><span>${rows.length} rows</span></div>
@@ -847,7 +919,10 @@
                             <tr><th>Release</th><th>Size</th><th>Seeds</th><th>Action</th></tr>
                         </thead>
                         <tbody>
-                            ${rows.map(row => `
+                            ${rows.map(row => {
+                                const seasonNum = parseInt(row.season, 10) || 0;
+                                const inLibrary = completeSeasonSet.has(seasonNum);
+                                return `
                                 <tr>
                                     <td>
                                         <div class="ep-title">${escapeHtml(row.title || '')}</div>
@@ -855,9 +930,15 @@
                                     </td>
                                     <td>${escapeHtml(row.size || 'N/A')}</td>
                                     <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
-                                    <td class="episode-add"><button class="add-btn" style="padding:6px 10px;" onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${parseInt(row.season, 10) || 0}, 0, 'pack')">Ingest Season</button></td>
+                                    <td class="episode-add">
+                                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                            <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${seasonNum}, 0, 'pack')">${inLibrary ? 'Season Complete' : 'Ingest Season'}</button>
+                                            <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, null, 'pack')">Smart Search</button>
+                                        </div>
+                                    </td>
                                 </tr>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -997,6 +1078,26 @@
             grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading releases for ${showTitle}...</div>`;
 
             try {
+                let libraryStatus = {
+                    inLibrary: false,
+                    show: null,
+                    seasons: [],
+                    availableEpisodeKeys: []
+                };
+
+                try {
+                    const libRes = await fetch(`/api/tv-shows/${encodeURIComponent(imdbId)}/library-status`);
+                    const libData = await parseJsonOrThrow(libRes);
+                    if (libData && libData.success) {
+                        libraryStatus = {
+                            ...libraryStatus,
+                            ...libData
+                        };
+                    }
+                } catch (_libErr) {
+                    // Non-fatal: EZTV browsing still works without local availability data.
+                }
+
                 const res = await fetch(`/api/eztv/browse?imdbId=${encodeURIComponent(imdbId)}&packsOnly=${packsOnly}&consolidated=false`);
                 const data = await parseJsonOrThrow(res);
 
@@ -1006,6 +1107,12 @@
                 }
 
                 const best = chooseBestEpisodeRows(data.torrents);
+                const availableEpisodeSet = new Set(Array.isArray(libraryStatus.availableEpisodeKeys) ? libraryStatus.availableEpisodeKeys : []);
+                const completeSeasonSet = new Set(
+                    (Array.isArray(libraryStatus.seasons) ? libraryStatus.seasons : [])
+                        .filter((season) => Number(season.totalEpisodes || 0) > 0 && Number(season.availableCount || 0) >= Number(season.totalEpisodes || 0))
+                        .map((season) => Number(season.seasonNumber))
+                );
                 const episodesBySeason = new Map();
                 for (const row of best.episodes) {
                     const season = parseInt(row.season, 10);
@@ -1017,15 +1124,23 @@
                     .sort((a, b) => a[0] - b[0])
                     .map(([season, rows]) => {
                         const seededCount = rows.filter(r => (parseInt(r.seeds, 10) || 0) > 0).length;
+                        const inLibraryCount = rows.filter((r) => {
+                            const key = `${parseInt(r.season, 10) || 0}-${parseInt(r.episode, 10) || 0}`;
+                            return availableEpisodeSet.has(key);
+                        }).length;
                         return `
                             <details class="season-panel" open>
-                                <summary class="season-summary"><strong>Season ${season}</strong><span>${rows.length} episodes • ${seededCount} seeded</span></summary>
+                                <summary class="season-summary"><strong>Season ${season}</strong><span>${rows.length} episodes • ${seededCount} seeded • ${inLibraryCount} in library</span></summary>
+                                <div style="padding:8px 10px; border-top:1px solid #263247; background:#0f1b31; display:flex; gap:8px; flex-wrap:wrap;">
+                                    <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, null, 'pack')">Add Whole Season (Smart Search)</button>
+                                    ${completeSeasonSet.has(Number(season)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
+                                </div>
                                 <table class="episode-table">
                                     <thead>
                                         <tr><th>Episode</th><th>Size</th><th>Seeds</th><th>Action</th></tr>
                                     </thead>
                                     <tbody>
-                                        ${renderEpisodeTableRows(rows)}
+                                        ${renderEpisodeTableRows(rows, { availableEpisodeSet, showTitle, imdbId })}
                                     </tbody>
                                 </table>
                             </details>
@@ -1039,6 +1154,7 @@
                         <div>
                             <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
                             <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} rows • Whole seasons only: ${packsOnly ? 'ON' : 'OFF'} • Mode: ${data.consolidated ? 'consolidated' : 'raw'}</div>
+                            ${libraryStatus.inLibrary ? `<div style="color:#86efac; font-size:0.82rem; margin-top:4px;">Already in library${libraryStatus.show?.localHref ? ` • <a href="${libraryStatus.show.localHref}" style="color:#86efac; text-decoration:underline;">open show</a>` : ''}</div>` : ''}
                             ${(typeof data.packRows === 'number' && typeof data.episodeRows === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Rows: ${data.packRows} pack • ${data.episodeRows} episode rows</div>` : ''}
                             ${(typeof data.totalEpisodeCandidates === 'number' && typeof data.uniqueEpisodeCandidates === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Episode candidates: ${data.totalEpisodeCandidates} • Unique SxE: ${data.uniqueEpisodeCandidates} • Seeded rows: ${data.nonZeroSeedRows || 0}</div>` : ''}
                             ${data.packsFallbackUsed ? '<div style="color:#f59e0b; font-size:0.8rem; margin-top:4px;">No seeded season packs found; showing unseeded pack rows where available.</div>' : ''}
@@ -1050,11 +1166,11 @@
                         <img src="${sanitizeImageSrc(showCover)}" onerror="handleImageFallback(this)" alt="${escapeHtml(showTitle)} cover">
                         <div class="show-overview-meta">
                             <h2>${escapeHtml(showTitle)}</h2>
-                            <div class="line">Grouped by season, then episode. Best seeded release selected per episode.</div>
+                            <div class="line">Grouped by season. Use direct ingest from EZTV rows or Smart Search via torrentsearch (IMDb + S/E aware).</div>
                             <div class="line">Episodes shown: ${best.episodes.length} • Pack rows: ${best.packs.length}</div>
                         </div>
                     </div>
-                    ${renderPackRows(best.packs)}
+                    ${renderPackRows(best.packs, { showTitle, imdbId, completeSeasonSet })}
                     ${seasonSections || '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No episode rows available after filtering.</div>'}
                 `;
             } catch (err) {

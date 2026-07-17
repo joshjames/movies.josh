@@ -273,6 +273,25 @@ function buildLibraryMovieIndexes(localRows = []) {
     return { byImdb, byTitleYear };
 }
 
+function buildLibrarySeriesIndexes(localRows = []) {
+    const byImdb = new Map();
+    const byTitle = new Map();
+
+    for (const item of localRows) {
+        const imdb = formatImdbId(item.imdbId || item.imdb_id || '');
+        if (imdb && !byImdb.has(imdb)) {
+            byImdb.set(imdb, item);
+        }
+
+        const titleKey = normalizeSearchText(item.title || '');
+        if (titleKey && !byTitle.has(titleKey)) {
+            byTitle.set(titleKey, item);
+        }
+    }
+
+    return { byImdb, byTitle };
+}
+
 function firstNonEmptyString(values = []) {
     for (const value of values) {
         const clean = String(value || '').trim();
@@ -1335,13 +1354,31 @@ router.get('/tv-shows/search', async (req, res) => {
             }
         }
 
+        const library = await getLibrary();
+        const localShows = Array.isArray(library?.shows) ? library.shows : [];
+        const seriesIndex = buildLibrarySeriesIndexes(localShows);
+
+        const mappedItems = items.map((item) => {
+            const imdbId = formatImdbId(item.imdbId || '');
+            const titleKey = normalizeSearchText(item.title || '');
+            const localMatch = (imdbId && seriesIndex.byImdb.get(imdbId)) || seriesIndex.byTitle.get(titleKey) || null;
+
+            return {
+                ...item,
+                imdbId,
+                inLibrary: Boolean(localMatch),
+                localShowId: localMatch?.id || null,
+                localHref: localMatch?.id ? `/series.html?id=${encodeURIComponent(localMatch.id)}` : null
+            };
+        });
+
         return res.json({
             success: true,
             source,
             updatedAt: index.updatedAt,
             totalItems: index.totalItems,
-            count: items.length,
-            items,
+            count: mappedItems.length,
+            items: mappedItems,
             missingBasics: index.totalItems === 0 && items.length === 0
         });
     } catch (err) {
@@ -1775,14 +1812,20 @@ router.get('/catalogs/tv/:slug', async (req, res) => {
             return res.status(404).json({ success: false, error: 'TV catalog not found.' });
         }
 
+        const library = await getLibrary();
+        const localShows = Array.isArray(library?.shows) ? library.shows : [];
+        const seriesIndex = buildLibrarySeriesIndexes(localShows);
+
         const mapped = catalogRows.map((item) => {
             const imdbId = formatImdbId(item.imdbId || item.id || '');
             const fallbackCover = imdbId ? `/api/tv-shows/${encodeURIComponent(imdbId)}/cover` : '';
+            const title = String(item.title || item.name || '').trim();
+            const localMatch = (imdbId && seriesIndex.byImdb.get(imdbId)) || seriesIndex.byTitle.get(normalizeSearchText(title)) || null;
 
             return {
                 imdbId,
                 tmdbId: item.tmdbId || null,
-                title: String(item.title || item.name || '').trim(),
+                title,
                 originalTitle: String(item.originalTitle || '').trim(),
                 startYear: String(item.startYear || '').trim(),
                 endYear: String(item.endYear || '').trim(),
@@ -1792,7 +1835,10 @@ router.get('/catalogs/tv/:slug', async (req, res) => {
                 popularity: Number(item.popularity || 0) || 0,
                 episodeCount: Number(item.episodeCount || 0) || 0,
                 source: item.source || 'catalog',
-                cover: String(item.cover || '').trim() || fallbackCover
+                cover: String(item.cover || '').trim() || fallbackCover,
+                inLibrary: Boolean(localMatch),
+                localShowId: localMatch?.id || null,
+                localHref: localMatch?.id ? `/series.html?id=${encodeURIComponent(localMatch.id)}` : null
             };
         });
 
@@ -1810,6 +1856,99 @@ router.get('/catalogs/tv/:slug', async (req, res) => {
             page,
             limit,
             items
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-shows/:imdbId/library-status', async (req, res) => {
+    try {
+        const imdbId = formatImdbId(req.params.imdbId || '');
+        if (!imdbId) {
+            return res.status(400).json({ success: false, error: 'Invalid IMDb ID.' });
+        }
+
+        const library = await getLibrary();
+        const shows = Array.isArray(library?.shows) ? library.shows : [];
+        const localShow = shows.find((item) => formatImdbId(item.imdbId || item.imdb_id || '') === imdbId) || null;
+
+        if (!localShow) {
+            return res.json({
+                success: true,
+                imdbId,
+                inLibrary: false,
+                show: null,
+                seasons: [],
+                availableEpisodeKeys: []
+            });
+        }
+
+        const sourceFolder = localShow?.sourcePath ? path.basename(localShow.sourcePath) : '';
+        const fallbackFolder = normalizeShowFolderInput(String(localShow.id || '').replace(/^series\//i, ''));
+        const showFolder = normalizeShowFolderInput(sourceFolder || fallbackFolder);
+        const showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
+
+        if (!showFolder || !showPath || !fs.existsSync(showPath)) {
+            return res.json({
+                success: true,
+                imdbId,
+                inLibrary: true,
+                show: {
+                    id: localShow.id || null,
+                    title: localShow.title || '',
+                    showFolder: showFolder || null,
+                    localHref: localShow.id ? `/series.html?id=${encodeURIComponent(localShow.id)}` : null
+                },
+                seasons: [],
+                availableEpisodeKeys: []
+            });
+        }
+
+        const manifest = rebuildSeriesManifest(showPath, {
+            showFolderName: showFolder,
+            write: true
+        });
+
+        const seasons = [];
+        const availableEpisodeKeys = [];
+        const seasonBlocks = manifest?.seasons || {};
+
+        Object.keys(seasonBlocks)
+            .sort((a, b) => Number(a) - Number(b))
+            .forEach((seasonKey) => {
+                const seasonNumber = Number(seasonKey);
+                const episodes = Array.isArray(seasonBlocks[seasonKey]?.episodes) ? seasonBlocks[seasonKey].episodes : [];
+                const availableEpisodes = episodes
+                    .filter((ep) => Boolean(ep?.available) || Boolean(String(ep?.localRelativePath || '').trim()))
+                    .map((ep) => Number(ep.episodeNumber))
+                    .filter((epNum) => Number.isFinite(epNum) && epNum > 0)
+                    .sort((a, b) => a - b);
+
+                availableEpisodes.forEach((epNum) => {
+                    availableEpisodeKeys.push(`${seasonNumber}-${epNum}`);
+                });
+
+                seasons.push({
+                    seasonNumber,
+                    totalEpisodes: episodes.length,
+                    availableCount: availableEpisodes.length,
+                    availableEpisodes
+                });
+            });
+
+        return res.json({
+            success: true,
+            imdbId,
+            inLibrary: true,
+            show: {
+                id: localShow.id || null,
+                title: localShow.title || '',
+                showFolder,
+                localHref: localShow.id ? `/series.html?id=${encodeURIComponent(localShow.id)}` : null
+            },
+            seasons,
+            availableEpisodeKeys
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
