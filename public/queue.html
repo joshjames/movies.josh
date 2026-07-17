@@ -273,6 +273,96 @@
             return n;
         }
 
+        function normalizeImdbId(value) {
+            const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+            if (!/^\d{5,10}$/.test(cleaned)) return '';
+            return `tt${cleaned}`;
+        }
+
+        function parseSeasonEpisodeFromText(value) {
+            const raw = String(value || '');
+            const sxe = raw.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+            if (sxe) {
+                return {
+                    season: parseInt(sxe[1], 10),
+                    episode: parseInt(sxe[2], 10)
+                };
+            }
+
+            const seasonOnly = raw.match(/season\s*(\d{1,2})/i) || raw.match(/s(\d{1,2})(?!\d)/i);
+            return {
+                season: seasonOnly ? parseInt(seasonOnly[1], 10) : null,
+                episode: null
+            };
+        }
+
+        function pickQueueReplacementContext(item) {
+            const title = String(item?.title || item?.payload?.torrentName || '').trim();
+            const queueContext = item?.payload?.queueContext || {};
+            const parsedFromTitle = parseSeasonEpisodeFromText(title);
+            const contentType = String(item?.contentType || queueContext?.contentType || '').toLowerCase();
+            const isSeries = contentType === 'series' || Boolean(parsedFromTitle.season || parsedFromTitle.episode || queueContext?.season || queueContext?.episode);
+            const imdbId = normalizeImdbId(item?.imdbId || item?.payload?.imdbId || queueContext?.imdbId || '');
+
+            const season = Number.isFinite(parseInt(queueContext?.season, 10)) && parseInt(queueContext.season, 10) > 0
+                ? parseInt(queueContext.season, 10)
+                : parsedFromTitle.season;
+            const episode = Number.isFinite(parseInt(queueContext?.episode, 10)) && parseInt(queueContext.episode, 10) > 0
+                ? parseInt(queueContext.episode, 10)
+                : parsedFromTitle.episode;
+
+            return {
+                query: title,
+                officialTitle: String(item?.title || item?.payload?.torrentName || '').replace(/[._-]/g, ' ').trim(),
+                imdbId,
+                contentType: isSeries ? 'series' : 'movie',
+                season,
+                episode,
+                sourceType: episode ? 'episode' : (season ? 'pack' : null),
+                quality: String(item?.quality || item?.payload?.quality || '').trim(),
+                minSeeds: String(item?.minSeeds || item?.payload?.minSeeds || '').trim()
+            };
+        }
+
+        function openReplacementSearch(item) {
+            const ctx = pickQueueReplacementContext(item);
+            const params = new URLSearchParams();
+            params.set('query', ctx.query || ctx.officialTitle || '');
+            params.set('officialTitle', ctx.officialTitle || ctx.query || '');
+            params.set('mediaType', ctx.contentType === 'series' ? 'series' : 'movie');
+            params.set('queueMediaType', ctx.contentType === 'series' ? 'series' : 'movie');
+            params.set('autoStart', '1');
+            params.set('autoResolve', '1');
+
+            if (ctx.imdbId) {
+                params.set('imdbId', ctx.imdbId);
+                params.set('queueImdbId', ctx.imdbId);
+            }
+
+            if (ctx.season) {
+                params.set('season', String(ctx.season));
+                params.set('targetSeason', String(ctx.season));
+                params.set('queueSeason', String(ctx.season));
+            }
+
+            if (ctx.episode) {
+                params.set('episode', String(ctx.episode));
+                params.set('targetEpisode', String(ctx.episode));
+                params.set('queueEpisode', String(ctx.episode));
+            }
+
+            if (ctx.quality) {
+                params.set('quality', ctx.quality);
+            }
+
+            if (ctx.sourceType) {
+                params.set('sourceType', ctx.sourceType);
+            }
+
+            const url = `/torrentsearch.html?${params.toString()}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
         function toItemKey(item) {
             return String(item.jobId || item.torrentHash || item.title || Math.random());
         }
@@ -481,6 +571,12 @@
                         } catch (err) {
                             alert(err.message);
                         }
+                    }));
+                }
+
+                if (item.jobId) {
+                    actions.appendChild(createActionButton('Find Replacement', 'md-outlined-button', () => {
+                        openReplacementSearch(item);
                     }));
                 }
 

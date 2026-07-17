@@ -428,6 +428,49 @@
             return document.getElementById(id).value.trim();
         }
 
+        function setValue(id, nextValue) {
+            const node = document.getElementById(id);
+            if (!node || nextValue === undefined || nextValue === null || nextValue === '') return;
+            node.value = String(nextValue);
+        }
+
+        function normalizeBoolParam(value) {
+            return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+        }
+
+        function applyLaunchParams() {
+            const params = new URLSearchParams(window.location.search);
+
+            setValue('queryIn', params.get('query') || params.get('q'));
+            setValue('officialTitleIn', params.get('officialTitle') || params.get('title'));
+            setValue('imdbIn', params.get('imdbId') || params.get('queueImdbId'));
+            setValue('queueImdbIn', params.get('queueImdbId') || params.get('imdbId'));
+            setValue('seasonIn', params.get('season') || params.get('queueSeason'));
+            setValue('episodeIn', params.get('episode') || params.get('queueEpisode'));
+            setValue('targetSeasonIn', params.get('targetSeason') || params.get('season'));
+            setValue('targetEpisodeIn', params.get('targetEpisode') || params.get('episode'));
+            setValue('queueSeasonIn', params.get('queueSeason') || params.get('season'));
+            setValue('queueEpisodeIn', params.get('queueEpisode') || params.get('episode'));
+            setValue('qualityIn', params.get('quality'));
+            setValue('minSeedsIn', params.get('minSeeds'));
+            setValue('sourceIn', params.get('source'));
+            setValue('mustIn', params.get('mustContain'));
+            setValue('excludeIn', params.get('excludeWords'));
+
+            const mediaType = String(params.get('mediaType') || params.get('queueMediaType') || '').toLowerCase();
+            if (mediaType === 'movie' || mediaType === 'series') {
+                document.getElementById('queueMediaTypeIn').value = mediaType === 'series' ? 'series' : 'movie';
+            }
+
+            const minConfidence = params.get('minConfidence');
+            if (minConfidence) setValue('minConfidenceIn', minConfidence);
+
+            const autoResolve = normalizeBoolParam(params.get('autoResolve'));
+            const autoStart = normalizeBoolParam(params.get('autoStart'));
+
+            return { autoResolve, autoStart, params };
+        }
+
         function setStatus(text, level = 'warn') {
             statusBox.className = `status ${level}`;
             statusBox.textContent = text;
@@ -1139,6 +1182,21 @@
         document.getElementById('refreshBtn').addEventListener('click', refreshResults);
         document.getElementById('resolveInternalBtn').addEventListener('click', () => resolveInternalMatch({ autoApply: true }));
         document.getElementById('deleteBtn').addEventListener('click', deleteSearch);
+
+        const launchState = applyLaunchParams();
+
+        if (launchState.autoResolve || launchState.autoStart) {
+            const currentQuery = value('queryIn');
+            if (currentQuery) {
+                resolveInternalMatch({ query: currentQuery, autoApply: true }).finally(() => {
+                    if (launchState.autoStart) {
+                        startSearch();
+                    }
+                });
+            } else if (launchState.autoStart) {
+                startSearch();
+            }
+        }
 
         window.showJson = showJson;
         window.queueResult = queueResult;
