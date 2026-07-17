@@ -22,6 +22,8 @@ const {
 const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
 const MetadataRegistry = require('../services/MetadataRegistry');
+const { getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const { getByImdbId: getMovieByImdbId } = require('../services/MovieTitleIndexService');
 const { 
     createJob, 
     getAllJobs, 
@@ -42,6 +44,52 @@ function normalizeText(value) {
         .replace(/[^a-z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function normalizeDisplayTitle(value) {
+    return String(value || '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildQueueMediaTitle({ title = '', imdbId = null, contentType = 'movie', payload = {} } = {}) {
+    const queueContext = (payload && typeof payload.queueContext === 'object') ? payload.queueContext : {};
+    const cleanImdbId = normalizeImdbId(imdbId || payload.imdbId || queueContext.imdbId);
+    const season = parseInt(queueContext.season, 10);
+    const episode = parseInt(queueContext.episode, 10);
+    const isSeries = String(contentType || '').toLowerCase() === 'series' || Boolean(Number.isFinite(season) && season > 0 || Number.isFinite(episode) && episode > 0);
+
+    let baseTitle = normalizeDisplayTitle(payload.mediaTitle || queueContext.mediaTitle || title || payload.torrentName || 'Queue Item');
+
+    if (cleanImdbId) {
+        if (isSeries) {
+            const series = getSeriesByImdbId(cleanImdbId);
+            baseTitle = normalizeDisplayTitle(series?.title || series?.originalTitle || baseTitle);
+        } else {
+            const movie = getMovieByImdbId(cleanImdbId);
+            baseTitle = normalizeDisplayTitle(movie?.title || baseTitle);
+        }
+    }
+
+    if (isSeries && baseTitle) {
+        const seasonPart = Number.isFinite(season) && season > 0 ? `S${String(season).padStart(2, '0')}` : '';
+        const episodePart = Number.isFinite(episode) && episode > 0 ? `E${String(episode).padStart(2, '0')}` : '';
+        if (seasonPart && episodePart) return `${baseTitle} ${seasonPart}${episodePart}`;
+        if (seasonPart) return `${baseTitle} ${seasonPart}`;
+    }
+
+    return baseTitle;
+}
+
+function buildQueueRowTitle(jobOrItem = {}, fallback = 'Queue Item') {
+    const payload = (jobOrItem && typeof jobOrItem.payload === 'object') ? jobOrItem.payload : {};
+    return buildQueueMediaTitle({
+        title: jobOrItem.title || fallback,
+        imdbId: jobOrItem.imdbId || payload.imdbId || null,
+        contentType: jobOrItem.contentType || payload.contentType || 'movie',
+        payload
+    });
 }
 
 function parseSeasonEpisodeFromTitle(title) {
@@ -1052,6 +1100,15 @@ router.post('/downloader/add', async (req, res) => {
                 return null;
             }
         })();
+        const mediaTitle = buildQueueMediaTitle({
+            title: torrentName,
+            imdbId: effectiveImdbId,
+            contentType: targetCategory === 'series-streamer' ? 'series' : 'movie',
+            payload: {
+                torrentName,
+                queueContext: effectiveQueueContext
+            }
+        });
 
         createJob({
             status: 'WAITING_DOWNLOAD',
@@ -1066,6 +1123,7 @@ router.post('/downloader/add', async (req, res) => {
                 videoFile: null,
                 magnetUrl,
                 imdbId: effectiveImdbId || null,
+                mediaTitle,
                 addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
                 queueContext: effectiveQueueContext
             }
@@ -1140,6 +1198,15 @@ router.post('/yts/add', async (req, res) => {
                 return null;
             }
         })();
+        const mediaTitle = buildQueueMediaTitle({
+            title: torrentName,
+            imdbId: effectiveImdbId,
+            contentType: 'movie',
+            payload: {
+                torrentName,
+                queueContext: effectiveQueueContext
+            }
+        });
 
         createJob({
             status: 'WAITING_DOWNLOAD',
@@ -1154,6 +1221,7 @@ router.post('/yts/add', async (req, res) => {
                 videoFile: null,
                 magnetUrl,
                 imdbId: effectiveImdbId || null,
+                mediaTitle,
                 addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
                 queueContext: effectiveQueueContext
             }
@@ -1273,7 +1341,8 @@ router.get('/pipeline/status', async (req, res) => {
             };
 
             pipeline.push({
-                title: torrent.name.replace(/[._-]/g, ' '),
+                title: linkedJob ? buildQueueRowTitle(linkedJob, torrent.name) : normalizeDisplayTitle(torrent.name),
+                mediaTitle: linkedJob ? buildQueueRowTitle(linkedJob, torrent.name) : normalizeDisplayTitle(torrent.name),
                 progress: (torrent.progress * 100).toFixed(1),
                 status: displayStatus,
                 eta: torrent.eta, 
@@ -1302,7 +1371,8 @@ router.get('/pipeline/status', async (req, res) => {
             // Collect failed jobs separately
             if (job.status === 'FAILED') {
                 failedJobs.push({
-                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    title: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
+                    mediaTitle: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
                     status: 'Failed at ' + job.currentStep,
                     error: job.error || 'Unknown error',
                     jobId: job.id,
@@ -1322,7 +1392,8 @@ router.get('/pipeline/status', async (req, res) => {
                     return;
                 }
                 pipeline.push({
-                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    title: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
+                    mediaTitle: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
                     progress: 0,
                     status: 'Paused in Acquisition Queue',
                     eta: 'Paused',
@@ -1341,7 +1412,8 @@ router.get('/pipeline/status', async (req, res) => {
 
             if (job.status === 'PAUSED') {
                 pipeline.push({
-                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    title: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
+                    mediaTitle: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
                     progress: 0,
                     status: 'Paused in Processing Queue',
                     eta: 'Paused',
@@ -1377,7 +1449,8 @@ router.get('/pipeline/status', async (req, res) => {
                     return;
                 }
                 pipeline.push({
-                    title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                    title: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
+                    mediaTitle: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
                     progress: 0,
                     status: 'Waiting For Download Completion',
                     eta: 'Pending...',
@@ -1401,7 +1474,8 @@ router.get('/pipeline/status', async (req, res) => {
             };
 
             pipeline.push({
-                title: (job.payload && job.payload.torrentName) ? job.payload.torrentName.replace(/[._-]/g, ' ') : 'Job ' + job.id.substring(0, 8),
+                title: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
+                mediaTitle: buildQueueRowTitle(job, 'Job ' + job.id.substring(0, 8)),
                 progress: stepInfo.progress,
                 status: stepInfo.display,
                 eta: 'Calculating...',
@@ -1741,7 +1815,16 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
         currentStep: 'INGEST',
         imdbId: replacementImdbId || null,
         contentType,
-        title: job.title || job.payload?.torrentName || 'Replacement source',
+        title: buildQueueMediaTitle({
+            title: job.title || job.payload?.torrentName || 'Replacement source',
+            imdbId: replacementImdbId || null,
+            contentType,
+            payload: {
+                ...(job.payload || {}),
+                queueContext: derivedQueueContext,
+                mediaTitle: job.payload?.mediaTitle || job.title || job.payload?.torrentName || 'Replacement source'
+            }
+        }),
         payload: {
             torrentHash: infoHash,
             torrentName,
@@ -1750,6 +1833,16 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
             videoFile: null,
             magnetUrl,
             imdbId: replacementImdbId || null,
+            mediaTitle: buildQueueMediaTitle({
+                title: job.title || job.payload?.torrentName || 'Replacement source',
+                imdbId: replacementImdbId || null,
+                contentType,
+                payload: {
+                    ...(job.payload || {}),
+                    queueContext: derivedQueueContext,
+                    mediaTitle: job.payload?.mediaTitle || job.title || job.payload?.torrentName || 'Replacement source'
+                }
+            }),
             addedByUser: owner || null,
             queueContext: derivedQueueContext,
             queueOptions: {

@@ -297,7 +297,7 @@
         }
 
         function pickQueueReplacementContext(item) {
-            const title = String(item?.title || item?.payload?.torrentName || '').trim();
+            const title = String(item?.mediaTitle || item?.title || item?.payload?.mediaTitle || item?.payload?.torrentName || '').trim();
             const queueContext = item?.payload?.queueContext || {};
             const parsedFromTitle = parseSeasonEpisodeFromText(title);
             const contentType = String(item?.contentType || queueContext?.contentType || '').toLowerCase();
@@ -313,8 +313,8 @@
 
             return {
                 query: title,
-                officialTitle: String(item?.title || item?.payload?.torrentName || '').replace(/[._-]/g, ' ').trim(),
-                queueLabel: String(item?.title || item?.payload?.torrentName || 'Queue item').replace(/[._-]/g, ' ').trim(),
+                officialTitle: String(item?.mediaTitle || item?.title || item?.payload?.mediaTitle || item?.payload?.torrentName || '').replace(/[._-]/g, ' ').trim(),
+                queueLabel: String(item?.mediaTitle || item?.title || item?.payload?.mediaTitle || item?.payload?.torrentName || 'Queue item').replace(/[._-]/g, ' ').trim(),
                 imdbId,
                 contentType: isSeries ? 'series' : 'movie',
                 season,
@@ -329,7 +329,7 @@
         function openReplacementSearch(item) {
             const ctx = pickQueueReplacementContext(item);
             const params = new URLSearchParams();
-            params.set('query', ctx.query || ctx.officialTitle || '');
+            params.set('query', ctx.officialTitle || ctx.query || '');
             params.set('officialTitle', ctx.officialTitle || ctx.query || '');
             params.set('mediaType', ctx.contentType === 'series' ? 'series' : 'movie');
             params.set('queueMediaType', ctx.contentType === 'series' ? 'series' : 'movie');
@@ -470,7 +470,7 @@
                     </div>
                     <md-assist-chip label="${label}"></md-assist-chip>
                 `;
-                top.querySelector('.name').textContent = String(item.title || 'Queue Item');
+                top.querySelector('.name').textContent = String(item.mediaTitle || item.title || 'Queue Item');
                 top.querySelector('.meta').textContent = item._failed
                     ? `Issue: ${item.error || 'Unknown problem'}`
                     : `Status: ${item.status || 'Processing'}${item.size ? ` · ${item.size}` : ''}`;
