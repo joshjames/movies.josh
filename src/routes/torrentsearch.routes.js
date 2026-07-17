@@ -1,8 +1,11 @@
 const express = require('express');
+const axios = require('axios');
 
 const router = express.Router();
 const logger = require('../services/logger');
 const TorrentSearchService = require('../services/TorrentSearchService');
+const { searchIndex: searchTvIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const MovieTitleIndexService = require('../services/MovieTitleIndexService');
 
 function parseIntSafe(value, fallback = 0) {
     const parsed = parseInt(value, 10);
@@ -20,6 +23,103 @@ function normalizeText(value) {
         .replace(/[^a-z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function sanitizeLookupQuery(value) {
+    return normalizeText(
+        String(value || '')
+            .replace(/s\d{1,2}\s*e\d{1,2}/gi, ' ')
+            .replace(/season\s*\d{1,2}/gi, ' ')
+            .replace(/episode\s*\d{1,3}/gi, ' ')
+            .replace(/\b(1080p|720p|2160p|4k|h264|x264|x265|hevc|webrip|webdl|web)\b/gi, ' ')
+    );
+}
+
+function normalizeImdbLoose(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return '';
+    return `tt${cleaned}`;
+}
+
+function scoreTitleCandidate({ candidate, query, imdbHint = '', preferredType = 'auto' }) {
+    const titleNorm = normalizeText(candidate?.title || candidate?.originalTitle || '');
+    const queryNorm = normalizeText(query || '');
+    const imdb = normalizeImdbLoose(candidate?.imdbId || candidate?.id || '');
+    const terms = queryNorm.split(' ').filter(Boolean);
+
+    let score = 0;
+    if (imdbHint && imdb && imdbHint === imdb) score += 800;
+    if (titleNorm === queryNorm && queryNorm) score += 260;
+    else if (titleNorm.startsWith(queryNorm) && queryNorm) score += 160;
+
+    for (const t of terms) {
+        if (titleNorm.includes(t)) score += 24;
+        else score -= 20;
+    }
+
+    const votes = Number(candidate?.votes || candidate?.numVotes || 0) || 0;
+    const rating = Number(candidate?.rating || candidate?.averageRating || 0) || 0;
+    score += Math.min(120, Math.floor(votes / 10000));
+    score += Math.floor(rating * 10);
+
+    const type = String(candidate?.mediaType || 'series');
+    if (preferredType === 'series' && type === 'series') score += 80;
+    if (preferredType === 'movie' && type === 'movie') score += 80;
+    if (preferredType === 'series' && type === 'movie') score -= 20;
+    if (preferredType === 'movie' && type === 'series') score -= 20;
+
+    return score;
+}
+
+async function searchOmdbFallback(query, limit = 8) {
+    const apiKey = String(process.env.OMDB_API_KEY || '84196d01').trim();
+    if (!apiKey) return [];
+
+    try {
+        const [movieRes, seriesRes] = await Promise.all([
+            axios.get(`http://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&s=${encodeURIComponent(query)}&type=movie`, { timeout: 8000 }),
+            axios.get(`http://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}&s=${encodeURIComponent(query)}&type=series`, { timeout: 8000 })
+        ]);
+
+        const movieRows = Array.isArray(movieRes?.data?.Search) ? movieRes.data.Search : [];
+        const seriesRows = Array.isArray(seriesRes?.data?.Search) ? seriesRes.data.Search : [];
+
+        const mapped = [
+            ...movieRows.map(row => ({
+                mediaType: 'movie',
+                imdbId: normalizeImdbLoose(row.imdbID || ''),
+                title: String(row.Title || '').trim(),
+                year: String(row.Year || '').trim(),
+                votes: 0,
+                rating: 0,
+                source: 'omdb-fallback'
+            })),
+            ...seriesRows.map(row => ({
+                mediaType: 'series',
+                imdbId: normalizeImdbLoose(row.imdbID || ''),
+                title: String(row.Title || '').trim(),
+                startYear: String(row.Year || '').split('-')[0] || '',
+                endYear: String(row.Year || '').split('-')[1] || '',
+                episodeCount: 0,
+                numVotes: 0,
+                averageRating: 0,
+                source: 'omdb-fallback'
+            }))
+        ].filter(item => item.imdbId && item.title);
+
+        const deduped = [];
+        const seen = new Set();
+        for (const item of mapped) {
+            if (seen.has(item.imdbId)) continue;
+            seen.add(item.imdbId);
+            deduped.push(item);
+            if (deduped.length >= limit) break;
+        }
+
+        return deduped;
+    } catch (_err) {
+        return [];
+    }
 }
 
 function parseSeasonEpisodeFromTitle(title) {
@@ -248,6 +348,116 @@ router.get('/health', async (_req, res) => {
         providers: TorrentSearchService.listProviders(),
         qbitSearchApi: resolveSearchApiUrl()
     });
+});
+
+router.get('/internal/resolve', async (req, res) => {
+    try {
+        const query = String(req.query.q || req.query.query || '').trim();
+        const lookupQuery = sanitizeLookupQuery(query) || query;
+        const limit = Math.max(1, Math.min(parseIntSafe(req.query.limit, 12), 50));
+        const preferredType = String(req.query.mediaType || 'auto').trim().toLowerCase();
+        const imdbHint = normalizeImdbLoose(req.query.imdbId || '');
+
+        if (!query && !imdbHint) {
+            return res.status(400).json({ success: false, error: 'query or imdbId is required.' });
+        }
+
+        const tvCandidates = lookupQuery
+            ? searchTvIndex(lookupQuery, Math.max(limit * 2, 20)).map(item => ({
+                mediaType: 'series',
+                imdbId: normalizeImdbLoose(item.imdbId || ''),
+                title: item.title,
+                originalTitle: item.originalTitle,
+                startYear: item.startYear,
+                endYear: item.endYear,
+                episodeCount: Number(item.episodeCount || 0) || 0,
+                averageRating: Number(item.averageRating || 0) || 0,
+                numVotes: Number(item.numVotes || 0) || 0,
+                source: 'tv-local-index'
+            }))
+            : [];
+
+        const movieCandidates = lookupQuery
+            ? MovieTitleIndexService.searchIndex(lookupQuery, Math.max(limit * 2, 20)).map(item => ({
+                mediaType: 'movie',
+                imdbId: normalizeImdbLoose(item.imdbId || ''),
+                title: item.title,
+                year: item.year,
+                rating: Number(item.rating || 0) || 0,
+                votes: Number(item.votes || 0) || 0,
+                genres: item.genres || [],
+                source: 'movie-local-index'
+            }))
+            : [];
+
+        let combined = [...tvCandidates, ...movieCandidates].filter(row => row.imdbId && row.title);
+
+        if (imdbHint) {
+            const tvByImdb = getSeriesByImdbId(imdbHint);
+            const movieByImdb = MovieTitleIndexService.getByImdbId(imdbHint);
+            if (tvByImdb) {
+                combined.unshift({
+                    mediaType: 'series',
+                    imdbId: normalizeImdbLoose(tvByImdb.imdbId || ''),
+                    title: tvByImdb.title,
+                    originalTitle: tvByImdb.originalTitle,
+                    startYear: tvByImdb.startYear,
+                    endYear: tvByImdb.endYear,
+                    episodeCount: Number(tvByImdb.episodeCount || 0) || 0,
+                    averageRating: Number(tvByImdb.averageRating || 0) || 0,
+                    numVotes: Number(tvByImdb.numVotes || 0) || 0,
+                    source: 'tv-local-index'
+                });
+            }
+            if (movieByImdb) {
+                combined.unshift({
+                    mediaType: 'movie',
+                    imdbId: normalizeImdbLoose(movieByImdb.imdbId || ''),
+                    title: movieByImdb.title,
+                    year: movieByImdb.year,
+                    rating: Number(movieByImdb.rating || 0) || 0,
+                    votes: Number(movieByImdb.votes || 0) || 0,
+                    genres: movieByImdb.genres || [],
+                    source: 'movie-local-index'
+                });
+            }
+        }
+
+        if (combined.length === 0 && lookupQuery) {
+            const fallback = await searchOmdbFallback(lookupQuery, Math.max(limit, 8));
+            combined = [...combined, ...fallback];
+        }
+
+        const deduped = [];
+        const seen = new Set();
+        for (const row of combined) {
+            const key = `${row.mediaType}:${row.imdbId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            deduped.push(row);
+        }
+
+        const ranked = deduped
+            .map(candidate => ({
+                ...candidate,
+                score: scoreTitleCandidate({ candidate, query: lookupQuery, imdbHint, preferredType })
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, limit);
+
+        return res.json({
+            success: true,
+            query,
+            lookupQuery,
+            imdbHint: imdbHint || null,
+            preferredType,
+            count: ranked.length,
+            candidates: ranked
+        });
+    } catch (err) {
+        logger.error(`[TorrentSearch] Internal resolve failed: ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 router.get('/plugins', async (_req, res) => {

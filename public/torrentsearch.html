@@ -622,32 +622,13 @@
             const imdbHint = normalizeImdbId(value('imdbIn') || value('queueImdbIn') || '');
 
             try {
-                let candidates = [];
+                const r = await fetch(`/api/torrentsearch/internal/resolve?q=${encodeURIComponent(queryText)}&limit=20&mediaType=${encodeURIComponent(mediaType)}${imdbHint ? `&imdbId=${encodeURIComponent(imdbHint)}` : ''}`);
+                const payload = await r.json();
+                if (!r.ok || payload.success === false) throw new Error(payload.error || `HTTP ${r.status}`);
 
-                if (mediaType === 'series') {
-                    const r = await fetch(`/api/tv-shows/search?q=${encodeURIComponent(queryText)}&limit=20&localOnly=1`);
-                    const payload = await r.json();
-                    if (!r.ok || payload.success === false) throw new Error(payload.error || `HTTP ${r.status}`);
-
-                    candidates = Array.isArray(payload.items)
-                        ? payload.items.map(item => ({ ...item, mediaType: 'series', source: payload.source || 'local-index' }))
-                        : [];
-                } else {
-                    const r = await fetch(`/api/movies/search/unified?q=${encodeURIComponent(queryText)}&remoteMode=never&localLimit=20`);
-                    const payload = await r.json();
-                    if (!r.ok || payload.success === false) throw new Error(payload.error || `HTTP ${r.status}`);
-
-                    candidates = Array.isArray(payload.localResults)
-                        ? payload.localResults.map(item => ({ ...item, mediaType: 'movie', source: 'local-library' }))
-                        : [];
-                }
-
-                state.internalMatches = candidates
-                    .map(item => ({
-                        ...item,
-                        score: scoreInternalCandidate(item, queryText, imdbHint)
-                    }))
-                    .sort((a, b) => b.score - a.score);
+                state.internalMatches = Array.isArray(payload.candidates)
+                    ? payload.candidates
+                    : [];
 
                 renderInternalMatches(queryText);
 
