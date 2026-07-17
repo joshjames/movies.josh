@@ -314,13 +314,15 @@
             return {
                 query: title,
                 officialTitle: String(item?.title || item?.payload?.torrentName || '').replace(/[._-]/g, ' ').trim(),
+                queueLabel: String(item?.title || item?.payload?.torrentName || 'Queue item').replace(/[._-]/g, ' ').trim(),
                 imdbId,
                 contentType: isSeries ? 'series' : 'movie',
                 season,
                 episode,
                 sourceType: episode ? 'episode' : (season ? 'pack' : null),
                 quality: String(item?.quality || item?.payload?.quality || '').trim(),
-                minSeeds: String(item?.minSeeds || item?.payload?.minSeeds || '').trim()
+                minSeeds: String(item?.minSeeds || item?.payload?.minSeeds || '').trim(),
+                jobId: String(item?.jobId || '').trim()
             };
         }
 
@@ -333,6 +335,8 @@
             params.set('queueMediaType', ctx.contentType === 'series' ? 'series' : 'movie');
             params.set('autoStart', '1');
             params.set('autoResolve', '1');
+            params.set('replaceJobId', ctx.jobId);
+            params.set('replacementMode', '1');
 
             if (ctx.imdbId) {
                 params.set('imdbId', ctx.imdbId);

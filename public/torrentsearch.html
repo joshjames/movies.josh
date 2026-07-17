@@ -412,7 +412,9 @@
             lastResponse: null,
             plugins: [],
             candidates: [],
-            internalMatches: []
+            internalMatches: [],
+            replacementJobId: null,
+            replacementMode: false
         };
 
         const statusBox = document.getElementById('statusBox');
@@ -467,8 +469,13 @@
 
             const autoResolve = normalizeBoolParam(params.get('autoResolve'));
             const autoStart = normalizeBoolParam(params.get('autoStart'));
+            const replacementJobId = String(params.get('replaceJobId') || params.get('jobId') || '').trim();
+            const replacementMode = normalizeBoolParam(params.get('replacementMode')) || Boolean(replacementJobId);
 
-            return { autoResolve, autoStart, params };
+            state.replacementJobId = replacementJobId || null;
+            state.replacementMode = replacementMode;
+
+            return { autoResolve, autoStart, replacementJobId, replacementMode, params };
         }
 
         function setStatus(text, level = 'warn') {
@@ -679,6 +686,19 @@
 
                 if (state.internalMatches.length && options.autoApply !== false) {
                     applyInternalCandidate(0);
+                }
+
+                if (state.replacementMode && state.replacementJobId) {
+                    const bannerId = 'replacementBanner';
+                    const existing = document.getElementById(bannerId);
+                    const replacementBanner = existing || document.createElement('div');
+                    replacementBanner.id = bannerId;
+                    replacementBanner.className = 'status warn';
+                    replacementBanner.style.marginTop = '8px';
+                    replacementBanner.textContent = `Replacement mode active for job ${state.replacementJobId}. Selecting a candidate will replace the original queue item.`;
+                    if (!existing) {
+                        likelyWrap.parentNode.insertBefore(replacementBanner, likelyWrap);
+                    }
                 }
             } catch (err) {
                 internalMatchWrap.className = 'status bad';
@@ -896,10 +916,23 @@
                 queueContext: queueMeta.queueContext
             };
 
-            const r = await fetch('/api/downloader/add', {
+            let endpoint = '/api/downloader/add';
+            let payload = payloadBody;
+
+            if (state.replacementMode && state.replacementJobId) {
+                endpoint = `/api/job/${encodeURIComponent(state.replacementJobId)}/alternate-source`;
+                payload = {
+                    ...payloadBody,
+                    replaceExisting: true,
+                    contentType: queueMeta.category === 'series-streamer' ? 'series' : 'movie',
+                    addedByUser: queueMeta.queueContext?.addedByUser || null
+                };
+            }
+
+            const r = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payloadBody)
+                body: JSON.stringify(payload)
             });
 
             const payload = await r.json();
@@ -910,7 +943,8 @@
             const metaSummary = queueMeta.queueContext
                 ? ` | imdb=${queueMeta.queueContext.imdbId || 'n/a'} | season=${queueMeta.queueContext.season || '-'} | episode=${queueMeta.queueContext.episode || '-'}`
                 : ' | metadata=off';
-            setStatus(`Queued selected result into acquisition pipeline (${queueMeta.category}).${metaSummary}`, 'good');
+            const modeText = state.replacementMode ? 'replaced original queue item' : 'queued into acquisition pipeline';
+            setStatus(`Queued selected result (${modeText}) (${queueMeta.category}).${metaSummary}`, 'good');
         }
 
         function showCandidateJson(index) {
