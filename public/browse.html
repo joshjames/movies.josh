@@ -897,7 +897,6 @@
                         <td class="episode-add">
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                                 <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Add Episode'}</button>
-                                <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">Smart Search (Admin)</button>
                             </div>
                         </td>
                     </tr>
@@ -933,7 +932,6 @@
                                     <td class="episode-add">
                                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
                                             <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, 0, 'pack')">${inLibrary ? 'Season Complete' : 'Add Whole Season'}</button>
-                                            <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, null, 'pack')">Smart Search (Admin)</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -1133,7 +1131,6 @@
                                 <summary class="season-summary"><strong>Season ${season}</strong><span>${rows.length} episodes • ${seededCount} seeded • ${inLibraryCount} in library</span></summary>
                                 <div style="padding:8px 10px; border-top:1px solid #263247; background:#0f1b31; display:flex; gap:8px; flex-wrap:wrap;">
                                     <button class="add-btn" style="padding:6px 10px;" ${completeSeasonSet.has(Number(season)) ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, 0, 'pack')">${completeSeasonSet.has(Number(season)) ? 'Season Complete' : 'Add Whole Season'}</button>
-                                    <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, null, 'pack')">Smart Search (Admin)</button>
                                     ${completeSeasonSet.has(Number(season)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
                                 </div>
                                 <table class="episode-table">
@@ -1167,7 +1164,7 @@
                         <img src="${sanitizeImageSrc(showCover)}" onerror="handleImageFallback(this)" alt="${escapeHtml(showTitle)} cover">
                         <div class="show-overview-meta">
                             <h2>${escapeHtml(showTitle)}</h2>
-                            <div class="line">Grouped by season. Use Add Episode / Add Whole Season for automatic ingest; Smart Search (Admin) is optional override.</div>
+                            <div class="line">Grouped by season. Use Add Episode / Add Whole Season for automatic ingest.</div>
                             <div class="line">Episodes shown: ${best.episodes.length} • Pack rows: ${best.packs.length}</div>
                         </div>
                     </div>

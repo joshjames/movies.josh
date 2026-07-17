@@ -349,25 +349,80 @@ function buildAutoSeriesSearchQuery(showTitle, season = null, episode = null, so
     return title;
 }
 
-async function waitForSearchTerminalState(searchId, { timeoutMs = 25000, pollMs = 1400 } = {}) {
-    const started = Date.now();
-    let lastStatus = 'unknown';
+async function collectAutoSeriesSearchCandidates(searchId, context = {}, options = {}) {
+    const maxWaitMs = Math.max(10000, Math.min(parseInt(options.maxWaitMs, 10) || 35000, 120000));
+    const minWaitMs = Math.max(3000, Math.min(parseInt(options.minWaitMs, 10) || 12000, maxWaitMs));
+    const pollMs = Math.max(800, Math.min(parseInt(options.pollMs, 10) || 1800, 7000));
+    const settleWindowMs = Math.max(3000, Math.min(parseInt(options.settleWindowMs, 10) || 8000, maxWaitMs));
+    const resultLimit = Math.max(80, Math.min(parseInt(options.resultLimit, 10) || 500, 1000));
 
-    while ((Date.now() - started) < timeoutMs) {
-        const statuses = await TorrentSearchService.getStatus(searchId);
+    const startedAt = Date.now();
+    let lastImprovementAt = startedAt;
+    let lastStatus = 'unknown';
+    let sampleCount = 0;
+
+    let bestScore = Number.NEGATIVE_INFINITY;
+    let best = null;
+    let candidates = [];
+
+    while (true) {
+        sampleCount += 1;
+
+        const [statuses, searchResult] = await Promise.all([
+            TorrentSearchService.getStatus(searchId).catch(() => []),
+            TorrentSearchService.getResults(searchId, { limit: resultLimit, offset: 0 }).catch(() => ({ results: [] }))
+        ]);
+
         const row = Array.isArray(statuses)
             ? statuses.find((item) => Number(item?.id) === Number(searchId))
             : null;
-
         lastStatus = String(row?.status || '').toLowerCase() || 'unknown';
-        if (lastStatus === 'stopped' || lastStatus === 'error' || lastStatus === 'missingfiles') {
-            break;
+
+        const rawRows = Array.isArray(searchResult?.results) ? searchResult.results : [];
+        const scored = pickBestAutoSeriesCandidate(rawRows, context);
+        const currentBest = scored.best;
+        const currentScore = Number(currentBest?.confidenceScore || Number.NEGATIVE_INFINITY);
+        const totalCandidates = scored.candidates.length;
+
+        if (currentBest && (currentScore > bestScore || totalCandidates > candidates.length)) {
+            bestScore = currentScore;
+            best = currentBest;
+            candidates = scored.candidates;
+            lastImprovementAt = Date.now();
+        } else if (!best && currentBest) {
+            bestScore = currentScore;
+            best = currentBest;
+            candidates = scored.candidates;
+            lastImprovementAt = Date.now();
+        }
+
+        const now = Date.now();
+        const elapsedMs = now - startedAt;
+        const idleMs = now - lastImprovementAt;
+        const terminalStatus = lastStatus === 'stopped' || lastStatus === 'error' || lastStatus === 'missingfiles';
+
+        const readyBySettleWindow = elapsedMs >= minWaitMs && idleMs >= settleWindowMs && Boolean(best);
+        const readyByTerminal = terminalStatus && elapsedMs >= minWaitMs && Boolean(best);
+        const readyByTimeout = elapsedMs >= maxWaitMs;
+
+        if (readyBySettleWindow || readyByTerminal || readyByTimeout) {
+            return {
+                best,
+                candidates,
+                stats: {
+                    status: lastStatus,
+                    sampleCount,
+                    elapsedMs,
+                    idleMs,
+                    maxWaitMs,
+                    minWaitMs,
+                    settleWindowMs
+                }
+            };
         }
 
         await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
-
-    return { status: lastStatus };
 }
 
 function mapRawSearchRow(raw = {}) {
@@ -1467,20 +1522,23 @@ router.post('/downloader/add-auto', async (req, res) => {
             return res.status(502).json({ success: false, error: 'Search did not return a valid id.' });
         }
 
-        await waitForSearchTerminalState(searchId, {
-            timeoutMs: Math.max(5000, Math.min(parseInt(timeoutMs, 10) || 25000, 60000)),
-            pollMs: 1400
-        });
-
-        const searchResult = await TorrentSearchService.getResults(searchId, { limit: 300, offset: 0 });
-        const rawRows = Array.isArray(searchResult?.results) ? searchResult.results : [];
-        const scored = pickBestAutoSeriesCandidate(rawRows, {
+        const collected = await collectAutoSeriesSearchCandidates(searchId, {
             showTitle,
             imdbId: cleanImdbId,
             season: seasonNum,
             episode: episodeNum,
             sourceType: normalizedSourceType
+        }, {
+            maxWaitMs: Number.isFinite(parseInt(timeoutMs, 10)) ? parseInt(timeoutMs, 10) : undefined,
+            minWaitMs: parseInt(process.env.AUTO_SEARCH_MIN_WAIT_MS || '12000', 10),
+            pollMs: parseInt(process.env.AUTO_SEARCH_POLL_MS || '1800', 10),
+            settleWindowMs: parseInt(process.env.AUTO_SEARCH_SETTLE_MS || '8000', 10),
+            resultLimit: parseInt(process.env.AUTO_SEARCH_RESULT_LIMIT || '500', 10)
         });
+        const scored = {
+            best: collected.best,
+            candidates: Array.isArray(collected.candidates) ? collected.candidates : []
+        };
 
         const threshold = Number.isFinite(parseFloat(minScore)) ? parseFloat(minScore) : 90;
         if (!scored.best || Number(scored.best.confidenceScore || 0) < threshold) {
@@ -1489,6 +1547,7 @@ router.post('/downloader/add-auto', async (req, res) => {
                 error: 'No confident search result found for automatic queueing.',
                 query,
                 searchId,
+                searchStats: collected.stats,
                 bestScore: scored.best ? scored.best.confidenceScore : null,
                 threshold,
                 candidates: scored.candidates.slice(0, 5).map((row) => ({
@@ -1505,6 +1564,14 @@ router.post('/downloader/add-auto', async (req, res) => {
 
         const magnetUrl = scored.best.magnetUrl;
         const effectiveImdbId = cleanImdbId || queueContext.imdbId || null;
+
+        logger.info(
+            `[Auto Queue] selected candidate imdb=${effectiveImdbId || 'n/a'} ` +
+            `S${seasonNum || 0}E${episodeNum || 0} source=${normalizedSourceType} ` +
+            `score=${Number(scored.best.confidenceScore || 0).toFixed(1)} ` +
+            `seeds=${scored.best.seeds || 0} status=${collected?.stats?.status || 'unknown'} ` +
+            `elapsedMs=${collected?.stats?.elapsedMs || 0} samples=${collected?.stats?.sampleCount || 0}`
+        );
 
         await TorrentService.addMagnet(magnetUrl, 'series-streamer', effectiveImdbId, {
             addedByUser: activeUser || null,
@@ -1555,6 +1622,7 @@ router.post('/downloader/add-auto', async (req, res) => {
                 episode: scored.best.episode,
                 quality: scored.best.quality
             },
+            searchStats: collected.stats,
             job: queuedJob
         });
     } catch (err) {
@@ -1732,9 +1800,18 @@ router.get('/pipeline/status', async (req, res) => {
 
         // Remove orphaned waiting placeholders that no longer exist in qBittorrent.
         if (reconciliationReady) {
+            const stalePruneGraceMs = Math.max(60000, parseInt(process.env.WAITING_JOB_STALE_PRUNE_GRACE_MS || '600000', 10) || 600000);
             for (const [hash, waitingJob] of waitingByHash.entries()) {
                 const isWaiting = waitingJob.status === 'WAITING_DOWNLOAD' || waitingJob.status === 'PAUSED_DOWNLOAD';
                 if (!isWaiting) continue;
+
+                // qBittorrent hashes are canonical 40-char lowercase hex; skip eager prune when hash cannot be safely matched.
+                if (!/^[a-f0-9]{40}$/.test(hash)) continue;
+
+                const referenceTs = new Date(waitingJob?.updatedAt || waitingJob?.createdAt || 0).getTime();
+                const ageMs = Number.isFinite(referenceTs) ? (Date.now() - referenceTs) : Number.MAX_SAFE_INTEGER;
+                if (ageMs < stalePruneGraceMs) continue;
+
                 if (knownPipelineHashes.has(hash)) continue;
 
                 // If qBittorrent is reachable and this hash is absent from the full snapshot,
