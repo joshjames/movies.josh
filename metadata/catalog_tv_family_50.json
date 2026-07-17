@@ -1,0 +1,972 @@
+[
+  {
+    "tmdbId": 2912,
+    "imdbId": "tt0159881",
+    "title": "Jeopardy!",
+    "originalTitle": "Jeopardy!",
+    "startYear": "1984",
+    "endYear": "",
+    "genres": [
+      "Reality",
+      "Family"
+    ],
+    "averageRating": 6.9,
+    "numVotes": 160,
+    "popularity": 60.8493,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/hfz0IgebqGENG6ZnuqKQKMFk2vy.jpg"
+  },
+  {
+    "tmdbId": 121513,
+    "imdbId": "tt7803586",
+    "title": "Kang's Family",
+    "originalTitle": "外来媳妇本地郎",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 10,
+    "numVotes": 3,
+    "popularity": 58.3786,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/yubXCrUPIc83Nk53gYARF49rOYV.jpg"
+  },
+  {
+    "tmdbId": 65682,
+    "imdbId": "tt5154982",
+    "title": "Sister-in-Law Is at Home!",
+    "originalTitle": "भाभीजी घर पर हैं!",
+    "startYear": "2015",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 5.6,
+    "numVotes": 8,
+    "popularity": 74.0167,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/2lkV7WWu1QbXV3PYqqslgGZMLNq.jpg"
+  },
+  {
+    "tmdbId": 65733,
+    "imdbId": "tt4083422",
+    "title": "Doraemon",
+    "originalTitle": "ドラえもん",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Kids",
+      "Family"
+    ],
+    "averageRating": 8.087,
+    "numVotes": 235,
+    "popularity": 104.249,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/9ZN1P32SHviL3SV51qLivxycvcx.jpg"
+  },
+  {
+    "tmdbId": 82452,
+    "imdbId": "tt9018736",
+    "title": "Avatar: The Last Airbender",
+    "originalTitle": "Avatar: The Last Airbender",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Family",
+      "Action",
+      "Adventure",
+      "Comedy"
+    ],
+    "averageRating": 7.788,
+    "numVotes": 86877,
+    "popularity": 101.5867,
+    "episodeCount": 22,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/lzZpWEaqzP0qVA5nkCc5ASbNcSy.jpg"
+  },
+  {
+    "tmdbId": 456,
+    "imdbId": "tt0096697",
+    "title": "The Simpsons",
+    "originalTitle": "The Simpsons",
+    "startYear": "1989",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 8.019,
+    "numVotes": 469630,
+    "popularity": 95.0995,
+    "episodeCount": 858,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/uWpG7GqfKGQqX4YMAo3nv5OrglV.jpg"
+  },
+  {
+    "tmdbId": 153485,
+    "imdbId": "tt0236924",
+    "title": "Sazae-san",
+    "originalTitle": "サザエさん",
+    "startYear": "1969",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7,
+    "numVotes": 7,
+    "popularity": 71.6598,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/ovOdOiGr0xHxB8rCwLSXAchCrta.jpg"
+  },
+  {
+    "tmdbId": 6060,
+    "imdbId": "tt0278212",
+    "title": "Kyunki... Saas Bhi Kabhi Bahu Thi...",
+    "originalTitle": "क्योंकि सास भी कभी बहू थी",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 3.4,
+    "numVotes": 12,
+    "popularity": 65.4575,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/rJfoyxt7FOKr7WPB6FPuffarpcn.jpg"
+  },
+  {
+    "tmdbId": 206679,
+    "imdbId": "tt21340756",
+    "title": "Na lovu",
+    "originalTitle": "Na lovu",
+    "startYear": "2021",
+    "endYear": "",
+    "genres": [
+      "Reality",
+      "Family"
+    ],
+    "averageRating": 5.4,
+    "numVotes": 9,
+    "popularity": 43.8403,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/udJ1wVuOwFg1q6UBcQGwcpcdIYF.jpg"
+  },
+  {
+    "tmdbId": 50821,
+    "imdbId": "tt0175383",
+    "title": "Among Friends",
+    "originalTitle": "Barátok közt",
+    "startYear": "1998",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 3.775,
+    "numVotes": 20,
+    "popularity": 22.3468,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/kBBbSgNchtMvsgD6z1oI1RRluHP.jpg"
+  },
+  {
+    "tmdbId": 34860,
+    "imdbId": "tt0306365",
+    "title": "Ninja Boy Rantaro",
+    "originalTitle": "忍たま乱太郎",
+    "startYear": "1993",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Action & Adventure",
+      "Kids",
+      "Animation",
+      "Family"
+    ],
+    "averageRating": 6.7,
+    "numVotes": 22,
+    "popularity": 43.6672,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/fzNiSp0HhCthOTYu9IYWlPPa7fU.jpg"
+  },
+  {
+    "tmdbId": 57911,
+    "imdbId": "tt0069576",
+    "title": "Doraemon",
+    "originalTitle": "ドラえもん",
+    "startYear": "1979",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Kids",
+      "Family"
+    ],
+    "averageRating": 7.7,
+    "numVotes": 607,
+    "popularity": 86.8653,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/bHMqPDsW7Lb71CVHXq4PuEvQ4NY.jpg"
+  },
+  {
+    "tmdbId": 49036,
+    "imdbId": "tt1395015",
+    "title": "Love Stories in the Countryside",
+    "originalTitle": "乡村爱情",
+    "startYear": "2006",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Comedy"
+    ],
+    "averageRating": 6.1,
+    "numVotes": 8,
+    "popularity": 38.7763,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/2XlU2bzsESbc6x9lBKe0gyk90oO.jpg"
+  },
+  {
+    "tmdbId": 1877,
+    "imdbId": "tt0852863",
+    "title": "Phineas and Ferb",
+    "originalTitle": "Phineas and Ferb",
+    "startYear": "2007",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 7.885,
+    "numVotes": 68283,
+    "popularity": 57.9215,
+    "episodeCount": 151,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/g6TidT7be954rrzPPBTIXkSmfXj.jpg"
+  },
+  {
+    "tmdbId": 86310,
+    "imdbId": "tt9025492",
+    "title": "RadhaKrishn",
+    "originalTitle": "राधाकृष्ण",
+    "startYear": "2018",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Comedy",
+      "Action & Adventure",
+      "Soap"
+    ],
+    "averageRating": 9,
+    "numVotes": 4,
+    "popularity": 35.9033,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/3SiMmfY0663JmjpAfftmj1h6XGP.jpg"
+  },
+  {
+    "tmdbId": 45140,
+    "imdbId": "tt2771780",
+    "title": "Teen Titans Go!",
+    "originalTitle": "Teen Titans Go!",
+    "startYear": "2013",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Comedy",
+      "Family",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 6.434,
+    "numVotes": 28955,
+    "popularity": 46.3633,
+    "episodeCount": 447,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/kPKAigYUlWRpnfo4Ptiwlz4FWXU.jpg"
+  },
+  {
+    "tmdbId": 319876,
+    "imdbId": "tt13545698",
+    "title": "Poove Unakkaga",
+    "originalTitle": "Poove Unakkaga",
+    "startYear": "2020",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 41.8272,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/9V2lWqXeJ66DkjfpmJ3A3UlXPsS.jpg"
+  },
+  {
+    "tmdbId": 71728,
+    "imdbId": "tt6226232",
+    "title": "Young Sheldon",
+    "originalTitle": "Young Sheldon",
+    "startYear": "2017",
+    "endYear": "2024",
+    "genres": [
+      "Comedy",
+      "Family",
+      "Drama"
+    ],
+    "averageRating": 8.031,
+    "numVotes": 149305,
+    "popularity": 45.9711,
+    "episodeCount": 141,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/kidkbZRBGbsEIrX7pODRSKi9ipl.jpg"
+  },
+  {
+    "tmdbId": 2674,
+    "imdbId": "tt0088580",
+    "title": "Neighbours",
+    "originalTitle": "Neighbours",
+    "startYear": "1985",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Drama",
+      "Family",
+      "Comedy"
+    ],
+    "averageRating": 6.074,
+    "numVotes": 61,
+    "popularity": 24.3936,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/bXY78bQsKCIiD17Sr6yO4wLIXqS.jpg"
+  },
+  {
+    "tmdbId": 1781,
+    "imdbId": "tt0071007",
+    "title": "Little House on the Prairie",
+    "originalTitle": "Little House on the Prairie",
+    "startYear": "1974",
+    "endYear": "1983",
+    "genres": [
+      "Western",
+      "Drama",
+      "Family",
+      "Romance"
+    ],
+    "averageRating": 7.949,
+    "numVotes": 30413,
+    "popularity": 54.4535,
+    "episodeCount": 204,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/eVpvlqKZfEVsBOttNFTUyfPoA6K.jpg"
+  },
+  {
+    "tmdbId": 2122,
+    "imdbId": "tt0118375",
+    "title": "King of the Hill",
+    "originalTitle": "King of the Hill",
+    "startYear": "1997",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family",
+      "Drama"
+    ],
+    "averageRating": 7.407,
+    "numVotes": 65992,
+    "popularity": 33.8147,
+    "episodeCount": 298,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/e2xyMapmYgv4AuSoSDv9Y4pQlD6.jpg"
+  },
+  {
+    "tmdbId": 38693,
+    "imdbId": "tt1871731",
+    "title": "Ninjago",
+    "originalTitle": "Ninjago: Masters of Spinjitzu",
+    "startYear": "2011",
+    "endYear": "2022",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Comedy",
+      "Family",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8,
+    "numVotes": 13567,
+    "popularity": 41.8239,
+    "episodeCount": 212,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/wz6ZqlyndVpdRayZi1gbYHWcqFi.jpg"
+  },
+  {
+    "tmdbId": 2778,
+    "imdbId": "tt0072584",
+    "title": "Wheel of Fortune",
+    "originalTitle": "Wheel of Fortune",
+    "startYear": "1983",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Reality"
+    ],
+    "averageRating": 6.9,
+    "numVotes": 80,
+    "popularity": 11.3243,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/4S36URhKU4sBL1gC2B5UxmTlZMl.jpg"
+  },
+  {
+    "tmdbId": 14951,
+    "imdbId": "tt0083452",
+    "title": "Nature",
+    "originalTitle": "Nature",
+    "startYear": "1982",
+    "endYear": "",
+    "genres": [
+      "Documentary",
+      "Family"
+    ],
+    "averageRating": 7.9,
+    "numVotes": 44,
+    "popularity": 29.6239,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/qRg5boKJdJhJKoGJdchVqPGQTEl.jpg"
+  },
+  {
+    "tmdbId": 85077,
+    "imdbId": "tt5622316",
+    "title": "The Chosen",
+    "originalTitle": "The Chosen",
+    "startYear": "2017",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Family",
+      "Drama",
+      "History"
+    ],
+    "averageRating": 8.765,
+    "numVotes": 70175,
+    "popularity": 37.0768,
+    "episodeCount": 50,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/dqVUFuNrMFWt7uGNWlpo91VKYOI.jpg"
+  },
+  {
+    "tmdbId": 3022,
+    "imdbId": "tt0101188",
+    "title": "Rugrats",
+    "originalTitle": "Rugrats",
+    "startYear": "1991",
+    "endYear": "2003",
+    "genres": [
+      "Family",
+      "Animation",
+      "Kids",
+      "Comedy",
+      "Adventure"
+    ],
+    "averageRating": 7.6,
+    "numVotes": 41275,
+    "popularity": 42.1988,
+    "episodeCount": 174,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/wmsINbZuEBLNP2Z26Xffx5NHJpW.jpg"
+  },
+  {
+    "tmdbId": 32707,
+    "imdbId": "tt1863997",
+    "title": "Stay Together, My Love",
+    "originalTitle": "साथ निभाना साथिया",
+    "startYear": "2010",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 2,
+    "numVotes": 4,
+    "popularity": 41.9866,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/nRrE3cZpS8GAYgFnHTmb3BKp9rC.jpg"
+  },
+  {
+    "tmdbId": 548,
+    "imdbId": "tt0051257",
+    "title": "Blue Peter",
+    "originalTitle": "Blue Peter",
+    "startYear": "1958",
+    "endYear": "",
+    "genres": [
+      "Family"
+    ],
+    "averageRating": 7.5,
+    "numVotes": 8,
+    "popularity": 11.0048,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/qONA6QgXZsqwDNzqv6sLLMicJnU.jpg"
+  },
+  {
+    "tmdbId": 68604,
+    "imdbId": "tt5919914",
+    "title": "Ishqbaaaz",
+    "originalTitle": "इश्कबाज़",
+    "startYear": "2016",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 9,
+    "numVotes": 3,
+    "popularity": 25.8001,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/lOa6zZVA9q6tBVZobRhWIdRMtEp.jpg"
+  },
+  {
+    "tmdbId": 290225,
+    "imdbId": "tt10295228",
+    "title": "Sangeethe",
+    "originalTitle": "සංගීතේ",
+    "startYear": "2019",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Comedy",
+      "Soap"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 41.6343,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/8kkzyQdJEWiv92DJQm0sNR7aIg1.jpg"
+  },
+  {
+    "tmdbId": 5368,
+    "imdbId": "tt0046617",
+    "title": "Lassie",
+    "originalTitle": "Lassie",
+    "startYear": "1954",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Drama",
+      "Family",
+      "Comedy"
+    ],
+    "averageRating": 6.275,
+    "numVotes": 71,
+    "popularity": 29.3308,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/vqbVr4fYRZb28ywczaidn29JJTA.jpg"
+  },
+  {
+    "tmdbId": 40,
+    "imdbId": "tt0077000",
+    "title": "Dallas",
+    "originalTitle": "Dallas",
+    "startYear": "1978",
+    "endYear": "1991",
+    "genres": [
+      "Soap",
+      "Drama",
+      "Family",
+      "Romance"
+    ],
+    "averageRating": 6.865,
+    "numVotes": 18280,
+    "popularity": 30.7351,
+    "episodeCount": 356,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/A1dupjBm7rXqBw2Dbz9WUsHoyxo.jpg"
+  },
+  {
+    "tmdbId": 283304,
+    "imdbId": "tt2431250",
+    "title": "Little House on the Prairie",
+    "originalTitle": "Little House on the Prairie",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Western",
+      "Family"
+    ],
+    "averageRating": 6.233,
+    "numVotes": 45,
+    "popularity": 41.4482,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/oWUGSadxC9vQPOCeHDDVfDezmQC.jpg"
+  },
+  {
+    "tmdbId": 111453,
+    "imdbId": "tt13085534",
+    "title": "Ghum Hai Kisikey Pyaar Meiin",
+    "originalTitle": "घुम है किसिकी प्यार में",
+    "startYear": "2020",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap",
+      "Family"
+    ],
+    "averageRating": 5.7,
+    "numVotes": 70,
+    "popularity": 24.9614,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/u3NVGYCpkAgBArXogLuHPfpSNwG.jpg"
+  },
+  {
+    "tmdbId": 74824,
+    "imdbId": "tt5951488",
+    "title": "Klassen",
+    "originalTitle": "Klassen",
+    "startYear": "2016",
+    "endYear": "",
+    "genres": [
+      "Family"
+    ],
+    "averageRating": 7.2,
+    "numVotes": 6,
+    "popularity": 10.1752,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/oifIDVNGEACjdTIzLATvVv2wmYr.jpg"
+  },
+  {
+    "tmdbId": 54999,
+    "imdbId": "tt1724525",
+    "title": "Uusi Päivä",
+    "originalTitle": "Uusi Päivä",
+    "startYear": "2010",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 5.3,
+    "numVotes": 3,
+    "popularity": 40.9668,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/6S1Ic9YTc24azvC2XgIxSpcdEF2.jpg"
+  },
+  {
+    "tmdbId": 15680,
+    "imdbId": "tt0220189",
+    "title": "Abarenbo Shogun",
+    "originalTitle": "暴れん坊将軍",
+    "startYear": "1978",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Drama",
+      "Action & Adventure"
+    ],
+    "averageRating": 8,
+    "numVotes": 8,
+    "popularity": 26.5241,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/i2SVXj2f1ep2Day2yCiLdm3iyIq.jpg"
+  },
+  {
+    "tmdbId": 2352,
+    "imdbId": "tt0106080",
+    "title": "The Nanny",
+    "originalTitle": "The Nanny",
+    "startYear": "1993",
+    "endYear": "1999",
+    "genres": [
+      "Comedy",
+      "Family",
+      "Romance"
+    ],
+    "averageRating": 8.077,
+    "numVotes": 55199,
+    "popularity": 31.5949,
+    "episodeCount": 145,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/4syShXMjaPAP3mG81ekhruv94sd.jpg"
+  },
+  {
+    "tmdbId": 210865,
+    "imdbId": "tt21105088",
+    "title": "Yalı Çapkını",
+    "originalTitle": "Yalı Çapkını",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Drama"
+    ],
+    "averageRating": 8.365,
+    "numVotes": 126,
+    "popularity": 31.3818,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/cgf5R2XrfRQGp2sTu3cncbnFxRy.jpg"
+  },
+  {
+    "tmdbId": 93719,
+    "imdbId": "tt10233790",
+    "title": "Maraya",
+    "originalTitle": "مرايا",
+    "startYear": "1982",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 8.8,
+    "numVotes": 4,
+    "popularity": 26.9645,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/60j41u7PsucOn9dXNP0yzJXtDOT.jpg"
+  },
+  {
+    "tmdbId": 39314,
+    "imdbId": "tt1985299",
+    "title": "Bade Achhe Lagte Hain",
+    "originalTitle": "बड़े अच्छे लगते हैं",
+    "startYear": "2011",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 8,
+    "numVotes": 3,
+    "popularity": 31.5554,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/3gSjiLrEOzIBUQtndBeCf4CvMsL.jpg"
+  },
+  {
+    "tmdbId": 40712,
+    "imdbId": "tt0208617",
+    "title": "Die Fallers – Eine Schwarzwaldfamilie",
+    "originalTitle": "Die Fallers – Eine Schwarzwaldfamilie",
+    "startYear": "1994",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Drama"
+    ],
+    "averageRating": 6.25,
+    "numVotes": 4,
+    "popularity": 1.6738,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/fqgY8LyVaSwS3UTxwqRXB9UJ2MI.jpg"
+  },
+  {
+    "tmdbId": 80885,
+    "imdbId": "tt2787558",
+    "title": "Ninja Hattori-kun",
+    "originalTitle": "忍者ハットリくん",
+    "startYear": "1981",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Comedy",
+      "Family",
+      "Kids"
+    ],
+    "averageRating": 6.4,
+    "numVotes": 33,
+    "popularity": 25.2718,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/9PUkpvq0wJnJ2M00dtgxKn6LptB.jpg"
+  },
+  {
+    "tmdbId": 2625,
+    "imdbId": "tt0105986",
+    "title": "Diagnosis: Murder",
+    "originalTitle": "Diagnosis: Murder",
+    "startYear": "1993",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Mystery",
+      "Crime"
+    ],
+    "averageRating": 7.124,
+    "numVotes": 120,
+    "popularity": 31.3468,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/5yhozeY2KgYXQQE9kfbiIyypYiI.jpg"
+  },
+  {
+    "tmdbId": 49347,
+    "imdbId": "tt4745726",
+    "title": "Elif",
+    "originalTitle": "Elif",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 5.7,
+    "numVotes": 10,
+    "popularity": 15.2256,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/337YdJG3TUMzpdnbJyP7K9oA72e.jpg"
+  },
+  {
+    "tmdbId": 1025,
+    "imdbId": "tt0052507",
+    "title": "The Bullwinkle Show",
+    "originalTitle": "The Bullwinkle Show",
+    "startYear": "1959",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Kids",
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7.125,
+    "numVotes": 60,
+    "popularity": 17.1207,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/cAMWBJyYynFWxJNrIvVnHlN2e9P.jpg"
+  },
+  {
+    "tmdbId": 71734,
+    "imdbId": "tt3911870",
+    "title": "Kumkum Bhagya",
+    "originalTitle": "Kumkum Bhagya",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 3.6,
+    "numVotes": 9,
+    "popularity": 35.7998,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/3GGnq4bfBANUuYHK07zmMNC51CL.jpg"
+  },
+  {
+    "tmdbId": 40521,
+    "imdbId": "tt2324525",
+    "title": "Home with Kids",
+    "originalTitle": "家有儿女",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7.409,
+    "numVotes": 22,
+    "popularity": 26.6907,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/knQh5E3YazUwkupxvfSyy11VqW0.jpg"
+  },
+  {
+    "tmdbId": 5455,
+    "imdbId": "tt0375435",
+    "title": "Saber y Ganar",
+    "originalTitle": "Saber y Ganar",
+    "startYear": "1997",
+    "endYear": "",
+    "genres": [
+      "Family"
+    ],
+    "averageRating": 10,
+    "numVotes": 2,
+    "popularity": 1.2392,
+    "episodeCount": 0,
+    "source": "tmdb-discover-family",
+    "cover": "https://image.tmdb.org/t/p/w500/32Xh0zXL8Z7TYuVNG2MOEHcqMlh.jpg"
+  },
+  {
+    "tmdbId": 3452,
+    "imdbId": "tt0106004",
+    "title": "Frasier",
+    "originalTitle": "Frasier",
+    "startYear": "1993",
+    "endYear": "2004",
+    "genres": [
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7.685,
+    "numVotes": 103409,
+    "popularity": 29.0451,
+    "episodeCount": 263,
+    "source": "tmdb-discover-family+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/gYAb6GCVEFsU9hzMCG5rxaxoIv3.jpg"
+  }
+]

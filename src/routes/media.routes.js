@@ -53,6 +53,9 @@ const CATALOG_LABEL_OVERRIDES = {
     top_50_romance: 'Top 50 Romance',
     top_50_sci_fi: 'Top 50 Sci-Fi',
     top_50_thriller: 'Top 50 Thriller',
+    movie_trending_50: 'Trending Movies',
+    movie_popular_50: 'Popular Movies',
+    movie_new_50: 'New Movies',
     popular_1980s: 'Best of 1980s',
     popular_1990s: 'Best of 1990s',
     popular_2000s: 'Best of 2000s',
@@ -64,6 +67,15 @@ const CATALOG_LABEL_OVERRIDES = {
     popular_1950s: 'Best of 1950s',
     popular_1960s: 'Best of 1960s',
     popular_1970s: 'Best of 1970s'
+};
+
+const TV_CATALOG_LABEL_OVERRIDES = {
+    trending_50: 'Trending This Week',
+    popular_50: 'Popular TV',
+    currently_airing_30: 'Currently Airing',
+    comedy_50: 'Top TV Comedy',
+    drama_50: 'Top TV Drama',
+    family_50: 'Top TV Family'
 };
 
 function normalizeSearchText(value = '') {
@@ -96,6 +108,9 @@ function catalogDisplayName(slug = '') {
 }
 
 function getCatalogSortWeight(slug = '') {
+    if (slug === 'movie_trending_50') return 2;
+    if (slug === 'movie_popular_50') return 3;
+    if (slug === 'movie_new_50') return 4;
     if (slug === 'weekly_fresh_100') return 5;
     if (slug === 'top_100_all_time') return 10;
     if (slug === 'critics_choices') return 20;
@@ -114,11 +129,46 @@ function getCatalogSortWeight(slug = '') {
 }
 
 function getCatalogIcon(slug = '') {
+    if (slug === 'movie_trending_50') return '🔥';
+    if (slug === 'movie_popular_50') return '📈';
+    if (slug === 'movie_new_50') return '🆕';
     if (slug === 'weekly_fresh_100') return '🆕';
     if (slug.includes('critics')) return '⭐';
     if (slug.includes('top_100')) return '🏆';
     if (slug.startsWith('top_50_')) return '🎭';
     if (slug.includes('popular_')) return '🎬';
+    return '📚';
+}
+
+function toTvCatalogSlug(fileName = '') {
+    const base = String(fileName || '')
+        .replace(/^catalog_tv_/i, '')
+        .replace(/\.json$/i, '');
+    return base.toLowerCase();
+}
+
+function tvCatalogDisplayName(slug = '') {
+    if (TV_CATALOG_LABEL_OVERRIDES[slug]) return TV_CATALOG_LABEL_OVERRIDES[slug];
+    return titleCaseWords(String(slug || '').replace(/^tv_/, ''));
+}
+
+function getTvCatalogSortWeight(slug = '') {
+    if (slug === 'trending_50') return 5;
+    if (slug === 'popular_50') return 10;
+    if (slug === 'currently_airing_30') return 15;
+    if (slug === 'comedy_50') return 20;
+    if (slug === 'drama_50') return 25;
+    if (slug === 'family_50') return 30;
+    return 1000;
+}
+
+function getTvCatalogIcon(slug = '') {
+    if (slug.includes('trending')) return '🔥';
+    if (slug.includes('popular')) return '📈';
+    if (slug.includes('airing')) return '📺';
+    if (slug.includes('comedy')) return '😂';
+    if (slug.includes('drama')) return '🎭';
+    if (slug.includes('family')) return '👨‍👩‍👧';
     return '📚';
 }
 
@@ -128,6 +178,16 @@ function listCatalogFilesByDirectory() {
 
         const files = fs.readdirSync(dirPath)
             .filter(name => /^catalog_.*\.json$/i.test(name));
+        return { dirPath, files };
+    });
+}
+
+function listTvCatalogFilesByDirectory() {
+    return CATALOG_DATA_DIR_CANDIDATES.map((dirPath) => {
+        if (!fs.existsSync(dirPath)) return { dirPath, files: [] };
+
+        const files = fs.readdirSync(dirPath)
+            .filter(name => /^catalog_tv_.*\.json$/i.test(name));
         return { dirPath, files };
     });
 }
@@ -162,6 +222,24 @@ function readCatalogJsonBySlug(slug = '') {
     } catch (_err) {
         return [];
     }
+}
+
+function readTvCatalogJsonBySlug(slug = '') {
+    const safe = String(slug || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '');
+    if (!safe) return null;
+
+    for (const dirPath of CATALOG_DATA_DIR_CANDIDATES) {
+        const filePath = path.join(dirPath, `catalog_tv_${safe}.json`);
+        if (!fs.existsSync(filePath)) continue;
+        try {
+            const payload = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            return Array.isArray(payload) ? payload : [];
+        } catch (_err) {
+            return [];
+        }
+    }
+
+    return null;
 }
 
 function getCatalogCoverUrl(imdbId = '') {
@@ -1642,6 +1720,99 @@ router.get('/catalogs/movies/cover/:imdbId', async (req, res) => {
         return res.sendFile(coverPath);
     } catch (err) {
         return res.status(404).json({ success: false, error: err.message || 'Poster fetch failed.' });
+    }
+});
+
+router.get('/catalogs/tv', async (_req, res) => {
+    try {
+        const dirEntries = listTvCatalogFilesByDirectory();
+        const allCatalogFiles = dirEntries.flatMap(entry => entry.files.map(fileName => ({ fileName, dirPath: entry.dirPath })));
+
+        if (!allCatalogFiles.length) {
+            return res.json({ success: true, defaultSlug: null, catalogs: [] });
+        }
+
+        const catalogs = allCatalogFiles
+            .map((entry) => {
+                const slug = toTvCatalogSlug(entry.fileName);
+                const filePath = path.join(entry.dirPath, entry.fileName);
+                let count = 0;
+
+                try {
+                    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                    count = Array.isArray(raw) ? raw.length : 0;
+                } catch (_err) {
+                    count = 0;
+                }
+
+                return {
+                    slug,
+                    title: tvCatalogDisplayName(slug),
+                    count,
+                    icon: getTvCatalogIcon(slug),
+                    weight: getTvCatalogSortWeight(slug)
+                };
+            })
+            .sort((a, b) => a.weight - b.weight || a.title.localeCompare(b.title))
+            .map(({ weight, ...item }) => item);
+
+        const defaultSlug = catalogs.find(item => item.slug === 'trending_50')?.slug || catalogs[0]?.slug || null;
+
+        return res.json({ success: true, defaultSlug, catalogs });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/catalogs/tv/:slug', async (req, res) => {
+    try {
+        const slug = String(req.params.slug || '').trim().toLowerCase();
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 50, 100));
+
+        const catalogRows = readTvCatalogJsonBySlug(slug);
+        if (!catalogRows) {
+            return res.status(404).json({ success: false, error: 'TV catalog not found.' });
+        }
+
+        const mapped = catalogRows.map((item) => {
+            const imdbId = formatImdbId(item.imdbId || item.id || '');
+            const fallbackCover = imdbId ? `/api/tv-shows/${encodeURIComponent(imdbId)}/cover` : '';
+
+            return {
+                imdbId,
+                tmdbId: item.tmdbId || null,
+                title: String(item.title || item.name || '').trim(),
+                originalTitle: String(item.originalTitle || '').trim(),
+                startYear: String(item.startYear || '').trim(),
+                endYear: String(item.endYear || '').trim(),
+                genres: Array.isArray(item.genres) ? item.genres.join(', ') : String(item.genres || '').trim(),
+                averageRating: Number(item.averageRating || item.rating || 0) || 0,
+                numVotes: Number(item.numVotes || item.votes || 0) || 0,
+                popularity: Number(item.popularity || 0) || 0,
+                episodeCount: Number(item.episodeCount || 0) || 0,
+                source: item.source || 'catalog',
+                cover: String(item.cover || '').trim() || fallbackCover
+            };
+        });
+
+        const total = mapped.length;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+        const start = (page - 1) * limit;
+        const items = mapped.slice(start, start + limit);
+
+        return res.json({
+            success: true,
+            slug,
+            title: tvCatalogDisplayName(slug),
+            total,
+            totalPages,
+            page,
+            limit,
+            items
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 

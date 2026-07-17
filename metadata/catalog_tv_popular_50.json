@@ -1,0 +1,943 @@
+[
+  {
+    "tmdbId": 94722,
+    "imdbId": "tt0246393",
+    "title": "Tagesschau",
+    "originalTitle": "Tagesschau",
+    "startYear": "1952",
+    "endYear": "",
+    "genres": [
+      "News"
+    ],
+    "averageRating": 6.759,
+    "numVotes": 255,
+    "popularity": 58.7856,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/7dFZJ2ZJJdcmkp05B9NWlqTJ5tq.jpg"
+  },
+  {
+    "tmdbId": 94997,
+    "imdbId": "tt11198330",
+    "title": "House of the Dragon",
+    "originalTitle": "House of the Dragon",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Action & Adventure",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.371,
+    "numVotes": 538505,
+    "popularity": 260.212,
+    "episodeCount": 27,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/7V0Ebks0GgpKvQ7QbLAIdX5dos4.jpg"
+  },
+  {
+    "tmdbId": 243206,
+    "imdbId": "tt28077038",
+    "title": "Pritam and Pedro",
+    "originalTitle": "प्रीतम और पेड्रो",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery",
+      "Comedy"
+    ],
+    "averageRating": 8.636,
+    "numVotes": 11,
+    "popularity": 224.6359,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/lC0MtWrnC0SZICFHazagIfVKy0x.jpg"
+  },
+  {
+    "tmdbId": 124364,
+    "imdbId": "tt9813792",
+    "title": "From",
+    "originalTitle": "From",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.506,
+    "numVotes": 193837,
+    "popularity": 194.5036,
+    "episodeCount": 41,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/pRtJagIxpfODzzb0T0NAvZSzErC.jpg"
+  },
+  {
+    "tmdbId": 94664,
+    "imdbId": "tt13293588",
+    "title": "Mushoku Tensei: Jobless Reincarnation",
+    "originalTitle": "Mushoku Tensei: Isekai Ittara Honki Dasu",
+    "startYear": "2021",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.5,
+    "numVotes": 39328,
+    "popularity": 199.0078,
+    "episodeCount": 52,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/gLKOYIMyKlUHW0SVdskhgf9C0yy.jpg"
+  },
+  {
+    "tmdbId": 2734,
+    "imdbId": "tt0203259",
+    "title": "Law & Order: Special Victims Unit",
+    "originalTitle": "Law & Order: Special Victims Unit",
+    "startYear": "1999",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 7.954,
+    "numVotes": 145517,
+    "popularity": 172.9434,
+    "episodeCount": 601,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/iofokHZoUB4Qhik4PflvJl8TT6a.jpg"
+  },
+  {
+    "tmdbId": 206559,
+    "imdbId": "tt1527854",
+    "title": "Binnelanders",
+    "originalTitle": "Binnelanders",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Soap"
+    ],
+    "averageRating": 5.532,
+    "numVotes": 111,
+    "popularity": 79.6429,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/3bzECfllho8PphdYujLUIuhncJD.jpg"
+  },
+  {
+    "tmdbId": 15226,
+    "imdbId": "tt0401916",
+    "title": "C.I.D.",
+    "originalTitle": "सीआईडी",
+    "startYear": "1998",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 5.7,
+    "numVotes": 30,
+    "popularity": 66.2758,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/3UymnlLfLMKxG8OcFhSnAlnhQfZ.jpg"
+  },
+  {
+    "tmdbId": 125988,
+    "imdbId": "tt14688458",
+    "title": "Silo",
+    "originalTitle": "Silo",
+    "startYear": "2023",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ],
+    "averageRating": 8.178,
+    "numVotes": 216915,
+    "popularity": 236.5473,
+    "episodeCount": 40,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/gMYZZvnkVNTqSVnVCphWbPXwWwb.jpg"
+  },
+  {
+    "tmdbId": 17887,
+    "imdbId": "tt0375446",
+    "title": "7de Laan",
+    "originalTitle": "7de Laan",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Soap"
+    ],
+    "averageRating": 8.333,
+    "numVotes": 3,
+    "popularity": 42.3191,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/vQcC4Kcx0ZEXxmj0gUrfkFR14LU.jpg"
+  },
+  {
+    "tmdbId": 100780,
+    "imdbId": "tt4455902",
+    "title": "Jamai Raja",
+    "originalTitle": "Jamai Raja",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 5.5,
+    "numVotes": 4,
+    "popularity": 129.3623,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/7TDfSot51AFRK8aFs2kO3snM4um.jpg"
+  },
+  {
+    "tmdbId": 2912,
+    "imdbId": "tt0159881",
+    "title": "Jeopardy!",
+    "originalTitle": "Jeopardy!",
+    "startYear": "1984",
+    "endYear": "",
+    "genres": [
+      "Reality",
+      "Family"
+    ],
+    "averageRating": 6.9,
+    "numVotes": 160,
+    "popularity": 60.8493,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/hfz0IgebqGENG6ZnuqKQKMFk2vy.jpg"
+  },
+  {
+    "tmdbId": 79744,
+    "imdbId": "tt7587890",
+    "title": "The Rookie",
+    "originalTitle": "The Rookie",
+    "startYear": "2018",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Comedy",
+      "Action"
+    ],
+    "averageRating": 8.55,
+    "numVotes": 129964,
+    "popularity": 137.6974,
+    "episodeCount": 145,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/70kTz0OmjjZe7zHvIDrq2iKW7PJ.jpg"
+  },
+  {
+    "tmdbId": 8590,
+    "imdbId": "tt0423713",
+    "title": "Plus belle la vie",
+    "originalTitle": "Plus belle la vie",
+    "startYear": "2004",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy",
+      "Crime"
+    ],
+    "averageRating": 4.395,
+    "numVotes": 38,
+    "popularity": 34.5171,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/jmU8HlTDn87xmRqXagcL2swDr8I.jpg"
+  },
+  {
+    "tmdbId": 5920,
+    "imdbId": "tt1196946",
+    "title": "The Mentalist",
+    "originalTitle": "The Mentalist",
+    "startYear": "2008",
+    "endYear": "2015",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 8.362,
+    "numVotes": 232961,
+    "popularity": 133.627,
+    "episodeCount": 151,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/acYXu4KaDj1NIkMgObnhe4C4a0T.jpg"
+  },
+  {
+    "tmdbId": 549,
+    "imdbId": "tt0098844",
+    "title": "Law & Order",
+    "originalTitle": "Law & Order",
+    "startYear": "1990",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 7.293,
+    "numVotes": 51414,
+    "popularity": 129.1818,
+    "episodeCount": 550,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/haJ9eHytVO3H3JooMJG1DiWwDNm.jpg"
+  },
+  {
+    "tmdbId": 1416,
+    "imdbId": "tt0413573",
+    "title": "Grey's Anatomy",
+    "originalTitle": "Grey's Anatomy",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "averageRating": 8.208,
+    "numVotes": 375238,
+    "popularity": 127.8751,
+    "episodeCount": 467,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/hjJkrLXhWvGHpLeLBDFznpBTY1S.jpg"
+  },
+  {
+    "tmdbId": 1622,
+    "imdbId": "tt0460681",
+    "title": "Supernatural",
+    "originalTitle": "Supernatural",
+    "startYear": "2005",
+    "endYear": "2020",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi & Fantasy",
+      "Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.312,
+    "numVotes": 541955,
+    "popularity": 123.5457,
+    "episodeCount": 327,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/8iixmfGx5EIFPdpNvB2JvI3VIqX.jpg"
+  },
+  {
+    "tmdbId": 45789,
+    "imdbId": "tt0479846",
+    "title": "Storm of Love",
+    "originalTitle": "Sturm der Liebe",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 6,
+    "numVotes": 39,
+    "popularity": 53.9208,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/jfFNydakwvbeACEwSd2Gh8UWtba.jpg"
+  },
+  {
+    "tmdbId": 85009,
+    "imdbId": "tt0454650",
+    "title": "锵锵三人行",
+    "originalTitle": "锵锵三人行",
+    "startYear": "1998",
+    "endYear": "",
+    "genres": [
+      "Talk",
+      "Reality"
+    ],
+    "averageRating": 8.833,
+    "numVotes": 6,
+    "popularity": 66.6733,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/zvS0sib3PgjlyPol1iHbalujTCp.jpg"
+  },
+  {
+    "tmdbId": 121513,
+    "imdbId": "tt7803586",
+    "title": "Kang's Family",
+    "originalTitle": "外来媳妇本地郎",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 10,
+    "numVotes": 3,
+    "popularity": 58.3786,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/yubXCrUPIc83Nk53gYARF49rOYV.jpg"
+  },
+  {
+    "tmdbId": 95897,
+    "imdbId": "tt14962432",
+    "title": "Overflow",
+    "originalTitle": "おーばーふろぉ",
+    "startYear": "2020",
+    "endYear": "",
+    "genres": [
+      "Animation"
+    ],
+    "averageRating": 7.3,
+    "numVotes": 88,
+    "popularity": 117.0825,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/8RtwL5gxUvh9YViqjhNlVRvJpum.jpg"
+  },
+  {
+    "tmdbId": 12415,
+    "imdbId": "tt0128176",
+    "title": "Egoli: Place of Gold",
+    "originalTitle": "Egoli: Place of Gold",
+    "startYear": "1992",
+    "endYear": "",
+    "genres": [
+      "Soap"
+    ],
+    "averageRating": 7.2,
+    "numVotes": 5,
+    "popularity": 29.9591,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/l8ivo9sEkKrLYRsNeyaVmAbH0eg.jpg"
+  },
+  {
+    "tmdbId": 498,
+    "imdbId": "tt0106053",
+    "title": "Late Show with David Letterman",
+    "originalTitle": "Late Show with David Letterman",
+    "startYear": "1993",
+    "endYear": "2015",
+    "genres": [
+      "Talk",
+      "Comedy",
+      "Music",
+      "Talk-Show"
+    ],
+    "averageRating": 6.4,
+    "numVotes": 14873,
+    "popularity": 51.6727,
+    "episodeCount": 6501,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/fTBC5EpsgKmli9VQcJMtqQ08Qj4.jpg"
+  },
+  {
+    "tmdbId": 1434,
+    "imdbId": "tt0182576",
+    "title": "Family Guy",
+    "originalTitle": "Family Guy",
+    "startYear": "1999",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 7.407,
+    "numVotes": 389606,
+    "popularity": 119.4288,
+    "episodeCount": 506,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/3PFsEuAiyLkWsP4GG6dIV37Q6gu.jpg"
+  },
+  {
+    "tmdbId": 1399,
+    "imdbId": "tt0944947",
+    "title": "Game of Thrones",
+    "originalTitle": "Game of Thrones",
+    "startYear": "2011",
+    "endYear": "2019",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Action & Adventure",
+      "Fantasy"
+    ],
+    "averageRating": 8.466,
+    "numVotes": 2628909,
+    "popularity": 111.749,
+    "episodeCount": 74,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg"
+  },
+  {
+    "tmdbId": 4614,
+    "imdbId": "tt0364845",
+    "title": "NCIS",
+    "originalTitle": "NCIS",
+    "startYear": "2003",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Action & Adventure",
+      "Action"
+    ],
+    "averageRating": 7.611,
+    "numVotes": 177091,
+    "popularity": 107.761,
+    "episodeCount": 508,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/mBcu8d6x6zB1el3MPNl7cZQEQ31.jpg"
+  },
+  {
+    "tmdbId": 14424,
+    "imdbId": "tt0144724",
+    "title": "Young Hearts",
+    "originalTitle": "Malhação",
+    "startYear": "1995",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Comedy",
+      "Drama"
+    ],
+    "averageRating": 6.284,
+    "numVotes": 37,
+    "popularity": 24.6321,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/bF24r2FxsjzgkJcrbBU8RC9JVoU.jpg"
+  },
+  {
+    "tmdbId": 324186,
+    "imdbId": "tt29481945",
+    "title": "Majhi Manasa",
+    "originalTitle": "Majhi Manasa",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 112.1822,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/6bk8ShS9yZnO7do6uy0Lfej7KUY.jpg"
+  },
+  {
+    "tmdbId": 65701,
+    "imdbId": "tt4087032",
+    "title": "Good Mythical Morning",
+    "originalTitle": "Good Mythical Morning",
+    "startYear": "2012",
+    "endYear": "",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 6.9,
+    "numVotes": 91,
+    "popularity": 43.9228,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/jMpBQr2aNOFAI6wsC47zsOG6qOh.jpg"
+  },
+  {
+    "tmdbId": 1871,
+    "imdbId": "tt0088512",
+    "title": "EastEnders",
+    "originalTitle": "EastEnders",
+    "startYear": "1985",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 4.249,
+    "numVotes": 229,
+    "popularity": 73.4085,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/z4jgyI5TpoRZiJTNchkVkMrGQyz.jpg"
+  },
+  {
+    "tmdbId": 70625,
+    "imdbId": "tt1360087",
+    "title": "Trace",
+    "originalTitle": "След",
+    "startYear": "2007",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Crime"
+    ],
+    "averageRating": 6.833,
+    "numVotes": 12,
+    "popularity": 62.1151,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/p7srucCIMPIzKvvVgXQfxruQ4BA.jpg"
+  },
+  {
+    "tmdbId": 106587,
+    "imdbId": "tt8105644",
+    "title": "Muzhskoye / Zhenskoye",
+    "originalTitle": "Мужское / Женское",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Talk"
+    ],
+    "averageRating": 5.5,
+    "numVotes": 2,
+    "popularity": 51.0789,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/p6C0g6ZQ4jj9kW7Om8Z3Fjkzw1c.jpg"
+  },
+  {
+    "tmdbId": 257723,
+    "imdbId": "tt38270077",
+    "title": "Maddie + Triggs",
+    "originalTitle": "Maddie + Triggs",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Kids"
+    ],
+    "averageRating": 10,
+    "numVotes": 1,
+    "popularity": 164.3852,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/tOLQ3aodmqjiDotcaTEPKJmMoJN.jpg"
+  },
+  {
+    "tmdbId": 22980,
+    "imdbId": "tt2057880",
+    "title": "Watch What Happens Live with Andy Cohen",
+    "originalTitle": "Watch What Happens Live with Andy Cohen",
+    "startYear": "2009",
+    "endYear": "",
+    "genres": [
+      "Talk",
+      "Comedy"
+    ],
+    "averageRating": 5,
+    "numVotes": 87,
+    "popularity": 73.1705,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/onSD9UXfJwrMXWhq7UY7hGF2S1h.jpg"
+  },
+  {
+    "tmdbId": 27181,
+    "imdbId": "tt0853076",
+    "title": "Rote Rosen",
+    "originalTitle": "Rote Rosen",
+    "startYear": "2006",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Drama"
+    ],
+    "averageRating": 3,
+    "numVotes": 5,
+    "popularity": 136.8148,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/swL2qUjGrChFyj14ExwA0pwWtzv.jpg"
+  },
+  {
+    "tmdbId": 4057,
+    "imdbId": "tt0452046",
+    "title": "Criminal Minds",
+    "originalTitle": "Criminal Minds",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 8.3,
+    "numVotes": 240392,
+    "popularity": 108.0166,
+    "episodeCount": 367,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/hWSb4UnIjlTvnvrP98NbFSO60HA.jpg"
+  },
+  {
+    "tmdbId": 65682,
+    "imdbId": "tt5154982",
+    "title": "Sister-in-Law Is at Home!",
+    "originalTitle": "भाभीजी घर पर हैं!",
+    "startYear": "2015",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 5.6,
+    "numVotes": 8,
+    "popularity": 74.0167,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/2lkV7WWu1QbXV3PYqqslgGZMLNq.jpg"
+  },
+  {
+    "tmdbId": 312949,
+    "imdbId": "tt39551330",
+    "title": "Chainsmoker Cat",
+    "originalTitle": "ヤニねこ",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 8.8,
+    "numVotes": 28,
+    "popularity": 125.1069,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/kqeKlSd7o9BCbTraZsDnksRSfxm.jpg"
+  },
+  {
+    "tmdbId": 36361,
+    "imdbId": "tt0484918",
+    "title": "Ulice",
+    "originalTitle": "Ulice",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 4.6,
+    "numVotes": 35,
+    "popularity": 23.3526,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/gFEHva8Csx18hMGJJZ6gi4sFSKR.jpg"
+  },
+  {
+    "tmdbId": 65733,
+    "imdbId": "tt4083422",
+    "title": "Doraemon",
+    "originalTitle": "ドラえもん",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Kids",
+      "Family"
+    ],
+    "averageRating": 8.087,
+    "numVotes": 235,
+    "popularity": 104.249,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/9ZN1P32SHviL3SV51qLivxycvcx.jpg"
+  },
+  {
+    "tmdbId": 1636,
+    "imdbId": "tt0139803",
+    "title": "Top of the Pops",
+    "originalTitle": "Top of the Pops",
+    "startYear": "1964",
+    "endYear": "",
+    "genres": [
+      "Reality"
+    ],
+    "averageRating": 6.651,
+    "numVotes": 43,
+    "popularity": 76.7763,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/jjfTTjVYWyD6rGHVbnC44IrsJ7P.jpg"
+  },
+  {
+    "tmdbId": 6489,
+    "imdbId": "tt0182607",
+    "title": "Klan",
+    "originalTitle": "Klan",
+    "startYear": "1997",
+    "endYear": "",
+    "genres": [
+      "Soap"
+    ],
+    "averageRating": 5.455,
+    "numVotes": 11,
+    "popularity": 40.7766,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/vuSKqHmKLrKG2AYFOyQ4Ci9wTAj.jpg"
+  },
+  {
+    "tmdbId": 298954,
+    "imdbId": "tt38590149",
+    "title": "Antigang",
+    "originalTitle": "Antigang",
+    "startYear": "2025",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 7.333,
+    "numVotes": 3,
+    "popularity": 50.264,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/nSjS6oQFkpCPvZPAeZCEqo5Nxv8.jpg"
+  },
+  {
+    "tmdbId": 76479,
+    "imdbId": "tt1190634",
+    "title": "The Boys",
+    "originalTitle": "The Boys",
+    "startYear": "2019",
+    "endYear": "2026",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Action & Adventure",
+      "Action",
+      "Comedy",
+      "Crime"
+    ],
+    "averageRating": 8.443,
+    "numVotes": 1001622,
+    "popularity": 96.9336,
+    "episodeCount": 40,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/in1R2dDc421JxsoRWaIIAqVI2KE.jpg"
+  },
+  {
+    "tmdbId": 82452,
+    "imdbId": "tt9018736",
+    "title": "Avatar: The Last Airbender",
+    "originalTitle": "Avatar: The Last Airbender",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Family",
+      "Action",
+      "Adventure",
+      "Comedy"
+    ],
+    "averageRating": 7.788,
+    "numVotes": 86877,
+    "popularity": 101.5867,
+    "episodeCount": 22,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/lzZpWEaqzP0qVA5nkCc5ASbNcSy.jpg"
+  },
+  {
+    "tmdbId": 61818,
+    "imdbId": "tt3513388",
+    "title": "Late Night with Seth Meyers",
+    "originalTitle": "Late Night with Seth Meyers",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Talk",
+      "Comedy"
+    ],
+    "averageRating": 5.146,
+    "numVotes": 130,
+    "popularity": 68.1064,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/u8VruEGv7mtyJihVn2CSA1u90pk.jpg"
+  },
+  {
+    "tmdbId": 456,
+    "imdbId": "tt0096697",
+    "title": "The Simpsons",
+    "originalTitle": "The Simpsons",
+    "startYear": "1989",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 8.019,
+    "numVotes": 469630,
+    "popularity": 95.0995,
+    "episodeCount": 858,
+    "source": "tmdb-discover-popular+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/uWpG7GqfKGQqX4YMAo3nv5OrglV.jpg"
+  },
+  {
+    "tmdbId": 153485,
+    "imdbId": "tt0236924",
+    "title": "Sazae-san",
+    "originalTitle": "サザエさん",
+    "startYear": "1969",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7,
+    "numVotes": 7,
+    "popularity": 71.6598,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/ovOdOiGr0xHxB8rCwLSXAchCrta.jpg"
+  },
+  {
+    "tmdbId": 223911,
+    "imdbId": "tt27432264",
+    "title": "Renegade Immortal",
+    "originalTitle": "仙逆",
+    "startYear": "2023",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Drama",
+      "Action & Adventure"
+    ],
+    "averageRating": 8.256,
+    "numVotes": 39,
+    "popularity": 109.857,
+    "episodeCount": 0,
+    "source": "tmdb-discover-popular",
+    "cover": "https://image.tmdb.org/t/p/w500/2jEJSCLFjniFT7z4YvyY9Ywo1lc.jpg"
+  }
+]

@@ -1,0 +1,835 @@
+[
+  {
+    "tmdbId": 1368337,
+    "imdbId": "tt33764258",
+    "id": "tt33764258",
+    "title": "The Odyssey",
+    "year": "2026",
+    "rating": 6.939,
+    "votes": 189,
+    "genres": [
+      "Adventure",
+      "Action",
+      "Fantasy"
+    ],
+    "popularity": 226.2542,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/5rhTDKUhPYvpdQIijFIs5VoWsON.jpg"
+  },
+  {
+    "tmdbId": 1083381,
+    "imdbId": "tt26657236",
+    "id": "tt26657236",
+    "title": "Backrooms",
+    "year": "2026",
+    "rating": 7.007,
+    "votes": 1381,
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Science Fiction"
+    ],
+    "popularity": 280.3212,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/rhGx6E3qRNMgj3i5su2oukNHwIQ.jpg"
+  },
+  {
+    "tmdbId": 1339713,
+    "imdbId": "tt37287335",
+    "id": "tt37287335",
+    "title": "Obsession",
+    "year": "2026",
+    "rating": 8.252,
+    "votes": 3100,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ],
+    "popularity": 649.4059,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/bRwnj8WEKBCvmfeUNOukJPwB43K.jpg"
+  },
+  {
+    "tmdbId": 1108427,
+    "imdbId": "tt27419466",
+    "id": "tt27419466",
+    "title": "Moana",
+    "year": "2026",
+    "rating": 5.823,
+    "votes": 99,
+    "genres": [
+      "Family",
+      "Fantasy",
+      "Comedy",
+      "Adventure"
+    ],
+    "popularity": 284.1018,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/zKVgiv5qHCvCLT4A2ymJi5QeXDH.jpg"
+  },
+  {
+    "tmdbId": 1280738,
+    "imdbId": "tt33311069",
+    "id": "tt33311069",
+    "title": "The Furious",
+    "year": "2026",
+    "rating": 7.391,
+    "votes": 197,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ],
+    "popularity": 260.7265,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/zP19YO60jwEsfKd5Qf1UvA5uJu8.jpg"
+  },
+  {
+    "tmdbId": 1212763,
+    "imdbId": "tt31170389",
+    "id": "tt31170389",
+    "title": "Evil Dead Burn",
+    "year": "2026",
+    "rating": 6.8,
+    "votes": 140,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ],
+    "popularity": 88.6382,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/ztadKzIIR0ERYqpHteaPFtk7inP.jpg"
+  },
+  {
+    "tmdbId": 969681,
+    "imdbId": "tt22084616",
+    "id": "tt22084616",
+    "title": "Spider-Man: Brand New Day",
+    "year": "2026",
+    "rating": 0,
+    "votes": 0,
+    "genres": [
+      "Science Fiction",
+      "Action",
+      "Adventure"
+    ],
+    "popularity": 104.7492,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/yyB2VJEW3an2xCdcYCPQhn9QERR.jpg"
+  },
+  {
+    "tmdbId": 1084244,
+    "imdbId": "tt29355505",
+    "id": "tt29355505",
+    "title": "Toy Story 5",
+    "year": "2026",
+    "rating": 7.416,
+    "votes": 627,
+    "genres": [
+      "Animation",
+      "Family",
+      "Comedy",
+      "Adventure"
+    ],
+    "popularity": 404.6152,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/sfQtVlIHljToOwYjhe21KPGzZWK.jpg"
+  },
+  {
+    "tmdbId": 1318621,
+    "imdbId": "tt34477910",
+    "id": "tt34477910",
+    "title": "Descendants: Wicked Wonderland",
+    "year": "2026",
+    "rating": 6.1,
+    "votes": 4,
+    "genres": [
+      "Fantasy",
+      "Family",
+      "TV Movie"
+    ],
+    "popularity": 8.3485,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/tPbMu1LH4YzyvG2a9X5qYERHmIv.jpg"
+  },
+  {
+    "tmdbId": 1058424,
+    "imdbId": "tt27369017",
+    "id": "tt27369017",
+    "title": "Hope",
+    "year": "2026",
+    "rating": 8.167,
+    "votes": 6,
+    "genres": [
+      "Science Fiction",
+      "Mystery",
+      "Action"
+    ],
+    "popularity": 21.2842,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/1n37BJchWHLiSYQkuFxe5KjB951.jpg"
+  },
+  {
+    "tmdbId": 1315772,
+    "imdbId": "tt32890033",
+    "id": "tt32890033",
+    "title": "Minions & Monsters",
+    "year": "2026",
+    "rating": 6.4,
+    "votes": 179,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy",
+      "Family",
+      "Fantasy"
+    ],
+    "popularity": 61.7127,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/nz7i42yhLIJ4ve9JKgM6NthoLHO.jpg"
+  },
+  {
+    "tmdbId": 936075,
+    "imdbId": "tt11378946",
+    "id": "tt11378946",
+    "title": "Michael",
+    "year": "2026",
+    "rating": 8.704,
+    "votes": 3537,
+    "genres": [
+      "Music",
+      "Drama"
+    ],
+    "popularity": 161.7003,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/zm0KAbOjlt9eR5y7vDiL2dEOwMl.jpg"
+  },
+  {
+    "tmdbId": 1468683,
+    "imdbId": "tt36619926",
+    "id": "tt36619926",
+    "title": "Heartstopper Forever",
+    "year": "2026",
+    "rating": 4,
+    "votes": 3,
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "popularity": 6.1676,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/r4lVJVO1BeBb11cBcXBdbHc9e9k.jpg"
+  },
+  {
+    "tmdbId": 687163,
+    "imdbId": "tt12042730",
+    "id": "tt12042730",
+    "title": "Project Hail Mary",
+    "year": "2026",
+    "rating": 8.663,
+    "votes": 6127,
+    "genres": [
+      "Science Fiction",
+      "Adventure"
+    ],
+    "popularity": 166.2738,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/yihdXomYb5kTeSivtFndMy5iDmf.jpg"
+  },
+  {
+    "tmdbId": 1440050,
+    "imdbId": "tt34459219",
+    "id": "tt34459219",
+    "title": "The Breadwinner",
+    "year": "2026",
+    "rating": 7.3,
+    "votes": 18,
+    "genres": [
+      "Comedy",
+      "Family"
+    ],
+    "popularity": 13.7121,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/4apG9Xk6HQvV48JKEjSUeiebju7.jpg"
+  },
+  {
+    "tmdbId": 1368314,
+    "imdbId": "tt33763941",
+    "id": "tt33763941",
+    "title": "Passenger",
+    "year": "2026",
+    "rating": 7.21,
+    "votes": 440,
+    "genres": [
+      "Horror",
+      "Thriller"
+    ],
+    "popularity": 242.9096,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/2sOEJzhPzjTkZSlPbGxOJ7xgIyS.jpg"
+  },
+  {
+    "tmdbId": 950028,
+    "imdbId": "tt14173636",
+    "id": "tt14173636",
+    "title": "The Invite",
+    "year": "2026",
+    "rating": 7.6,
+    "votes": 60,
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "popularity": 33.8488,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/b7Dr8Chzse8VagexAporUu2RtLx.jpg"
+  },
+  {
+    "tmdbId": 1242332,
+    "imdbId": "tt31195136",
+    "id": "tt31195136",
+    "title": "Normal",
+    "year": "2026",
+    "rating": 7.057,
+    "votes": 323,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ],
+    "popularity": 21.7444,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/38n0tIc9c1cn5C3IMhjnIFJtwfz.jpg"
+  },
+  {
+    "tmdbId": 1616674,
+    "imdbId": "tt39370887",
+    "id": "tt39370887",
+    "title": "Me Before Me",
+    "year": "2026",
+    "rating": 3.5,
+    "votes": 2,
+    "genres": [
+      "Drama"
+    ],
+    "popularity": 0.7767,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/oFMbldhgyFsaMK3tiycccFyKksQ.jpg"
+  },
+  {
+    "tmdbId": 1314481,
+    "imdbId": "tt33612209",
+    "id": "tt33612209",
+    "title": "The Devil Wears Prada 2",
+    "year": "2026",
+    "rating": 7.112,
+    "votes": 1510,
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "popularity": 177.2742,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/fCAURTUx3YfsJ8k9I0UamjSILiR.jpg"
+  },
+  {
+    "tmdbId": 1484913,
+    "imdbId": "tt39632269",
+    "id": "tt39632269",
+    "title": "Ikka",
+    "year": "2026",
+    "rating": 5.1,
+    "votes": 11,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ],
+    "popularity": 41.8805,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/fp5EAKE8nTx402n1fWz55QsuYY9.jpg"
+  },
+  {
+    "tmdbId": 1595852,
+    "imdbId": "tt38235625",
+    "id": "tt38235625",
+    "title": "Boulevard",
+    "year": "2026",
+    "rating": 7.7,
+    "votes": 103,
+    "genres": [
+      "Romance",
+      "Drama"
+    ],
+    "popularity": 50.2378,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/sQS3zYJznspQwNSCv9LMc5VHQST.jpg"
+  },
+  {
+    "tmdbId": 1304313,
+    "imdbId": "tt32612507",
+    "id": "tt32612507",
+    "title": "Lee Cronin's The Mummy",
+    "year": "2026",
+    "rating": 7.969,
+    "votes": 2245,
+    "genres": [
+      "Horror",
+      "Mystery"
+    ],
+    "popularity": 74.1566,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/1q308iixueCU4pFtSYugNOevtNx.jpg"
+  },
+  {
+    "tmdbId": 1710008,
+    "imdbId": "tt39385949",
+    "id": "tt39385949",
+    "title": "Nothing to Lose",
+    "year": "2026",
+    "rating": 5.481,
+    "votes": 27,
+    "genres": [
+      "Drama",
+      "Action"
+    ],
+    "popularity": 27.6428,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/3SKN8QZptMm8KfCCQtEmyh1Zkgz.jpg"
+  },
+  {
+    "tmdbId": 1273221,
+    "imdbId": "tt32093575",
+    "id": "tt32093575",
+    "title": "Scary Movie",
+    "year": "2026",
+    "rating": 5.4,
+    "votes": 463,
+    "genres": [
+      "Comedy"
+    ],
+    "popularity": 346.6253,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/1KlYdWoOrbL5ux357rW9LC155qw.jpg"
+  },
+  {
+    "tmdbId": 1226863,
+    "imdbId": "tt28650488",
+    "id": "tt28650488",
+    "title": "The Super Mario Galaxy Movie",
+    "year": "2026",
+    "rating": 8.26,
+    "votes": 3093,
+    "genres": [
+      "Family",
+      "Comedy",
+      "Adventure",
+      "Fantasy",
+      "Animation"
+    ],
+    "popularity": 87.3073,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/eJGWx219ZcEMVQJhAgMiqo8tYY.jpg"
+  },
+  {
+    "tmdbId": 1248832,
+    "imdbId": "tt31450459",
+    "id": "tt31450459",
+    "title": "Digger",
+    "year": "2026",
+    "rating": 0,
+    "votes": 0,
+    "genres": [
+      "Comedy"
+    ],
+    "popularity": 16.5612,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/1ATXKrIPJyKNwnJ6lcG088Sa6zi.jpg"
+  },
+  {
+    "tmdbId": 1275779,
+    "imdbId": "tt15047880",
+    "id": "tt15047880",
+    "title": "Disclosure Day",
+    "year": "2026",
+    "rating": 6.689,
+    "votes": 886,
+    "genres": [
+      "Science Fiction",
+      "Thriller"
+    ],
+    "popularity": 477.844,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/AnJ8IQJI23hNpYXVNaythu061Ru.jpg"
+  },
+  {
+    "tmdbId": 1380316,
+    "imdbId": "tt34379307",
+    "id": "tt34379307",
+    "title": "Is God Is",
+    "year": "2026",
+    "rating": 5.8,
+    "votes": 63,
+    "genres": [
+      "Drama",
+      "Thriller"
+    ],
+    "popularity": 24.7984,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/rCYQGHdoz7qwYsb6wXETJfUfDLX.jpg"
+  },
+  {
+    "tmdbId": 1325734,
+    "imdbId": "tt33071426",
+    "id": "tt33071426",
+    "title": "The Drama",
+    "year": "2026",
+    "rating": 6.922,
+    "votes": 1228,
+    "genres": [
+      "Romance",
+      "Comedy",
+      "Drama"
+    ],
+    "popularity": 36.7013,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/qhGCY6DIemLoCi7x1GuEt98m4JF.jpg"
+  },
+  {
+    "tmdbId": 1541560,
+    "imdbId": "tt38128726",
+    "id": "tt38128726",
+    "title": "Stop! That! Train!",
+    "year": "2026",
+    "rating": 4.833,
+    "votes": 21,
+    "genres": [
+      "Action",
+      "Comedy"
+    ],
+    "popularity": 5.1798,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/w90dGS6D2lVO4aO5rdQ8QECrUGY.jpg"
+  },
+  {
+    "tmdbId": 1381202,
+    "imdbId": "tt33372918",
+    "id": "tt33372918",
+    "title": "The Outer Threat",
+    "year": "2026",
+    "rating": 5.8,
+    "votes": 9,
+    "genres": [
+      "Science Fiction",
+      "Thriller"
+    ],
+    "popularity": 20.0225,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/3ZaO8yZwGo4PJSgwLwSowD4EBbN.jpg"
+  },
+  {
+    "tmdbId": 1327819,
+    "imdbId": "tt26443616",
+    "id": "tt26443616",
+    "title": "Hoppers",
+    "year": "2026",
+    "rating": 8.2,
+    "votes": 1937,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy",
+      "Family",
+      "Science Fiction"
+    ],
+    "popularity": 77.1598,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/xjtWQ2CL1mpmMNwuU5HeS4Iuwuu.jpg"
+  },
+  {
+    "tmdbId": 931285,
+    "imdbId": "tt17490712",
+    "id": "tt17490712",
+    "title": "Mortal Kombat II",
+    "year": "2026",
+    "rating": 7.982,
+    "votes": 2005,
+    "genres": [
+      "Action",
+      "Fantasy",
+      "Adventure"
+    ],
+    "popularity": 130.4542,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/hwRdDFIhaEmpRgoki805YvyyjZf.jpg"
+  },
+  {
+    "tmdbId": 1170608,
+    "imdbId": "tt31378509",
+    "id": "tt31378509",
+    "title": "Dune: Part Three",
+    "year": "2026",
+    "rating": 0,
+    "votes": 0,
+    "genres": [
+      "Action",
+      "Adventure",
+      "Science Fiction"
+    ],
+    "popularity": 13.2391,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/d43fvHQsIMa4kpyhKXw0haEJIvI.jpg"
+  },
+  {
+    "tmdbId": 1491920,
+    "imdbId": "tt36103784",
+    "id": "tt36103784",
+    "title": "Kung Fu Soccer",
+    "year": "2026",
+    "rating": 4.571,
+    "votes": 7,
+    "genres": [
+      "Drama",
+      "Comedy",
+      "Action"
+    ],
+    "popularity": 104.2194,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/6QgJQrClh9ej357yzLWgCxrjAmJ.jpg"
+  },
+  {
+    "tmdbId": 454639,
+    "imdbId": "tt0427340",
+    "id": "tt0427340",
+    "title": "Masters of the Universe",
+    "year": "2026",
+    "rating": 6.9,
+    "votes": 400,
+    "genres": [
+      "Action",
+      "Fantasy",
+      "Science Fiction"
+    ],
+    "popularity": 36.9088,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/3YMd9Ogae4rDKLWuAZFuse9xhc5.jpg"
+  },
+  {
+    "tmdbId": 1003596,
+    "imdbId": "tt21357150",
+    "id": "tt21357150",
+    "title": "Avengers: Doomsday",
+    "year": "2026",
+    "rating": 0,
+    "votes": 0,
+    "genres": [
+      "Science Fiction",
+      "Action",
+      "Adventure"
+    ],
+    "popularity": 32.5868,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/8HkIe2i4ScpCkcX9SzZ9IPasqWV.jpg"
+  },
+  {
+    "tmdbId": 980431,
+    "imdbId": "tt18259538",
+    "id": "tt18259538",
+    "title": "Avatar Aang: The Last Airbender",
+    "year": "2026",
+    "rating": 0,
+    "votes": 0,
+    "genres": [
+      "Animation",
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
+    "popularity": 110.9359,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/3sgnSfNT27Bx5O5ukr7B26mhEQq.jpg"
+  },
+  {
+    "tmdbId": 1633263,
+    "imdbId": "tt39602729",
+    "id": "tt39602729",
+    "title": "Wonderful Nightmare",
+    "year": "2026",
+    "rating": 5.833,
+    "votes": 3,
+    "genres": [
+      "Drama",
+      "Comedy",
+      "Fantasy"
+    ],
+    "popularity": 13.0757,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/5plgPtzwuIHUKMN044igzRkbd90.jpg"
+  },
+  {
+    "tmdbId": 1242265,
+    "imdbId": "tt31189814",
+    "id": "tt31189814",
+    "title": "Fuze",
+    "year": "2026",
+    "rating": 6.438,
+    "votes": 161,
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "popularity": 9.1751,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/oMFdQE5hMJ9JjhNORegwTo0GKmh.jpg"
+  },
+  {
+    "tmdbId": 83533,
+    "imdbId": "tt1757678",
+    "id": "tt1757678",
+    "title": "Avatar: Fire and Ash",
+    "year": "2025",
+    "rating": 7.63,
+    "votes": 3816,
+    "genres": [
+      "Science Fiction",
+      "Adventure",
+      "Fantasy"
+    ],
+    "popularity": 125.2883,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/bRBeSHfGHwkEpImlhxPmOcUsaeg.jpg"
+  },
+  {
+    "tmdbId": 1397201,
+    "imdbId": "tt38109660",
+    "id": "tt38109660",
+    "title": "Golden Kamuy -The Abashiri Prison Raid-",
+    "year": "2026",
+    "rating": 7.9,
+    "votes": 12,
+    "genres": [
+      "Action",
+      "Drama",
+      "History",
+      "Adventure"
+    ],
+    "popularity": 31.0281,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/836hM2OzkTOY8Vrv152ZczW1oj7.jpg"
+  },
+  {
+    "tmdbId": 614945,
+    "imdbId": "tt10375624",
+    "id": "tt10375624",
+    "title": "Voicemails for Isabelle",
+    "year": "2026",
+    "rating": 8.398,
+    "votes": 589,
+    "genres": [
+      "Romance",
+      "Comedy"
+    ],
+    "popularity": 41.4821,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/canZTWSxACSnAluir3dCtMxKpA1.jpg"
+  },
+  {
+    "tmdbId": 1303331,
+    "imdbId": "tt27548557",
+    "id": "tt27548557",
+    "title": "Dhamaal 4",
+    "year": "2026",
+    "rating": 3,
+    "votes": 1,
+    "genres": [
+      "Comedy"
+    ],
+    "popularity": 15.793,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/5d7hpbefNiuebl5eqP5cRrckVxs.jpg"
+  },
+  {
+    "tmdbId": 1290821,
+    "imdbId": "tt32357218",
+    "id": "tt32357218",
+    "title": "Shelter",
+    "year": "2026",
+    "rating": 7.748,
+    "votes": 1493,
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ],
+    "popularity": 36.8114,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/buPFnHZ3xQy6vZEHxbHgL1Pc6CR.jpg"
+  },
+  {
+    "tmdbId": 1413976,
+    "imdbId": "tt35309713",
+    "id": "tt35309713",
+    "title": "Citizen Vigilante",
+    "year": "2026",
+    "rating": 6.472,
+    "votes": 251,
+    "genres": [
+      "Thriller",
+      "Action",
+      "Crime"
+    ],
+    "popularity": 128.7863,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/6LmJD3Wohe0g4U62wgi7RyJqfE4.jpg"
+  },
+  {
+    "tmdbId": 1321008,
+    "imdbId": "tt32315584",
+    "id": "tt32315584",
+    "title": "Black Box",
+    "year": "2026",
+    "rating": 6.077,
+    "votes": 26,
+    "genres": [
+      "Horror",
+      "Thriller",
+      "Science Fiction"
+    ],
+    "popularity": 106.0823,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/O7vJPEWsnLrKqPYHIHKG8zlEK1.jpg"
+  },
+  {
+    "tmdbId": 1700944,
+    "imdbId": "tt42111424",
+    "id": "tt42111424",
+    "title": "Love, Ngo",
+    "year": "2026",
+    "rating": 9.5,
+    "votes": 2,
+    "genres": [
+      "Comedy"
+    ],
+    "popularity": 10.1237,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/qA7FX4vp2qWfkMd2R3JrbGP6vbu.jpg"
+  },
+  {
+    "tmdbId": 1340206,
+    "imdbId": "tt33296751",
+    "id": "tt33296751",
+    "title": "Tuner",
+    "year": "2026",
+    "rating": 7.164,
+    "votes": 177,
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "popularity": 20.1932,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/5OvA3i9wZs5jHu0DCrfmXlzAM67.jpg"
+  }
+]

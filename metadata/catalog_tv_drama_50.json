@@ -1,0 +1,954 @@
+[
+  {
+    "tmdbId": 94997,
+    "imdbId": "tt11198330",
+    "title": "House of the Dragon",
+    "originalTitle": "House of the Dragon",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Action & Adventure",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.371,
+    "numVotes": 538505,
+    "popularity": 260.212,
+    "episodeCount": 27,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/7V0Ebks0GgpKvQ7QbLAIdX5dos4.jpg"
+  },
+  {
+    "tmdbId": 243206,
+    "imdbId": "tt28077038",
+    "title": "Pritam and Pedro",
+    "originalTitle": "प्रीतम और पेड्रो",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery",
+      "Comedy"
+    ],
+    "averageRating": 8.636,
+    "numVotes": 11,
+    "popularity": 224.6359,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/lC0MtWrnC0SZICFHazagIfVKy0x.jpg"
+  },
+  {
+    "tmdbId": 124364,
+    "imdbId": "tt9813792",
+    "title": "From",
+    "originalTitle": "From",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.507,
+    "numVotes": 193837,
+    "popularity": 194.5036,
+    "episodeCount": 41,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/pRtJagIxpfODzzb0T0NAvZSzErC.jpg"
+  },
+  {
+    "tmdbId": 2734,
+    "imdbId": "tt0203259",
+    "title": "Law & Order: Special Victims Unit",
+    "originalTitle": "Law & Order: Special Victims Unit",
+    "startYear": "1999",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 7.954,
+    "numVotes": 145517,
+    "popularity": 172.9434,
+    "episodeCount": 601,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/iofokHZoUB4Qhik4PflvJl8TT6a.jpg"
+  },
+  {
+    "tmdbId": 15226,
+    "imdbId": "tt0401916",
+    "title": "C.I.D.",
+    "originalTitle": "सीआईडी",
+    "startYear": "1998",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 5.7,
+    "numVotes": 30,
+    "popularity": 66.2758,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/3UymnlLfLMKxG8OcFhSnAlnhQfZ.jpg"
+  },
+  {
+    "tmdbId": 125988,
+    "imdbId": "tt14688458",
+    "title": "Silo",
+    "originalTitle": "Silo",
+    "startYear": "2023",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ],
+    "averageRating": 8.178,
+    "numVotes": 216915,
+    "popularity": 236.5473,
+    "episodeCount": 40,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/gMYZZvnkVNTqSVnVCphWbPXwWwb.jpg"
+  },
+  {
+    "tmdbId": 100780,
+    "imdbId": "tt4455902",
+    "title": "Jamai Raja",
+    "originalTitle": "Jamai Raja",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 5.5,
+    "numVotes": 4,
+    "popularity": 129.3623,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/7TDfSot51AFRK8aFs2kO3snM4um.jpg"
+  },
+  {
+    "tmdbId": 79744,
+    "imdbId": "tt7587890",
+    "title": "The Rookie",
+    "originalTitle": "The Rookie",
+    "startYear": "2018",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Comedy",
+      "Action"
+    ],
+    "averageRating": 8.55,
+    "numVotes": 129964,
+    "popularity": 137.6974,
+    "episodeCount": 145,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/70kTz0OmjjZe7zHvIDrq2iKW7PJ.jpg"
+  },
+  {
+    "tmdbId": 8590,
+    "imdbId": "tt0423713",
+    "title": "Plus belle la vie",
+    "originalTitle": "Plus belle la vie",
+    "startYear": "2004",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy",
+      "Crime"
+    ],
+    "averageRating": 4.395,
+    "numVotes": 38,
+    "popularity": 34.5171,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/jmU8HlTDn87xmRqXagcL2swDr8I.jpg"
+  },
+  {
+    "tmdbId": 5920,
+    "imdbId": "tt1196946",
+    "title": "The Mentalist",
+    "originalTitle": "The Mentalist",
+    "startYear": "2008",
+    "endYear": "2015",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 8.362,
+    "numVotes": 232961,
+    "popularity": 133.627,
+    "episodeCount": 151,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/acYXu4KaDj1NIkMgObnhe4C4a0T.jpg"
+  },
+  {
+    "tmdbId": 549,
+    "imdbId": "tt0098844",
+    "title": "Law & Order",
+    "originalTitle": "Law & Order",
+    "startYear": "1990",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 7.293,
+    "numVotes": 51414,
+    "popularity": 129.1818,
+    "episodeCount": 550,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/haJ9eHytVO3H3JooMJG1DiWwDNm.jpg"
+  },
+  {
+    "tmdbId": 1416,
+    "imdbId": "tt0413573",
+    "title": "Grey's Anatomy",
+    "originalTitle": "Grey's Anatomy",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "averageRating": 8.208,
+    "numVotes": 375238,
+    "popularity": 127.8751,
+    "episodeCount": 467,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/hjJkrLXhWvGHpLeLBDFznpBTY1S.jpg"
+  },
+  {
+    "tmdbId": 1622,
+    "imdbId": "tt0460681",
+    "title": "Supernatural",
+    "originalTitle": "Supernatural",
+    "startYear": "2005",
+    "endYear": "2020",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi & Fantasy",
+      "Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.312,
+    "numVotes": 541955,
+    "popularity": 123.5457,
+    "episodeCount": 327,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/8iixmfGx5EIFPdpNvB2JvI3VIqX.jpg"
+  },
+  {
+    "tmdbId": 45789,
+    "imdbId": "tt0479846",
+    "title": "Storm of Love",
+    "originalTitle": "Sturm der Liebe",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 6,
+    "numVotes": 39,
+    "popularity": 53.9208,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/jfFNydakwvbeACEwSd2Gh8UWtba.jpg"
+  },
+  {
+    "tmdbId": 121513,
+    "imdbId": "tt7803586",
+    "title": "Kang's Family",
+    "originalTitle": "外来媳妇本地郎",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 10,
+    "numVotes": 3,
+    "popularity": 58.3786,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/yubXCrUPIc83Nk53gYARF49rOYV.jpg"
+  },
+  {
+    "tmdbId": 1399,
+    "imdbId": "tt0944947",
+    "title": "Game of Thrones",
+    "originalTitle": "Game of Thrones",
+    "startYear": "2011",
+    "endYear": "2019",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Action & Adventure",
+      "Fantasy"
+    ],
+    "averageRating": 8.466,
+    "numVotes": 2628909,
+    "popularity": 111.749,
+    "episodeCount": 74,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg"
+  },
+  {
+    "tmdbId": 4614,
+    "imdbId": "tt0364845",
+    "title": "NCIS",
+    "originalTitle": "NCIS",
+    "startYear": "2003",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Action & Adventure",
+      "Action"
+    ],
+    "averageRating": 7.611,
+    "numVotes": 177091,
+    "popularity": 107.761,
+    "episodeCount": 508,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/mBcu8d6x6zB1el3MPNl7cZQEQ31.jpg"
+  },
+  {
+    "tmdbId": 14424,
+    "imdbId": "tt0144724",
+    "title": "Young Hearts",
+    "originalTitle": "Malhação",
+    "startYear": "1995",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Comedy",
+      "Drama"
+    ],
+    "averageRating": 6.284,
+    "numVotes": 37,
+    "popularity": 24.6321,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/bF24r2FxsjzgkJcrbBU8RC9JVoU.jpg"
+  },
+  {
+    "tmdbId": 324186,
+    "imdbId": "tt29481945",
+    "title": "Majhi Manasa",
+    "originalTitle": "Majhi Manasa",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 112.1822,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/6bk8ShS9yZnO7do6uy0Lfej7KUY.jpg"
+  },
+  {
+    "tmdbId": 1871,
+    "imdbId": "tt0088512",
+    "title": "EastEnders",
+    "originalTitle": "EastEnders",
+    "startYear": "1985",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 4.2,
+    "numVotes": 228,
+    "popularity": 73.4085,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/z4jgyI5TpoRZiJTNchkVkMrGQyz.jpg"
+  },
+  {
+    "tmdbId": 27181,
+    "imdbId": "tt0853076",
+    "title": "Rote Rosen",
+    "originalTitle": "Rote Rosen",
+    "startYear": "2006",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Drama"
+    ],
+    "averageRating": 3,
+    "numVotes": 5,
+    "popularity": 136.8148,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/swL2qUjGrChFyj14ExwA0pwWtzv.jpg"
+  },
+  {
+    "tmdbId": 4057,
+    "imdbId": "tt0452046",
+    "title": "Criminal Minds",
+    "originalTitle": "Criminal Minds",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 8.303,
+    "numVotes": 240392,
+    "popularity": 108.0166,
+    "episodeCount": 367,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/hWSb4UnIjlTvnvrP98NbFSO60HA.jpg"
+  },
+  {
+    "tmdbId": 65682,
+    "imdbId": "tt5154982",
+    "title": "Sister-in-Law Is at Home!",
+    "originalTitle": "भाभीजी घर पर हैं!",
+    "startYear": "2015",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 5.6,
+    "numVotes": 8,
+    "popularity": 74.0167,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/2lkV7WWu1QbXV3PYqqslgGZMLNq.jpg"
+  },
+  {
+    "tmdbId": 36361,
+    "imdbId": "tt0484918",
+    "title": "Ulice",
+    "originalTitle": "Ulice",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 4.6,
+    "numVotes": 35,
+    "popularity": 23.3526,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/gFEHva8Csx18hMGJJZ6gi4sFSKR.jpg"
+  },
+  {
+    "tmdbId": 298954,
+    "imdbId": "tt38590149",
+    "title": "Antigang",
+    "originalTitle": "Antigang",
+    "startYear": "2025",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 7.333,
+    "numVotes": 3,
+    "popularity": 50.264,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/nSjS6oQFkpCPvZPAeZCEqo5Nxv8.jpg"
+  },
+  {
+    "tmdbId": 82452,
+    "imdbId": "tt9018736",
+    "title": "Avatar: The Last Airbender",
+    "originalTitle": "Avatar: The Last Airbender",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Family",
+      "Action",
+      "Adventure",
+      "Comedy"
+    ],
+    "averageRating": 7.788,
+    "numVotes": 86877,
+    "popularity": 101.5867,
+    "episodeCount": 22,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/lzZpWEaqzP0qVA5nkCc5ASbNcSy.jpg"
+  },
+  {
+    "tmdbId": 223911,
+    "imdbId": "tt27432264",
+    "title": "Renegade Immortal",
+    "originalTitle": "仙逆",
+    "startYear": "2023",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Drama",
+      "Action & Adventure"
+    ],
+    "averageRating": 8.256,
+    "numVotes": 39,
+    "popularity": 109.857,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/2jEJSCLFjniFT7z4YvyY9Ywo1lc.jpg"
+  },
+  {
+    "tmdbId": 286506,
+    "imdbId": "tt36204806",
+    "title": "Blossoms of Power",
+    "originalTitle": "百花杀",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 77.0802,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/g8Af8gOu7bZlvjoQ7St9WolzaI9.jpg"
+  },
+  {
+    "tmdbId": 13945,
+    "imdbId": "tt0103434",
+    "title": "Gute Zeiten, schlechte Zeiten",
+    "originalTitle": "Gute Zeiten, schlechte Zeiten",
+    "startYear": "1992",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 5.458,
+    "numVotes": 48,
+    "popularity": 24.6847,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/qujVFLAlBnPU9mZElV4NZgL8iXT.jpg"
+  },
+  {
+    "tmdbId": 6060,
+    "imdbId": "tt0278212",
+    "title": "Kyunki... Saas Bhi Kabhi Bahu Thi...",
+    "originalTitle": "क्योंकि सास भी कभी बहू थी",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 3.4,
+    "numVotes": 12,
+    "popularity": 65.4575,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/rJfoyxt7FOKr7WPB6FPuffarpcn.jpg"
+  },
+  {
+    "tmdbId": 80318,
+    "imdbId": "tt0388585",
+    "title": "CentoVetrine",
+    "originalTitle": "CentoVetrine",
+    "startYear": "2001",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Drama"
+    ],
+    "averageRating": 6.667,
+    "numVotes": 3,
+    "popularity": 22.3385,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/25v6iDGmIpyG3zndfYdt4KfQgQ9.jpg"
+  },
+  {
+    "tmdbId": 91791,
+    "imdbId": "tt11633750",
+    "title": "Shoujo Commando IZUMI",
+    "originalTitle": "少女コマンドーIZUMI",
+    "startYear": "1987",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 6.7,
+    "numVotes": 3,
+    "popularity": 50.7395,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/6TvFAqk2LxU2p0Y9cs3q70aLrnw.jpg"
+  },
+  {
+    "tmdbId": 1431,
+    "imdbId": "tt0247082",
+    "title": "CSI: Crime Scene Investigation",
+    "originalTitle": "CSI: Crime Scene Investigation",
+    "startYear": "2000",
+    "endYear": "2015",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 7.63,
+    "numVotes": 94336,
+    "popularity": 97.2222,
+    "episodeCount": 335,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/i5hmoRjHNWady4AtAGICTUXknKH.jpg"
+  },
+  {
+    "tmdbId": 1396,
+    "imdbId": "tt0903747",
+    "title": "Breaking Bad",
+    "originalTitle": "Breaking Bad",
+    "startYear": "2008",
+    "endYear": "2013",
+    "genres": [
+      "Drama",
+      "Crime",
+      "Thriller"
+    ],
+    "averageRating": 8.948,
+    "numVotes": 2635764,
+    "popularity": 85.8758,
+    "episodeCount": 62,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/ztkUQFLlC19CCMYHW9o1zWhJRNq.jpg"
+  },
+  {
+    "tmdbId": 2661,
+    "imdbId": "tt0156214",
+    "title": "Kamen Rider",
+    "originalTitle": "仮面ライダー",
+    "startYear": "1971",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Drama"
+    ],
+    "averageRating": 6.4,
+    "numVotes": 103,
+    "popularity": 60.8028,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/2DIBDFHiKQawz4WPsYekl9DHwyA.jpg"
+  },
+  {
+    "tmdbId": 273240,
+    "imdbId": "tt33546863",
+    "title": "Off Campus",
+    "originalTitle": "Off Campus",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Romance",
+      "Sport"
+    ],
+    "averageRating": 8.913,
+    "numVotes": 38959,
+    "popularity": 86.605,
+    "episodeCount": 9,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/cbODFqkcmRgrYH8NkG4Q4Hcg8Z1.jpg"
+  },
+  {
+    "tmdbId": 764,
+    "imdbId": "tt0118401",
+    "title": "Midsomer Murders",
+    "originalTitle": "Midsomer Murders",
+    "startYear": "1997",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 7.469,
+    "numVotes": 44472,
+    "popularity": 80.676,
+    "episodeCount": 145,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/pz7tsWxe0TTdfJnWPjZAEnrSl5M.jpg"
+  },
+  {
+    "tmdbId": 57243,
+    "imdbId": "tt0436992",
+    "title": "Doctor Who",
+    "originalTitle": "Doctor Who",
+    "startYear": "2005",
+    "endYear": "2022",
+    "genres": [
+      "Action & Adventure",
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "averageRating": 7.615,
+    "numVotes": 263055,
+    "popularity": 91.5588,
+    "episodeCount": 175,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/m6G92osOtSeXwjSfL21jZCUOvxe.jpg"
+  },
+  {
+    "tmdbId": 322055,
+    "imdbId": "tt43592244",
+    "title": "The Prosecutor's Proposal",
+    "originalTitle": "검사실의 제안",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Crime",
+      "Drama"
+    ],
+    "averageRating": 6,
+    "numVotes": 5,
+    "popularity": 116.2999,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/lK6DrnFecG0AsA8O5UqEYOrOArd.jpg"
+  },
+  {
+    "tmdbId": 70998,
+    "imdbId": "tt6472622",
+    "title": "Souryo to Majiwaru Shikiyoku no Yoru ni...",
+    "originalTitle": "僧侶と交わる色欲の夜に…",
+    "startYear": "2017",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Drama"
+    ],
+    "averageRating": 5.3,
+    "numVotes": 14,
+    "popularity": 92.2837,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/ueI9EeoRdMVa7hWEm21nQEU8Zv3.jpg"
+  },
+  {
+    "tmdbId": 34307,
+    "imdbId": "tt1586680",
+    "title": "Shameless",
+    "originalTitle": "Shameless",
+    "startYear": "2011",
+    "endYear": "2021",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 8.167,
+    "numVotes": 334831,
+    "popularity": 77.6512,
+    "episodeCount": 134,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/ifo31fMWLmyOVpdak9K0kY4jldQ.jpg"
+  },
+  {
+    "tmdbId": 316540,
+    "imdbId": "tt43321335",
+    "title": "Bittersweet Love",
+    "originalTitle": "嫁入高门",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 10,
+    "numVotes": 1,
+    "popularity": 98.8321,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/xGXWk9FL4SNJpiLCKDkB3QTO4w6.jpg"
+  },
+  {
+    "tmdbId": 4604,
+    "imdbId": "tt0279600",
+    "title": "Smallville",
+    "originalTitle": "Smallville",
+    "startYear": "2001",
+    "endYear": "2011",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Action & Adventure",
+      "Drama",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.192,
+    "numVotes": 154573,
+    "popularity": 78.9249,
+    "episodeCount": 217,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/pUhJGETy2sec4vEkiqJ9eGeIywc.jpg"
+  },
+  {
+    "tmdbId": 250596,
+    "imdbId": "tt32332642",
+    "title": "My Wife Has No Emotion",
+    "originalTitle": "僕の妻は感情がない",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 6.5,
+    "numVotes": 21,
+    "popularity": 75.6555,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/ttaknfJP0qjg7kMKwH0w29fcE6d.jpg"
+  },
+  {
+    "tmdbId": 1408,
+    "imdbId": "tt0412142",
+    "title": "House",
+    "originalTitle": "House M.D.",
+    "startYear": "2004",
+    "endYear": "2012",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 8.566,
+    "numVotes": 595108,
+    "popularity": 75.3503,
+    "episodeCount": 177,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/3Cz7ySOQJmqiuTdrc6CY0r65yDI.jpg"
+  },
+  {
+    "tmdbId": 72879,
+    "imdbId": "tt7124904",
+    "title": "Tomorrow Is Ours",
+    "originalTitle": "Demain nous appartient",
+    "startYear": "2017",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 6.4,
+    "numVotes": 71,
+    "popularity": 40.7533,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/7BjipkA48xXLauTg45QKiOb144a.jpg"
+  },
+  {
+    "tmdbId": 1911,
+    "imdbId": "tt0460627",
+    "title": "Bones",
+    "originalTitle": "Bones",
+    "startYear": "2005",
+    "endYear": "2017",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "averageRating": 8.2,
+    "numVotes": 191232,
+    "popularity": 76.3023,
+    "episodeCount": 245,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/eyTu5c8LniVciRZIOSHTvvkkgJa.jpg"
+  },
+  {
+    "tmdbId": 18165,
+    "imdbId": "tt1405406",
+    "title": "The Vampire Diaries",
+    "originalTitle": "The Vampire Diaries",
+    "startYear": "2009",
+    "endYear": "2017",
+    "genres": [
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.301,
+    "numVotes": 385055,
+    "popularity": 80.4994,
+    "episodeCount": 171,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/b3vl6wV1W8PBezFfntKTrhrehCY.jpg"
+  },
+  {
+    "tmdbId": 322430,
+    "imdbId": "tt42543947",
+    "title": "The Polygamist",
+    "originalTitle": "The Polygamist",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 8.773,
+    "numVotes": 132,
+    "popularity": 110.657,
+    "episodeCount": 0,
+    "source": "tmdb-discover-drama",
+    "cover": "https://image.tmdb.org/t/p/w500/emnQZe22rYBCsbZ7h1TUAkYEzrZ.jpg"
+  },
+  {
+    "tmdbId": 73586,
+    "imdbId": "tt4236770",
+    "title": "Yellowstone",
+    "originalTitle": "Yellowstone",
+    "startYear": "2018",
+    "endYear": "2024",
+    "genres": [
+      "Western",
+      "Drama"
+    ],
+    "averageRating": 8.3,
+    "numVotes": 314714,
+    "popularity": 73.1494,
+    "episodeCount": 53,
+    "source": "tmdb-discover-drama+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/vOYfRZ0NpUK5hG2CB2dJFnYJlGe.jpg"
+  }
+]

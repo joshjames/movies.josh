@@ -1,0 +1,946 @@
+[
+  {
+    "tmdbId": 243206,
+    "imdbId": "tt28077038",
+    "title": "Pritam and Pedro",
+    "originalTitle": "प्रीतम और पेड्रो",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery",
+      "Comedy"
+    ],
+    "averageRating": 8.636,
+    "numVotes": 11,
+    "popularity": 224.6359,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/lC0MtWrnC0SZICFHazagIfVKy0x.jpg"
+  },
+  {
+    "tmdbId": 79744,
+    "imdbId": "tt7587890",
+    "title": "The Rookie",
+    "originalTitle": "The Rookie",
+    "startYear": "2018",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Comedy",
+      "Action"
+    ],
+    "averageRating": 8.55,
+    "numVotes": 129964,
+    "popularity": 137.6974,
+    "episodeCount": 145,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/70kTz0OmjjZe7zHvIDrq2iKW7PJ.jpg"
+  },
+  {
+    "tmdbId": 8590,
+    "imdbId": "tt0423713",
+    "title": "Plus belle la vie",
+    "originalTitle": "Plus belle la vie",
+    "startYear": "2004",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy",
+      "Crime"
+    ],
+    "averageRating": 4.395,
+    "numVotes": 38,
+    "popularity": 34.5171,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/jmU8HlTDn87xmRqXagcL2swDr8I.jpg"
+  },
+  {
+    "tmdbId": 121513,
+    "imdbId": "tt7803586",
+    "title": "Kang's Family",
+    "originalTitle": "外来媳妇本地郎",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family"
+    ],
+    "averageRating": 10,
+    "numVotes": 3,
+    "popularity": 58.3786,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/yubXCrUPIc83Nk53gYARF49rOYV.jpg"
+  },
+  {
+    "tmdbId": 498,
+    "imdbId": "tt0106053",
+    "title": "Late Show with David Letterman",
+    "originalTitle": "Late Show with David Letterman",
+    "startYear": "1993",
+    "endYear": "2015",
+    "genres": [
+      "Talk",
+      "Comedy",
+      "Music",
+      "Talk-Show"
+    ],
+    "averageRating": 6.4,
+    "numVotes": 14873,
+    "popularity": 51.6727,
+    "episodeCount": 6501,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/fTBC5EpsgKmli9VQcJMtqQ08Qj4.jpg"
+  },
+  {
+    "tmdbId": 1434,
+    "imdbId": "tt0182576",
+    "title": "Family Guy",
+    "originalTitle": "Family Guy",
+    "startYear": "1999",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 7.407,
+    "numVotes": 389606,
+    "popularity": 119.4288,
+    "episodeCount": 506,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/3PFsEuAiyLkWsP4GG6dIV37Q6gu.jpg"
+  },
+  {
+    "tmdbId": 14424,
+    "imdbId": "tt0144724",
+    "title": "Young Hearts",
+    "originalTitle": "Malhação",
+    "startYear": "1995",
+    "endYear": "",
+    "genres": [
+      "Soap",
+      "Comedy",
+      "Drama"
+    ],
+    "averageRating": 6.284,
+    "numVotes": 37,
+    "popularity": 24.6321,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/bF24r2FxsjzgkJcrbBU8RC9JVoU.jpg"
+  },
+  {
+    "tmdbId": 65701,
+    "imdbId": "tt4087032",
+    "title": "Good Mythical Morning",
+    "originalTitle": "Good Mythical Morning",
+    "startYear": "2012",
+    "endYear": "",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 6.9,
+    "numVotes": 91,
+    "popularity": 43.9228,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/jMpBQr2aNOFAI6wsC47zsOG6qOh.jpg"
+  },
+  {
+    "tmdbId": 22980,
+    "imdbId": "tt2057880",
+    "title": "Watch What Happens Live with Andy Cohen",
+    "originalTitle": "Watch What Happens Live with Andy Cohen",
+    "startYear": "2009",
+    "endYear": "",
+    "genres": [
+      "Talk",
+      "Comedy"
+    ],
+    "averageRating": 5,
+    "numVotes": 87,
+    "popularity": 73.1705,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/onSD9UXfJwrMXWhq7UY7hGF2S1h.jpg"
+  },
+  {
+    "tmdbId": 65682,
+    "imdbId": "tt5154982",
+    "title": "Sister-in-Law Is at Home!",
+    "originalTitle": "भाभीजी घर पर हैं!",
+    "startYear": "2015",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Family",
+      "Soap"
+    ],
+    "averageRating": 5.6,
+    "numVotes": 8,
+    "popularity": 74.0167,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/2lkV7WWu1QbXV3PYqqslgGZMLNq.jpg"
+  },
+  {
+    "tmdbId": 312949,
+    "imdbId": "tt39551330",
+    "title": "Chainsmoker Cat",
+    "originalTitle": "ヤニねこ",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 8.8,
+    "numVotes": 28,
+    "popularity": 125.1069,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/kqeKlSd7o9BCbTraZsDnksRSfxm.jpg"
+  },
+  {
+    "tmdbId": 36361,
+    "imdbId": "tt0484918",
+    "title": "Ulice",
+    "originalTitle": "Ulice",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 4.6,
+    "numVotes": 35,
+    "popularity": 23.3526,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/gFEHva8Csx18hMGJJZ6gi4sFSKR.jpg"
+  },
+  {
+    "tmdbId": 65733,
+    "imdbId": "tt4083422",
+    "title": "Doraemon",
+    "originalTitle": "ドラえもん",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Kids",
+      "Family"
+    ],
+    "averageRating": 8.087,
+    "numVotes": 235,
+    "popularity": 104.249,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/9ZN1P32SHviL3SV51qLivxycvcx.jpg"
+  },
+  {
+    "tmdbId": 61818,
+    "imdbId": "tt3513388",
+    "title": "Late Night with Seth Meyers",
+    "originalTitle": "Late Night with Seth Meyers",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Talk",
+      "Comedy"
+    ],
+    "averageRating": 5.146,
+    "numVotes": 130,
+    "popularity": 68.1064,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/u8VruEGv7mtyJihVn2CSA1u90pk.jpg"
+  },
+  {
+    "tmdbId": 456,
+    "imdbId": "tt0096697",
+    "title": "The Simpsons",
+    "originalTitle": "The Simpsons",
+    "startYear": "1989",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 8.019,
+    "numVotes": 469630,
+    "popularity": 95.0995,
+    "episodeCount": 858,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/uWpG7GqfKGQqX4YMAo3nv5OrglV.jpg"
+  },
+  {
+    "tmdbId": 153485,
+    "imdbId": "tt0236924",
+    "title": "Sazae-san",
+    "originalTitle": "サザエさん",
+    "startYear": "1969",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7,
+    "numVotes": 7,
+    "popularity": 71.6598,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/ovOdOiGr0xHxB8rCwLSXAchCrta.jpg"
+  },
+  {
+    "tmdbId": 63770,
+    "imdbId": "tt3697842",
+    "title": "The Late Show with Stephen Colbert",
+    "originalTitle": "The Late Show with Stephen Colbert",
+    "startYear": "2015",
+    "endYear": "2026",
+    "genres": [
+      "Comedy",
+      "Talk",
+      "Talk-Show"
+    ],
+    "averageRating": 6.1,
+    "numVotes": 16888,
+    "popularity": 55.8421,
+    "episodeCount": 1818,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/9jkThAGYj2yp8jsS6Nriy5mzKFT.jpg"
+  },
+  {
+    "tmdbId": 59941,
+    "imdbId": "tt3444938",
+    "title": "The Tonight Show Starring Jimmy Fallon",
+    "originalTitle": "The Tonight Show Starring Jimmy Fallon",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Talk",
+      "Music",
+      "Talk-Show"
+    ],
+    "averageRating": 5.789,
+    "numVotes": 20246,
+    "popularity": 80.5104,
+    "episodeCount": 2327,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/1N4o5PmmqhlVDrcdJ2RlCFWbLGX.jpg"
+  },
+  {
+    "tmdbId": 57775,
+    "imdbId": "tt0220204",
+    "title": "Chibi Maruko-chan",
+    "originalTitle": "ちびまる子ちゃん",
+    "startYear": "1990",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 7.8,
+    "numVotes": 24,
+    "popularity": 75.3026,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/bfn54AAMuh47IFqeoco0jgeVH1a.jpg"
+  },
+  {
+    "tmdbId": 33238,
+    "imdbId": "tt2185037",
+    "title": "Running Man",
+    "originalTitle": "런닝맨",
+    "startYear": "2010",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Reality"
+    ],
+    "averageRating": 8.216,
+    "numVotes": 213,
+    "popularity": 78.5372,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/2Wmmu1MkqxJ48J7aySET9EKEjXz.jpg"
+  },
+  {
+    "tmdbId": 9237,
+    "imdbId": "tt0816405",
+    "title": "Striscia la Notizia",
+    "originalTitle": "Striscia la Notizia",
+    "startYear": "1988",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "News"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 11.7779,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/x4QByhE7lOMtUTi32xWSqoOHenD.jpg"
+  },
+  {
+    "tmdbId": 72974,
+    "imdbId": "tt1368424",
+    "title": "Downtown no Gaki no Tsukai ya Arahende!!",
+    "originalTitle": "ダウンタウンのガキの使いやあらへんで！",
+    "startYear": "1989",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Comedy",
+      "Talk"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 48.6058,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/59IPwylg1xLeYigjH9bDauN7MCq.jpg"
+  },
+  {
+    "tmdbId": 34307,
+    "imdbId": "tt1586680",
+    "title": "Shameless",
+    "originalTitle": "Shameless",
+    "startYear": "2011",
+    "endYear": "2021",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 8.167,
+    "numVotes": 334831,
+    "popularity": 77.6512,
+    "episodeCount": 134,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/ifo31fMWLmyOVpdak9K0kY4jldQ.jpg"
+  },
+  {
+    "tmdbId": 250596,
+    "imdbId": "tt32332642",
+    "title": "My Wife Has No Emotion",
+    "originalTitle": "僕の妻は感情がない",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 6.5,
+    "numVotes": 21,
+    "popularity": 75.6555,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/ttaknfJP0qjg7kMKwH0w29fcE6d.jpg"
+  },
+  {
+    "tmdbId": 46831,
+    "imdbId": "tt2910420",
+    "title": "Government Job",
+    "originalTitle": "Државни посао",
+    "startYear": "2012",
+    "endYear": "",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 7.9,
+    "numVotes": 11,
+    "popularity": 55.2677,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/sceVlRK5RvnU1qjNipyWDHQXB7x.jpg"
+  },
+  {
+    "tmdbId": 60625,
+    "imdbId": "tt2861424",
+    "title": "Rick and Morty",
+    "originalTitle": "Rick and Morty",
+    "startYear": "2013",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Action & Adventure",
+      "Adventure"
+    ],
+    "averageRating": 8.679,
+    "numVotes": 699878,
+    "popularity": 115.6803,
+    "episodeCount": 94,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/owhkU6KRqdXoUQpjV8uyZGPtX58.jpg"
+  },
+  {
+    "tmdbId": 276161,
+    "imdbId": "tt34809853",
+    "title": "Teach You a Lesson",
+    "originalTitle": "참교육",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 9.474,
+    "numVotes": 686,
+    "popularity": 74.2434,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/fMECSPrTmRClSViMsXFYmiYIcWP.jpg"
+  },
+  {
+    "tmdbId": 1668,
+    "imdbId": "tt0108778",
+    "title": "Friends",
+    "originalTitle": "Friends",
+    "startYear": "1994",
+    "endYear": "2004",
+    "genres": [
+      "Comedy",
+      "Romance"
+    ],
+    "averageRating": 8.414,
+    "numVotes": 1196570,
+    "popularity": 70.3544,
+    "episodeCount": 234,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/2koX1xLkpTQM4IZebYvKysFW1Nh.jpg"
+  },
+  {
+    "tmdbId": 32415,
+    "imdbId": "tt1637574",
+    "title": "Conan",
+    "originalTitle": "Conan",
+    "startYear": "2010",
+    "endYear": "2021",
+    "genres": [
+      "Talk",
+      "Comedy",
+      "News",
+      "Music",
+      "Talk-Show"
+    ],
+    "averageRating": 7.164,
+    "numVotes": 25627,
+    "popularity": 51.6056,
+    "episodeCount": 1508,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/oQxrvUhP3ycwnlxIrIMQ9Z3kleq.jpg"
+  },
+  {
+    "tmdbId": 502,
+    "imdbId": "tt0063951",
+    "title": "Sesame Street",
+    "originalTitle": "Sesame Street",
+    "startYear": "1969",
+    "endYear": "",
+    "genres": [
+      "Kids",
+      "Comedy",
+      "Animation",
+      "Drama"
+    ],
+    "averageRating": 7.102,
+    "numVotes": 17152,
+    "popularity": 110.1826,
+    "episodeCount": 3424,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/14k9BfZ2p4rQBMeJ5crKTfUZVwD.jpg"
+  },
+  {
+    "tmdbId": 1421,
+    "imdbId": "tt1442437",
+    "title": "Modern Family",
+    "originalTitle": "Modern Family",
+    "startYear": "2009",
+    "endYear": "2020",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ],
+    "averageRating": 7.9,
+    "numVotes": 542090,
+    "popularity": 69.8429,
+    "episodeCount": 250,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/k5Qg5rgPoKdh3yTJJrLtyoyYGwC.jpg"
+  },
+  {
+    "tmdbId": 2316,
+    "imdbId": "tt0386676",
+    "title": "The Office",
+    "originalTitle": "The Office",
+    "startYear": "2005",
+    "endYear": "2013",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 8.589,
+    "numVotes": 837755,
+    "popularity": 71.7868,
+    "episodeCount": 191,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/7DJKHzAi83BmQrWLrYYOqcoKfhR.jpg"
+  },
+  {
+    "tmdbId": 1433,
+    "imdbId": "tt0397306",
+    "title": "American Dad!",
+    "originalTitle": "American Dad!",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 7.014,
+    "numVotes": 144781,
+    "popularity": 62.2135,
+    "episodeCount": 448,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/eb9sH2am9IUSQ8GhXTNAVoujk8W.jpg"
+  },
+  {
+    "tmdbId": 32209,
+    "imdbId": "tt1441404",
+    "title": "Al Fondo Hay Sitio",
+    "originalTitle": "Al Fondo Hay Sitio",
+    "startYear": "2009",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "averageRating": 7.818,
+    "numVotes": 233,
+    "popularity": 17.917,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/4BkYVoybIvM2U7zeg2JTT5M5dwF.jpg"
+  },
+  {
+    "tmdbId": 85184,
+    "imdbId": "tt3612488",
+    "title": "The Noite com Danilo Gentili",
+    "originalTitle": "The Noite com Danilo Gentili",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Talk",
+      "Comedy"
+    ],
+    "averageRating": 5.3,
+    "numVotes": 10,
+    "popularity": 5.6911,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/agA6JjPuTsuVdJblhVt8vtiKalf.jpg"
+  },
+  {
+    "tmdbId": 2224,
+    "imdbId": "tt0115147",
+    "title": "The Daily Show",
+    "originalTitle": "The Daily Show",
+    "startYear": "1996",
+    "endYear": "",
+    "genres": [
+      "News",
+      "Comedy",
+      "Talk-Show"
+    ],
+    "averageRating": 6.397,
+    "numVotes": 49710,
+    "popularity": 93.1627,
+    "episodeCount": 4566,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/ixcfyK7it6FjRM36Te4OdblAq4X.jpg"
+  },
+  {
+    "tmdbId": 34860,
+    "imdbId": "tt0306365",
+    "title": "Ninja Boy Rantaro",
+    "originalTitle": "忍たま乱太郎",
+    "startYear": "1993",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Action & Adventure",
+      "Kids",
+      "Animation",
+      "Family"
+    ],
+    "averageRating": 6.7,
+    "numVotes": 22,
+    "popularity": 43.6672,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/fzNiSp0HhCthOTYu9IYWlPPa7fU.jpg"
+  },
+  {
+    "tmdbId": 70672,
+    "imdbId": "tt5247622",
+    "title": "Men on a Mission",
+    "originalTitle": "아는 형님",
+    "startYear": "2015",
+    "endYear": "",
+    "genres": [
+      "Reality",
+      "Comedy"
+    ],
+    "averageRating": 7.357,
+    "numVotes": 42,
+    "popularity": 43.6794,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/2jIi55JtYKJTL1km8qHMuUilOWo.jpg"
+  },
+  {
+    "tmdbId": 30623,
+    "imdbId": "tt12853970",
+    "title": "Shin Chan",
+    "originalTitle": "クレヨンしんちゃん",
+    "startYear": "1992",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 7.7,
+    "numVotes": 112,
+    "popularity": 48.4925,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/zg19Paur3lVVSh8J4LJVO1wgBIg.jpg"
+  },
+  {
+    "tmdbId": 693,
+    "imdbId": "tt0410975",
+    "title": "Desperate Housewives",
+    "originalTitle": "Desperate Housewives",
+    "startYear": "2004",
+    "endYear": "2012",
+    "genres": [
+      "Mystery",
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 7.9,
+    "numVotes": 154619,
+    "popularity": 56.543,
+    "episodeCount": 180,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/sywYmV9c9Vj2U7ocqNyfDt2pz3r.jpg"
+  },
+  {
+    "tmdbId": 257161,
+    "imdbId": "tt32862759",
+    "title": "Amazing Night",
+    "originalTitle": "喜人奇妙夜",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Reality",
+      "Comedy"
+    ],
+    "averageRating": 5.714,
+    "numVotes": 7,
+    "popularity": 52.3333,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/nQFCp0Tlfqq3NhF2kiNAGwXLfnX.jpg"
+  },
+  {
+    "tmdbId": 5092,
+    "imdbId": "tt4546568",
+    "title": "Infinite Challenge",
+    "originalTitle": "무한도전",
+    "startYear": "2005",
+    "endYear": "",
+    "genres": [
+      "Reality",
+      "Comedy"
+    ],
+    "averageRating": 7.7,
+    "numVotes": 20,
+    "popularity": 42.1029,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/3ZIPTvMnzI5ThmdGeEYQFxJV5Sg.jpg"
+  },
+  {
+    "tmdbId": 10536,
+    "imdbId": "tt0170980",
+    "title": "The Mike Douglas Show",
+    "originalTitle": "The Mike Douglas Show",
+    "startYear": "1961",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Talk"
+    ],
+    "averageRating": 5.8,
+    "numVotes": 9,
+    "popularity": 40.034,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/qNk97cbF3dZyhkfIcJhjFDD64sM.jpg"
+  },
+  {
+    "tmdbId": 98031,
+    "imdbId": "tt4325992",
+    "title": "Keep Running",
+    "originalTitle": "奔跑吧",
+    "startYear": "2014",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Reality"
+    ],
+    "averageRating": 5.714,
+    "numVotes": 14,
+    "popularity": 55.2419,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/lr4er9w2jHqFx8VFyASN8Q1LWzB.jpg"
+  },
+  {
+    "tmdbId": 57911,
+    "imdbId": "tt0069576",
+    "title": "Doraemon",
+    "originalTitle": "ドラえもん",
+    "startYear": "1979",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Kids",
+      "Family"
+    ],
+    "averageRating": 7.7,
+    "numVotes": 607,
+    "popularity": 86.8653,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/bHMqPDsW7Lb71CVHXq4PuEvQ4NY.jpg"
+  },
+  {
+    "tmdbId": 36062,
+    "imdbId": "tt1112587",
+    "title": "Best Friends",
+    "originalTitle": "SpangaS",
+    "startYear": "2007",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Soap"
+    ],
+    "averageRating": 3.7,
+    "numVotes": 9,
+    "popularity": 23.9079,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/2bH7QQ7WQfnbt1CWiX8BE5E2V4t.jpg"
+  },
+  {
+    "tmdbId": 18495,
+    "imdbId": "tt0477526",
+    "title": "Nonstop",
+    "originalTitle": "논스톱",
+    "startYear": "2000",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 5.333,
+    "numVotes": 6,
+    "popularity": 85.1883,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/elXJzhz1dM0lO7fK2BfO2pVtC7l.jpg"
+  },
+  {
+    "tmdbId": 63809,
+    "imdbId": "tt0831821",
+    "title": "Camera Café",
+    "originalTitle": "Camera Café",
+    "startYear": "2003",
+    "endYear": "",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 6.9,
+    "numVotes": 61,
+    "popularity": 15.7043,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/vmdCodGh2nUPRDBQbIVsxGaIMyK.jpg"
+  },
+  {
+    "tmdbId": 49036,
+    "imdbId": "tt1395015",
+    "title": "Love Stories in the Countryside",
+    "originalTitle": "乡村爱情",
+    "startYear": "2006",
+    "endYear": "",
+    "genres": [
+      "Family",
+      "Comedy"
+    ],
+    "averageRating": 6.1,
+    "numVotes": 8,
+    "popularity": 38.7763,
+    "episodeCount": 0,
+    "source": "tmdb-discover-comedy",
+    "cover": "https://image.tmdb.org/t/p/w500/2XlU2bzsESbc6x9lBKe0gyk90oO.jpg"
+  },
+  {
+    "tmdbId": 1877,
+    "imdbId": "tt0852863",
+    "title": "Phineas and Ferb",
+    "originalTitle": "Phineas and Ferb",
+    "startYear": "2007",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 7.885,
+    "numVotes": 68283,
+    "popularity": 57.9215,
+    "episodeCount": 151,
+    "source": "tmdb-discover-comedy+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/g6TidT7be954rrzPPBTIXkSmfXj.jpg"
+  }
+]

@@ -1,0 +1,961 @@
+[
+  {
+    "tmdbId": 278624,
+    "imdbId": "tt34866681",
+    "title": "Lucky",
+    "originalTitle": "Lucky",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 5.5,
+    "numVotes": 35,
+    "popularity": 13.935,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/xsrkiXg8EuNNtbPtbmvCxg95gK7.jpg"
+  },
+  {
+    "tmdbId": 125988,
+    "imdbId": "tt14688458",
+    "title": "Silo",
+    "originalTitle": "Silo",
+    "startYear": "2023",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ],
+    "averageRating": 8.178,
+    "numVotes": 216915,
+    "popularity": 236.5473,
+    "episodeCount": 40,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/gMYZZvnkVNTqSVnVCphWbPXwWwb.jpg"
+  },
+  {
+    "tmdbId": 94997,
+    "imdbId": "tt11198330",
+    "title": "House of the Dragon",
+    "originalTitle": "House of the Dragon",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Action & Adventure",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.371,
+    "numVotes": 538505,
+    "popularity": 260.212,
+    "episodeCount": 27,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/7V0Ebks0GgpKvQ7QbLAIdX5dos4.jpg"
+  },
+  {
+    "tmdbId": 296206,
+    "imdbId": "tt42127457",
+    "title": "Agent Kim Reactivated",
+    "originalTitle": "김부장",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Crime",
+      "Drama"
+    ],
+    "averageRating": 7.5,
+    "numVotes": 28,
+    "popularity": 98.2639,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/jruaZAm1KjkFRhgRcdF8tqakhpH.jpg"
+  },
+  {
+    "tmdbId": 254528,
+    "imdbId": "tt27550719",
+    "title": "The Hawk",
+    "originalTitle": "The Hawk",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 3,
+    "numVotes": 10,
+    "popularity": 3.8412,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/yxnQQH2E1hfrW4vKOFTAOyFRlpj.jpg"
+  },
+  {
+    "tmdbId": 37854,
+    "imdbId": "tt0388629",
+    "title": "One Piece",
+    "originalTitle": "One Piece: Wan pîsu",
+    "startYear": "1999",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Comedy",
+      "Animation",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.746,
+    "numVotes": 358015,
+    "popularity": 33.1752,
+    "episodeCount": 1189,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/dB4EDhre2dsC2kxYDavyKWqLQwi.jpg"
+  },
+  {
+    "tmdbId": 283304,
+    "imdbId": "tt2431250",
+    "title": "Little House on the Prairie",
+    "originalTitle": "Little House on the Prairie",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Western",
+      "Family"
+    ],
+    "averageRating": 6.233,
+    "numVotes": 45,
+    "popularity": 41.4482,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/oWUGSadxC9vQPOCeHDDVfDezmQC.jpg"
+  },
+  {
+    "tmdbId": 60625,
+    "imdbId": "tt2861424",
+    "title": "Rick and Morty",
+    "originalTitle": "Rick and Morty",
+    "startYear": "2013",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Sci-Fi & Fantasy",
+      "Action & Adventure",
+      "Adventure"
+    ],
+    "averageRating": 8.679,
+    "numVotes": 699878,
+    "popularity": 115.6803,
+    "episodeCount": 94,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/owhkU6KRqdXoUQpjV8uyZGPtX58.jpg"
+  },
+  {
+    "tmdbId": 286709,
+    "imdbId": "tt31849235",
+    "title": "The Westies",
+    "originalTitle": "The Westies",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 6.222,
+    "numVotes": 9,
+    "popularity": 32.3921,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/6nNxw6SsbEtSpktVEGdoYDqPH7C.jpg"
+  },
+  {
+    "tmdbId": 255358,
+    "imdbId": "tt36517689",
+    "title": "THE GHOST IN THE SHELL",
+    "originalTitle": "攻殻機動隊 THE GHOST IN THE SHELL",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 9.029,
+    "numVotes": 17,
+    "popularity": 28.6052,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/uEfNGaxbKI1xWmUy3DIndlaxUkz.jpg"
+  },
+  {
+    "tmdbId": 94664,
+    "imdbId": "tt13293588",
+    "title": "Mushoku Tensei: Jobless Reincarnation",
+    "originalTitle": "Mushoku Tensei: Isekai Ittara Honki Dasu",
+    "startYear": "2021",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.48,
+    "numVotes": 39328,
+    "popularity": 199.0078,
+    "episodeCount": 52,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/gLKOYIMyKlUHW0SVdskhgf9C0yy.jpg"
+  },
+  {
+    "tmdbId": 138502,
+    "imdbId": "tt16026746",
+    "title": "X-Men '97",
+    "originalTitle": "X-Men '97",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.631,
+    "numVotes": 54019,
+    "popularity": 45.875,
+    "episodeCount": 20,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/2HKBc5UiFw8JrruHq8S1Y7TnlW0.jpg"
+  },
+  {
+    "tmdbId": 300727,
+    "imdbId": "tt43357366",
+    "title": "The Apartment Job",
+    "originalTitle": "아파트",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy",
+      "Crime"
+    ],
+    "averageRating": 5.3,
+    "numVotes": 3,
+    "popularity": 33.8486,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/qFxbrHvNq5tn9SCBq3aKPgaGfyO.jpg"
+  },
+  {
+    "tmdbId": 124364,
+    "imdbId": "tt9813792",
+    "title": "From",
+    "originalTitle": "From",
+    "startYear": "2022",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.507,
+    "numVotes": 193837,
+    "popularity": 194.5036,
+    "episodeCount": 41,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/pRtJagIxpfODzzb0T0NAvZSzErC.jpg"
+  },
+  {
+    "tmdbId": 252107,
+    "imdbId": "tt32140872",
+    "title": "Star City",
+    "originalTitle": "Star City",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "War & Politics"
+    ],
+    "averageRating": 7.6,
+    "numVotes": 57,
+    "popularity": 25.7881,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/b8VtW6IEIyEWYdnJHx8bG8RdAak.jpg"
+  },
+  {
+    "tmdbId": 277439,
+    "imdbId": "tt34675596",
+    "title": "Cape Fear",
+    "originalTitle": "Cape Fear",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Crime"
+    ],
+    "averageRating": 7.014,
+    "numVotes": 73,
+    "popularity": 27.6879,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/3ZLy3cfQa9prahoRq1teMmr5pvW.jpg"
+  },
+  {
+    "tmdbId": 296286,
+    "imdbId": "tt37614297",
+    "title": "Smoking Behind the Supermarket with You",
+    "originalTitle": "スーパーの裏でヤニ吸うふたり",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy"
+    ],
+    "averageRating": 9,
+    "numVotes": 13,
+    "popularity": 28.8331,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/vQ8v5bMQtEdmEvVwNos5dkKxyK7.jpg"
+  },
+  {
+    "tmdbId": 279323,
+    "imdbId": "tt35051401",
+    "title": "The East Palace",
+    "originalTitle": "동궁",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 10,
+    "numVotes": 1,
+    "popularity": 3.9964,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/yfYohBszGqoAW8oM0qydOtJ4kPh.jpg"
+  },
+  {
+    "tmdbId": 301412,
+    "imdbId": "tt39028251",
+    "title": "Dream to You",
+    "originalTitle": "그대에게 드림",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 7.4,
+    "numVotes": 4,
+    "popularity": 21.4576,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/cBiwrUwUNNYXTc5xrDEQWcMqftd.jpg"
+  },
+  {
+    "tmdbId": 285404,
+    "imdbId": "tt35946742",
+    "title": "Maximum Pleasure Guaranteed",
+    "originalTitle": "Maximum Pleasure Guaranteed",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Comedy"
+    ],
+    "averageRating": 5.908,
+    "numVotes": 38,
+    "popularity": 13.9909,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/oeD9rnfk7AohNiJTRoCx4SOKhXj.jpg"
+  },
+  {
+    "tmdbId": 299167,
+    "imdbId": "tt34991493",
+    "title": "Dutton Ranch",
+    "originalTitle": "Dutton Ranch",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Western",
+      "Drama"
+    ],
+    "averageRating": 9.248,
+    "numVotes": 436,
+    "popularity": 95.7784,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/xsiecCxd8lkcAluw0wWwbW5CwSv.jpg"
+  },
+  {
+    "tmdbId": 136315,
+    "imdbId": "tt14452776",
+    "title": "The Bear",
+    "originalTitle": "The Bear",
+    "startYear": "2022",
+    "endYear": "2026",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ],
+    "averageRating": 8.139,
+    "numVotes": 312970,
+    "popularity": 47.0217,
+    "episodeCount": 47,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/eKfVzzEazSIjJMrw9ADa2x8ksLz.jpg"
+  },
+  {
+    "tmdbId": 65942,
+    "imdbId": "tt5607616",
+    "title": "Re: Zero - Starting Life in Another World",
+    "originalTitle": "Re:Zero kara Hajimeru Isekai Seikatsu",
+    "startYear": "2016",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Drama",
+      "Mystery",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Adventure"
+    ],
+    "averageRating": 8,
+    "numVotes": 73036,
+    "popularity": 36.953,
+    "episodeCount": 110,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/oHqYrPAsIiTD5m4DuxumV4er8BU.jpg"
+  },
+  {
+    "tmdbId": 288671,
+    "imdbId": "tt36495086",
+    "title": "The Map of Longing",
+    "originalTitle": "El mapa de los anhelos",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 5.5,
+    "numVotes": 1,
+    "popularity": 2.2443,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/wcgjZ7koqOYDcKUn6DmnNolqmUS.jpg"
+  },
+  {
+    "tmdbId": 203744,
+    "imdbId": "tt16418808",
+    "title": "Sugar",
+    "originalTitle": "Sugar",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Action",
+      "Crime"
+    ],
+    "averageRating": 7.16,
+    "numVotes": 44580,
+    "popularity": 19.4625,
+    "episodeCount": 16,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/tLmwLYiI7EpPbhgmdeivNGY0xw7.jpg"
+  },
+  {
+    "tmdbId": 258348,
+    "imdbId": "tt32991344",
+    "title": "Clevatess",
+    "originalTitle": "クレバテス-魔獣の王と赤子と屍の勇者",
+    "startYear": "2025",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 7.933,
+    "numVotes": 89,
+    "popularity": 13.064,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/1Pcp1QJS83KY25nTnL2UvJHWUVQ.jpg"
+  },
+  {
+    "tmdbId": 82452,
+    "imdbId": "tt9018736",
+    "title": "Avatar: The Last Airbender",
+    "originalTitle": "Avatar: The Last Airbender",
+    "startYear": "2024",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Family",
+      "Action",
+      "Adventure",
+      "Comedy"
+    ],
+    "averageRating": 7.788,
+    "numVotes": 86877,
+    "popularity": 101.5867,
+    "episodeCount": 22,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/lzZpWEaqzP0qVA5nkCc5ASbNcSy.jpg"
+  },
+  {
+    "tmdbId": 278178,
+    "imdbId": "tt34771210",
+    "title": "I Will Find You",
+    "originalTitle": "I Will Find You",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Crime"
+    ],
+    "averageRating": 8.232,
+    "numVotes": 284,
+    "popularity": 52.0283,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/pb9oYHHNzauiCQZT03MpDAg46GI.jpg"
+  },
+  {
+    "tmdbId": 295558,
+    "imdbId": "tt38973414",
+    "title": "Key to the Phoenix Heart",
+    "originalTitle": "雀骨",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 8,
+    "numVotes": 1,
+    "popularity": 20.3064,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/44ixm38SHC5HAbuaD7Mq2dakWk9.jpg"
+  },
+  {
+    "tmdbId": 322055,
+    "imdbId": "tt43592244",
+    "title": "The Prosecutor's Proposal",
+    "originalTitle": "검사실의 제안",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Mystery",
+      "Crime",
+      "Drama"
+    ],
+    "averageRating": 6,
+    "numVotes": 5,
+    "popularity": 116.2999,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/lK6DrnFecG0AsA8O5UqEYOrOArd.jpg"
+  },
+  {
+    "tmdbId": 253960,
+    "imdbId": "tt33083249",
+    "title": "Human Vapor",
+    "originalTitle": "ガス人間",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Sci-Fi & Fantasy",
+      "Crime"
+    ],
+    "averageRating": 7.538,
+    "numVotes": 39,
+    "popularity": 26.2032,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/gSYPd4icODc7QdRA7BK0VqBxBYp.jpg"
+  },
+  {
+    "tmdbId": 286506,
+    "imdbId": "tt36204806",
+    "title": "Blossoms of Power",
+    "originalTitle": "百花杀",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 0,
+    "numVotes": 0,
+    "popularity": 77.0802,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/g8Af8gOu7bZlvjoQ7St9WolzaI9.jpg"
+  },
+  {
+    "tmdbId": 387,
+    "imdbId": "tt0206512",
+    "title": "SpongeBob SquarePants",
+    "originalTitle": "SpongeBob SquarePants",
+    "startYear": "1999",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family"
+    ],
+    "averageRating": 7.712,
+    "numVotes": 126372,
+    "popularity": 10.9238,
+    "episodeCount": 355,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/5h0EU2lqBb03dp5vtRuUHJwqzem.jpg"
+  },
+  {
+    "tmdbId": 297826,
+    "imdbId": "tt32869308",
+    "title": "Tomb Raider King",
+    "originalTitle": "도굴왕",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 9,
+    "numVotes": 5,
+    "popularity": 32.4659,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/xDW6cor12UD0b2IqboQWnrIn0UO.jpg"
+  },
+  {
+    "tmdbId": 82684,
+    "imdbId": "tt9054364",
+    "title": "That Time I Got Reincarnated as a Slime",
+    "originalTitle": "Tensei Shitara Suraimu Datta Ken",
+    "startYear": "2018",
+    "endYear": "",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Sci-Fi & Fantasy",
+      "Comedy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.432,
+    "numVotes": 25217,
+    "popularity": 23.8243,
+    "episodeCount": 95,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/pzujcdPAoH361NObVrtbA7zACE7.jpg"
+  },
+  {
+    "tmdbId": 106449,
+    "imdbId": "tt12879782",
+    "title": "A Record of a Mortal's Journey to Immortality",
+    "originalTitle": "凡人修仙传",
+    "startYear": "2020",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Drama"
+    ],
+    "averageRating": 8.4,
+    "numVotes": 81,
+    "popularity": 49.0164,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/u1VRjvvCIVwb1MUhoxSAUimhoKZ.jpg"
+  },
+  {
+    "tmdbId": 95479,
+    "imdbId": "tt12343534",
+    "title": "Jujutsu Kaisen",
+    "originalTitle": "Jujutsu Kaisen",
+    "startYear": "2020",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.581,
+    "numVotes": 212366,
+    "popularity": 56.0561,
+    "episodeCount": 63,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/fHpKWq9ayzSk8nSwqRuaAUemRKh.jpg"
+  },
+  {
+    "tmdbId": 260823,
+    "imdbId": "tt35346717",
+    "title": "From Old Country Bumpkin to Master Swordsman",
+    "originalTitle": "片田舎のおっさん、剣聖になる",
+    "startYear": "2025",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy",
+      "Comedy"
+    ],
+    "averageRating": 7.2,
+    "numVotes": 92,
+    "popularity": 12.8402,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/ujQp5egkJOkDHx4TehlgHePFcRv.jpg"
+  },
+  {
+    "tmdbId": 291392,
+    "imdbId": "tt36979936",
+    "title": "Love For You",
+    "originalTitle": "野狗骨头",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 8.667,
+    "numVotes": 3,
+    "popularity": 58.7806,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/luKNvVTizD4O46XjTJ5Hlj2EuHt.jpg"
+  },
+  {
+    "tmdbId": 209867,
+    "imdbId": "tt22248376",
+    "title": "Frieren: Beyond Journey's End",
+    "originalTitle": "Sôsô no Furîren",
+    "startYear": "2023",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Drama",
+      "Sci-Fi & Fantasy",
+      "Adventure",
+      "Comedy"
+    ],
+    "averageRating": 8.8,
+    "numVotes": 79176,
+    "popularity": 39.7694,
+    "episodeCount": 39,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/dqZENchTd7lp5zht7BdlqM7RBhD.jpg"
+  },
+  {
+    "tmdbId": 290232,
+    "imdbId": "tt36742917",
+    "title": "I'm Not Afraid",
+    "originalTitle": "No tengo miedo",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 8,
+    "numVotes": 14,
+    "popularity": 27.7681,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/ydUCCsKWNkGFecRPKHViWi0lppz.jpg"
+  },
+  {
+    "tmdbId": 30984,
+    "imdbId": "tt0434665",
+    "title": "Bleach",
+    "originalTitle": "Bleach",
+    "startYear": "2004",
+    "endYear": "2012",
+    "genres": [
+      "Action & Adventure",
+      "Animation",
+      "Sci-Fi & Fantasy",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.363,
+    "numVotes": 93050,
+    "popularity": 44.6191,
+    "episodeCount": 369,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/5iVUUnE2tgBPypACYNobCKHagfV.jpg"
+  },
+  {
+    "tmdbId": 251600,
+    "imdbId": "tt36872458",
+    "title": "The Eternal Fragrance",
+    "originalTitle": "千香",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 6.8,
+    "numVotes": 5,
+    "popularity": 22.5997,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/yLm2X0pReuUFZrbrRkndupF9GeN.jpg"
+  },
+  {
+    "tmdbId": 270572,
+    "imdbId": "tt27557666",
+    "title": "Lord of the Flies",
+    "originalTitle": "Lord of the Flies",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Action & Adventure"
+    ],
+    "averageRating": 7.571,
+    "numVotes": 106,
+    "popularity": 4.8179,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/zD50ejpus5rNidj6CBr4Ml59KOL.jpg"
+  },
+  {
+    "tmdbId": 79744,
+    "imdbId": "tt7587890",
+    "title": "The Rookie",
+    "originalTitle": "The Rookie",
+    "startYear": "2018",
+    "endYear": "",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Comedy",
+      "Action"
+    ],
+    "averageRating": 8.55,
+    "numVotes": 129964,
+    "popularity": 137.6974,
+    "episodeCount": 145,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/70kTz0OmjjZe7zHvIDrq2iKW7PJ.jpg"
+  },
+  {
+    "tmdbId": 254420,
+    "imdbId": "tt32020831",
+    "title": "Elle",
+    "originalTitle": "Elle",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "averageRating": 7.814,
+    "numVotes": 59,
+    "popularity": 28.4829,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/dpH7Lyrs7z7MlTGgfeibryGnWAv.jpg"
+  },
+  {
+    "tmdbId": 85552,
+    "imdbId": "tt8772296",
+    "title": "Euphoria",
+    "originalTitle": "Euphoria",
+    "startYear": "2019",
+    "endYear": "2026",
+    "genres": [
+      "Drama"
+    ],
+    "averageRating": 8.283,
+    "numVotes": 316183,
+    "popularity": 59.6994,
+    "episodeCount": 26,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/ypmtwojDd751Peszi62DVLytqqC.jpg"
+  },
+  {
+    "tmdbId": 66732,
+    "imdbId": "tt4574334",
+    "title": "Stranger Things",
+    "originalTitle": "Stranger Things",
+    "startYear": "2016",
+    "endYear": "2025",
+    "genres": [
+      "Action & Adventure",
+      "Mystery",
+      "Sci-Fi & Fantasy",
+      "Drama",
+      "Fantasy",
+      "Horror"
+    ],
+    "averageRating": 8.559,
+    "numVotes": 1712284,
+    "popularity": 71.4329,
+    "episodeCount": 42,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/uOOtwVbSr4QDjAGIifLDwpb2Pdl.jpg"
+  },
+  {
+    "tmdbId": 220102,
+    "imdbId": "tt30460310",
+    "title": "Spider-Noir",
+    "originalTitle": "Spider-Noir",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Crime",
+      "Action",
+      "Adventure"
+    ],
+    "averageRating": 8.421,
+    "numVotes": 50412,
+    "popularity": 22.3747,
+    "episodeCount": 8,
+    "source": "tmdb-trending-week+local-tv-index",
+    "cover": "https://image.tmdb.org/t/p/w500/oD8WSVqz84ZRfelkr7JPeJwR9Iv.jpg"
+  },
+  {
+    "tmdbId": 314554,
+    "imdbId": "tt40550160",
+    "title": "From Overshadowed to Overpowered: Second Reincarnation of a Talentless Sage",
+    "originalTitle": "落第賢者の学院無双 ～二度目の転生、Ｓランクチート魔術師冒険録～",
+    "startYear": "2026",
+    "endYear": "",
+    "genres": [
+      "Animation",
+      "Action & Adventure",
+      "Sci-Fi & Fantasy"
+    ],
+    "averageRating": 7,
+    "numVotes": 2,
+    "popularity": 23.8896,
+    "episodeCount": 0,
+    "source": "tmdb-trending-week",
+    "cover": "https://image.tmdb.org/t/p/w500/p4TE3kK2iyuADfDYIRDTxjahdNa.jpg"
+  }
+]
