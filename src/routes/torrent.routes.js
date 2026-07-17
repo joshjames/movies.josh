@@ -21,7 +21,10 @@ const {
 
 const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
+const TorrentSearchService = require('../services/TorrentSearchService');
 const MetadataRegistry = require('../services/MetadataRegistry');
+const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
+const { resolveSeriesFolderPath } = require('../services/StoragePathResolver');
 const { getSeriesByImdbId } = require('../services/TvSeriesIndexService');
 const { getByImdbId: getMovieByImdbId } = require('../services/MovieTitleIndexService');
 const { 
@@ -309,6 +312,264 @@ async function reserveMovieAcquisitionQuota({ userKey, targetCategory }) {
 
     const config = await ProfileService.readData(userKey, 'config', {});
     return AcquisitionQuotaService.reserveDailyAcquisition(userKey, config);
+}
+
+function inferQualityLabel(title = '') {
+    const name = String(title || '').toLowerCase();
+    if (/\b(2160p|4k|uhd)\b/.test(name)) return '2160p';
+    if (/\b1080p\b/.test(name)) return '1080p';
+    if (/\b720p\b/.test(name)) return '720p';
+    if (/\b480p\b/.test(name)) return '480p';
+    return 'unknown';
+}
+
+function normalizeTitleForCompare(value = '') {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildAutoSeriesSearchQuery(showTitle, season = null, episode = null, sourceType = 'episode') {
+    const title = normalizeDisplayTitle(showTitle || '');
+    const s = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
+    const e = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
+    const source = String(sourceType || '').trim().toLowerCase();
+
+    if (s && e) {
+        return `${title} S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`.trim();
+    }
+    if (s && source === 'pack') {
+        return `${title} season ${s} complete`.trim();
+    }
+    if (s) {
+        return `${title} season ${s}`.trim();
+    }
+    return title;
+}
+
+async function waitForSearchTerminalState(searchId, { timeoutMs = 25000, pollMs = 1400 } = {}) {
+    const started = Date.now();
+    let lastStatus = 'unknown';
+
+    while ((Date.now() - started) < timeoutMs) {
+        const statuses = await TorrentSearchService.getStatus(searchId);
+        const row = Array.isArray(statuses)
+            ? statuses.find((item) => Number(item?.id) === Number(searchId))
+            : null;
+
+        lastStatus = String(row?.status || '').toLowerCase() || 'unknown';
+        if (lastStatus === 'stopped' || lastStatus === 'error' || lastStatus === 'missingfiles') {
+            break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return { status: lastStatus };
+}
+
+function mapRawSearchRow(raw = {}) {
+    const title = String(raw?.fileName || raw?.title || raw?.name || '').trim();
+    const magnetUrl = String(raw?.fileUrl || raw?.magnet || raw?.url || '').trim();
+    const seeds = parseInt(raw?.nbSeeders ?? raw?.seeds ?? 0, 10) || 0;
+    const peers = parseInt(raw?.nbLeechers ?? raw?.peers ?? 0, 10) || 0;
+    const sizeBytes = parseFloat(raw?.fileSize ?? raw?.size ?? 0) || 0;
+    const source = String(raw?.siteUrl || raw?.site || '').trim();
+    const parsed = parseSeasonEpisodeFromTitle(title);
+
+    return {
+        title,
+        magnetUrl,
+        seeds,
+        peers,
+        sizeBytes,
+        source,
+        season: parsed.season,
+        episode: parsed.episode,
+        quality: inferQualityLabel(title),
+        raw
+    };
+}
+
+function scoreAutoSeriesCandidate(candidate, context = {}) {
+    const targetTitle = normalizeTitleForCompare(context.showTitle || '');
+    const titleNorm = normalizeTitleForCompare(candidate.title || '');
+    const imdbDigits = String(context.imdbId || '').replace(/^tt/i, '');
+    const combined = `${titleNorm} ${String(candidate.source || '').toLowerCase()} ${String(candidate.magnetUrl || '').toLowerCase()}`;
+    const titleTokens = targetTitle.split(' ').filter(Boolean);
+
+    let score = 0;
+
+    if (titleNorm && targetTitle && titleNorm.includes(targetTitle)) score += 140;
+    for (const token of titleTokens) {
+        if (token.length < 2) continue;
+        if (titleNorm.includes(token)) score += 14;
+    }
+
+    const season = Number.isFinite(parseInt(context.season, 10)) ? parseInt(context.season, 10) : null;
+    const episode = Number.isFinite(parseInt(context.episode, 10)) ? parseInt(context.episode, 10) : null;
+    const sourceType = String(context.sourceType || '').toLowerCase();
+
+    if (season && candidate.season === season) score += 90;
+    if (season && candidate.season && candidate.season !== season) score -= 140;
+
+    if (episode && candidate.episode === episode) score += 130;
+    if (episode && candidate.episode && candidate.episode !== episode) score -= 180;
+
+    if (sourceType === 'pack' && season && candidate.season === season && !candidate.episode) score += 60;
+    if (sourceType === 'pack' && candidate.episode) score -= 50;
+
+    if (imdbDigits && combined.includes(imdbDigits)) score += 85;
+
+    score += Math.min(220, candidate.seeds * 5);
+    score += Math.min(60, candidate.peers * 2);
+
+    if (candidate.quality === '2160p') score += 18;
+    else if (candidate.quality === '1080p') score += 14;
+    else if (candidate.quality === '720p') score += 8;
+
+    return score;
+}
+
+function pickBestAutoSeriesCandidate(rows = [], context = {}) {
+    const candidates = rows
+        .map(mapRawSearchRow)
+        .filter((row) => row.title && row.magnetUrl && row.magnetUrl.startsWith('magnet:?'))
+        .map((row) => ({
+            ...row,
+            confidenceScore: scoreAutoSeriesCandidate(row, context)
+        }))
+        .sort((a, b) => b.confidenceScore - a.confidenceScore);
+
+    return {
+        best: candidates[0] || null,
+        candidates
+    };
+}
+
+function extractMagnetRuntimeInfo(magnetUrl = '') {
+    try {
+        const parsed = new URL(String(magnetUrl || '').trim());
+        const torrentName = parsed.searchParams.get('dn') || 'Unknown';
+        const xt = parsed.searchParams.get('xt') || '';
+        const infoHash = xt.includes('btih:') ? xt.split('btih:')[1].trim().toLowerCase() : null;
+        return { torrentName, infoHash };
+    } catch (_err) {
+        return { torrentName: 'Unknown', infoHash: null };
+    }
+}
+
+function normalizeSeriesFolderName(value = '') {
+    const raw = String(value || '').trim().replace(/^series\//i, '');
+    const clean = path.basename(raw);
+    if (!clean || clean.includes('..')) return '';
+    return clean;
+}
+
+async function getSeriesLibraryAvailabilityByImdb(imdbId) {
+    const normalizedImdbId = normalizeImdbId(imdbId);
+    const empty = {
+        imdbId: normalizedImdbId || null,
+        inLibrary: false,
+        availableEpisodeKeys: new Set(),
+        completeSeasons: new Set(),
+        seasons: []
+    };
+
+    if (!normalizedImdbId) return empty;
+
+    const library = await getLibrary();
+    const shows = Array.isArray(library?.shows) ? library.shows : [];
+    const localShow = shows.find((item) => normalizeImdbId(item.imdbId || item.imdb_id || '') === normalizedImdbId) || null;
+    if (!localShow) return empty;
+
+    const sourceFolder = localShow?.sourcePath ? path.basename(localShow.sourcePath) : '';
+    const fallbackFolder = normalizeSeriesFolderName(localShow?.id || '');
+    const showFolder = normalizeSeriesFolderName(sourceFolder || fallbackFolder);
+
+    let showPath = '';
+    if (localShow?.sourcePath && fs.existsSync(localShow.sourcePath)) {
+        showPath = localShow.sourcePath;
+    } else if (showFolder) {
+        showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
+    }
+
+    if (!showPath || !fs.existsSync(showPath)) {
+        return {
+            ...empty,
+            inLibrary: true
+        };
+    }
+
+    const manifest = rebuildSeriesManifest(showPath, {
+        showFolderName: showFolder || path.basename(showPath),
+        write: true
+    });
+
+    const seasonBlocks = manifest?.seasons || {};
+    const availableEpisodeKeys = new Set();
+    const completeSeasons = new Set();
+    const seasons = [];
+
+    Object.keys(seasonBlocks)
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((seasonKey) => {
+            const seasonNumber = Number(seasonKey);
+            const episodes = Array.isArray(seasonBlocks[seasonKey]?.episodes) ? seasonBlocks[seasonKey].episodes : [];
+            const availableEpisodes = episodes
+                .filter((ep) => Boolean(ep?.available) || Boolean(String(ep?.localRelativePath || '').trim()))
+                .map((ep) => Number(ep.episodeNumber))
+                .filter((epNum) => Number.isFinite(epNum) && epNum > 0)
+                .sort((a, b) => a - b);
+
+            availableEpisodes.forEach((epNum) => {
+                availableEpisodeKeys.add(`${seasonNumber}-${epNum}`);
+            });
+
+            const seasonState = {
+                seasonNumber,
+                totalEpisodes: episodes.length,
+                availableCount: availableEpisodes.length,
+                availableEpisodes
+            };
+            seasons.push(seasonState);
+
+            if (seasonState.totalEpisodes > 0 && seasonState.availableCount >= seasonState.totalEpisodes) {
+                completeSeasons.add(seasonNumber);
+            }
+        });
+
+    return {
+        imdbId: normalizedImdbId,
+        inLibrary: true,
+        availableEpisodeKeys,
+        completeSeasons,
+        seasons
+    };
+}
+
+function isSeriesRequestAlreadyInLibrary(libraryStatus, { season = null, episode = null, sourceType = 'episode' } = {}) {
+    if (!libraryStatus?.inLibrary) return false;
+
+    const seasonNum = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
+    const episodeNum = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
+    const normalizedSource = String(sourceType || '').toLowerCase();
+
+    if (seasonNum && episodeNum) {
+        return libraryStatus.availableEpisodeKeys instanceof Set
+            ? libraryStatus.availableEpisodeKeys.has(`${seasonNum}-${episodeNum}`)
+            : false;
+    }
+
+    if (seasonNum && (normalizedSource === 'pack' || !episodeNum)) {
+        return libraryStatus.completeSeasons instanceof Set
+            ? libraryStatus.completeSeasons.has(seasonNum)
+            : false;
+    }
+
+    return false;
 }
 
 function simplifyEztvTorrents(rawTorrents, targetImdbId, cover, packsOnly) {
@@ -1132,6 +1393,177 @@ router.post('/downloader/add', async (req, res) => {
         return res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
+    }
+});
+
+// POST: /api/downloader/add-auto - Automatically search and queue best series match
+router.post('/downloader/add-auto', async (req, res) => {
+    const {
+        title,
+        imdbId,
+        season,
+        episode,
+        sourceType,
+        timeoutMs,
+        plugins,
+        category,
+        minScore
+    } = req.body || {};
+
+    const activeUser = normalizeUserKey(getActiveUser(req));
+    const cleanImdbId = normalizeImdbId(imdbId);
+    const cleanTitle = normalizeDisplayTitle(title || '');
+    const seasonNum = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
+    const episodeNum = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
+    const normalizedSourceType = String(sourceType || '').toLowerCase() === 'pack' ? 'pack' : 'episode';
+
+    if (!cleanImdbId) {
+        return res.status(400).json({ success: false, error: 'imdbId is required for auto add dedupe.' });
+    }
+    if (episodeNum && !seasonNum) {
+        return res.status(400).json({ success: false, error: 'episode requires season.' });
+    }
+
+    const showTitle = cleanTitle || cleanImdbId;
+    const query = buildAutoSeriesSearchQuery(showTitle, seasonNum, episodeNum, normalizedSourceType);
+    const queueContext = {
+        imdbId: cleanImdbId || null,
+        season: seasonNum,
+        episode: episodeNum,
+        sourceType: normalizedSourceType,
+        addedByUser: activeUser || null
+    };
+
+    let searchId = null;
+
+    try {
+        const libraryStatus = await getSeriesLibraryAvailabilityByImdb(cleanImdbId);
+        if (isSeriesRequestAlreadyInLibrary(libraryStatus, {
+            season: seasonNum,
+            episode: episodeNum,
+            sourceType: normalizedSourceType
+        })) {
+            return res.status(200).json({
+                success: true,
+                alreadyAvailable: true,
+                message: normalizedSourceType === 'pack'
+                    ? 'Season already complete in library.'
+                    : 'Episode already available in library.',
+                imdbId: cleanImdbId,
+                season: seasonNum,
+                episode: episodeNum,
+                sourceType: normalizedSourceType
+            });
+        }
+
+        const started = await TorrentSearchService.startSearch({
+            query,
+            category: String(category || 'tv').trim() || 'tv',
+            plugins: String(plugins || 'enabled').trim() || 'enabled'
+        });
+
+        searchId = started?.id || null;
+        if (!searchId) {
+            return res.status(502).json({ success: false, error: 'Search did not return a valid id.' });
+        }
+
+        await waitForSearchTerminalState(searchId, {
+            timeoutMs: Math.max(5000, Math.min(parseInt(timeoutMs, 10) || 25000, 60000)),
+            pollMs: 1400
+        });
+
+        const searchResult = await TorrentSearchService.getResults(searchId, { limit: 300, offset: 0 });
+        const rawRows = Array.isArray(searchResult?.results) ? searchResult.results : [];
+        const scored = pickBestAutoSeriesCandidate(rawRows, {
+            showTitle,
+            imdbId: cleanImdbId,
+            season: seasonNum,
+            episode: episodeNum,
+            sourceType: normalizedSourceType
+        });
+
+        const threshold = Number.isFinite(parseFloat(minScore)) ? parseFloat(minScore) : 90;
+        if (!scored.best || Number(scored.best.confidenceScore || 0) < threshold) {
+            return res.status(404).json({
+                success: false,
+                error: 'No confident search result found for automatic queueing.',
+                query,
+                searchId,
+                bestScore: scored.best ? scored.best.confidenceScore : null,
+                threshold,
+                candidates: scored.candidates.slice(0, 5).map((row) => ({
+                    title: row.title,
+                    seeds: row.seeds,
+                    peers: row.peers,
+                    score: row.confidenceScore,
+                    season: row.season,
+                    episode: row.episode,
+                    quality: row.quality
+                }))
+            });
+        }
+
+        const magnetUrl = scored.best.magnetUrl;
+        const effectiveImdbId = cleanImdbId || queueContext.imdbId || null;
+
+        await TorrentService.addMagnet(magnetUrl, 'series-streamer', effectiveImdbId, {
+            addedByUser: activeUser || null,
+            queueContext
+        });
+
+        const { torrentName, infoHash } = extractMagnetRuntimeInfo(magnetUrl);
+        const mediaTitle = buildQueueMediaTitle({
+            title: torrentName,
+            imdbId: effectiveImdbId,
+            contentType: 'series',
+            payload: {
+                torrentName,
+                queueContext
+            }
+        });
+
+        const queuedJob = createJob({
+            status: 'WAITING_DOWNLOAD',
+            currentStep: 'INGEST',
+            imdbId: effectiveImdbId || null,
+            contentType: 'series',
+            payload: {
+                torrentHash: infoHash,
+                torrentName,
+                rawPath: null,
+                cleanPath: null,
+                videoFile: null,
+                magnetUrl,
+                imdbId: effectiveImdbId || null,
+                mediaTitle,
+                addedByUser: activeUser || null,
+                queueContext
+            }
+        });
+
+        return res.json({
+            success: true,
+            message: 'Auto-selected best match and queued for download.',
+            query,
+            searchId,
+            selected: {
+                title: scored.best.title,
+                seeds: scored.best.seeds,
+                peers: scored.best.peers,
+                score: scored.best.confidenceScore,
+                season: scored.best.season,
+                episode: scored.best.episode,
+                quality: scored.best.quality
+            },
+            job: queuedJob
+        });
+    } catch (err) {
+        logger.error(`[Auto Queue] add-auto failed: ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message });
+    } finally {
+        if (searchId) {
+            TorrentSearchService.deleteSearch(searchId).catch((_err) => {});
+        }
     }
 });
 

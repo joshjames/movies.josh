@@ -896,8 +896,8 @@
                         <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
                         <td class="episode-add">
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Ingest Episode'}</button>
-                                <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">Smart Search</button>
+                                <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Add Episode'}</button>
+                                <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">Smart Search (Admin)</button>
                             </div>
                         </td>
                     </tr>
@@ -932,8 +932,8 @@
                                     <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
                                     <td class="episode-add">
                                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                            <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addMediaAsset(this, '${btoa(row.magnet)}', 'series-streamer', '${row.imdbId || ''}', ${seasonNum}, 0, 'pack')">${inLibrary ? 'Season Complete' : 'Ingest Season'}</button>
-                                            <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, null, 'pack')">Smart Search</button>
+                                            <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, 0, 'pack')">${inLibrary ? 'Season Complete' : 'Add Whole Season'}</button>
+                                            <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, null, 'pack')">Smart Search (Admin)</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -1132,7 +1132,8 @@
                             <details class="season-panel" open>
                                 <summary class="season-summary"><strong>Season ${season}</strong><span>${rows.length} episodes • ${seededCount} seeded • ${inLibraryCount} in library</span></summary>
                                 <div style="padding:8px 10px; border-top:1px solid #263247; background:#0f1b31; display:flex; gap:8px; flex-wrap:wrap;">
-                                    <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, null, 'pack')">Add Whole Season (Smart Search)</button>
+                                    <button class="add-btn" style="padding:6px 10px;" ${completeSeasonSet.has(Number(season)) ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, 0, 'pack')">${completeSeasonSet.has(Number(season)) ? 'Season Complete' : 'Add Whole Season'}</button>
+                                    <button class="page-btn" style="padding:6px 10px; background:#7c2d12; border-color:#9a3412;" onclick="openTorrentSearchForShow('${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, null, 'pack')">Smart Search (Admin)</button>
                                     ${completeSeasonSet.has(Number(season)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
                                 </div>
                                 <table class="episode-table">
@@ -1233,6 +1234,45 @@
                 btn.disabled = false;
                 btn.style.background = '#10b981';
                 btn.innerText = targetCategory === 'series-streamer' ? 'Ingest Release' : 'Add to Library';
+            }
+        }
+
+        async function addSeriesAutoAsset(btn, showTitle, imdbId = '', season = 0, episode = 0, sourceType = 'episode') {
+            btn.disabled = true;
+            btn.style.background = '#475569';
+            btn.innerText = 'Finding Best Match...';
+
+            try {
+                const parsedSeason = parseInt(season, 10);
+                const parsedEpisode = parseInt(episode, 10);
+                const payload = {
+                    title: String(showTitle || '').trim(),
+                    imdbId: normalizeImdbId(imdbId || ''),
+                    season: Number.isFinite(parsedSeason) && parsedSeason > 0 ? parsedSeason : null,
+                    episode: Number.isFinite(parsedEpisode) && parsedEpisode > 0 ? parsedEpisode : null,
+                    sourceType: String(sourceType || '').toLowerCase() === 'pack' ? 'pack' : 'episode'
+                };
+
+                const response = await fetch('/api/downloader/add-auto', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await parseJsonOrThrow(response);
+                if (!response.ok || !data.success) {
+                    throw new Error(data && data.error ? data.error : 'Auto add failed');
+                }
+
+                showToast(data.message || 'Best match queued for ingest.');
+                btn.innerText = 'Queued';
+                btn.style.background = '#059669';
+            } catch (err) {
+                showToast(err && err.message ? err.message : 'Automatic ingest failed.');
+                btn.disabled = false;
+                btn.style.background = '#10b981';
+                const isPack = String(sourceType || '').toLowerCase() === 'pack';
+                btn.innerText = isPack ? 'Add Whole Season' : 'Add Episode';
             }
         }
 
