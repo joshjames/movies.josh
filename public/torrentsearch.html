@@ -347,11 +347,13 @@
                 <div class="actions">
                     <button class="btn" id="startBtn" type="button">Start Search</button>
                     <button class="btn alt" id="refreshBtn" type="button">Refresh Results</button>
+                    <button class="btn alt" id="resolveInternalBtn" type="button">Resolve Internal Match</button>
                     <button class="btn ghost" id="deleteBtn" type="button">Delete Search</button>
                 </div>
 
                 <div id="statusBox" class="status warn">No active search yet.</div>
                 <div id="diagnosticsBox" class="diagnostics"></div>
+                <div id="internalMatchWrap" class="status" style="margin-top:8px;">Internal DB match idle.</div>
             </aside>
 
             <section class="panel">
@@ -409,11 +411,13 @@
             searchId: null,
             lastResponse: null,
             plugins: [],
-            candidates: []
+            candidates: [],
+            internalMatches: []
         };
 
         const statusBox = document.getElementById('statusBox');
         const diagnosticsBox = document.getElementById('diagnosticsBox');
+        const internalMatchWrap = document.getElementById('internalMatchWrap');
         const statsPills = document.getElementById('statsPills');
         const likelyWrap = document.getElementById('likelyWrap');
         const filteredBody = document.getElementById('filteredBody');
@@ -503,6 +507,157 @@
                 season: explicitSeason || filterSeason || queueSeason || null,
                 episode: explicitEpisode || filterEpisode || queueEpisode || null
             };
+        }
+
+        function parseSeasonEpisodeHint(text) {
+            const raw = String(text || '');
+            const sxe = raw.match(/s(\d{1,2})\s*e(\d{1,2})/i);
+            if (sxe) {
+                return {
+                    season: parseInt(sxe[1], 10),
+                    episode: parseInt(sxe[2], 10)
+                };
+            }
+
+            const seasonOnly = raw.match(/season\s*(\d{1,2})/i) || raw.match(/s(\d{1,2})(?!\d)/i);
+            return {
+                season: seasonOnly ? parseInt(seasonOnly[1], 10) : null,
+                episode: null
+            };
+        }
+
+        function normalizeTitleForCompare(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function scoreInternalCandidate(candidate, queryText, imdbHint) {
+            const titleNorm = normalizeTitleForCompare(candidate?.title || candidate?.originalTitle || '');
+            const queryNorm = normalizeTitleForCompare(queryText || '');
+            const imdbNorm = normalizeImdbId(candidate?.imdbId || '');
+            const queryTokens = queryNorm.split(' ').filter(Boolean);
+            let score = 0;
+
+            if (imdbHint && imdbNorm && imdbHint === imdbNorm) score += 500;
+            if (titleNorm === queryNorm && queryNorm) score += 300;
+            if (titleNorm.startsWith(queryNorm) && queryNorm) score += 180;
+
+            for (const token of queryTokens) {
+                if (titleNorm.includes(token)) score += 20;
+                else score -= 20;
+            }
+
+            score += Math.min(120, Math.floor(Number(candidate?.numVotes || 0) / 10000));
+            score += Math.floor(Number(candidate?.averageRating || 0) * 10);
+            return score;
+        }
+
+        function applyInternalCandidate(index) {
+            const candidate = Array.isArray(state.internalMatches) ? state.internalMatches[index] : null;
+            if (!candidate) {
+                internalMatchWrap.className = 'status bad';
+                internalMatchWrap.textContent = 'Internal candidate not found.';
+                return;
+            }
+
+            const normalizedImdb = normalizeImdbId(candidate.imdbId || '');
+            const currentQuery = value('queryIn');
+            const hint = parseSeasonEpisodeHint(currentQuery);
+            const mediaType = candidate.mediaType === 'movie' ? 'movie' : 'series';
+
+            document.getElementById('officialTitleIn').value = candidate.title || '';
+            if (normalizedImdb) {
+                document.getElementById('imdbIn').value = normalizedImdb;
+                document.getElementById('queueImdbIn').value = normalizedImdb;
+            }
+
+            if (mediaType === 'series') {
+                document.getElementById('queueMediaTypeIn').value = 'series';
+                if (hint.season && !value('seasonIn')) document.getElementById('seasonIn').value = String(hint.season);
+                if (hint.episode && !value('episodeIn')) document.getElementById('episodeIn').value = String(hint.episode);
+                if (hint.season && !value('targetSeasonIn')) document.getElementById('targetSeasonIn').value = String(hint.season);
+                if (hint.episode && !value('targetEpisodeIn')) document.getElementById('targetEpisodeIn').value = String(hint.episode);
+                if (hint.season && !value('queueSeasonIn')) document.getElementById('queueSeasonIn').value = String(hint.season);
+                if (hint.episode && !value('queueEpisodeIn')) document.getElementById('queueEpisodeIn').value = String(hint.episode);
+            }
+
+            internalMatchWrap.className = 'status good';
+            internalMatchWrap.textContent = `Applied internal match: ${candidate.title} (${candidate.imdbId || 'no-imdb'}) [${candidate.source}]`;
+        }
+
+        function renderInternalMatches(queryText = '') {
+            if (!Array.isArray(state.internalMatches) || !state.internalMatches.length) {
+                internalMatchWrap.className = 'status warn';
+                internalMatchWrap.textContent = 'No internal DB candidates found yet.';
+                return;
+            }
+
+            const top = state.internalMatches.slice(0, 5).map((item, idx) => {
+                return `<div style="display:flex;gap:6px;align-items:center;justify-content:space-between;margin:4px 0;">
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title)} (${esc(item.imdbId || 'n/a')})</span>
+                    <span style="font-size:.75rem;color:#64748b;">${esc(item.source)}</span>
+                    <button class="tiny-btn" onclick="applyInternalCandidate(${idx})">Apply</button>
+                </div>`;
+            }).join('');
+
+            internalMatchWrap.className = 'status';
+            internalMatchWrap.innerHTML = `
+                <div style="font-weight:700;margin-bottom:4px;">Internal DB candidates for: ${esc(queryText || value('queryIn'))}</div>
+                ${top}
+            `;
+        }
+
+        async function resolveInternalMatch(options = {}) {
+            const queryText = String(options.query || value('queryIn') || '').trim();
+            if (!queryText) {
+                internalMatchWrap.className = 'status warn';
+                internalMatchWrap.textContent = 'Enter a query first to resolve internal matches.';
+                return;
+            }
+
+            const mediaType = String(value('queueMediaTypeIn') || 'series').toLowerCase() === 'movie' ? 'movie' : 'series';
+            const imdbHint = normalizeImdbId(value('imdbIn') || value('queueImdbIn') || '');
+
+            try {
+                let candidates = [];
+
+                if (mediaType === 'series') {
+                    const r = await fetch(`/api/tv-shows/search?q=${encodeURIComponent(queryText)}&limit=20&localOnly=1`);
+                    const payload = await r.json();
+                    if (!r.ok || payload.success === false) throw new Error(payload.error || `HTTP ${r.status}`);
+
+                    candidates = Array.isArray(payload.items)
+                        ? payload.items.map(item => ({ ...item, mediaType: 'series', source: payload.source || 'local-index' }))
+                        : [];
+                } else {
+                    const r = await fetch(`/api/movies/search/unified?q=${encodeURIComponent(queryText)}&remoteMode=never&localLimit=20`);
+                    const payload = await r.json();
+                    if (!r.ok || payload.success === false) throw new Error(payload.error || `HTTP ${r.status}`);
+
+                    candidates = Array.isArray(payload.localResults)
+                        ? payload.localResults.map(item => ({ ...item, mediaType: 'movie', source: 'local-library' }))
+                        : [];
+                }
+
+                state.internalMatches = candidates
+                    .map(item => ({
+                        ...item,
+                        score: scoreInternalCandidate(item, queryText, imdbHint)
+                    }))
+                    .sort((a, b) => b.score - a.score);
+
+                renderInternalMatches(queryText);
+
+                if (state.internalMatches.length && options.autoApply !== false) {
+                    applyInternalCandidate(0);
+                }
+            } catch (err) {
+                internalMatchWrap.className = 'status bad';
+                internalMatchWrap.textContent = `Internal match failed: ${err.message}`;
+            }
         }
 
         function calculateMatchConfidence(rawFileName, officialTitle, targetSeason, targetEpisode) {
@@ -878,6 +1033,11 @@
                 }
 
                 state.searchId = payload.searchId;
+
+                if (!value('officialTitleIn') || !value('queueImdbIn')) {
+                    await resolveInternalMatch({ query, autoApply: true });
+                }
+
                 setStatus(`Search started with id ${state.searchId}.`, 'good');
                 await refreshResults();
             } catch (err) {
@@ -947,11 +1107,14 @@
                 state.searchId = null;
                 state.lastResponse = null;
                 state.candidates = [];
+                state.internalMatches = [];
                 filteredBody.innerHTML = '';
                 rawBody.innerHTML = '';
                 jsonOut.textContent = 'Search deleted. Start a new one to continue testing.';
                 renderLikelyCandidate(null);
                 renderStats(null);
+                internalMatchWrap.className = 'status';
+                internalMatchWrap.textContent = 'Internal DB match idle.';
                 setStatus(`Deleted search ${id}.`, 'good');
             } catch (err) {
                 setStatus(`Delete failed: ${err.message}`, 'bad');
@@ -961,12 +1124,14 @@
         document.getElementById('loadPluginsBtn').addEventListener('click', loadPlugins);
         document.getElementById('startBtn').addEventListener('click', startSearch);
         document.getElementById('refreshBtn').addEventListener('click', refreshResults);
+        document.getElementById('resolveInternalBtn').addEventListener('click', () => resolveInternalMatch({ autoApply: true }));
         document.getElementById('deleteBtn').addEventListener('click', deleteSearch);
 
         window.showJson = showJson;
         window.queueResult = queueResult;
         window.queueCandidate = queueCandidate;
         window.showCandidateJson = showCandidateJson;
+        window.applyInternalCandidate = applyInternalCandidate;
     </script>
 </body>
 </html>
