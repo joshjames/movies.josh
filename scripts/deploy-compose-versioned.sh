@@ -55,7 +55,7 @@ APP_DEPLOYED_AT="$APP_DEPLOYED_AT" \
 
 echo "==> Waiting for runtime health endpoint..."
 for i in {1..30}; do
-    if docker exec "$APP_CONTAINER_NAME" sh -lc "wget -qO- http://127.0.0.1:3000/api/runtime/health >/dev/null"; then
+    if docker exec "$APP_CONTAINER_NAME" node -e "const http=require('http');const req=http.get('http://127.0.0.1:3000/api/runtime/health',(res)=>{process.exit(res.statusCode===200?0:1)});req.on('error',()=>process.exit(1));req.setTimeout(2000,()=>{req.destroy();process.exit(1);});"; then
         echo "==> Health check passed (${APP_CONTAINER_NAME})"
         break
     fi
