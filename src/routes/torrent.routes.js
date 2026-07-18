@@ -516,6 +516,108 @@ function extractMagnetRuntimeInfo(magnetUrl = '') {
     }
 }
 
+function scoreEztvAutoCandidate(row) {
+    const seeds = parseInt(row?.seeds, 10) || 0;
+    const peers = parseInt(row?.peers, 10) || 0;
+    return (seeds * 1000) + (peers * 10);
+}
+
+async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = null, sourceType = 'episode' } = {}) {
+    const normalizedImdb = normalizeImdbId(imdbId);
+    if (!normalizedImdb) {
+        return { best: null, diagnostics: { reason: 'missing_imdb' } };
+    }
+
+    const imdbDigits = String(normalizedImdb).replace(/^tt/i, '');
+    const packsOnly = String(sourceType || '').toLowerCase() === 'pack';
+    const seasonNum = Number.isFinite(parseInt(season, 10)) ? parseInt(season, 10) : null;
+    const episodeNum = Number.isFinite(parseInt(episode, 10)) ? parseInt(episode, 10) : null;
+
+    const fetched = await fetchEztvPages(imdbDigits, 5);
+    const reduced = mapRawEztvRows(fetched.torrents || [], normalizedImdb, '', packsOnly, 400);
+    const rows = Array.isArray(reduced?.items) ? reduced.items : [];
+
+    const exact = rows.filter((row) => {
+        const rowSeason = parseInt(row?.season, 10);
+        const rowEpisode = parseInt(row?.episode, 10);
+        const rowType = String(row?.sourceType || '').toLowerCase();
+
+        if (!Number.isFinite(rowSeason) || !seasonNum || rowSeason !== seasonNum) return false;
+        if (packsOnly) return rowType === 'pack';
+        return rowType === 'episode' && Number.isFinite(rowEpisode) && rowEpisode === episodeNum;
+    });
+
+    const seededExact = exact.filter((row) => (parseInt(row?.seeds, 10) || 0) > 0);
+    const pool = seededExact.length ? seededExact : exact;
+    const best = pool.length
+        ? [...pool].sort((a, b) => scoreEztvAutoCandidate(b) - scoreEztvAutoCandidate(a))[0]
+        : null;
+
+    return {
+        best,
+        diagnostics: {
+            imdbId: normalizedImdb,
+            packsOnly,
+            season: seasonNum,
+            episode: episodeNum,
+            rawCount: fetched.torrents?.length || 0,
+            exactCount: exact.length,
+            seededExactCount: seededExact.length,
+            upstreamWarnings: fetched.upstreamWarnings || []
+        }
+    };
+}
+
+async function queueAutoSeriesMagnet({
+    magnetUrl,
+    effectiveImdbId,
+    activeUser,
+    queueContext,
+    source = 'search'
+} = {}) {
+    await TorrentService.addMagnet(magnetUrl, 'series-streamer', effectiveImdbId, {
+        addedByUser: activeUser || null,
+        queueContext
+    });
+
+    const { torrentName, infoHash } = extractMagnetRuntimeInfo(magnetUrl);
+    const mediaTitle = buildQueueMediaTitle({
+        title: torrentName,
+        imdbId: effectiveImdbId,
+        contentType: 'series',
+        payload: {
+            torrentName,
+            queueContext
+        }
+    });
+
+    const queuedJob = createJob({
+        status: 'WAITING_DOWNLOAD',
+        currentStep: 'INGEST',
+        imdbId: effectiveImdbId || null,
+        contentType: 'series',
+        payload: {
+            torrentHash: infoHash,
+            torrentName,
+            rawPath: null,
+            cleanPath: null,
+            videoFile: null,
+            magnetUrl,
+            imdbId: effectiveImdbId || null,
+            mediaTitle,
+            addedByUser: activeUser || null,
+            queueContext,
+            sourceSelection: source
+        }
+    });
+
+    return {
+        queuedJob,
+        torrentName,
+        infoHash
+    };
+}
+
 function normalizeSeriesFolderName(value = '') {
     const raw = String(value || '').trim().replace(/^series\//i, '');
     const clean = path.basename(raw);
@@ -1511,6 +1613,48 @@ router.post('/downloader/add-auto', async (req, res) => {
             });
         }
 
+        const eztvSelection = await selectBestEztvAutoCandidate({
+            imdbId: cleanImdbId,
+            season: seasonNum,
+            episode: episodeNum,
+            sourceType: normalizedSourceType
+        });
+
+        if (eztvSelection?.best?.magnet) {
+            const magnetUrl = String(eztvSelection.best.magnet || '').trim();
+            const effectiveImdbId = cleanImdbId || queueContext.imdbId || null;
+
+            const queued = await queueAutoSeriesMagnet({
+                magnetUrl,
+                effectiveImdbId,
+                activeUser,
+                queueContext,
+                source: 'eztv'
+            });
+
+            logger.info(
+                `[Auto Queue] selected EZTV candidate imdb=${effectiveImdbId || 'n/a'} ` +
+                `S${seasonNum || 0}E${episodeNum || 0} source=${normalizedSourceType} ` +
+                `seeds=${parseInt(eztvSelection.best.seeds, 10) || 0} peers=${parseInt(eztvSelection.best.peers, 10) || 0}`
+            );
+
+            return res.json({
+                success: true,
+                message: 'Queued via EZTV exact match.',
+                query,
+                selected: {
+                    title: eztvSelection.best.originalTitle || eztvSelection.best.title || 'EZTV release',
+                    seeds: parseInt(eztvSelection.best.seeds, 10) || 0,
+                    peers: parseInt(eztvSelection.best.peers, 10) || 0,
+                    season: parseInt(eztvSelection.best.season, 10) || null,
+                    episode: parseInt(eztvSelection.best.episode, 10) || null,
+                    source: 'eztv'
+                },
+                eztv: eztvSelection.diagnostics,
+                job: queued.queuedJob
+            });
+        }
+
         const started = await TorrentSearchService.startSearch({
             query,
             category: String(category || 'tv').trim() || 'tv',
@@ -1541,7 +1685,21 @@ router.post('/downloader/add-auto', async (req, res) => {
         };
 
         const threshold = Number.isFinite(parseFloat(minScore)) ? parseFloat(minScore) : 90;
-        if (!scored.best || Number(scored.best.confidenceScore || 0) < threshold) {
+        const seededExactSearchFallback = scored.candidates.find((row) => {
+            const rowSeason = Number.isFinite(parseInt(row?.season, 10)) ? parseInt(row.season, 10) : null;
+            const rowEpisode = Number.isFinite(parseInt(row?.episode, 10)) ? parseInt(row.episode, 10) : null;
+            const seeds = parseInt(row?.seeds, 10) || 0;
+            if (seeds <= 0) return false;
+            if (!seasonNum || rowSeason !== seasonNum) return false;
+            if (normalizedSourceType === 'pack') return !rowEpisode;
+            return Boolean(episodeNum && rowEpisode === episodeNum);
+        }) || null;
+
+        const selectedSearchCandidate = (scored.best && Number(scored.best.confidenceScore || 0) >= threshold)
+            ? scored.best
+            : seededExactSearchFallback;
+
+        if (!selectedSearchCandidate || !selectedSearchCandidate.magnetUrl) {
             return res.status(404).json({
                 success: false,
                 error: 'No confident search result found for automatic queueing.',
@@ -1562,50 +1720,26 @@ router.post('/downloader/add-auto', async (req, res) => {
             });
         }
 
-        const magnetUrl = scored.best.magnetUrl;
+        const magnetUrl = selectedSearchCandidate.magnetUrl;
         const effectiveImdbId = cleanImdbId || queueContext.imdbId || null;
+        const selectionSource = selectedSearchCandidate === seededExactSearchFallback
+            ? 'search-seeded-exact-fallback'
+            : 'search-confidence';
 
         logger.info(
             `[Auto Queue] selected candidate imdb=${effectiveImdbId || 'n/a'} ` +
             `S${seasonNum || 0}E${episodeNum || 0} source=${normalizedSourceType} ` +
-            `score=${Number(scored.best.confidenceScore || 0).toFixed(1)} ` +
-            `seeds=${scored.best.seeds || 0} status=${collected?.stats?.status || 'unknown'} ` +
+            `score=${Number(selectedSearchCandidate.confidenceScore || 0).toFixed(1)} ` +
+            `seeds=${selectedSearchCandidate.seeds || 0} status=${collected?.stats?.status || 'unknown'} ` +
             `elapsedMs=${collected?.stats?.elapsedMs || 0} samples=${collected?.stats?.sampleCount || 0}`
         );
 
-        await TorrentService.addMagnet(magnetUrl, 'series-streamer', effectiveImdbId, {
-            addedByUser: activeUser || null,
-            queueContext
-        });
-
-        const { torrentName, infoHash } = extractMagnetRuntimeInfo(magnetUrl);
-        const mediaTitle = buildQueueMediaTitle({
-            title: torrentName,
-            imdbId: effectiveImdbId,
-            contentType: 'series',
-            payload: {
-                torrentName,
-                queueContext
-            }
-        });
-
-        const queuedJob = createJob({
-            status: 'WAITING_DOWNLOAD',
-            currentStep: 'INGEST',
-            imdbId: effectiveImdbId || null,
-            contentType: 'series',
-            payload: {
-                torrentHash: infoHash,
-                torrentName,
-                rawPath: null,
-                cleanPath: null,
-                videoFile: null,
-                magnetUrl,
-                imdbId: effectiveImdbId || null,
-                mediaTitle,
-                addedByUser: activeUser || null,
-                queueContext
-            }
+        const queued = await queueAutoSeriesMagnet({
+            magnetUrl,
+            effectiveImdbId,
+            activeUser,
+            queueContext,
+            source: selectionSource
         });
 
         return res.json({
@@ -1614,16 +1748,17 @@ router.post('/downloader/add-auto', async (req, res) => {
             query,
             searchId,
             selected: {
-                title: scored.best.title,
-                seeds: scored.best.seeds,
-                peers: scored.best.peers,
-                score: scored.best.confidenceScore,
-                season: scored.best.season,
-                episode: scored.best.episode,
-                quality: scored.best.quality
+                title: selectedSearchCandidate.title,
+                seeds: selectedSearchCandidate.seeds,
+                peers: selectedSearchCandidate.peers,
+                score: selectedSearchCandidate.confidenceScore,
+                season: selectedSearchCandidate.season,
+                episode: selectedSearchCandidate.episode,
+                quality: selectedSearchCandidate.quality,
+                source: selectionSource
             },
             searchStats: collected.stats,
-            job: queuedJob
+            job: queued.queuedJob
         });
     } catch (err) {
         logger.error(`[Auto Queue] add-auto failed: ${err.message}`);
