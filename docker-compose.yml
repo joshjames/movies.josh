@@ -1,5 +1,5 @@
 x-app-common: &app-common
-  image: simple-streamer:v2
+  image: ${APP_IMAGE_NAME:-simple-streamer:v2}
   build:
     context: .
     dockerfile: Dockerfile
@@ -29,9 +29,11 @@ x-app-common: &app-common
 services:
   movie-streamer:
     <<: *app-common
-    container_name: movie-streamer-v2-test
+    container_name: ${APP_CONTAINER_NAME:-movie-streamer-v2-test}
     cpus: "4.0"
     environment:
+      APP_BUILD_VERSION: "${APP_BUILD_VERSION:-dev}"
+      APP_DEPLOYED_AT: "${APP_DEPLOYED_AT:-}"
       WORKER_URL_INGEST: "http://ingest-worker:5000/process"
       WORKER_URL_METADATA: "http://metadata-worker:5001/process"
       WORKER_URL_SUBTITLES: "http://subtitle-worker:5002/process"

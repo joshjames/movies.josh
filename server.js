@@ -19,6 +19,33 @@ const PORT = process.env.PORT || 3000;
 const ENABLE_PIPELINE_WATCHER = !['false', '0', 'no'].includes(String(process.env.ENABLE_PIPELINE_WATCHER || 'true').trim().toLowerCase());
 const ENABLE_LIBRARY_AUTOSCAN = !['false', '0', 'no'].includes(String(process.env.ENABLE_LIBRARY_AUTOSCAN || 'true').trim().toLowerCase());
 
+const SERVER_STARTED_AT_MS = Date.now();
+const BUILD_VERSION = String(process.env.APP_BUILD_VERSION || process.env.IMAGE_TAG || 'dev').trim();
+const DEPLOYED_AT = String(process.env.APP_DEPLOYED_AT || new Date(SERVER_STARTED_AT_MS).toISOString()).trim();
+const METRICS_TOKEN = String(process.env.METRICS_TOKEN || '').trim();
+const requestMetrics = {
+    totalRequests: 0,
+    activeRequests: 0,
+    totalErrors: 0,
+    byMethod: Object.create(null),
+    byStatusClass: {
+        '2xx': 0,
+        '3xx': 0,
+        '4xx': 0,
+        '5xx': 0,
+        other: 0
+    }
+};
+
+function classifyStatus(statusCode) {
+    const status = Number(statusCode);
+    if (status >= 200 && status < 300) return '2xx';
+    if (status >= 300 && status < 400) return '3xx';
+    if (status >= 400 && status < 500) return '4xx';
+    if (status >= 500 && status < 600) return '5xx';
+    return 'other';
+}
+
 //allow webhook requests from Square to reach our server without CORS issues
 //or authentication, since they are coming from Square's servers
 const webhookRouter = require('./src/routes/webhook.routes');
@@ -49,6 +76,70 @@ if (!fs.existsSync(SERIES_STORAGE_DIR)) {
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '20mb' }));
+
+app.use((req, res, next) => {
+    requestMetrics.totalRequests += 1;
+    requestMetrics.activeRequests += 1;
+    const method = String(req.method || 'UNKNOWN').toUpperCase();
+    requestMetrics.byMethod[method] = (requestMetrics.byMethod[method] || 0) + 1;
+
+    res.on('finish', () => {
+        requestMetrics.activeRequests = Math.max(0, requestMetrics.activeRequests - 1);
+        const bucket = classifyStatus(res.statusCode);
+        requestMetrics.byStatusClass[bucket] = (requestMetrics.byStatusClass[bucket] || 0) + 1;
+        if (res.statusCode >= 500) {
+            requestMetrics.totalErrors += 1;
+        }
+    });
+
+    res.on('close', () => {
+        requestMetrics.activeRequests = Math.max(0, requestMetrics.activeRequests - 1);
+    });
+
+    next();
+});
+
+app.get('/api/runtime/health', (_req, res) => {
+    return res.json({
+        success: true,
+        status: 'ok',
+        service: 'movie-streamer',
+        version: BUILD_VERSION,
+        deployedAt: DEPLOYED_AT,
+        uptimeSec: Math.floor(process.uptime())
+    });
+});
+
+app.get('/api/runtime/version', (_req, res) => {
+    return res.json({
+        success: true,
+        version: BUILD_VERSION,
+        deployedAt: DEPLOYED_AT,
+        startedAt: new Date(SERVER_STARTED_AT_MS).toISOString(),
+        node: process.version,
+        pid: process.pid
+    });
+});
+
+app.get('/api/runtime/metrics', (req, res) => {
+    if (METRICS_TOKEN) {
+        const supplied = String(req.query?.token || req.headers['x-metrics-token'] || '').trim();
+        if (!supplied || supplied !== METRICS_TOKEN) {
+            return res.status(403).json({ success: false, error: 'Forbidden' });
+        }
+    }
+
+    return res.json({
+        success: true,
+        service: 'movie-streamer',
+        version: BUILD_VERSION,
+        deployedAt: DEPLOYED_AT,
+        startedAt: new Date(SERVER_STARTED_AT_MS).toISOString(),
+        uptimeSec: Math.floor(process.uptime()),
+        memory: process.memoryUsage(),
+        requestMetrics
+    });
+});
 
 // =========================================================================
 // 🔓 PUBLIC ACCESS LAYER & AUTH EXEMPTIONS
