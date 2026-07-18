@@ -215,6 +215,36 @@
             position: relative;
         }
 
+        .avatar-bell {
+            position: absolute;
+            right: 8px;
+            top: 4px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            border: 2px solid #0b1220;
+            background: #2563eb;
+            color: #e2e8f0;
+            font-size: 12px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        .avatar-bell[data-has-unread="true"] {
+            background: #b91c1c;
+            animation: bellPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes bellPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
         .avatar-btn {
             width: 64px;
             height: 64px;
@@ -271,7 +301,7 @@
             position: absolute;
             right: 0;
             top: 72px;
-            min-width: 180px;
+            min-width: 320px;
             background: #0b1220;
             border: 1px solid #334155;
             border-radius: 6px; 
@@ -312,6 +342,91 @@
 
         .avatar-item:hover {
             background: #1e293b;
+        }
+
+        .avatar-menu-divider {
+            border-top: 1px solid #1e293b;
+            margin: 6px 2px;
+        }
+
+        .notify-panel {
+            padding: 6px 8px 8px 8px;
+            display: grid;
+            gap: 8px;
+            max-height: 300px;
+            overflow: auto;
+        }
+
+        .notify-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            color: #cbd5e1;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .notify-counts {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .notify-chip {
+            background: #111827;
+            border: 1px solid #334155;
+            color: #94a3b8;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 0.68rem;
+            font-weight: 700;
+        }
+
+        .notify-list {
+            display: grid;
+            gap: 6px;
+        }
+
+        .notify-item {
+            border: 1px solid #223047;
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 8px;
+            display: grid;
+            gap: 3px;
+        }
+
+        .notify-item-title {
+            color: #f8fafc;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+
+        .notify-item-body {
+            color: #cbd5e1;
+            font-size: 0.72rem;
+            line-height: 1.3;
+        }
+
+        .notify-item-meta {
+            color: #94a3b8;
+            font-size: 0.67rem;
+        }
+
+        .notify-link {
+            color: #93c5fd;
+            text-decoration: none;
+        }
+
+        .notify-empty {
+            color: #94a3b8;
+            font-size: 0.74rem;
+            text-align: center;
+            padding: 8px 0;
         }
 
         /* Right Section: Navigation Controls */
@@ -651,6 +766,25 @@
                 border-width: 2px;
             }
 
+            .avatar-bell {
+                width: 20px;
+                height: 20px;
+                right: 6px;
+                top: 2px;
+                font-size: 11px;
+            }
+
+            .avatar-menu {
+                right: -8px;
+                top: 60px;
+                min-width: min(92vw, 360px);
+                max-width: min(92vw, 360px);
+            }
+
+            .notify-panel {
+                max-height: 44vh;
+            }
+
             .logo-wrapper {
                 grid-area: logo;
                 width: 150px;
@@ -755,11 +889,20 @@
                     <button type="button" class="avatar-btn" id="avatar-btn" aria-label="Open account menu">
                         <img src="/images/avatar.png" alt="User avatar" id="header-avatar-image">
                     </button>
+                    <span class="avatar-bell" id="avatar-bell" data-has-unread="false" aria-hidden="true">🔔</span>
                     <div class="avatar-menu" id="avatar-menu">
                         <div class="avatar-menu-header" id="avatar-menu-user">Signed in</div>
                         <a href="/queue.html" class="avatar-item">Queue Manager</a>
                         <a href="/account.html" class="avatar-item">Account</a>
                         <a href="/api/auth/logout" class="avatar-item">Logout</a>
+                        <div class="avatar-menu-divider"></div>
+                        <section class="notify-panel" id="notify-panel">
+                            <div class="notify-header">
+                                <span>Notifications</span>
+                                <div class="notify-counts" id="notify-counts"></div>
+                            </div>
+                            <div class="notify-list" id="notify-list"></div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -798,6 +941,7 @@
         let currentCatalogPage = 1;
         let homeSearchCards = [];
         let deferredInstallPrompt = null;
+        let headerNotifications = null;
         const NO_COVER_DATA_URI = "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'200'%20height%3D'300'%3E%3Crect%20width%3D'100%25'%20height%3D'100%25'%20fill%3D'%23020617'%2F%3E%3Ctext%20x%3D'50%25'%20y%3D'50%25'%20dominant-baseline%3D'middle'%20text-anchor%3D'middle'%20fill%3D'%23475569'%3ENo%20Cover%3C%2Ftext%3E%3C%2Fsvg%3E";
 
         function isStandaloneMode() {
@@ -1098,9 +1242,12 @@
             const menu = document.getElementById('avatar-menu');
             if (!btn || !menu) return;
 
-            btn.addEventListener('click', (event) => {
+            btn.addEventListener('click', async (event) => {
                 event.stopPropagation();
                 menu.classList.toggle('show');
+                if (menu.classList.contains('show')) {
+                    await refreshNotificationsPanel();
+                }
             });
 
             document.addEventListener('click', (event) => {
@@ -1212,6 +1359,103 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function formatRelativeNotificationTime(isoString) {
+            const timeMs = Date.parse(String(isoString || ''));
+            if (!Number.isFinite(timeMs)) return 'just now';
+            const deltaSec = Math.max(0, Math.floor((Date.now() - timeMs) / 1000));
+            if (deltaSec < 60) return 'just now';
+            const mins = Math.floor(deltaSec / 60);
+            if (mins < 60) return `${mins}m ago`;
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+
+        function updateBellFromSummary(summary) {
+            const bell = document.getElementById('avatar-bell');
+            if (!bell) return;
+            const total = Number(summary?.total || 0);
+            bell.setAttribute('data-has-unread', total > 0 ? 'true' : 'false');
+            bell.textContent = total > 0 ? '🔔' : '🔕';
+        }
+
+        function renderNotificationGroups(payload) {
+            const countsEl = document.getElementById('notify-counts');
+            const listEl = document.getElementById('notify-list');
+            if (!countsEl || !listEl) return;
+
+            const summary = payload?.summary || { system: 0, library: 0, user: 0, total: 0 };
+            updateBellFromSummary(summary);
+
+            countsEl.innerHTML = `
+                <span class="notify-chip">System ${summary.system || 0}</span>
+                <span class="notify-chip">My Library ${summary.library || 0}</span>
+                <span class="notify-chip">User ${summary.user || 0}</span>
+            `;
+
+            const groups = payload?.groups || {};
+            const categories = [
+                { key: 'system', title: 'System' },
+                { key: 'library', title: 'My Library' },
+                { key: 'user', title: 'User' }
+            ];
+
+            const blocks = categories.map((group) => {
+                const rows = Array.isArray(groups[group.key]) ? groups[group.key].slice(0, 3) : [];
+                if (!rows.length) return '';
+                const items = rows.map((item) => {
+                    const safeTitle = escapeHtml(item.title || 'Notification');
+                    const safeBody = escapeHtml(item.message || '');
+                    const timeLabel = formatRelativeNotificationTime(item.createdAt);
+                    const href = String(item.href || '').trim();
+                    const titleHtml = href
+                        ? `<a class="notify-link" href="${href}">${safeTitle}</a>`
+                        : safeTitle;
+
+                    return `
+                        <article class="notify-item">
+                            <div class="notify-item-title">${titleHtml}</div>
+                            <div class="notify-item-body">${safeBody || '&nbsp;'}</div>
+                            <div class="notify-item-meta">${timeLabel}</div>
+                        </article>
+                    `;
+                }).join('');
+
+                return `
+                    <section>
+                        <div class="notify-item-meta" style="margin-bottom:4px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em;">${group.title}</div>
+                        <div class="notify-list">${items}</div>
+                    </section>
+                `;
+            }).filter(Boolean);
+
+            if (!blocks.length) {
+                listEl.innerHTML = '<div class="notify-empty">No notifications right now.</div>';
+                return;
+            }
+
+            listEl.innerHTML = blocks.join('');
+        }
+
+        async function refreshNotificationsPanel() {
+            try {
+                const response = await fetch('/api/profile/notifications?limit=30&limitPerCategory=3', {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (!data?.success) {
+                    renderNotificationGroups({ summary: { system: 0, library: 0, user: 0, total: 0 }, groups: {} });
+                    return;
+                }
+
+                headerNotifications = data;
+                renderNotificationGroups(data);
+            } catch (_err) {
+                renderNotificationGroups({ summary: { system: 0, library: 0, user: 0, total: 0 }, groups: {} });
+            }
         }
 
         function sanitizeSearchText(value) {
@@ -1457,6 +1701,7 @@
             initHomeSearch();
             hydrateUserProfileHeader();
             loadMovies(1);
+            refreshNotificationsPanel();
             setInterval(updatePipelineStatus, 5000);
             updatePipelineStatus();
         });

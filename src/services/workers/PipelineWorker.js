@@ -11,6 +11,7 @@ const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
 const { searchIndex: searchTvSeriesIndex } = require('../TvSeriesIndexService');
 const MetadataRegistry = require('../MetadataRegistry');
 const ProfileService = require('../ProfileService');
+const NotificationService = require('../NotificationService');
 const MailerService = require('../MailerService');
 const SeriesFolderResolver = require('../SeriesFolderResolver');
 const { rebuildSeriesManifest } = require('../SeriesIndexService');
@@ -221,6 +222,19 @@ async function runQueueCompletionHooks(job, libraryItem) {
             imdbId: job.imdbId || libraryItem.imdbId || ''
         });
     }
+
+    // Always publish a library notification for queue completion.
+    await NotificationService.push(owner, {
+        category: 'library',
+        title: `${mediaTitle} added`,
+        message: 'Ready to watch in your library.',
+        href: buildLibraryHref(libraryItem || {}, contentType),
+        payload: {
+            jobId: job.id,
+            imdbId: job.imdbId || libraryItem?.imdbId || '',
+            contentType
+        }
+    });
 
     if (options.notifyOnComplete) {
         const targetEmail = String(config.email || owner || '').trim();

@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const ProfileService = require('../services/ProfileService'); 
+const NotificationService = require('../services/NotificationService');
 
 // Helper function to force uniform media keys matching your storage tree structure
 function sanitizeMediaId(id) {
@@ -145,6 +146,96 @@ router.delete('/watch-later/:mediaId', async (req, res) => {
         if (!result.success) {
             return res.status(400).json(result);
         }
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: /api/profile/notifications
+router.get('/notifications', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const limit = parseInt(req.query.limit, 10) || 30;
+        const limitPerCategory = parseInt(req.query.limitPerCategory, 10) || 3;
+        const payload = await NotificationService.list(username, { limit, limitPerCategory });
+        return res.json({ success: true, ...payload });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/profile/notifications
+// Normal users can only push `user` category to themselves.
+router.post('/notifications', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const config = await ProfileService.readData(username, 'config', {});
+        const isPrivileged = username === 'josh' || username.startsWith('josh@') || config?.isAdmin === true;
+        const requestedCategory = NotificationService.normalizeCategory(req.body?.category || 'user');
+
+        if (!isPrivileged && requestedCategory !== 'user') {
+            return res.status(403).json({ success: false, error: 'Only user-category notifications are allowed for this account.' });
+        }
+
+        const targetUser = isPrivileged && req.body?.targetUser
+            ? String(req.body.targetUser || '').toLowerCase().trim()
+            : username;
+
+        const title = String(req.body?.title || '').trim();
+        const message = String(req.body?.message || '').trim();
+        if (!title) {
+            return res.status(400).json({ success: false, error: 'title is required.' });
+        }
+
+        const pushed = await NotificationService.push(targetUser, {
+            category: requestedCategory,
+            title,
+            message,
+            href: req.body?.href || '',
+            ttlMs: req.body?.ttlMs,
+            payload: req.body?.payload
+        });
+
+        return res.json({ success: true, ...pushed });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/profile/notifications/prune
+router.post('/notifications/prune', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const result = await NotificationService.prune(username);
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// DELETE: /api/profile/notifications/category/:category
+router.delete('/notifications/category/:category', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+
+        const category = String(req.params.category || '').trim();
+        const result = await NotificationService.clearCategory(username, category);
         return res.json(result);
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
