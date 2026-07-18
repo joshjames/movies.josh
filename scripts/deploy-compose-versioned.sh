@@ -20,6 +20,11 @@ if [[ ! -f .env ]]; then
     exit 1
 fi
 
+NPM_URL=$(grep -E '^NPM_URL=' .env | head -n1 | cut -d '=' -f2- || true)
+NPM_ADMIN_USER=$(grep -E '^(NPM_ADMIN_USER|PM_ADMIN_USER)=' .env | head -n1 | cut -d '=' -f2- || true)
+NPM_ADMIN_PASSWORD=$(grep -E '^NPM_ADMIN_PASSWORD=' .env | head -n1 | cut -d '=' -f2- || true)
+NPM_PROXY_DOMAINS=$(grep -E '^NPM_PROXY_DOMAINS=' .env | head -n1 | cut -d '=' -f2- || true)
+
 STAMP=$(date -u +%Y%m%d%H%M%S)
 SHORT_SHA=$(git rev-parse --short HEAD)
 VERSION_TAG="${CURRENT_BRANCH}-${STAMP}-${SHORT_SHA}"
@@ -65,6 +70,19 @@ for i in {1..30}; do
     fi
     sleep 2
 done
+
+if [[ -n "$NPM_URL" && -n "$NPM_ADMIN_USER" && -n "$NPM_ADMIN_PASSWORD" ]]; then
+    echo "==> Updating NPM proxy host targets via API"
+    TARGET_CONTAINER_HOST="$APP_CONTAINER_NAME" \
+    TARGET_CONTAINER_PORT="3000" \
+    NPM_URL="$NPM_URL" \
+    NPM_ADMIN_USER="$NPM_ADMIN_USER" \
+    NPM_ADMIN_PASSWORD="$NPM_ADMIN_PASSWORD" \
+    NPM_PROXY_DOMAINS="${NPM_PROXY_DOMAINS:-anymovie.online,anyseries.online}" \
+    node scripts/npm-switch-proxy-hosts.js
+else
+    echo "==> NPM API update skipped (missing NPM_URL/NPM_ADMIN_USER/NPM_ADMIN_PASSWORD in .env)"
+fi
 
 echo ""
 echo "Deployment complete."

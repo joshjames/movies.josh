@@ -1,5 +1,6 @@
 const axios = require('axios');
 const TorrentSearchService = require('./TorrentSearchService');
+const logger = require('./logger');
 
 function normalizeDisplayTitle(value = '') {
     return String(value || '')
@@ -368,6 +369,8 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
     const sourceType = String(intent.sourceType || '').toLowerCase() === 'pack' ? 'pack' : 'episode';
     const query = buildAutoSeriesSearchQuery(showTitle || imdbId || '', seasonNum, episodeNum, sourceType);
 
+    logger.info(`[AutoAcquire] Search start | title="${showTitle || 'n/a'}" imdb=${imdbId || 'n/a'} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${sourceType} query="${query}"`);
+
     const eztvSelection = await selectBestEztvAutoCandidate({
         imdbId,
         season: seasonNum,
@@ -376,6 +379,7 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
     });
 
     if (eztvSelection?.best?.magnet) {
+        logger.info(`[AutoAcquire] Selected EZTV result | query="${query}" title="${String(eztvSelection.best.originalTitle || eztvSelection.best.title || '').trim()}" seeds=${parseInt(eztvSelection.best.seeds, 10) || 0}`);
         return {
             success: true,
             query,
@@ -401,6 +405,7 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
 
     const searchId = started?.id || null;
     if (!searchId) {
+        logger.warn(`[AutoAcquire] qBittorrent search did not return an id | query="${query}"`);
         return {
             success: false,
             query,
@@ -442,6 +447,8 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
         : seededExactSearchFallback;
 
     if (!selectedSearchCandidate || !selectedSearchCandidate.magnetUrl) {
+        const topCandidates = scored.candidates.slice(0, 3).map((row) => `${row.title} [score=${row.confidenceScore} seeds=${row.seeds}]`).join(' | ');
+        logger.warn(`[AutoAcquire] No confident result | query="${query}" searchId=${searchId} status=${collected?.stats?.status || 'unknown'} top=${topCandidates || 'none'}`);
         return {
             success: false,
             query,
@@ -463,6 +470,8 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
     const selectionSource = selectedSearchCandidate === seededExactSearchFallback
         ? 'search-seeded-exact-fallback'
         : 'search-confidence';
+
+    logger.info(`[AutoAcquire] Selected search result | query="${query}" source=${selectionSource} title="${selectedSearchCandidate.title}" score=${selectedSearchCandidate.confidenceScore || 'n/a'} seeds=${selectedSearchCandidate.seeds || 0}`);
 
     return {
         success: true,

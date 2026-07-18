@@ -328,7 +328,15 @@
         }
 
         function pickQueueReplacementContext(item) {
-            const title = String(item?.mediaTitle || item?.title || item?.payload?.mediaTitle || item?.payload?.torrentName || '').trim();
+            const title = String(
+                item?.payload?.searchIntent?.title ||
+                item?.payload?.queueContext?.mediaTitle ||
+                item?.payload?.mediaTitle ||
+                item?.mediaTitle ||
+                item?.title ||
+                item?.payload?.torrentName ||
+                ''
+            ).trim();
             const queueContext = item?.payload?.queueContext || {};
             const parsedFromTitle = parseSeasonEpisodeFromText(title);
             const contentType = String(item?.contentType || queueContext?.contentType || '').toLowerCase();
@@ -350,8 +358,8 @@
 
             return {
                 query: cleanedTitle || title,
-                officialTitle: cleanedTitle || String(item?.mediaTitle || item?.title || item?.payload?.mediaTitle || item?.payload?.torrentName || '').replace(/[._-]/g, ' ').trim(),
-                queueLabel: cleanedTitle || String(item?.mediaTitle || item?.title || item?.payload?.mediaTitle || item?.payload?.torrentName || 'Queue item').replace(/[._-]/g, ' ').trim(),
+                officialTitle: cleanedTitle || String(title || 'Queue item').replace(/[._-]/g, ' ').trim(),
+                queueLabel: cleanedTitle || String(title || 'Queue item').replace(/[._-]/g, ' ').trim(),
                 imdbId,
                 contentType: isSeries ? 'series' : 'movie',
                 season,

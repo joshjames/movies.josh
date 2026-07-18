@@ -177,6 +177,7 @@
         const showId = params.get('id'); 
         let serverShowData = null;
         let episodeManagerCache = null;
+        let episodeManagerIsAdmin = false;
 
         async function initPage() {
             if (!showId) {
@@ -184,6 +185,8 @@
                 window.location.href = "/";
                 return;
             }
+
+            await loadEpisodeManagerAccess();
 
             try {
                 const cleanFolder = showId.replace('series/', '');
@@ -232,6 +235,10 @@
         }
 
         function openEpisodeManager() {
+            if (!episodeManagerIsAdmin) {
+                alert('Episode Manager is restricted to admin users.');
+                return;
+            }
             const overlay = document.getElementById('episode-manager-overlay');
             overlay.classList.add('show');
             reloadEpisodeManager();
@@ -245,6 +252,26 @@
         function managerApiPath() {
             const cleanFolder = showId.replace('series/', '');
             return `/api/series/${encodeURIComponent(cleanFolder)}/episode-manager`;
+        }
+
+        async function loadEpisodeManagerAccess() {
+            try {
+                const res = await fetch('/api/account/profile');
+                const data = await res.json();
+                const user = data?.user || {};
+                const key = String(user?.userKey || user?.displayName || '').toLowerCase();
+                const isAdmin = user?.isAdmin === true || key === 'josh' || key.startsWith('josh@');
+                episodeManagerIsAdmin = Boolean(isAdmin);
+
+                const btn = document.querySelector('button[onclick="openEpisodeManager()"]');
+                if (btn && !episodeManagerIsAdmin) {
+                    btn.style.display = 'none';
+                }
+            } catch (_err) {
+                episodeManagerIsAdmin = false;
+                const btn = document.querySelector('button[onclick="openEpisodeManager()"]');
+                if (btn) btn.style.display = 'none';
+            }
         }
 
         function renderEpisodeManagerTable(payload) {
@@ -285,6 +312,11 @@
                         </td>
                         <td>
                             <div class="episode-manager-meta">${escapeHtml(item.videoFile || '(no local file)')}</div>
+                            <div style="height:8px"></div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" onclick="probeEpisode(${item.seasonNumber}, ${item.episodeNumber})" style="background:#1d4ed8;">Probe</button>
+                                <button type="button" onclick="audioFixEpisode(${item.seasonNumber}, ${item.episodeNumber})" style="background:#b45309;">Force Audio Fix</button>
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -330,6 +362,51 @@
             } catch (err) {
                 document.getElementById('episode-manager-table-wrap').innerHTML = `<div style="color:#f87171; padding:20px;">${escapeHtml(err.message)}</div>`;
                 setEpisodeManagerStatus(`Load failed: ${err.message}`, true);
+            }
+        }
+
+        async function probeEpisode(seasonNumber, episodeNumber) {
+            try {
+                setEpisodeManagerStatus(`Probing S${seasonNumber}E${episodeNumber}...`);
+                const url = `${managerApiPath()}/probe?season=${encodeURIComponent(String(seasonNumber))}&episode=${encodeURIComponent(String(episodeNumber))}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Probe failed (${res.status})`);
+                }
+
+                const audioSummary = Array.isArray(data?.probe?.audioStreams)
+                    ? data.probe.audioStreams.map((row) => `${row.codec || 'audio'} ${row.channels || 0}ch ${row.language || 'und'}`).join(' | ')
+                    : 'No audio stream data';
+
+                alert(`Probe: S${seasonNumber}E${episodeNumber}\nFile: ${data?.probe?.file || 'unknown'}\nNeeds downmix: ${data?.probe?.requiresDownmix ? 'yes' : 'no'}\nAudio: ${audioSummary}`);
+                setEpisodeManagerStatus(`Probe complete for S${seasonNumber}E${episodeNumber}.`);
+            } catch (err) {
+                setEpisodeManagerStatus(`Probe failed: ${err.message}`, true);
+            }
+        }
+
+        async function audioFixEpisode(seasonNumber, episodeNumber) {
+            try {
+                const ok = confirm(`Run audio-only downmix for S${seasonNumber}E${episodeNumber}? This creates/updates a .web.mp4 profile for that episode.`);
+                if (!ok) return;
+
+                setEpisodeManagerStatus(`Transcoding audio for S${seasonNumber}E${episodeNumber}...`);
+                const res = await fetch(`${managerApiPath()}/audio-fix`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ seasonNumber, episodeNumber })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Audio fix failed (${res.status})`);
+                }
+
+                setEpisodeManagerStatus(`Audio fix complete for S${seasonNumber}E${episodeNumber}.`);
+                await reloadEpisodeManager();
+                await initPage();
+            } catch (err) {
+                setEpisodeManagerStatus(`Audio fix failed: ${err.message}`, true);
             }
         }
 
@@ -424,6 +501,8 @@
         }
 
         window.onload = initPage;
+        window.probeEpisode = probeEpisode;
+        window.audioFixEpisode = audioFixEpisode;
     </script>
 </body>
 </html>

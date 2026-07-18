@@ -633,9 +633,11 @@ async function promoteWaitingJobFromFilesystem(job) {
 
 async function processSeriesSearchJob(job) {
     const intent = (job?.payload && typeof job.payload.searchIntent === 'object') ? job.payload.searchIntent : {};
+    logger.info(`🔎 [Queue][SEARCH] Job ${job?.id || 'unknown'} intent | title="${intent.title || 'n/a'}" imdb=${intent.imdbId || 'n/a'} season=${intent.season || '-'} episode=${intent.episode || '-'} sourceType=${intent.sourceType || 'episode'}`);
     const searchOutcome = await SeriesAcquisitionService.resolveAutoSeriesAcquisition(intent);
 
     if (!searchOutcome?.success || !searchOutcome.magnetUrl) {
+        logger.warn(`❌ [Queue][SEARCH] Job ${job?.id || 'unknown'} failed | query="${searchOutcome?.query || 'n/a'}" error="${searchOutcome?.error || 'No confident search result found for automatic queueing.'}"`);
         return updateJob(job, {
             status: 'FAILED',
             currentStep: 'FAILED',
@@ -660,6 +662,7 @@ async function processSeriesSearchJob(job) {
     });
 
     const { torrentName, infoHash } = extractMagnetRuntimeInfo(searchOutcome.magnetUrl);
+    logger.info(`✅ [Queue][SEARCH] Job ${job?.id || 'unknown'} selected | query="${searchOutcome.query || 'n/a'}" title="${searchOutcome?.selected?.title || torrentName || 'n/a'}" source=${searchOutcome.source || 'search'} hash=${infoHash || 'n/a'}`);
     return updateJob(job, {
         status: 'WAITING_DOWNLOAD',
         currentStep: 'INGEST',

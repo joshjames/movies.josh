@@ -1172,6 +1172,125 @@ function normalizeEpisodeManagerUpdate(update = {}) {
     };
 }
 
+async function isPrivilegedMediaAdmin(req) {
+    const activeUser = String(getActiveUser(req) || '').toLowerCase().trim();
+    if (!activeUser) return false;
+    if (activeUser === 'josh' || activeUser.startsWith('josh@')) return true;
+
+    try {
+        const config = await ProfileService.readData(activeUser, 'config', {});
+        return config?.isAdmin === true;
+    } catch (_err) {
+        return false;
+    }
+}
+
+function resolveEpisodeEntry(seriesData, seasonNumber, episodeNumber) {
+    const seasonKey = String(seasonNumber || '').trim();
+    const episodeNum = Number(episodeNumber);
+    if (!seasonKey || !Number.isFinite(episodeNum) || episodeNum <= 0) return null;
+
+    const episodes = Array.isArray(seriesData?.seasons?.[seasonKey]?.episodes)
+        ? seriesData.seasons[seasonKey].episodes
+        : [];
+    return episodes.find((ep) => Number(ep?.episodeNumber) === episodeNum) || null;
+}
+
+function absoluteToSeriesRelativePath(absolutePath) {
+    const normalizedAbsolute = path.resolve(String(absolutePath || ''));
+    const roots = getSeriesRoots().map((root) => path.resolve(root));
+
+    for (const root of roots) {
+        const prefix = `${root}${path.sep}`;
+        if (normalizedAbsolute.startsWith(prefix)) {
+            return path.relative(root, normalizedAbsolute).split(path.sep).join('/');
+        }
+    }
+
+    return '';
+}
+
+function probeVideoDiagnostics(videoPath) {
+    const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'format=duration,bit_rate,size:stream=index,codec_type,codec_name,channels,channel_layout,width,height,avg_frame_rate:stream_tags=language,title',
+        '-of', 'json',
+        videoPath
+    ], { encoding: 'utf8' });
+
+    if (probe.status !== 0) {
+        const stderr = String(probe.stderr || probe.stdout || '').trim();
+        throw new Error(stderr || 'ffprobe failed for episode video.');
+    }
+
+    const parsed = JSON.parse(probe.stdout || '{}');
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const audioStreams = streams
+        .filter((stream) => stream.codec_type === 'audio')
+        .map((stream) => ({
+            index: Number(stream.index),
+            codec: String(stream.codec_name || '').toLowerCase(),
+            channels: Number(stream.channels) || 0,
+            channelLayout: String(stream.channel_layout || ''),
+            language: String(stream.tags?.language || 'und').toLowerCase(),
+            title: String(stream.tags?.title || '')
+        }));
+
+    const browserSafeAudio = new Set(['aac', 'mp3']);
+    const requiresDownmix = audioStreams.some((stream) => !browserSafeAudio.has(stream.codec) || (stream.channels > 2));
+
+    return {
+        file: path.basename(videoPath),
+        path: videoPath,
+        format: {
+            durationSec: Number(parsed?.format?.duration || 0),
+            bitRate: Number(parsed?.format?.bit_rate || 0),
+            sizeBytes: Number(parsed?.format?.size || 0)
+        },
+        streams,
+        audioStreams,
+        requiresDownmix
+    };
+}
+
+function runEpisodeAudioDownmixTranscode(videoPath) {
+    const source = path.resolve(String(videoPath || ''));
+    const parsed = path.parse(source);
+    const stem = String(parsed.name || '').replace(/\.web$/i, '');
+    const outputPath = path.join(parsed.dir, `${stem}.web.mp4`);
+    const tempOutputPath = path.join(parsed.dir, `${stem}.web.audiofix.tmp.mp4`);
+
+    const args = [
+        '-y',
+        '-i', source,
+        '-map', '0:v:0',
+        '-map', '0:a:0',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-b:a', '160k',
+        '-movflags', '+faststart',
+        tempOutputPath
+    ];
+
+    const transcode = spawnSync('ffmpeg', args, { encoding: 'utf8' });
+    if (transcode.status !== 0 || !fs.existsSync(tempOutputPath)) {
+        const stderr = String(transcode.stderr || transcode.stdout || '').trim();
+        throw new Error(stderr || 'ffmpeg downmix transcode failed.');
+    }
+
+    if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+    }
+    fs.renameSync(tempOutputPath, outputPath);
+
+    return {
+        source,
+        outputPath,
+        sourceReplaced: path.resolve(outputPath) === source
+    };
+}
+
 function buildEpisodeManagerItems(showFolder, showPath, seriesData) {
     const seasons = seriesData?.seasons || {};
     const items = [];
@@ -2292,6 +2411,11 @@ router.get('/series/:showFolder', async (req, res) => {
 
 router.get('/series/:showFolder/episode-manager', async (req, res) => {
     try {
+        const allowed = await isPrivilegedMediaAdmin(req);
+        if (!allowed) {
+            return res.status(403).json({ success: false, error: 'Admin privileges are required for Episode Manager.' });
+        }
+
         const resolved = await resolveSeriesShowFolder(req.params.showFolder);
         if (!resolved) {
             return res.status(404).json({ success: false, error: 'Show folder not found.' });
@@ -2313,6 +2437,11 @@ router.get('/series/:showFolder/episode-manager', async (req, res) => {
 
 router.post('/series/:showFolder/episode-manager', async (req, res) => {
     try {
+        const allowed = await isPrivilegedMediaAdmin(req);
+        if (!allowed) {
+            return res.status(403).json({ success: false, error: 'Admin privileges are required for Episode Manager.' });
+        }
+
         const resolved = await resolveSeriesShowFolder(req.params.showFolder);
         if (!resolved) {
             return res.status(404).json({ success: false, error: 'Show folder not found.' });
@@ -2407,6 +2536,120 @@ router.post('/series/:showFolder/episode-manager', async (req, res) => {
 
         const payload = buildEpisodeManagerItems(showFolder, showPath, seriesData);
         return res.json({ success: true, changed, ...payload });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/series/:showFolder/episode-manager/probe', async (req, res) => {
+    try {
+        const allowed = await isPrivilegedMediaAdmin(req);
+        if (!allowed) {
+            return res.status(403).json({ success: false, error: 'Admin privileges are required for Episode Manager.' });
+        }
+
+        const seasonNumber = parseInt(req.query.season, 10);
+        const episodeNumber = parseInt(req.query.episode, 10);
+        if (!Number.isFinite(seasonNumber) || seasonNumber <= 0 || !Number.isFinite(episodeNumber) || episodeNumber <= 0) {
+            return res.status(400).json({ success: false, error: 'season and episode query params are required.' });
+        }
+
+        const resolved = await resolveSeriesShowFolder(req.params.showFolder);
+        if (!resolved) {
+            return res.status(404).json({ success: false, error: 'Show folder not found.' });
+        }
+
+        const seriesData = rebuildSeriesManifest(resolved.path, {
+            showFolderName: resolved.folder,
+            write: false
+        });
+
+        const entry = resolveEpisodeEntry(seriesData, seasonNumber, episodeNumber);
+        const localRelativePath = sanitizeSeriesRelativePath(entry?.localRelativePath || '');
+        const videoPath = localRelativePath ? resolveRelativePathInSeriesRoots(localRelativePath) : '';
+        if (!videoPath || !fs.existsSync(videoPath)) {
+            return res.status(404).json({ success: false, error: 'Episode video file not found for selected season/episode.' });
+        }
+
+        const probe = probeVideoDiagnostics(videoPath);
+        return res.json({
+            success: true,
+            showFolder: resolved.folder,
+            seasonNumber,
+            episodeNumber,
+            localRelativePath,
+            probe
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/series/:showFolder/episode-manager/audio-fix', async (req, res) => {
+    try {
+        const allowed = await isPrivilegedMediaAdmin(req);
+        if (!allowed) {
+            return res.status(403).json({ success: false, error: 'Admin privileges are required for Episode Manager.' });
+        }
+
+        const seasonNumber = parseInt(req.body?.seasonNumber, 10);
+        const episodeNumber = parseInt(req.body?.episodeNumber, 10);
+        if (!Number.isFinite(seasonNumber) || seasonNumber <= 0 || !Number.isFinite(episodeNumber) || episodeNumber <= 0) {
+            return res.status(400).json({ success: false, error: 'seasonNumber and episodeNumber are required.' });
+        }
+
+        const resolved = await resolveSeriesShowFolder(req.params.showFolder);
+        if (!resolved) {
+            return res.status(404).json({ success: false, error: 'Show folder not found.' });
+        }
+
+        const seriesData = rebuildSeriesManifest(resolved.path, {
+            showFolderName: resolved.folder,
+            write: false
+        });
+
+        const entry = resolveEpisodeEntry(seriesData, seasonNumber, episodeNumber);
+        if (!entry) {
+            return res.status(404).json({ success: false, error: 'Episode entry not found in series manifest.' });
+        }
+
+        const localRelativePath = sanitizeSeriesRelativePath(entry.localRelativePath || '');
+        const sourceVideoPath = localRelativePath ? resolveRelativePathInSeriesRoots(localRelativePath) : '';
+        if (!sourceVideoPath || !fs.existsSync(sourceVideoPath)) {
+            return res.status(404).json({ success: false, error: 'Episode source video was not found on disk.' });
+        }
+
+        const beforeProbe = probeVideoDiagnostics(sourceVideoPath);
+        const transcodeResult = runEpisodeAudioDownmixTranscode(sourceVideoPath);
+        const updatedRelativePath = absoluteToSeriesRelativePath(transcodeResult.outputPath);
+        if (!updatedRelativePath) {
+            return res.status(500).json({ success: false, error: 'Unable to compute updated relative path for transcoded episode.' });
+        }
+
+        entry.localRelativePath = sanitizeSeriesRelativePath(updatedRelativePath);
+        entry.available = true;
+
+        await fsPromises.writeFile(path.join(resolved.path, 'series.json'), JSON.stringify(seriesData, null, 4), 'utf-8');
+
+        const refreshedManifest = rebuildSeriesManifest(resolved.path, {
+            showFolderName: resolved.folder,
+            write: false
+        });
+        const refreshedEntry = resolveEpisodeEntry(refreshedManifest, seasonNumber, episodeNumber);
+        const refreshedAbs = refreshedEntry?.localRelativePath ? resolveRelativePathInSeriesRoots(refreshedEntry.localRelativePath) : '';
+        const afterProbe = refreshedAbs && fs.existsSync(refreshedAbs) ? probeVideoDiagnostics(refreshedAbs) : null;
+
+        return res.json({
+            success: true,
+            showFolder: resolved.folder,
+            seasonNumber,
+            episodeNumber,
+            sourceRelativePath: localRelativePath,
+            outputRelativePath: entry.localRelativePath,
+            beforeProbe,
+            afterProbe,
+            message: 'Audio downmix transcode complete. Episode now points to browser-safe web profile.'
+        });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

@@ -1612,6 +1612,7 @@ router.post('/downloader/add-auto', async (req, res) => {
 
         const showTitle = cleanTitle || cleanImdbId;
         const query = SeriesAcquisitionService.buildAutoSeriesSearchQuery(showTitle, seasonNum, episodeNum, normalizedSourceType);
+        logger.info(`[Auto Queue] Request | user=${activeUser || 'unknown'} imdb=${cleanImdbId} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${normalizedSourceType} query="${query}"`);
         const searchIntent = {
             title: showTitle,
             imdbId: cleanImdbId,
