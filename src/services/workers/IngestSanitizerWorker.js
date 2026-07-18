@@ -144,6 +144,7 @@ function analyzeDirectoryContents(dirPath) {
     const files = fs.readdirSync(dirPath);
     let tvMatches = [];
     let mediaCount = 0;
+    let videoCount = 0;
 
     for (const file of files) {
         const ext = path.extname(file).toLowerCase();
@@ -151,6 +152,9 @@ function analyzeDirectoryContents(dirPath) {
         if (file.toLowerCase().includes('sample')) continue;
 
         mediaCount++;
+        if (['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.mpeg', '.ogv', '.ts'].includes(ext)) {
+            videoCount += 1;
+        }
         const match = file.match(/s\s*(\d+)\s*e\s*(\d+)/i);
         if (match) {
             tvMatches.push({
@@ -162,7 +166,7 @@ function analyzeDirectoryContents(dirPath) {
     }
 
     return {
-        isSeasonPack: tvMatches.length > 0 && tvMatches.length === mediaCount,
+        isSeasonPack: tvMatches.length > 0 && tvMatches.length === videoCount,
         detectedEpisodes: tvMatches
     };
 }

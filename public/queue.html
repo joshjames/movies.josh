@@ -255,6 +255,7 @@
 
             if (status.includes('failed')) return 'Needs Attention';
             if (status.includes('paused')) return 'Paused';
+            if (stage === 'search') return 'Searching';
             if (stage === 'downloading') return 'Acquiring';
             if (stage === 'ingest') return 'Ingesting';
             if (stage === 'metadata') return 'Obtaining Details';

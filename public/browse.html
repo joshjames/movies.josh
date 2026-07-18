@@ -280,9 +280,6 @@
                     <option value="">TV Catalog: Trending</option>
                 </select>
 
-                <label class="checkbox-container" id="packsWrapper" style="display: none;">
-                    <input type="checkbox" id="packsOnlyIn"> Show Whole Seasons Only
-                </label>
             </div>
 
             <div class="catalogs-toggle-row" id="catalogs-toggle-row">
@@ -639,7 +636,6 @@
             document.getElementById('ratingIn').style.display = isMovie ? 'inline-block' : 'none';
             document.getElementById('sortIn').style.display = isMovie ? 'inline-block' : 'none';
             document.getElementById('tvCatalogIn').style.display = isMovie ? 'none' : 'inline-block';
-            document.getElementById('packsWrapper').style.display = isMovie ? 'none' : 'flex';
             document.getElementById('catalogs-toggle-row').style.display = isMovie ? 'flex' : 'none';
             document.getElementById('catalogs-drawer').style.display = isMovie ? 'block' : 'none';
 
@@ -684,11 +680,6 @@
         document.getElementById('tvCatalogIn').addEventListener('change', () => {
             activeTvCatalogSlug = String(document.getElementById('tvCatalogIn').value || '').trim();
             if (currentMode === 'shows' && !document.getElementById('searchIn').value.trim()) {
-                fetchShowCatalog();
-            }
-        });
-        document.getElementById('packsOnlyIn').addEventListener('change', () => {
-            if (currentMode === 'shows') {
                 fetchShowCatalog();
             }
         });
@@ -748,7 +739,7 @@
                                 <div class="meta">${yearLabel} • ${show.genres || 'Unknown genres'}</div>
                             </div>
                             ${openBtn}
-                            <button class="add-btn" style="background:#10b981;" onclick="loadShowTorrents('${show.imdbId}', '${safeTitle}')">Browse Episodes</button>
+                            <button class="add-btn" style="background:#10b981;" onclick="loadShowEpisodes('${show.imdbId}', '${safeTitle}')">Browse Episodes</button>
                         </div>
                     </div>
                 `;
@@ -890,13 +881,14 @@
                     <tr>
                         <td>
                             <div class="ep-title">S${season}E${episode}</div>
-                            <div class="ep-meta">${escapeHtml(row.originalTitle || row.title || '')}</div>
                         </td>
-                        <td>${escapeHtml(row.size || 'N/A')}</td>
-                        <td>▲ ${parseInt(row.seeds, 10) || 0}</td>
+                        <td>
+                            <div class="ep-meta">${escapeHtml(row.title || `Episode ${episodeNum}`)}</div>
+                        </td>
+                        <td>${escapeHtml(row.released || 'Unknown')}</td>
                         <td class="episode-add">
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Add Episode'}</button>
+                                <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Queue Episode'}</button>
                             </div>
                         </td>
                     </tr>
@@ -1065,15 +1057,14 @@
             }
         }
 
-        async function loadShowTorrents(imdbId, showTitle) {
+        async function loadShowEpisodes(imdbId, showTitle) {
             const grid = document.getElementById('catalog-grid');
-            const packsOnly = document.getElementById('packsOnlyIn').checked;
             const paginationWrapper = document.getElementById('pagination-wrapper');
 
             if (!grid || !paginationWrapper) return;
 
             paginationWrapper.innerHTML = '';
-            grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading releases for ${showTitle}...</div>`;
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">Loading episode metadata for ${showTitle}...</div>`;
 
             try {
                 let libraryStatus = {
@@ -1093,86 +1084,83 @@
                         };
                     }
                 } catch (_libErr) {
-                    // Non-fatal: EZTV browsing still works without local availability data.
+                    // Non-fatal: the browser can still load metadata without local availability data.
                 }
 
-                const res = await fetch(`/api/eztv/browse?imdbId=${encodeURIComponent(imdbId)}&packsOnly=${packsOnly}&consolidated=false`);
+                const res = await fetch(`/api/tv-shows/${encodeURIComponent(imdbId)}/episodes`);
                 const data = await parseJsonOrThrow(res);
 
-                if (!data.success || !data.torrents || data.torrents.length === 0) {
-                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No releases found for ${showTitle}.</div>`;
+                if (!data.success || !Array.isArray(data.seasons) || data.seasons.length === 0) {
+                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No episode metadata found for ${showTitle}.</div>`;
                     return;
                 }
 
-                const best = chooseBestEpisodeRows(data.torrents);
                 const availableEpisodeSet = new Set(Array.isArray(libraryStatus.availableEpisodeKeys) ? libraryStatus.availableEpisodeKeys : []);
                 const completeSeasonSet = new Set(
                     (Array.isArray(libraryStatus.seasons) ? libraryStatus.seasons : [])
                         .filter((season) => Number(season.totalEpisodes || 0) > 0 && Number(season.availableCount || 0) >= Number(season.totalEpisodes || 0))
                         .map((season) => Number(season.seasonNumber))
                 );
-                const episodesBySeason = new Map();
-                for (const row of best.episodes) {
-                    const season = parseInt(row.season, 10);
-                    if (!episodesBySeason.has(season)) episodesBySeason.set(season, []);
-                    episodesBySeason.get(season).push(row);
-                }
 
-                const seasonSections = Array.from(episodesBySeason.entries())
-                    .sort((a, b) => a[0] - b[0])
-                    .map(([season, rows]) => {
-                        const seededCount = rows.filter(r => (parseInt(r.seeds, 10) || 0) > 0).length;
-                        const inLibraryCount = rows.filter((r) => {
-                            const key = `${parseInt(r.season, 10) || 0}-${parseInt(r.episode, 10) || 0}`;
+                const seasonSections = data.seasons
+                    .slice()
+                    .sort((a, b) => Number(a.seasonNumber) - Number(b.seasonNumber))
+                    .map((season) => {
+                        const rows = Array.isArray(season.episodes) ? season.episodes : [];
+                        const seasonNum = Number(season.seasonNumber) || 0;
+                        const inLibraryCount = rows.filter((row) => {
+                            const key = `${seasonNum}-${parseInt(row.episodeNumber, 10) || 0}`;
                             return availableEpisodeSet.has(key);
                         }).length;
                         return `
                             <details class="season-panel" open>
-                                <summary class="season-summary"><strong>Season ${season}</strong><span>${rows.length} episodes • ${seededCount} seeded • ${inLibraryCount} in library</span></summary>
+                                <summary class="season-summary"><strong>Season ${seasonNum}</strong><span>${rows.length} episodes • ${inLibraryCount} in library</span></summary>
                                 <div style="padding:8px 10px; border-top:1px solid #263247; background:#0f1b31; display:flex; gap:8px; flex-wrap:wrap;">
-                                    <button class="add-btn" style="padding:6px 10px;" ${completeSeasonSet.has(Number(season)) ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${season}, 0, 'pack')">${completeSeasonSet.has(Number(season)) ? 'Season Complete' : 'Add Whole Season'}</button>
-                                    ${completeSeasonSet.has(Number(season)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
+                                    <button class="add-btn" style="padding:6px 10px;" ${completeSeasonSet.has(Number(seasonNum)) ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${seasonNum}, 0, 'pack')">${completeSeasonSet.has(Number(seasonNum)) ? 'Season Complete' : 'Queue Whole Season'}</button>
+                                    ${completeSeasonSet.has(Number(seasonNum)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
                                 </div>
                                 <table class="episode-table">
                                     <thead>
-                                        <tr><th>Episode</th><th>Size</th><th>Seeds</th><th>Action</th></tr>
+                                        <tr><th>Episode</th><th>Title</th><th>Released</th><th>Action</th></tr>
                                     </thead>
                                     <tbody>
-                                        ${renderEpisodeTableRows(rows, { availableEpisodeSet, showTitle, imdbId })}
+                                        ${renderEpisodeTableRows(rows.map((row) => ({
+                                            season: seasonNum,
+                                            episode: row.episodeNumber,
+                                            title: row.title,
+                                            released: row.released,
+                                            imdbRating: row.imdbRating
+                                        })), { availableEpisodeSet, showTitle: data.title || showTitle, imdbId })}
                                     </tbody>
                                 </table>
                             </details>
                         `;
                     }).join('');
 
-                const showCover = tvCoverByImdb[String(imdbId)] || (data.torrents[0] && data.torrents[0].cover) || '';
+                const showCover = data.cover || tvCoverByImdb[String(imdbId)] || '';
 
                 grid.innerHTML = `
                     <div style="grid-column: 1/-1; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:4px;">
                         <div>
-                            <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${showTitle}</h2>
-                            <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.torrents.length} rows • Whole seasons only: ${packsOnly ? 'ON' : 'OFF'} • Mode: ${data.consolidated ? 'consolidated' : 'raw'}</div>
+                            <h2 style="margin:0 0 4px 0; font-size:1.1rem; color:#f8fafc;">${data.title || showTitle}</h2>
+                            <div style="color:#94a3b8; font-size:0.85rem;">IMDb ${imdbId} • ${data.episodeCount || 0} episodes across ${data.totalSeasons || data.seasons.length} seasons</div>
                             ${libraryStatus.inLibrary ? `<div style="color:#86efac; font-size:0.82rem; margin-top:4px;">Already in library${libraryStatus.show?.localHref ? ` • <a href="${libraryStatus.show.localHref}" style="color:#86efac; text-decoration:underline;">open show</a>` : ''}</div>` : ''}
-                            ${(typeof data.packRows === 'number' && typeof data.episodeRows === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Rows: ${data.packRows} pack • ${data.episodeRows} episode rows</div>` : ''}
-                            ${(typeof data.totalEpisodeCandidates === 'number' && typeof data.uniqueEpisodeCandidates === 'number') ? `<div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Episode candidates: ${data.totalEpisodeCandidates} • Unique SxE: ${data.uniqueEpisodeCandidates} • Seeded rows: ${data.nonZeroSeedRows || 0}</div>` : ''}
-                            ${data.packsFallbackUsed ? '<div style="color:#f59e0b; font-size:0.8rem; margin-top:4px;">No seeded season packs found; showing unseeded pack rows where available.</div>' : ''}
-                            ${Array.isArray(data.upstreamWarnings) && data.upstreamWarnings.length ? `<div style="color:#f97316; font-size:0.8rem; margin-top:4px;">${data.upstreamWarnings[0]}</div>` : ''}
+                            <div style="color:#94a3b8; font-size:0.8rem; margin-top:4px;">Browse reflects IMDb season/episode metadata. Queue buttons hand off discovery to the backend job pipeline.</div>
                         </div>
                         <button class="page-btn" style="background:#334155;" onclick="fetchShowCatalog()">Back to Shows</button>
                     </div>
                     <div class="show-overview">
                         <img src="${sanitizeImageSrc(showCover)}" onerror="handleImageFallback(this)" alt="${escapeHtml(showTitle)} cover">
                         <div class="show-overview-meta">
-                            <h2>${escapeHtml(showTitle)}</h2>
-                            <div class="line">Grouped by season. Use Add Episode / Add Whole Season for automatic ingest.</div>
-                            <div class="line">Episodes shown: ${best.episodes.length} • Pack rows: ${best.packs.length}</div>
+                            <h2>${escapeHtml(data.title || showTitle)}</h2>
+                            <div class="line">Grouped by season. Use Queue Episode / Queue Whole Season to create a job.</div>
+                            <div class="line">Provider: ${escapeHtml(data.provider || 'unknown')} • Seasons loaded: ${data.seasons.length}</div>
                         </div>
                     </div>
-                    ${renderPackRows(best.packs, { showTitle, imdbId, completeSeasonSet })}
                     ${seasonSections || '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No episode rows available after filtering.</div>'}
                 `;
             } catch (err) {
-                grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading releases for this show. ${err && err.message ? err.message : ''}</div>`;
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#f43f5e;">Error loading episodes for this show. ${err && err.message ? err.message : ''}</div>`;
             }
         }
 
@@ -1237,7 +1225,7 @@
         async function addSeriesAutoAsset(btn, showTitle, imdbId = '', season = 0, episode = 0, sourceType = 'episode') {
             btn.disabled = true;
             btn.style.background = '#475569';
-            btn.innerText = 'Finding Best Match...';
+            btn.innerText = 'Queueing Search Job...';
 
             try {
                 const parsedSeason = parseInt(season, 10);
@@ -1269,7 +1257,7 @@
                 btn.disabled = false;
                 btn.style.background = '#10b981';
                 const isPack = String(sourceType || '').toLowerCase() === 'pack';
-                btn.innerText = isPack ? 'Add Whole Season' : 'Add Episode';
+                btn.innerText = isPack ? 'Queue Whole Season' : 'Queue Episode';
             }
         }
 

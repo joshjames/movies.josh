@@ -13,6 +13,7 @@ const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback, normalizeCard } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const metadataProvider = require('../services/MetadataProvider');
 const ProfileService = require('../services/ProfileService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
 const {
@@ -1219,6 +1220,85 @@ function buildEpisodeManagerItems(showFolder, showPath, seriesData) {
     };
 }
 
+async function buildTvSeasonBrowser(imdbId) {
+    const cleanImdbId = formatImdbId(imdbId);
+    if (!cleanImdbId) return null;
+
+    const indexItem = getSeriesByImdbId(cleanImdbId);
+    const fallbackTitle = String(indexItem?.title || indexItem?.originalTitle || '').trim();
+    const fallbackYear = String(indexItem?.startYear || '').trim();
+
+    const metadataLookup = await metadataProvider.fetchMetadataWithFallback({
+        imdbId: cleanImdbId,
+        title: fallbackTitle,
+        year: fallbackYear,
+        contentType: 'series'
+    });
+
+    const metadata = metadataLookup?.data && metadataLookup.data.Response === 'True'
+        ? metadataLookup.data
+        : null;
+
+    if (!metadata) return null;
+
+    const totalSeasons = Number.isFinite(parseInt(metadata.totalSeasons, 10)) ? parseInt(metadata.totalSeasons, 10) : null;
+    const maxProbeSeasons = totalSeasons && totalSeasons > 0 ? totalSeasons : 25;
+    const showTitle = String(metadata.Title || fallbackTitle || '').trim();
+    const seasons = [];
+    let emptyStreak = 0;
+
+    for (let seasonNumber = 1; seasonNumber <= maxProbeSeasons; seasonNumber += 1) {
+        const episodes = await metadataProvider.fetchSeasonEpisodesWithFallback({
+            imdbId: cleanImdbId,
+            title: showTitle,
+            season: seasonNumber,
+            tmdbId: metadata.tmdbId || null
+        });
+
+        if (!Array.isArray(episodes) || episodes.length === 0) {
+            if (!totalSeasons && seasons.length > 0) {
+                emptyStreak += 1;
+                if (emptyStreak >= 2) break;
+            }
+            continue;
+        }
+
+        emptyStreak = 0;
+        const normalizedEpisodes = episodes
+            .map((episode) => ({
+                episodeNumber: Number(episode.Episode),
+                title: String(episode.Title || '').trim() || `Episode ${episode.Episode}`,
+                released: String(episode.Released || '').trim() || 'Unknown',
+                imdbRating: String(episode.imdbRating || '').trim() || 'N/A'
+            }))
+            .filter((episode) => Number.isFinite(episode.episodeNumber) && episode.episodeNumber > 0)
+            .sort((a, b) => a.episodeNumber - b.episodeNumber);
+
+        seasons.push({
+            seasonNumber,
+            totalEpisodes: normalizedEpisodes.length,
+            episodes: normalizedEpisodes
+        });
+    }
+
+    const episodeCount = seasons.reduce((sum, season) => sum + season.totalEpisodes, 0);
+
+    return {
+        imdbId: cleanImdbId,
+        title: showTitle,
+        originalTitle: String(metadata.originalTitle || showTitle || '').trim(),
+        startYear: String(metadata.Year || fallbackYear || '').trim(),
+        endYear: String(metadata.endYear || '').trim(),
+        plot: String(metadata.Plot || '').trim(),
+        genres: String(metadata.Genre || '').trim(),
+        cover: cleanImdbId ? `/api/tv-shows/${encodeURIComponent(cleanImdbId)}/cover` : '',
+        provider: metadataLookup.provider || 'unknown',
+        totalSeasons: String(totalSeasons || seasons.length || 0),
+        episodeCount,
+        seasons
+    };
+}
+
 // =========================================================================
 // ENDPOINTS
 // =========================================================================
@@ -1393,6 +1473,27 @@ router.get('/tv-shows/:imdbId', (req, res) => {
             return res.status(404).json({ success: false, error: 'Series not found in local index.' });
         }
         return res.json({ success: true, item: withCover(item) });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-shows/:imdbId/episodes', async (req, res) => {
+    try {
+        const imdbId = formatImdbId(req.params.imdbId);
+        if (!imdbId) {
+            return res.status(400).json({ success: false, error: 'Invalid IMDb ID.' });
+        }
+
+        const browser = await buildTvSeasonBrowser(imdbId);
+        if (!browser) {
+            return res.status(404).json({ success: false, error: 'Series not found in IMDb metadata.' });
+        }
+
+        return res.json({
+            success: true,
+            ...browser
+        });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

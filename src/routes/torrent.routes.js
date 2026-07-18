@@ -22,6 +22,7 @@ const {
 const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
 const TorrentSearchService = require('../services/TorrentSearchService');
+const SeriesAcquisitionService = require('../services/SeriesAcquisitionService');
 const MetadataRegistry = require('../services/MetadataRegistry');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { resolveSeriesFolderPath } = require('../services/StoragePathResolver');
@@ -209,7 +210,7 @@ function getJobOwner(job) {
 }
 
 function inferRetryStep(job) {
-    const validSteps = new Set(['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC']);
+    const validSteps = new Set(['SEARCH', 'INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC']);
     const current = String(job?.currentStep || '').toUpperCase();
     if (validSteps.has(current)) return current;
 
@@ -341,7 +342,7 @@ function buildAutoSeriesSearchQuery(showTitle, season = null, episode = null, so
         return `${title} S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`.trim();
     }
     if (s && source === 'pack') {
-        return `${title} season ${s} complete`.trim();
+        return `${title} S${String(s).padStart(2, '0')} season pack complete`.trim();
     }
     if (s) {
         return `${title} season ${s}`.trim();
@@ -433,6 +434,7 @@ function mapRawSearchRow(raw = {}) {
     const sizeBytes = parseFloat(raw?.fileSize ?? raw?.size ?? 0) || 0;
     const source = String(raw?.siteUrl || raw?.site || '').trim();
     const parsed = parseSeasonEpisodeFromTitle(title);
+    const sourceType = looksLikeSeasonPack(title) ? 'pack' : 'episode';
 
     return {
         title,
@@ -444,6 +446,7 @@ function mapRawSearchRow(raw = {}) {
         season: parsed.season,
         episode: parsed.episode,
         quality: inferQualityLabel(title),
+        sourceType,
         raw
     };
 }
@@ -466,6 +469,10 @@ function scoreAutoSeriesCandidate(candidate, context = {}) {
     const season = Number.isFinite(parseInt(context.season, 10)) ? parseInt(context.season, 10) : null;
     const episode = Number.isFinite(parseInt(context.episode, 10)) ? parseInt(context.episode, 10) : null;
     const sourceType = String(context.sourceType || '').toLowerCase();
+
+    if (sourceType === 'pack' && candidate.sourceType !== 'pack') {
+        return Number.NEGATIVE_INFINITY;
+    }
 
     if (season && candidate.season === season) score += 90;
     if (season && candidate.season && candidate.season !== season) score -= 140;
@@ -492,10 +499,12 @@ function pickBestAutoSeriesCandidate(rows = [], context = {}) {
     const candidates = rows
         .map(mapRawSearchRow)
         .filter((row) => row.title && row.magnetUrl && row.magnetUrl.startsWith('magnet:?'))
+        .filter((row) => String(context.sourceType || '').toLowerCase() !== 'pack' || row.sourceType === 'pack')
         .map((row) => ({
             ...row,
             confidenceScore: scoreAutoSeriesCandidate(row, context)
         }))
+        .filter((row) => Number.isFinite(row.confidenceScore) && row.confidenceScore > Number.NEGATIVE_INFINITY)
         .sort((a, b) => b.confidenceScore - a.confidenceScore);
 
     return {
@@ -1553,7 +1562,7 @@ router.post('/downloader/add', async (req, res) => {
     }
 });
 
-// POST: /api/downloader/add-auto - Automatically search and queue best series match
+// POST: /api/downloader/add-auto - Create a search job for series acquisition
 router.post('/downloader/add-auto', async (req, res) => {
     const {
         title,
@@ -1581,18 +1590,6 @@ router.post('/downloader/add-auto', async (req, res) => {
         return res.status(400).json({ success: false, error: 'episode requires season.' });
     }
 
-    const showTitle = cleanTitle || cleanImdbId;
-    const query = buildAutoSeriesSearchQuery(showTitle, seasonNum, episodeNum, normalizedSourceType);
-    const queueContext = {
-        imdbId: cleanImdbId || null,
-        season: seasonNum,
-        episode: episodeNum,
-        sourceType: normalizedSourceType,
-        addedByUser: activeUser || null
-    };
-
-    let searchId = null;
-
     try {
         const libraryStatus = await getSeriesLibraryAvailabilityByImdb(cleanImdbId);
         if (isSeriesRequestAlreadyInLibrary(libraryStatus, {
@@ -1613,160 +1610,47 @@ router.post('/downloader/add-auto', async (req, res) => {
             });
         }
 
-        const eztvSelection = await selectBestEztvAutoCandidate({
+        const showTitle = cleanTitle || cleanImdbId;
+        const query = SeriesAcquisitionService.buildAutoSeriesSearchQuery(showTitle, seasonNum, episodeNum, normalizedSourceType);
+        const searchIntent = {
+            title: showTitle,
             imdbId: cleanImdbId,
             season: seasonNum,
             episode: episodeNum,
-            sourceType: normalizedSourceType
-        });
-
-        if (eztvSelection?.best?.magnet) {
-            const magnetUrl = String(eztvSelection.best.magnet || '').trim();
-            const effectiveImdbId = cleanImdbId || queueContext.imdbId || null;
-
-            const queued = await queueAutoSeriesMagnet({
-                magnetUrl,
-                effectiveImdbId,
-                activeUser,
-                queueContext,
-                source: 'eztv'
-            });
-
-            logger.info(
-                `[Auto Queue] selected EZTV candidate imdb=${effectiveImdbId || 'n/a'} ` +
-                `S${seasonNum || 0}E${episodeNum || 0} source=${normalizedSourceType} ` +
-                `seeds=${parseInt(eztvSelection.best.seeds, 10) || 0} peers=${parseInt(eztvSelection.best.peers, 10) || 0}`
-            );
-
-            return res.json({
-                success: true,
-                message: 'Queued via EZTV exact match.',
-                query,
-                selected: {
-                    title: eztvSelection.best.originalTitle || eztvSelection.best.title || 'EZTV release',
-                    seeds: parseInt(eztvSelection.best.seeds, 10) || 0,
-                    peers: parseInt(eztvSelection.best.peers, 10) || 0,
-                    season: parseInt(eztvSelection.best.season, 10) || null,
-                    episode: parseInt(eztvSelection.best.episode, 10) || null,
-                    source: 'eztv'
-                },
-                eztv: eztvSelection.diagnostics,
-                job: queued.queuedJob
-            });
-        }
-
-        const started = await TorrentSearchService.startSearch({
-            query,
+            sourceType: normalizedSourceType,
             category: String(category || 'tv').trim() || 'tv',
-            plugins: String(plugins || 'enabled').trim() || 'enabled'
-        });
-
-        searchId = started?.id || null;
-        if (!searchId) {
-            return res.status(502).json({ success: false, error: 'Search did not return a valid id.' });
-        }
-
-        const collected = await collectAutoSeriesSearchCandidates(searchId, {
-            showTitle,
-            imdbId: cleanImdbId,
-            season: seasonNum,
-            episode: episodeNum,
-            sourceType: normalizedSourceType
-        }, {
-            maxWaitMs: Number.isFinite(parseInt(timeoutMs, 10)) ? parseInt(timeoutMs, 10) : undefined,
-            minWaitMs: parseInt(process.env.AUTO_SEARCH_MIN_WAIT_MS || '12000', 10),
-            pollMs: parseInt(process.env.AUTO_SEARCH_POLL_MS || '1800', 10),
-            settleWindowMs: parseInt(process.env.AUTO_SEARCH_SETTLE_MS || '8000', 10),
-            resultLimit: parseInt(process.env.AUTO_SEARCH_RESULT_LIMIT || '500', 10)
-        });
-        const scored = {
-            best: collected.best,
-            candidates: Array.isArray(collected.candidates) ? collected.candidates : []
+            plugins: String(plugins || 'enabled').trim() || 'enabled',
+            timeoutMs: Number.isFinite(parseInt(timeoutMs, 10)) ? parseInt(timeoutMs, 10) : null,
+            minScore: Number.isFinite(parseFloat(minScore)) ? parseFloat(minScore) : null,
+            addedByUser: activeUser || null
         };
 
-        const threshold = Number.isFinite(parseFloat(minScore)) ? parseFloat(minScore) : 90;
-        const seededExactSearchFallback = scored.candidates.find((row) => {
-            const rowSeason = Number.isFinite(parseInt(row?.season, 10)) ? parseInt(row.season, 10) : null;
-            const rowEpisode = Number.isFinite(parseInt(row?.episode, 10)) ? parseInt(row.episode, 10) : null;
-            const seeds = parseInt(row?.seeds, 10) || 0;
-            if (seeds <= 0) return false;
-            if (!seasonNum || rowSeason !== seasonNum) return false;
-            if (normalizedSourceType === 'pack') return !rowEpisode;
-            return Boolean(episodeNum && rowEpisode === episodeNum);
-        }) || null;
-
-        const selectedSearchCandidate = (scored.best && Number(scored.best.confidenceScore || 0) >= threshold)
-            ? scored.best
-            : seededExactSearchFallback;
-
-        if (!selectedSearchCandidate || !selectedSearchCandidate.magnetUrl) {
-            return res.status(404).json({
-                success: false,
-                error: 'No confident search result found for automatic queueing.',
-                query,
-                searchId,
-                searchStats: collected.stats,
-                bestScore: scored.best ? scored.best.confidenceScore : null,
-                threshold,
-                candidates: scored.candidates.slice(0, 5).map((row) => ({
-                    title: row.title,
-                    seeds: row.seeds,
-                    peers: row.peers,
-                    score: row.confidenceScore,
-                    season: row.season,
-                    episode: row.episode,
-                    quality: row.quality
-                }))
-            });
-        }
-
-        const magnetUrl = selectedSearchCandidate.magnetUrl;
-        const effectiveImdbId = cleanImdbId || queueContext.imdbId || null;
-        const selectionSource = selectedSearchCandidate === seededExactSearchFallback
-            ? 'search-seeded-exact-fallback'
-            : 'search-confidence';
-
-        logger.info(
-            `[Auto Queue] selected candidate imdb=${effectiveImdbId || 'n/a'} ` +
-            `S${seasonNum || 0}E${episodeNum || 0} source=${normalizedSourceType} ` +
-            `score=${Number(selectedSearchCandidate.confidenceScore || 0).toFixed(1)} ` +
-            `seeds=${selectedSearchCandidate.seeds || 0} status=${collected?.stats?.status || 'unknown'} ` +
-            `elapsedMs=${collected?.stats?.elapsedMs || 0} samples=${collected?.stats?.sampleCount || 0}`
-        );
-
-        const queued = await queueAutoSeriesMagnet({
-            magnetUrl,
-            effectiveImdbId,
-            activeUser,
-            queueContext,
-            source: selectionSource
+        const queuedJob = createJob({
+            status: 'QUEUED',
+            currentStep: 'SEARCH',
+            imdbId: cleanImdbId,
+            contentType: 'series',
+            payload: {
+                searchIntent,
+                queueContext: {
+                    imdbId: cleanImdbId,
+                    season: seasonNum,
+                    episode: episodeNum,
+                    sourceType: normalizedSourceType,
+                    addedByUser: activeUser || null
+                }
+            }
         });
 
         return res.json({
             success: true,
-            message: 'Auto-selected best match and queued for download.',
+            message: 'Search job queued. The queue will resolve a release if one exists.',
             query,
-            searchId,
-            selected: {
-                title: selectedSearchCandidate.title,
-                seeds: selectedSearchCandidate.seeds,
-                peers: selectedSearchCandidate.peers,
-                score: selectedSearchCandidate.confidenceScore,
-                season: selectedSearchCandidate.season,
-                episode: selectedSearchCandidate.episode,
-                quality: selectedSearchCandidate.quality,
-                source: selectionSource
-            },
-            searchStats: collected.stats,
-            job: queued.queuedJob
+            job: queuedJob
         });
     } catch (err) {
         logger.error(`[Auto Queue] add-auto failed: ${err.message}`);
         return res.status(500).json({ success: false, error: err.message });
-    } finally {
-        if (searchId) {
-            TorrentSearchService.deleteSearch(searchId).catch((_err) => {});
-        }
     }
 });
 
@@ -2079,6 +1963,7 @@ router.get('/pipeline/status', async (req, res) => {
 
             // Map job step to human-friendly status
             const stepStatusMap = {
+                'SEARCH': { display: 'Searching for Best Match', stage: 'search', progress: 5 },
                 'INGEST': { display: 'Ingesting (Organizing Files)', stage: 'ingest', progress: 15 },
                 'METADATA': { display: 'Fetching Metadata & Artwork', stage: 'metadata', progress: 30 },
                 'SUBTITLES': { display: 'Finding Subtitles', stage: 'subtitles', progress: 45 },
@@ -2361,7 +2246,7 @@ router.patch('/admin/queue/job/:jobId', async (req, res) => {
         }
 
         const validStatus = new Set(['WAITING_DOWNLOAD', 'QUEUED', 'PAUSED', 'PAUSED_DOWNLOAD', 'FAILED', 'COMPLETE']);
-        const validSteps = new Set(['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC', 'COMPLETE', 'FAILED']);
+        const validSteps = new Set(['SEARCH', 'INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC', 'COMPLETE', 'FAILED']);
 
         const nextStatus = body.status !== undefined
             ? String(body.status || '').trim().toUpperCase()

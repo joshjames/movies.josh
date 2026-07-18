@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../../utils/logger');
 const TorrentService = require('../TorrentService');
+const SeriesAcquisitionService = require('../SeriesAcquisitionService');
 const LibraryScanner = require('../LibraryScanner');
 const { getLibrary } = require('../db');
 const { normalizeCard, upsertRecentCard } = require('../HomeFeedService');
@@ -12,6 +13,7 @@ const MetadataRegistry = require('../MetadataRegistry');
 const ProfileService = require('../ProfileService');
 const MailerService = require('../MailerService');
 const SeriesFolderResolver = require('../SeriesFolderResolver');
+const { rebuildSeriesManifest } = require('../SeriesIndexService');
 const { buildDefaultWorkerEndpoints } = require('../WorkerEndpoints');
 const {
     userGroup,
@@ -538,6 +540,143 @@ async function enqueueCompletedTorrent(torrent) {
     return job;
 }
 
+function hasAvailableSeasonEpisode(manifest, season, episode) {
+    const seasonKey = String(season || '').trim();
+    const episodeNum = Number(episode);
+    if (!seasonKey || !Number.isFinite(episodeNum) || episodeNum <= 0) return false;
+
+    const seasonEntry = manifest?.seasons?.[seasonKey];
+    const episodes = Array.isArray(seasonEntry?.episodes) ? seasonEntry.episodes : [];
+    return episodes.some((ep) => {
+        const epNum = Number(ep?.episodeNumber);
+        return Number.isFinite(epNum) && epNum === episodeNum && (Boolean(ep?.available) || Boolean(String(ep?.localRelativePath || '').trim()));
+    });
+}
+
+function hasCompleteSeason(manifest, season) {
+    const seasonKey = String(season || '').trim();
+    if (!seasonKey) return false;
+
+    const seasonEntry = manifest?.seasons?.[seasonKey];
+    const episodes = Array.isArray(seasonEntry?.episodes) ? seasonEntry.episodes : [];
+    if (!episodes.length) return false;
+
+    return episodes.every((ep) => Boolean(ep?.available) || Boolean(String(ep?.localRelativePath || '').trim()));
+}
+
+async function promoteWaitingJobFromFilesystem(job) {
+    if (!job || String(job.status || '').toUpperCase() !== 'WAITING_DOWNLOAD') return null;
+    if ((job.contentType || '') !== 'series') return null;
+
+    const imdbId = normalizeImdbId(job.imdbId || job.payload?.imdbId || job.payload?.queueContext?.imdbId);
+    if (!imdbId) return null;
+
+    const season = normalizePositiveInt(job.payload?.queueContext?.season);
+    const episode = normalizePositiveInt(job.payload?.queueContext?.episode);
+    if (!season) return null;
+
+    const resolved = SeriesFolderResolver.findSeriesFolderByImdbId(imdbId);
+    if (!resolved?.folderPath || !fs.existsSync(resolved.folderPath)) return null;
+
+    let manifest = null;
+    try {
+        manifest = rebuildSeriesManifest(resolved.folderPath, {
+            showFolderName: resolved.folderName,
+            write: false
+        });
+    } catch (_err) {
+        return null;
+    }
+
+    const sourceType = String(job.payload?.queueContext?.sourceType || '').toLowerCase();
+    const promoted = sourceType === 'pack'
+        ? hasCompleteSeason(manifest, season)
+        : hasAvailableSeasonEpisode(manifest, season, episode);
+
+    if (!promoted) return null;
+
+    const cleanPath = path.join(resolved.folderPath, `Season.${String(season).padStart(2, '0')}`);
+    const nextPayload = {
+        ...job.payload,
+        rawPath: job.payload?.rawPath || cleanPath,
+        cleanPath: job.payload?.cleanPath || cleanPath,
+        queueContext: {
+            ...(job.payload?.queueContext || {}),
+            targetShowFolder: job.payload?.queueContext?.targetShowFolder || resolved.folderName
+        }
+    };
+
+    const promotedJob = updateJob(job, {
+        status: 'QUEUED',
+        currentStep: 'INGEST',
+        payload: nextPayload,
+        error: null
+    });
+
+    logger.info(`🧭 [Queue] Promoted waiting series job ${job.id} from filesystem manifest: ${resolved.folderName} S${String(season).padStart(2, '0')}${episode ? `E${String(episode).padStart(2, '0')}` : ''}`);
+    return promotedJob;
+}
+
+async function processSeriesSearchJob(job) {
+    const intent = (job?.payload && typeof job.payload.searchIntent === 'object') ? job.payload.searchIntent : {};
+    const searchOutcome = await SeriesAcquisitionService.resolveAutoSeriesAcquisition(intent);
+
+    if (!searchOutcome?.success || !searchOutcome.magnetUrl) {
+        return updateJob(job, {
+            status: 'FAILED',
+            currentStep: 'FAILED',
+            error: searchOutcome?.error || 'No confident search result found for automatic queueing.',
+            history: [...(job.history || []), { step: job.currentStep, timestamp: new Date().toISOString() }]
+        });
+    }
+
+    const effectiveImdbId = normalizeImdbId(intent.imdbId || job.imdbId || null);
+    const queueContext = {
+        ...(job.payload?.queueContext || {}),
+        imdbId: effectiveImdbId || job.payload?.queueContext?.imdbId || null,
+        season: Number.isFinite(parseInt(intent.season, 10)) ? parseInt(intent.season, 10) : job.payload?.queueContext?.season || null,
+        episode: Number.isFinite(parseInt(intent.episode, 10)) ? parseInt(intent.episode, 10) : job.payload?.queueContext?.episode || null,
+        sourceType: String(intent.sourceType || job.payload?.queueContext?.sourceType || 'episode').toLowerCase() === 'pack' ? 'pack' : 'episode',
+        addedByUser: intent.addedByUser || job.payload?.queueContext?.addedByUser || null
+    };
+
+    await TorrentService.addMagnet(searchOutcome.magnetUrl, 'series-streamer', effectiveImdbId, {
+        addedByUser: queueContext.addedByUser || null,
+        queueContext
+    });
+
+    const { torrentName, infoHash } = extractMagnetRuntimeInfo(searchOutcome.magnetUrl);
+    return updateJob(job, {
+        status: 'WAITING_DOWNLOAD',
+        currentStep: 'INGEST',
+        imdbId: effectiveImdbId || job.imdbId || null,
+        payload: {
+            ...job.payload,
+            torrentHash: infoHash,
+            torrentName,
+            rawPath: null,
+            cleanPath: null,
+            videoFile: null,
+            magnetUrl: searchOutcome.magnetUrl,
+            imdbId: effectiveImdbId || null,
+            mediaTitle: buildQueueMediaTitle({
+                title: torrentName,
+                imdbId: effectiveImdbId,
+                contentType: 'series',
+                payload: {
+                    torrentName,
+                    queueContext
+                }
+            }),
+            queueContext,
+            searchStats: searchOutcome.searchStats || null,
+            searchSelection: searchOutcome.selected || null
+        },
+        history: [...(job.history || []), { step: job.currentStep, timestamp: new Date().toISOString() }],
+        error: null
+    });
+}
+
 async function processNextJob(job) {
     if (!job) return null;
 
@@ -571,6 +710,22 @@ async function processNextJob(job) {
         imdbId: resolvedJobImdbId || job.payload?.queueContext?.imdbId || null,
         targetShowFolder: resolvedSeriesFolder || job.payload?.queueContext?.targetShowFolder || null
     };
+
+    if (job.currentStep === 'SEARCH') {
+        try {
+            const updatedSearchJob = await processSeriesSearchJob(job);
+            logger.debug(`🔎 [Queue] Search job ${job.id} resolved to ${updatedSearchJob.status}/${updatedSearchJob.currentStep}`);
+            return updatedSearchJob;
+        } catch (err) {
+            logger.error(`❌ [Queue] Search job ${job.id} failed: ${err.message}`);
+            return updateJob(job, {
+                status: 'FAILED',
+                currentStep: 'FAILED',
+                error: err.message,
+                history: [...(job.history || []), { step: job.currentStep, timestamp: new Date().toISOString() }]
+            });
+        }
+    }
 
     const stepMap = {
         INGEST: {
@@ -785,7 +940,23 @@ async function checkPipelineCompletions() {
             return tagStr.includes('movie-streamer') || tagStr.includes('series-streamer');
         });
 
-        if (!completedTorrent) return;
+        if (!completedTorrent) {
+            const waitingJobs = getAllJobs().filter((job) => String(job?.status || '').toUpperCase() === 'WAITING_DOWNLOAD');
+            for (const waitingJob of waitingJobs) {
+                const promotedJob = await promoteWaitingJobFromFilesystem(waitingJob);
+                if (promotedJob) {
+                    isProcessingPipeline = true;
+                    await withDistributedLock(`pipeline:job:${promotedJob.id}`, async () => {
+                        const freshJob = getJob(promotedJob.id);
+                        if (!freshJob || freshJob.status !== 'QUEUED') return;
+                        await processNextJob(freshJob);
+                    }, { ttlMs: 15000, waitMs: 2000 });
+                    isProcessingPipeline = false;
+                    return;
+                }
+            }
+            return;
+        }
 
         isProcessingPipeline = true;
         const torrentHash = completedTorrent.hash;
