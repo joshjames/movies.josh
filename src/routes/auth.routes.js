@@ -7,6 +7,7 @@ const router = express.Router();
 // 📂 REAL SERVICE IMPORTS (Fixed depth from src/routes to src/services)
 const ProfileService = require('../services/ProfileService');
 const MailerService = require('../services/MailerService');
+const { getSessionCookieOptions, getClearCookieOptions } = require('../utils/cookieOptions');
 
 // POST: /api/auth/register
 router.post('/register', async (req, res) => {
@@ -127,7 +128,7 @@ router.post('/login', async (req, res) => {
             await ProfileService.updateLoginHistory(cleanName, ipAddress);
 
             // Assign structural root-path access cookie
-            res.cookie('user_profile', cleanName, { maxAge: 31536000000, path: '/' });
+            res.cookie('user_profile', cleanName, getSessionCookieOptions());
             return res.json({
                 success: true,
                 profile: {
@@ -184,7 +185,7 @@ router.post('/account', async (req, res) => {
         });
 
         if (updated.userKey && updated.userKey !== activeUser) {
-            res.cookie('user_profile', updated.userKey, { maxAge: 31536000000, path: '/' });
+            res.cookie('user_profile', updated.userKey, getSessionCookieOptions());
         }
 
         return res.json({ success: true, userKey: updated.userKey, config: updated.config });
@@ -281,7 +282,7 @@ router.post('/password-reset/confirm', async (req, res) => {
 
 // GET: /api/auth/logout
 router.get('/logout', (req, res) => {
-    res.clearCookie('user_profile', { path: '/' });
+    res.clearCookie('user_profile', getClearCookieOptions());
     res.redirect('/login.html');
 });
 

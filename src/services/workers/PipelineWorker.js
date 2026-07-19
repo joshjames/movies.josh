@@ -3,6 +3,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../../utils/logger');
+const { getPrimaryAppUrl } = require('../../utils/publicOrigin');
 const TorrentService = require('../TorrentService');
 const SeriesAcquisitionService = require('../SeriesAcquisitionService');
 const LibraryScanner = require('../LibraryScanner');
@@ -239,14 +240,14 @@ async function runQueueCompletionHooks(job, libraryItem) {
     if (options.notifyOnComplete) {
         const targetEmail = String(config.email || owner || '').trim();
         if (targetEmail.includes('@')) {
-            const appUrl = process.env.APP_URL || 'https://anymovie.online';
+            const appUrl = getPrimaryAppUrl();
             const displayName = config.displayName || config.name || config.username || owner;
             const destination = `${appUrl}${buildLibraryHref(libraryItem || {}, contentType)}`;
 
             await MailerService.sendTemplateEmail({
                 toEmail: targetEmail,
                 toName: displayName,
-                subject: `${mediaTitle} is ready in AnyMovie`,
+                subject: `${mediaTitle} is ready in AnySeries`,
                 templateName: 'queue-complete-email.html',
                 variables: {
                     title: 'Queue Item Completed',
@@ -257,7 +258,7 @@ async function runQueueCompletionHooks(job, libraryItem) {
                     watchUrl: destination,
                     supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
                     appUrl,
-                    senderName: process.env.SENDER_NAME || 'AnyMovie Admin'
+                    senderName: process.env.SENDER_NAME || 'AnySeries Admin'
                 }
             });
         }

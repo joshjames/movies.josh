@@ -149,7 +149,7 @@ class AccountService {
       process.env.SQUARE_SUBSCRIPTION_VARIATION_NAME ||
       process.env.SQUARE_SUBSCRIPTION_NAME_SANDBOX ||
       process.env.SQUARE_SUBSCRIPTION_NAME ||
-      'AnyMovie Monthly Subscription'
+      'AnySeries Monthly Subscription'
     ).trim();
 
     const existingStaticVariationId = await this.findExistingStaticMonthlyVariationId(
@@ -163,7 +163,7 @@ class AccountService {
     }
     const upsertObject = {
       type: 'SUBSCRIPTION_PLAN_VARIATION',
-      id: '#anymovie-monthly-static',
+      id: '#anyseries-monthly-static',
       subscriptionPlanVariationData: {
         name: variationName,
         subscriptionPlanId: planId,
@@ -228,7 +228,7 @@ class AccountService {
       process.env.SQUARE_SUBSCRIPTION_PLAN_NAME ||
       process.env.SQUARE_SUBSCRIPTION_NAME_SANDBOX ||
       process.env.SQUARE_SUBSCRIPTION_NAME ||
-      'Anymovie.Online Streaming Access'
+      'AnySeries Streaming Access'
     ).trim().toLowerCase();
 
     let cursor;
@@ -396,7 +396,7 @@ class AccountService {
         cardId: squareCardId,
         startDate: toDateOnlyIso(nowIso),
         timezone: process.env.SQUARE_TIMEZONE || 'UTC',
-        source: { name: 'AnyMovie' },
+        source: { name: process.env.SQUARE_SOURCE_NAME || 'AnySeries' },
         ...(createPhases.length > 0 ? { phases: createPhases } : {})
       });
 

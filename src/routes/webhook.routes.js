@@ -4,6 +4,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const AccountService = require('../services/AccountService');
 const logger = require('../services/logger');
+const { getPrimaryAppUrl, getLegacyAppUrl } = require('../utils/publicOrigin');
 
 function resolveWebhookConfig(req) {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -12,10 +13,38 @@ function resolveWebhookConfig(req) {
   const requestHost = forwardedHost || req.get('host');
   const fallbackUrl = `${requestProto}://${requestHost}${req.originalUrl}`;
 
+  const primaryAppUrl = getPrimaryAppUrl();
+  const legacyAppUrl = getLegacyAppUrl();
+  const dualDomainEnabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.WEBHOOK_DUAL_DOMAIN || 'true').trim().toLowerCase());
+
+  const derivedWebhookPaths = [
+    '/api/webhooks/subscription_payload',
+    '/api/webhooks/subscription_payload_sandbox'
+  ];
+
+  const derivedUrls = [];
+  if (primaryAppUrl) {
+    for (const path of derivedWebhookPaths) {
+      derivedUrls.push(`${primaryAppUrl}${path}`);
+    }
+  }
+  if (dualDomainEnabled && legacyAppUrl) {
+    for (const path of derivedWebhookPaths) {
+      derivedUrls.push(`${legacyAppUrl}${path}`);
+    }
+  }
+
+  const extraConfiguredUrls = String(process.env.SQUARE_WEBHOOK_ADDITIONAL_URLS || '')
+    .split(',')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
   const configuredUrls = [
     process.env.SUBSCRIPTION_NOTIFICATION_URL,
     process.env.SUBSCRIPTION_SANDBOX_WEBHOOK_URL,
     process.env.SUBSCRIPTION_SANBOX_WEBHOOK_URL,
+    ...derivedUrls,
+    ...extraConfiguredUrls,
     fallbackUrl
   ]
     .map((value) => String(value || '').trim())

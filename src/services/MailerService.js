@@ -5,6 +5,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { getPrimaryAppUrl, getLegacyAppUrl } = require('../utils/publicOrigin');
 
 const TEMPLATE_DIR = path.join(__dirname, '../templates');
 const templateCache = new Map();
@@ -93,8 +94,8 @@ async function sendEmail({ toEmail, toName, subject, htmlContent }) {
 
     const payload = {
         sender: { 
-            name: process.env.SENDER_NAME || "AnyMovie Admin", 
-            email: process.env.SENDER_EMAIL || "admin@anymovie.online" 
+            name: process.env.SENDER_NAME || "AnySeries Admin", 
+            email: process.env.SENDER_EMAIL || "welcome@anyseries.online" 
         },
         to: [{ email: toEmail, name: toName || '' }],
         subject,
@@ -117,15 +118,24 @@ async function sendEmail({ toEmail, toName, subject, htmlContent }) {
     }
 }
 
+function buildAuthUrl(pathname = '/') {
+    const primary = getPrimaryAppUrl();
+    const legacy = getLegacyAppUrl();
+    const preferLegacy = ['1', 'true', 'yes', 'on'].includes(String(process.env.AUTH_LINKS_USE_LEGACY || '').toLowerCase());
+    const base = (preferLegacy && legacy) ? legacy : primary;
+    const cleanPath = `/${String(pathname || '/').replace(/^\/+/, '')}`;
+    return `${base}${cleanPath === '/' ? '' : cleanPath}`;
+}
+
 async function sendTemplateEmail({ toEmail, toName, subject, templateName, variables = {} }) {
     const htmlContent = buildLayoutHtml(templateName, variables);
     return sendEmail({ toEmail, toName, subject, htmlContent });
 }
 
 async function sendVerificationEmail(email, userKey, token, options = {}) {
-    const verificationUrl = `${process.env.APP_URL || 'https://anymovie.online'}/api/auth/verify?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
+    const verificationUrl = `${buildAuthUrl('/api/auth/verify')}?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
     const displayName = options.displayName || userKey;
-    const subject = options.subject || process.env.VERIFICATION_EMAIL_SUBJECT || 'Activate Your AnyMovie Profile';
+    const subject = options.subject || process.env.VERIFICATION_EMAIL_SUBJECT || 'Activate Your AnySeries Profile';
 
     return sendTemplateEmail({
         toEmail: email,
@@ -133,22 +143,22 @@ async function sendVerificationEmail(email, userKey, token, options = {}) {
         subject,
         templateName: options.templateName || 'verification-email.html',
         variables: {
-            title: 'Activate Your AnyMovie Profile',
+            title: 'Activate Your AnySeries Profile',
             preheader: 'Verify your account to finish setup.',
             username: displayName,
             verificationUrl,
             supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
-            appUrl: process.env.APP_URL || 'https://anymovie.online',
-            senderName: process.env.SENDER_NAME || 'AnyMovie Admin'
+            appUrl: buildAuthUrl('/'),
+            senderName: process.env.SENDER_NAME || 'AnySeries Admin'
         }
     });
 }
 
 async function sendPasswordResetEmail(email, userKey, token, options = {}) {
-    const appUrl = process.env.APP_URL || 'https://anymovie.online';
+    const appUrl = buildAuthUrl('/');
     const resetUrl = `${appUrl}/login.html?reset=true&token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
     const displayName = options.displayName || userKey;
-    const subject = options.subject || process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'Reset your AnyMovie password';
+    const subject = options.subject || process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'Reset your AnySeries password';
 
     return sendTemplateEmail({
         toEmail: email,
@@ -156,13 +166,13 @@ async function sendPasswordResetEmail(email, userKey, token, options = {}) {
         subject,
         templateName: options.templateName || 'password-reset-email.html',
         variables: {
-            title: 'Reset Your AnyMovie Password',
+            title: 'Reset Your AnySeries Password',
             preheader: 'Use this secure link to set a new password.',
             username: displayName,
             resetUrl,
             supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
             appUrl,
-            senderName: process.env.SENDER_NAME || 'AnyMovie Admin'
+            senderName: process.env.SENDER_NAME || 'AnySeries Admin'
         }
     });
 }

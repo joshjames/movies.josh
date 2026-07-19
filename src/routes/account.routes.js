@@ -6,6 +6,7 @@ const ProfileService = require('../services/ProfileService');
 const AcquisitionQuotaService = require('../services/AcquisitionQuotaService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
 const { config: squareConfig } = require('../config/square');
+const { getSessionCookieOptions } = require('../utils/cookieOptions');
 
 /**
  * Handle initial registration payload from signup.html
@@ -203,7 +204,7 @@ router.put('/profile', requireAuth, async (req, res) => {
     const updated = await ProfileService.updateAccountProfile(userKey, payload);
 
     if (updated.userKey && updated.userKey !== userKey) {
-      res.cookie('user_profile', updated.userKey, { maxAge: 31536000000, path: '/' });
+      res.cookie('user_profile', updated.userKey, getSessionCookieOptions());
     }
 
     return res.json({ success: true, userKey: updated.userKey, config: updated.config });
