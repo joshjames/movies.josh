@@ -18,7 +18,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AnymovieOnline">
         <activity
-            android:name=".MainActivity"
+            android:name=".TvLoginActivity"
             android:banner="@drawable/app_icon_your_company"
             android:exported="true"
             android:icon="@drawable/app_icon_your_company"
@@ -31,6 +31,22 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".TvBrowseActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".TvAccountSettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".WebPlayerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
         <activity
             android:name=".DetailsActivity"
             android:exported="false" />

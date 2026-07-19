@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="36dp"
+    android:background="#0b1220">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="AnyMovie TV Sign In"
+        android:textColor="#ffffff"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="Connect this TV app to your server, then sign in."
+        android:textColor="#9fb0c8"
+        android:textSize="16sp" />
+
+    <EditText
+        android:id="@+id/serverField"
+        android:layout_width="600dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:hint="http://server-ip:3000"
+        android:textColor="#ffffff"
+        android:textColorHint="#6d7f99"
+        android:background="#18253a"
+        android:padding="12dp" />
+
+    <EditText
+        android:id="@+id/userField"
+        android:layout_width="600dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="Email"
+        android:textColor="#ffffff"
+        android:textColorHint="#6d7f99"
+        android:background="#18253a"
+        android:padding="12dp" />
+
+    <EditText
+        android:id="@+id/passField"
+        android:layout_width="600dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="Password"
+        android:inputType="textPassword"
+        android:textColor="#ffffff"
+        android:textColorHint="#6d7f99"
+        android:background="#18253a"
+        android:padding="12dp" />
+
+    <Button
+        android:id="@+id/signInButton"
+        android:layout_width="260dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:text="Sign In"
+        android:textStyle="bold"
+        android:background="#1d4ed8"
+        android:textColor="#ffffff" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text=""
+        android:textColor="#cbd5e1"
+        android:textSize="14sp" />
+
+</LinearLayout>

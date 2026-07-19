@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Home"
+        android:text="Browse"
         android:textColor="#ffffff"
         android:textSize="30sp"
         android:textStyle="bold" />
@@ -21,47 +21,58 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
+        <Button
+            android:id="@+id/moviesTab"
+            android:layout_width="130dp"
+            android:layout_height="wrap_content"
+            android:text="Movies"
+            android:background="#1d4ed8"
+            android:textColor="#ffffff" />
+
+        <Button
+            android:id="@+id/showsTab"
+            android:layout_width="130dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="TV"
+            android:background="#1d4ed8"
+            android:textColor="#ffffff" />
+
         <EditText
             android:id="@+id/searchField"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Search titles"
+            android:layout_marginStart="12dp"
+            android:hint="Search"
             android:textColor="#ffffff"
             android:textColorHint="#6d7f99"
             android:background="#18253a"
             android:padding="10dp" />
 
-        <Spinner
-            android:id="@+id/categorySpinner"
-            android:layout_width="180dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:background="#18253a" />
-
         <Button
             android:id="@+id/searchButton"
             android:layout_width="120dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="8dp"
             android:text="Search"
             android:background="#1d4ed8"
             android:textColor="#ffffff" />
 
         <Button
-            android:id="@+id/browseButton"
-            android:layout_width="120dp"
+            android:id="@+id/homeButton"
+            android:layout_width="110dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:text="Browse"
+            android:layout_marginStart="8dp"
+            android:text="Home"
             android:background="#0f766e"
             android:textColor="#ffffff" />
 
         <Button
             android:id="@+id/accountButton"
-            android:layout_width="140dp"
+            android:layout_width="130dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="8dp"
             android:text="Account"
             android:background="#475569"
             android:textColor="#ffffff" />
@@ -80,8 +91,6 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="12dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingBottom="8dp" />
+        android:layout_weight="1" />
 
 </LinearLayout>

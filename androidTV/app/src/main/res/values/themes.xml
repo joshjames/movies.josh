@@ -1,4 +1,4 @@
 <resources>
 
-    <style name="Theme.AnymovieOnline" parent="@style/Theme.Leanback" />
+    <style name="Theme.AnymovieOnline" parent="Theme.AppCompat.NoActionBar" />
 </resources>
