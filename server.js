@@ -18,6 +18,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ENABLE_PIPELINE_WATCHER = !['false', '0', 'no'].includes(String(process.env.ENABLE_PIPELINE_WATCHER || 'true').trim().toLowerCase());
 const ENABLE_LIBRARY_AUTOSCAN = !['false', '0', 'no'].includes(String(process.env.ENABLE_LIBRARY_AUTOSCAN || 'true').trim().toLowerCase());
+const SESSION_ACTIVITY_WINDOW_MS = Number(process.env.SESSION_ACTIVITY_WINDOW_MS || 15 * 60 * 1000);
 
 const SERVER_STARTED_AT_MS = Date.now();
 const BUILD_VERSION = String(process.env.APP_BUILD_VERSION || process.env.IMAGE_TAG || 'dev').trim();
@@ -36,6 +37,8 @@ const requestMetrics = {
         other: 0
     }
 };
+const sessionActivity = new Map();
+let lastSessionCleanupAt = Date.now();
 
 function classifyStatus(statusCode) {
     const status = Number(statusCode);
@@ -44,6 +47,49 @@ function classifyStatus(statusCode) {
     if (status >= 400 && status < 500) return '4xx';
     if (status >= 500 && status < 600) return '5xx';
     return 'other';
+}
+
+function normalizeActiveUser(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function pruneSessionActivity(nowMs) {
+    if (nowMs - lastSessionCleanupAt < 60 * 1000) return;
+    const cutoff = nowMs - SESSION_ACTIVITY_WINDOW_MS;
+    for (const [userKey, state] of sessionActivity.entries()) {
+        if (!state || Number(state.lastSeenAt || 0) < cutoff) {
+            sessionActivity.delete(userKey);
+        }
+    }
+    lastSessionCleanupAt = nowMs;
+}
+
+function buildSessionMetrics() {
+    const nowMs = Date.now();
+    const cutoff = nowMs - SESSION_ACTIVITY_WINDOW_MS;
+    const activeUsers = [];
+
+    for (const [userKey, state] of sessionActivity.entries()) {
+        if (!state) continue;
+        if (Number(state.lastSeenAt || 0) < cutoff) continue;
+        activeUsers.push({
+            user: userKey,
+            lastSeenAt: new Date(state.lastSeenAt).toISOString(),
+            requestCount: Number(state.requestCount || 0)
+        });
+    }
+
+    activeUsers.sort((a, b) => {
+        const lhs = Date.parse(b.lastSeenAt);
+        const rhs = Date.parse(a.lastSeenAt);
+        return lhs - rhs;
+    });
+
+    return {
+        windowMinutes: Math.max(1, Math.round(SESSION_ACTIVITY_WINDOW_MS / 60000)),
+        activeUserCount: activeUsers.length,
+        activeUsers
+    };
 }
 
 //allow webhook requests from Square to reach our server without CORS issues
@@ -78,10 +124,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '20mb' }));
 
 app.use((req, res, next) => {
+    const nowMs = Date.now();
+    pruneSessionActivity(nowMs);
+
     requestMetrics.totalRequests += 1;
     requestMetrics.activeRequests += 1;
     const method = String(req.method || 'UNKNOWN').toUpperCase();
     requestMetrics.byMethod[method] = (requestMetrics.byMethod[method] || 0) + 1;
+
+    const activeUser = normalizeActiveUser(req.cookies?.user_profile);
+    if (activeUser) {
+        const prev = sessionActivity.get(activeUser) || { firstSeenAt: nowMs, requestCount: 0, lastSeenAt: nowMs };
+        prev.lastSeenAt = nowMs;
+        prev.requestCount = Number(prev.requestCount || 0) + 1;
+        sessionActivity.set(activeUser, prev);
+    }
 
     res.on('finish', () => {
         requestMetrics.activeRequests = Math.max(0, requestMetrics.activeRequests - 1);
@@ -137,7 +194,8 @@ app.get('/api/runtime/metrics', (req, res) => {
         startedAt: new Date(SERVER_STARTED_AT_MS).toISOString(),
         uptimeSec: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
-        requestMetrics
+        requestMetrics,
+        sessionMetrics: buildSessionMetrics()
     });
 });
 

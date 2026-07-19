@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
 
 function parseArgs(argv) {
   const args = {
@@ -85,12 +86,31 @@ function loadTemplate(filePath) {
   return fs.readFileSync(absolute, 'utf8');
 }
 
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 async function sendTransactionalEmail({ apiKey, senderName, senderEmail, subject, html, recipient }) {
+  const personalizedHtml = html.replace(/{{\s*name\s*}}/gi, recipient.name);
   const payload = {
     sender: { name: senderName, email: senderEmail },
     to: [{ email: recipient.email, name: recipient.name }],
     subject,
-    htmlContent: html.replace(/{{\\s*name\\s*}}/gi, recipient.name)
+    htmlContent: personalizedHtml,
+    textContent: htmlToText(personalizedHtml)
   };
 
   await axios.post('https://api.brevo.com/v3/smtp/email', payload, {

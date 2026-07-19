@@ -1,6 +1,78 @@
-<h2>Service Update</h2>
-<p>Hello {{name}},</p>
-<p>We are currently experiencing a domain-level DNS/security-provider issue affecting reachability for some users.</p>
-<p>Temporary access is being maintained while we work with providers to restore full normal service.</p>
-<p>We will post another update once this is fully resolved.</p>
-<p>Thank you for your patience.</p>
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>AnySeries Service Update</title>
+	<style>
+		body { background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 24px; margin: 0; }
+		.email-container { max-width: 640px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 30px; }
+		.preheader { display: none; max-height: 0; overflow: hidden; opacity: 0; }
+		h1 { color: #f1f5f9; font-size: 1.55rem; margin: 0 0 16px 0; }
+		p { color: #dbe4ef; font-size: 0.98rem; line-height: 1.62; margin: 12px 0; }
+		.btn { display: inline-block; margin-top: 14px; background: #e50914; color: #ffffff !important; text-decoration: none; font-weight: 700; letter-spacing: 0.5px; border-radius: 8px; padding: 12px 18px; }
+		.status-box { background: #0b1220; border: 1px solid #243246; border-radius: 10px; padding: 14px; margin: 18px 0; }
+		.status-box strong { color: #f8fafc; }
+		.footer { border-top: 1px solid #334155; margin-top: 22px; padding-top: 18px; font-size: 0.86rem; color: #9fb0c5; line-height: 1.55; }
+		.footer a, a { color: #60a5fa; }
+		.logo-wrapper { margin: 0 0 14px 0; }
+	</style>
+</head>
+<body>
+	<div class="preheader">Temporary access update: please use our alternate access URL while we restore normal access.</div>
+	<div class="email-container">
+		<div class="logo-wrapper">
+			<svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
+				<defs>
+					<path id="textArchPath" d="M 50,85 Q 250,35 450,85" fill="none" />
+					<filter id="cinematicGlow" x="-20%" y="-20%" width="140%" height="140%">
+						<feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.9" />
+						<feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b91c1c" flood-opacity="0.4" />
+					</filter>
+				</defs>
+				<text font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+					font-size="52"
+					font-weight="900"
+					letter-spacing="5"
+					fill="#e50914"
+					filter="url(#cinematicGlow)">
+					<textPath href="#textArchPath" startOffset="50%" text-anchor="middle">ANYSERIES</textPath>
+				</text>
+				<text x="50%"
+					y="118"
+					font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+					font-size="16"
+					font-weight="700"
+					letter-spacing="14"
+					fill="#ffffff"
+					text-anchor="middle"
+					opacity="0.9">ONLINE</text>
+			</svg>
+		</div>
+
+		<h1>Service Status Update</h1>
+
+		<p>Hello,</p>
+
+		<p>We want to keep you informed: some networks and providers are temporarily limiting access to our existing AnyMovie Online site URL while they complete automated safety review checks.</p>
+
+		<div class="status-box">
+			<p><strong>Temporary access:</strong> please use <a href="https://anyseries.online">anyseries.online</a> while we resolve access on our existing AnyMovie Online site URL.</p>
+			<p><strong>What we are doing:</strong> we are actively working with Google, Namecheap, and Cloudflare to complete review and restore full normal access.</p>
+		</div>
+
+		<p>Our service remains active, and we will continue posting updates until this is fully resolved.</p>
+
+		<a class="btn" href="https://anyseries.online">Open AnySeries</a>
+
+		<p>If your usual AnyMovie Online URL is still blocked on your current network, continue using anyseries.online and retry your usual URL later as provider updates propagate.</p>
+
+		<div class="footer">
+			Need help? Contact us at <a href="mailto:welcome@anyseries.online">welcome@anyseries.online</a>.<br>
+			Thank you for your patience and support.<br><br>
+			AnySeries Online<br>
+			<a href="https://anyseries.online">https://anyseries.online</a>
+		</div>
+	</div>
+</body>
+</html>
