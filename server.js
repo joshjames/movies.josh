@@ -213,6 +213,8 @@ app.use('/login.html', express.static(path.join(__dirname, 'public/login.html'))
 app.use('/welcome.html', express.static(path.join(__dirname, 'public/welcome.html')));
 app.use('/css', express.static(path.join(__dirname, 'public/css'))); 
 app.use('/js', express.static(path.join(__dirname, 'public/js'))); 
+app.use('/data', express.static(path.join(__dirname, 'public/data')));
+app.use('/media', express.static(path.join(__dirname, 'public/media')));
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/favicon.ico', express.static(path.join(__dirname, 'public/favicon.ico')));
 app.use('/manifest.webmanifest', express.static(path.join(__dirname, 'public/manifest.webmanifest')));
