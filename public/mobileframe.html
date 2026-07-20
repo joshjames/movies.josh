@@ -1,0 +1,53 @@
+<style>
+.phone-wrapper {
+    position: relative;
+    width: 280px; /* Adjust width as needed */
+    height: 580px;
+    margin: 2rem auto;
+    background: #1e1e24; /* Frame color (Dark Titanium) */
+    border-radius: 40px;
+    padding: 12px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7),
+                inset 0 0 2px rgba(255, 255, 255, 0.2);
+    border: 1px solid #333;
+}
+
+/* Speaker / Dynamic Island Notch at Top */
+.phone-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 18px;
+    background: #0d1117; /* Matches screen background */
+    border-radius: 20px;
+    z-index: 10;
+}
+
+/* Inner Screen Container */
+.phone-screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 30px;
+    overflow: hidden;
+    background-color: #000;
+}
+
+/* Embedded Video */
+.phone-screen video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+</style>
+<div class="phone-wrapper">
+    <div class="phone-screen">
+        <video autoplay loop muted playsinline>
+            <source src="assets/ui-demo-mobile.webm" type="video/webm">
+            <source src="assets/ui-demo-mobile.mp4" type="video/mp4">
+        </video>
+    </div>
+</div>

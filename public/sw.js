@@ -2,11 +2,14 @@ const CACHE_VERSION = 'anymovie-static-v6';
 const CACHE_NAME = CACHE_VERSION;
 const STATIC_ASSETS = [
   '/',
+  '/welcome.html',
   '/index.html',
   '/browse.html',
   '/series.html',
   '/player.html',
   '/images/avatar.png',
+  '/media/demo.mp4',
+  '/data/welcome-assets.js',
   '/manifest.webmanifest'
 ];
 

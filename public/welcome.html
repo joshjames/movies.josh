@@ -439,6 +439,14 @@
             min-height: 420px;
         }
 
+        .demo-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            background: #020617;
+        }
+
         .media-frame::before {
             content: "Preview Slot";
             position: absolute;
@@ -484,6 +492,81 @@
             margin: 0;
             color: var(--muted);
             font: 400 0.95rem/1.68 system-ui, -apple-system, sans-serif;
+        }
+
+        .cover-section {
+            padding-top: 0;
+        }
+
+        .cover-wall {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 14px;
+            perspective: 1400px;
+        }
+
+        .cover-tile {
+            position: relative;
+            aspect-ratio: 2 / 3;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: linear-gradient(180deg, rgba(8, 14, 24, 0.04), rgba(8, 14, 24, 0.94));
+            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+            transform-style: preserve-3d;
+            transition: transform 0.28s ease, box-shadow 0.28s ease;
+        }
+
+        .cover-tile:nth-child(4n + 1) { transform: translateY(18px) rotate(-3deg) skewY(-1deg); }
+        .cover-tile:nth-child(4n + 2) { transform: translateY(0) rotate(2deg) skewY(0.5deg); }
+        .cover-tile:nth-child(4n + 3) { transform: translateY(22px) rotate(-1deg) skewY(1deg); }
+        .cover-tile:nth-child(4n + 4) { transform: translateY(6px) rotate(3deg) skewY(-0.5deg); }
+
+        .cover-tile:hover {
+            transform: translateY(-4px) scale(1.02) rotate(0deg) skewY(0deg);
+            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.42);
+        }
+
+        .cover-tile::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(2, 6, 23, 0.04) 0%, rgba(2, 6, 23, 0.3) 45%, rgba(2, 6, 23, 0.9) 100%);
+        }
+
+        .cover-tile .cover-badge {
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            z-index: 2;
+            padding: 7px 9px;
+            border-radius: 999px;
+            background: rgba(2, 6, 23, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: #dbe4ef;
+            font: 700 0.66rem/1 system-ui, -apple-system, sans-serif;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+
+        .cover-tile .cover-title {
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            bottom: 12px;
+            z-index: 2;
+            font: 700 0.84rem/1.35 system-ui, -apple-system, sans-serif;
+            color: #f8fafc;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+        }
+
+        .cover-tile .cover-thumb {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            filter: saturate(1.04) contrast(1.03);
+            transform: scale(1.02);
         }
 
         .quote-card {
@@ -603,6 +686,10 @@
             .screen-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+
+            .cover-wall {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
     </style>
 </head>
@@ -714,23 +801,32 @@
                 <div class="section-inner">
                     <div class="section-header parallax" data-parallax-speed="0.05">
                         <h2>Drop your product story directly into motion.</h2>
-                        <p>Previews coming soon.</p>
+                        <p>Use your demo video here and let the backdrop wall do the visual selling.</p>
                     </div>
 
                     <div class="media-showcase">
                         <div class="media-frame primary parallax" data-parallax-speed="0.08">
+                            <video class="demo-video" src="/media/demo.mp4" poster="/images/icons/anymovie_icon_256.png" autoplay muted loop playsinline controls></video>
                             <div class="media-copy">
                                 <h3>Home, queue, and continue-watching flow</h3>
-                                <p>COMING SOON queueing, and instant playback context.</p>
+                                <p>Show a quick real-world pass through the interface, even if it is a rough cut for now.</p>
                             </div>
                         </div>
                         <div class="media-frame secondary parallax" data-parallax-speed="0.12">
-                            <div class="media-copy">
-                                <h3>Mobile or TV walkthrough</h3>
-                                <p>COMING SOON focused on couch experience, login simplicity, or TV browse flow.</p>
-                            </div>
+                            <div class="cover-wall" id="miniCoverWall"></div>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section class="section cover-section">
+                <div class="section-inner">
+                    <div class="section-header parallax" data-parallax-speed="0.06">
+                        <h2>Trending covers, arranged like a living wall.</h2>
+                        <p>A static build-time snapshot blends your local cover database with a TMDb weekly trending pass, so the landing page feels full without making browser-side API calls.</p>
+                    </div>
+
+                    <div class="cover-wall" id="coverWall"></div>
                 </div>
             </section>
 
@@ -763,9 +859,71 @@
         </main>
     </div>
 
+    <script src="/data/welcome-assets.js"></script>
     <script>
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getWelcomeAssets() {
+            const data = window.__WELCOME_ASSETS__ || {};
+            const items = Array.isArray(data.items) ? data.items : [];
+            return items;
+        }
+
+        function renderCoverTile(item, index) {
+            const tile = document.createElement('article');
+            tile.className = 'cover-tile';
+
+            const badge = document.createElement('div');
+            badge.className = 'cover-badge';
+            badge.textContent = item.source === 'tmdb' ? 'TMDb Trending' : 'Local Cover';
+
+            const thumb = document.createElement('div');
+            thumb.className = 'cover-thumb';
+            thumb.setAttribute('aria-hidden', 'true');
+            thumb.style.backgroundImage = `url('${item.url}')`;
+
+            const title = document.createElement('div');
+            title.className = 'cover-title';
+            title.innerHTML = escapeHtml(item.title || `Featured ${index + 1}`);
+
+            tile.appendChild(thumb);
+            tile.appendChild(badge);
+            tile.appendChild(title);
+            return tile;
+        }
+
+        function renderWelcomeAssets() {
+            const items = getWelcomeAssets();
+            const wall = document.getElementById('coverWall');
+            const miniWall = document.getElementById('miniCoverWall');
+            const selected = items.slice(0, 20);
+
+            if (wall) {
+                wall.innerHTML = '';
+                selected.forEach((item, index) => wall.appendChild(renderCoverTile(item, index)));
+            }
+
+            if (miniWall) {
+                miniWall.innerHTML = '';
+                selected.slice(0, 4).forEach((item, index) => {
+                    const tile = renderCoverTile(item, index);
+                    tile.style.aspectRatio = '1 / 1';
+                    miniWall.appendChild(tile);
+                });
+            }
+        }
+
         (function () {
             const layers = Array.from(document.querySelectorAll('[data-parallax-speed]'));
+            renderWelcomeAssets();
+
             if (!layers.length) return;
 
             const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
