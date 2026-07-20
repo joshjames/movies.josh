@@ -211,6 +211,7 @@ app.get('/', (req, res) => {
 
 app.use('/login.html', express.static(path.join(__dirname, 'public/login.html')));
 app.use('/welcome.html', express.static(path.join(__dirname, 'public/welcome.html')));
+app.use('/mobileframe.html', express.static(path.join(__dirname, 'public/mobileframe.html')));
 app.use('/css', express.static(path.join(__dirname, 'public/css'))); 
 app.use('/js', express.static(path.join(__dirname, 'public/js'))); 
 app.use('/data', express.static(path.join(__dirname, 'public/data')));
