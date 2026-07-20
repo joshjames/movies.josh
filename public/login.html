@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/images/icons/pwa-192.png">
-    <title>AnyMovie - Login</title>
+    <title>AnyMovie Online Sign In</title>
     <style>
         :root {
             --login-bg: #020617;
@@ -226,13 +226,13 @@
 <body>
 
     <div class="auth-card">
-        <a class="login-logo-wrapper" href="/" aria-label="Go to AnyMovie home">
+        <a class="login-logo-wrapper" href="/welcome.html" aria-label="Go to AnyMovie welcome page">
             <span class="brand-arc">AnyMovie</span>
             <span class="brand-sub">Online</span>
         </a>
 
-        <h1 id="form-title">Welcome Back</h1>
-        <div class="subtitle" id="form-subtitle">Enter your details to Signup for Anymovie</div>
+        <h1 id="form-title">Sign In</h1>
+        <div class="subtitle" id="form-subtitle">Access your library, queue, and watch history.</div>
 
         <div class="banner" id="alertBlock"></div>
 
@@ -268,6 +268,7 @@
         <div class="toggle-box">
             <span id="toggleText">New to Anymovie?</span>
             <span class="toggle-link" id="toggleLink" onclick="toggleAuthMode()">Create a profile</span>
+            <div style="margin-top:12px;"><a class="utility-link" href="/welcome.html">View the welcome page</a></div>
         </div>
     </div>
 
@@ -365,8 +366,8 @@
             backToLoginLink.style.display = 'none';
 
             if (isLoginMode) {
-                title.innerText = 'Welcome Back';
-                subtitle.innerText = 'Enter your details to start streaming';
+                title.innerText = 'Sign In';
+                subtitle.innerText = 'Access your library, queue, and watch history.';
                 submitBtn.innerText = 'Login to Anymovie';
                 usernameLabel.innerText = 'Email or Username';
                 toggleText.innerText = 'New to Anymovie?';
@@ -375,8 +376,8 @@
                 nameGroup.style.display = 'none';
                 nameInput.removeAttribute('required');
             } else {
-                title.innerText = 'Provision Profile';
-                subtitle.innerText = 'Setup your new profile';
+                title.innerText = 'Create Your Profile';
+                subtitle.innerText = 'Start your account and unlock the full library experience.';
                 submitBtn.innerText = 'Register your account';
                 usernameLabel.innerText = 'Email Address';
                 toggleText.innerText = 'Already registered?';
@@ -392,6 +393,10 @@
             const params = new URLSearchParams(window.location.search);
             resetToken = String(params.get('token') || '').trim();
             resetUser = String(params.get('user') || '').trim().toLowerCase();
+
+            if (params.get('mode') === 'signup') {
+                isLoginMode = false;
+            }
 
             if (params.get('reset') === 'true' && (!resetToken || !resetUser)) {
                 showAlert('Reset link is missing required parameters. Request a new one.', 'error');

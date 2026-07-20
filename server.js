@@ -202,7 +202,15 @@ app.get('/api/runtime/metrics', (req, res) => {
 // =========================================================================
 // 🔓 PUBLIC ACCESS LAYER & AUTH EXEMPTIONS
 // =========================================================================
+app.get('/', (req, res) => {
+    if (req.cookies?.user_profile) {
+        return res.sendFile(path.join(__dirname, 'public/index.html'));
+    }
+    return res.sendFile(path.join(__dirname, 'public/welcome.html'));
+});
+
 app.use('/login.html', express.static(path.join(__dirname, 'public/login.html')));
+app.use('/welcome.html', express.static(path.join(__dirname, 'public/welcome.html')));
 app.use('/css', express.static(path.join(__dirname, 'public/css'))); 
 app.use('/js', express.static(path.join(__dirname, 'public/js'))); 
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
