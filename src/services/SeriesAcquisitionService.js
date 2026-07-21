@@ -332,7 +332,7 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
         .filter(Boolean);
 
     const seededExact = exact.filter((row) => (parseInt(row?.seeds, 10) || 0) > 0);
-    const pool = seededExact.length ? seededExact : exact;
+    const pool = seededExact;
     const best = pool.length
         ? [...pool].sort((a, b) => (parseInt(b?.seeds, 10) || 0) - (parseInt(a?.seeds, 10) || 0))[0]
         : null;
@@ -353,6 +353,9 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
             packsOnly,
             season: seasonNum,
             episode: episodeNum,
+            reason: seededExact.length
+                ? 'seeded_exact_match'
+                : (exact.length ? 'exact_match_without_seeds' : 'no_exact_match'),
             rawCount: rows.length,
             exactCount: exact.length,
             seededExactCount: seededExact.length,
@@ -371,21 +374,28 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
 
     logger.info(`[AutoAcquire] Search start | title="${showTitle || 'n/a'}" imdb=${imdbId || 'n/a'} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${sourceType} query="${query}"`);
 
-    const eztvSelection = await selectBestEztvAutoCandidate({
-        imdbId,
-        season: seasonNum,
-        episode: episodeNum,
-        sourceType
-    });
+    let eztvSelection = { best: null, diagnostics: { reason: 'not_attempted' } };
+    try {
+        eztvSelection = await selectBestEztvAutoCandidate({
+            imdbId,
+            season: seasonNum,
+            episode: episodeNum,
+            sourceType
+        });
+    } catch (err) {
+        logger.warn(`[AutoAcquire] EZTV lookup failed, falling back to search-confidence | query="${query}" error="${err.message}"`);
+        eztvSelection = { best: null, diagnostics: { reason: 'lookup_failed', error: err.message } };
+    }
 
-    if (eztvSelection?.best?.magnet) {
-        logger.info(`[AutoAcquire] Selected EZTV result | query="${query}" title="${String(eztvSelection.best.originalTitle || eztvSelection.best.title || '').trim()}" seeds=${parseInt(eztvSelection.best.seeds, 10) || 0}`);
+    const eztvSeeds = parseInt(eztvSelection?.best?.seeds, 10) || 0;
+    if (eztvSelection?.best?.magnet && eztvSeeds > 0) {
+        logger.info(`[AutoAcquire] Selected EZTV seeded result | query="${query}" title="${String(eztvSelection.best.originalTitle || eztvSelection.best.title || '').trim()}" seeds=${eztvSeeds}`);
         return {
             success: true,
             query,
             selected: {
                 title: eztvSelection.best.originalTitle || eztvSelection.best.title || 'EZTV release',
-                seeds: parseInt(eztvSelection.best.seeds, 10) || 0,
+                seeds: eztvSeeds,
                 peers: parseInt(eztvSelection.best.peers, 10) || 0,
                 season: parseInt(eztvSelection.best.season, 10) || null,
                 episode: parseInt(eztvSelection.best.episode, 10) || null,
@@ -396,6 +406,10 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
             source: 'eztv'
         };
     }
+
+    logger.info(
+        `[AutoAcquire] EZTV seeded exact unavailable; fallback to search-confidence | query="${query}" reason=${String(eztvSelection?.diagnostics?.reason || 'no_seeded_match')} raw=${Number(eztvSelection?.diagnostics?.rawCount || 0)} exact=${Number(eztvSelection?.diagnostics?.exactCount || 0)} seeded=${Number(eztvSelection?.diagnostics?.seededExactCount || 0)}`
+    );
 
     const started = await TorrentSearchService.startSearch({
         query,
