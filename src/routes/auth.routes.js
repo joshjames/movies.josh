@@ -128,7 +128,7 @@ router.post('/login', async (req, res) => {
             await ProfileService.updateLoginHistory(cleanName, ipAddress);
 
             // Assign structural root-path access cookie
-            res.cookie('user_profile', cleanName, getSessionCookieOptions());
+            res.cookie('user_profile', cleanName, getSessionCookieOptions(req));
             return res.json({
                 success: true,
                 profile: {
@@ -185,7 +185,7 @@ router.post('/account', async (req, res) => {
         });
 
         if (updated.userKey && updated.userKey !== activeUser) {
-            res.cookie('user_profile', updated.userKey, getSessionCookieOptions());
+            res.cookie('user_profile', updated.userKey, getSessionCookieOptions(req));
         }
 
         return res.json({ success: true, userKey: updated.userKey, config: updated.config });
@@ -282,7 +282,7 @@ router.post('/password-reset/confirm', async (req, res) => {
 
 // GET: /api/auth/logout
 router.get('/logout', (req, res) => {
-    res.clearCookie('user_profile', getClearCookieOptions());
+    res.clearCookie('user_profile', getClearCookieOptions(req));
     res.redirect('/login.html');
 });
 

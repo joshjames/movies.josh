@@ -10,12 +10,29 @@ function resolveSameSite() {
     return 'lax';
 }
 
-function resolveCookieDomain() {
-    const domain = String(process.env.COOKIE_DOMAIN || '').trim();
-    return domain || undefined;
+function normalizeDomain(value) {
+    return String(value || '').trim().toLowerCase().replace(/^\.+/, '');
 }
 
-function getSessionCookieOptions() {
+function getRequestHost(req) {
+    return normalizeDomain(req?.hostname || String(req?.headers?.host || '').split(':')[0] || '');
+}
+
+function resolveCookieDomain(req) {
+    const host = getRequestHost(req);
+    const configuredDomains = String(process.env.COOKIE_DOMAIN || '')
+        .split(',')
+        .map(normalizeDomain)
+        .filter(Boolean);
+
+    if (!configuredDomains.length) return undefined;
+    if (!host) return undefined;
+
+    const matched = configuredDomains.find((domain) => host === domain || host.endsWith(`.${domain}`));
+    return matched || undefined;
+}
+
+function getSessionCookieOptions(req) {
     const sameSite = resolveSameSite();
     const secureFromEnv = parseBool(process.env.COOKIE_SECURE, process.env.NODE_ENV === 'production');
     const secure = sameSite === 'none' ? true : secureFromEnv;
@@ -26,11 +43,11 @@ function getSessionCookieOptions() {
         httpOnly: true,
         sameSite,
         secure,
-        domain: resolveCookieDomain()
+        domain: resolveCookieDomain(req)
     };
 }
 
-function getClearCookieOptions() {
+function getClearCookieOptions(req) {
     const sameSite = resolveSameSite();
     const secureFromEnv = parseBool(process.env.COOKIE_SECURE, process.env.NODE_ENV === 'production');
     const secure = sameSite === 'none' ? true : secureFromEnv;
@@ -39,7 +56,7 @@ function getClearCookieOptions() {
         path: '/',
         sameSite,
         secure,
-        domain: resolveCookieDomain()
+        domain: resolveCookieDomain(req)
     };
 }
 

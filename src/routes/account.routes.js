@@ -204,7 +204,7 @@ router.put('/profile', requireAuth, async (req, res) => {
     const updated = await ProfileService.updateAccountProfile(userKey, payload);
 
     if (updated.userKey && updated.userKey !== userKey) {
-      res.cookie('user_profile', updated.userKey, getSessionCookieOptions());
+      res.cookie('user_profile', updated.userKey, getSessionCookieOptions(req));
     }
 
     return res.json({ success: true, userKey: updated.userKey, config: updated.config });
