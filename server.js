@@ -204,7 +204,7 @@ app.get('/api/runtime/metrics', (req, res) => {
 // =========================================================================
 app.get('/', (req, res) => {
     if (req.cookies?.user_profile) {
-        return res.sendFile(path.join(__dirname, 'public/index.html'));
+        return res.redirect('/index.html');
     }
     return res.sendFile(path.join(__dirname, 'public/welcome.html'));
 });
