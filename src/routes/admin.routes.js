@@ -30,6 +30,7 @@ const pipelineOrchestrator = require('../../Orchestrator');
 const Orchestrator = require('../../Orchestrator'); // Adjust this path to point to your Orchestrator.js
 const metadataService = require('../services/MetadataService');
 const metadataProvider = require('../services/MetadataProvider');
+const AccountService = require('../services/AccountService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
 const {
@@ -91,6 +92,36 @@ function sanitizeSeriesFolderName(folderName = '') {
     if (!clean) return '';
     if (clean.includes('/') || clean.includes('\\') || clean.includes('..')) return '';
     return clean;
+}
+
+function parsePositiveInt(value, fallback, min = 1, max = Number.MAX_SAFE_INTEGER) {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    if (parsed < min) return fallback;
+    if (parsed > max) return max;
+    return parsed;
+}
+
+function toIsoDateOrNull(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+}
+
+function normalizeSubscriptionStatus(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return 'GUEST';
+    if (raw === 'TRIALING') return 'TRIAL';
+    return raw;
+}
+
+function isPaidStatus(status) {
+    return ['ACTIVE', 'PENDING', 'PAUSED', 'GRACE'].includes(String(status || '').toUpperCase());
+}
+
+function isTrialStatus(status) {
+    return ['TRIAL', 'TRIALING'].includes(String(status || '').toUpperCase());
 }
 
 function toSeriesFolderName(value = '') {
@@ -2992,6 +3023,13 @@ router.post('/refetch-metadata', async (req, res) => {
 // GET: /api/admin/users
 router.get('/users', (req, res) => {
     try {
+        const query = String(req.query.query || '').trim().toLowerCase();
+        const shouldPaginate = ['1', 'true', 'yes', 'on'].includes(String(req.query.paginated || '').trim().toLowerCase())
+            || String(req.query.page || '').trim() !== ''
+            || String(req.query.limit || '').trim() !== '';
+        const page = parsePositiveInt(req.query.page, 1, 1, 100000);
+        const limit = parsePositiveInt(req.query.limit, 50, 1, 200);
+
         const userMetaDir = path.join(__dirname, '../../metadata', 'users');
         if (!fs.existsSync(userMetaDir)) return res.json({ success: true, users: [] });
 
@@ -3012,10 +3050,14 @@ router.get('/users', (req, res) => {
                 }
             }
 
-            const subscriptionStatus = String(config.subscriptionStatus || '').toUpperCase();
-            const hasPremium = ['ACTIVE', 'TRIALING', 'PENDING', 'PAUSED', 'GRACE'].includes(subscriptionStatus)
+            const subscriptionStatus = normalizeSubscriptionStatus(config.subscriptionStatus);
+            const trialEndsAt = toIsoDateOrNull(config.trialEndsAt);
+            const trialEndsAtMs = trialEndsAt ? Date.parse(trialEndsAt) : NaN;
+            const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+            const hasPremium = isPaidStatus(subscriptionStatus)
                 || Boolean(config.squareSubscriptionId)
-                || Boolean(config.freeAccessActive);
+                || Boolean(config.freeAccessActive)
+                || (isTrialStatus(subscriptionStatus) && trialActive);
             
             return {
                 username: folder,
@@ -3024,19 +3066,249 @@ router.get('/users', (req, res) => {
                 hasHistory,
                 hasPlayback,
                 hasPremium,
-                subscriptionStatus: subscriptionStatus || 'NONE',
+                isVerified: Boolean(config.isVerified),
+                subscriptionStatus,
                 billingTier: config.billingTier || null,
                 nextBillingDate: config.nextBillingDate || null,
-                trialEndsAt: config.trialEndsAt || null,
+                trialDays: Number(config.trialDays || 0),
+                trialEndsAt,
+                freeAccessActive: Boolean(config.freeAccessActive),
                 squareCustomerId: config.squareCustomerId || null,
                 squareSubscriptionId: config.squareSubscriptionId || null,
+                createdAt: config.createdAt || null,
+                signupDate: config.signupDate || null,
                 updatedAt: config.updatedAt || null
             };
         }).filter(Boolean);
 
-        res.json({ success: true, users: profiles });
+        profiles.sort((a, b) => {
+            const aUpdated = Number(a.updatedAt || 0);
+            const bUpdated = Number(b.updatedAt || 0);
+            return bUpdated - aUpdated;
+        });
+
+        const filtered = query
+            ? profiles.filter((profile) => {
+                const haystack = [
+                    profile.username,
+                    profile.email,
+                    profile.displayName,
+                    profile.subscriptionStatus,
+                    profile.squareCustomerId,
+                    profile.squareSubscriptionId
+                ]
+                    .map((value) => String(value || '').toLowerCase())
+                    .join(' ');
+                return haystack.includes(query);
+            })
+            : profiles;
+
+        if (!shouldPaginate) {
+            return res.json({ success: true, users: filtered, totalItems: filtered.length, paginated: false });
+        }
+
+        const totalItems = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+        const safePage = Math.min(page, totalPages);
+        const startIndex = (safePage - 1) * limit;
+        const users = filtered.slice(startIndex, startIndex + limit);
+
+        res.json({
+            success: true,
+            users,
+            page: safePage,
+            limit,
+            totalItems,
+            totalPages,
+            paginated: true
+        });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/normalize-data
+// Repair legacy/missing account fields and enforce a standard config baseline.
+router.post('/users/normalize-data', async (req, res) => {
+    try {
+        const users = await ProfileService.listUsers();
+        if (!Array.isArray(users) || users.length === 0) {
+            return res.json({ success: true, scanned: 0, updated: 0, errors: [] });
+        }
+
+        const defaultTrialDays = parsePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7, 0, 3650);
+        const errors = [];
+        let updated = 0;
+
+        for (const userKey of users) {
+            try {
+                const config = await ProfileService.readData(userKey, 'config', {});
+                const next = { ...config };
+                const now = Date.now();
+
+                next.email = String(next.email || userKey).trim().toLowerCase();
+                const baseName = String(next.displayName || next.name || next.username || next.email || userKey).trim();
+                next.displayName = baseName;
+                next.name = baseName;
+                next.username = baseName;
+                next.loginKey = String(next.loginKey || userKey).trim().toLowerCase();
+
+                next.createdAt = Number(next.createdAt || now);
+                next.signupDate = next.signupDate || new Date(next.createdAt).toISOString();
+
+                const trialDays = parsePositiveInt(next.trialDays, defaultTrialDays, 0, 3650);
+                next.trialDays = trialDays;
+
+                if (!next.trialEndsAt) {
+                    next.trialEndsAt = new Date(new Date(next.signupDate).getTime() + trialDays * 24 * 60 * 60 * 1000).toISOString();
+                }
+
+                const normalizedStatus = normalizeSubscriptionStatus(next.subscriptionStatus);
+                const trialEndsAtMs = next.trialEndsAt ? Date.parse(next.trialEndsAt) : NaN;
+                const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > now;
+                const paid = isPaidStatus(normalizedStatus) || Boolean(next.squareSubscriptionId);
+
+                next.subscriptionStatus = paid
+                    ? (normalizedStatus === 'GUEST' ? 'ACTIVE' : normalizedStatus)
+                    : (trialActive ? 'TRIAL' : 'GUEST');
+
+                if (!next.billingTier) {
+                    next.billingTier = paid ? 'premium-monthly' : (trialActive ? 'trial' : 'guest');
+                }
+
+                next.freeAccessActive = paid ? false : trialActive;
+                next.gracePeriodDays = parsePositiveInt(next.gracePeriodDays, parsePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3, 0, 3650), 0, 3650);
+                next.updatedAt = now;
+
+                const before = JSON.stringify(config || {});
+                const after = JSON.stringify(next);
+                if (before !== after) {
+                    await ProfileService.writeData(userKey, 'config', next);
+                    updated += 1;
+                }
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            scanned: users.length,
+            updated,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/reset-trials
+// Reset trial window for all users to start now and expire after configured trial days.
+router.post('/users/reset-trials', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const trialDays = parsePositiveInt(
+            body.trialDays,
+            parsePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7, 0, 3650),
+            0,
+            3650
+        );
+
+        const users = await ProfileService.listUsers();
+        if (!Array.isArray(users) || users.length === 0) {
+            return res.json({ success: true, updated: 0, users: [], trialDays });
+        }
+
+        const now = Date.now();
+        const trialEndsAt = new Date(now + trialDays * 24 * 60 * 60 * 1000).toISOString();
+        const updatedUsers = [];
+        const errors = [];
+
+        for (const userKey of users) {
+            try {
+                const config = await ProfileService.readData(userKey, 'config', {});
+                const nextConfig = {
+                    ...config,
+                    trialDays,
+                    trialEndsAt,
+                    freeAccessActive: true,
+                    gracePeriodEndsAt: null,
+                    updatedAt: now
+                };
+
+                const status = normalizeSubscriptionStatus(config.subscriptionStatus);
+                if (!isPaidStatus(status)) {
+                    nextConfig.subscriptionStatus = 'TRIAL';
+                    nextConfig.billingTier = 'trial';
+                }
+
+                await ProfileService.writeData(userKey, 'config', nextConfig);
+                updatedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            updated: updatedUsers.length,
+            users: updatedUsers,
+            trialDays,
+            trialEndsAt,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/:userKey/clear-square-subscription
+// Clear stale Square links for one user (common sandbox -> production repair path).
+router.post('/users/:userKey/clear-square-subscription', async (req, res) => {
+    try {
+        const userKey = String(req.params.userKey || '').trim().toLowerCase();
+        if (!userKey) {
+            return res.status(400).json({ success: false, error: 'Missing user key.' });
+        }
+
+        const config = await ProfileService.readData(userKey, 'config', {});
+        const trialEndsAtMs = config.trialEndsAt ? Date.parse(config.trialEndsAt) : NaN;
+        const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+
+        const nextConfig = {
+            ...config,
+            squareCustomerId: null,
+            squareCardId: null,
+            squareSubscriptionId: null,
+            squarePlanVariationId: null,
+            nextBillingDate: null,
+            cancelAtPeriodEnd: false,
+            subscriptionStatus: trialActive ? 'TRIAL' : 'GUEST',
+            billingTier: trialActive ? 'trial' : 'guest',
+            freeAccessActive: trialActive,
+            updatedAt: Date.now()
+        };
+
+        await ProfileService.writeData(userKey, 'config', nextConfig);
+        return res.json({ success: true, userKey, config: nextConfig });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/:userKey/reconcile-subscription
+// Force one-off Square reconciliation for a single user.
+router.post('/users/:userKey/reconcile-subscription', async (req, res) => {
+    try {
+        const userKey = String(req.params.userKey || '').trim().toLowerCase();
+        if (!userKey) {
+            return res.status(400).json({ success: false, error: 'Missing user key.' });
+        }
+
+        const result = await AccountService.reconcileSubscriptionState(userKey);
+        return res.json({ success: Boolean(result && result.success), userKey, result });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 

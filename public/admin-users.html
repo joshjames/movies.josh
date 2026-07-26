@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Any.Movie Admin User Manager</title>
+    <style>
+        :root {
+            --bg: #0b1220;
+            --panel: #111a2d;
+            --panel-2: #0f172a;
+            --line: #2a3a52;
+            --text: #e2e8f0;
+            --muted: #8ea2bd;
+            --blue: #2563eb;
+            --cyan: #0891b2;
+            --green: #0f766e;
+            --red: #b91c1c;
+            --amber: #b45309;
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 800px at 10% -20%, #182748 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .wrap {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            margin: 0 0 14px 0;
+            font-size: 1.4rem;
+            letter-spacing: 0.01em;
+        }
+
+        .toolbar {
+            display: grid;
+            grid-template-columns: 1fr repeat(6, auto);
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .toolbar input, .toolbar select, .toolbar button, .toolbar a {
+            min-height: 38px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            background: var(--panel-2);
+            color: var(--text);
+            padding: 0 12px;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+
+        .toolbar button { cursor: pointer; }
+
+        .btn-primary { background: #1d4ed8; border-color: #1d4ed8; }
+        .btn-cyan { background: var(--cyan); border-color: var(--cyan); }
+        .btn-green { background: var(--green); border-color: var(--green); }
+        .btn-red { background: var(--red); border-color: var(--red); }
+        .btn-muted { background: #334155; border-color: #334155; }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .status {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--line);
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        .table-wrap {
+            overflow: auto;
+            max-height: 72vh;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1280px;
+        }
+
+        th, td {
+            border-bottom: 1px solid #1f2b42;
+            padding: 9px 10px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 0.82rem;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #0d172b;
+            color: #9cc6ff;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.72rem;
+        }
+
+        .pill {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 3px 9px;
+            font-weight: 700;
+            font-size: 0.72rem;
+            border: 1px solid transparent;
+        }
+
+        .pill.active { background: #0a3d2d; border-color: #0f766e; color: #6ee7b7; }
+        .pill.trial { background: #3a2a08; border-color: var(--amber); color: #fcd34d; }
+        .pill.guest { background: #1e293b; border-color: #334155; color: #cbd5e1; }
+
+        .actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .actions button {
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            padding: 6px 8px;
+            background: #1e293b;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.72rem;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            border-top: 1px solid var(--line);
+            padding: 10px;
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
+        .pagination .nav {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .pagination button {
+            border-radius: 7px;
+            border: 1px solid var(--line);
+            background: #1e293b;
+            color: var(--text);
+            min-height: 34px;
+            padding: 0 12px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 1200px) {
+            .toolbar { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h1>User Manager</h1>
+        <div class="toolbar">
+            <input id="search" type="search" placeholder="Search user, email, subscription id...">
+            <select id="limit">
+                <option value="50" selected>50 per page</option>
+                <option value="100">100 per page</option>
+                <option value="150">150 per page</option>
+            </select>
+            <button class="btn-primary" id="btn-apply">Apply</button>
+            <button class="btn-cyan" id="btn-normalize">Normalize Missing Data</button>
+            <button class="btn-green" id="btn-reset-trials">Reset All Trials To Now</button>
+            <button class="btn-red" id="btn-reset-subs">Reset All Subscriptions</button>
+            <a class="btn-muted" href="/admin.html">Back To Admin</a>
+        </div>
+
+        <div class="panel">
+            <div class="status" id="status">Loading users...</div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Email</th>
+                            <th>Display</th>
+                            <th>Status</th>
+                            <th>Tier</th>
+                            <th>Trial Ends</th>
+                            <th>Square Customer</th>
+                            <th>Square Sub</th>
+                            <th>Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rows">
+                        <tr><td colspan="10" style="color:#8ea2bd;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <div id="meta">-</div>
+                <div class="nav">
+                    <button id="prev">Previous</button>
+                    <span id="page">Page 1</span>
+                    <button id="next">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            page: 1,
+            totalPages: 1,
+            totalItems: 0,
+            limit: 50,
+            query: '',
+            users: []
+        };
+
+        function esc(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function fmtDate(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return String(value);
+            return date.toLocaleString();
+        }
+
+        function statusPill(status) {
+            const normalized = String(status || 'GUEST').toUpperCase();
+            if (['ACTIVE', 'PENDING', 'PAUSED', 'GRACE'].includes(normalized)) {
+                return '<span class="pill active">' + esc(normalized) + '</span>';
+            }
+            if (['TRIAL', 'TRIALING'].includes(normalized)) {
+                return '<span class="pill trial">TRIAL</span>';
+            }
+            return '<span class="pill guest">' + esc(normalized || 'GUEST') + '</span>';
+        }
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function renderRows() {
+            const body = document.getElementById('rows');
+            if (!Array.isArray(state.users) || state.users.length === 0) {
+                body.innerHTML = '<tr><td colspan="10" style="color:#8ea2bd;">No users found for current filter.</td></tr>';
+                return;
+            }
+
+            body.innerHTML = state.users.map((user) => {
+                const username = esc(user.username || '');
+                return '<tr>'
+                    + '<td>' + username + '</td>'
+                    + '<td>' + esc(user.email || '-') + '</td>'
+                    + '<td>' + esc(user.displayName || '-') + '</td>'
+                    + '<td>' + statusPill(user.subscriptionStatus) + '</td>'
+                    + '<td>' + esc(user.billingTier || '-') + '</td>'
+                    + '<td>' + esc(fmtDate(user.trialEndsAt)) + '</td>'
+                    + '<td>' + esc(user.squareCustomerId || '-') + '</td>'
+                    + '<td>' + esc(user.squareSubscriptionId || '-') + '</td>'
+                    + '<td>' + esc(fmtDate(user.updatedAt || user.signupDate || user.createdAt)) + '</td>'
+                    + '<td>'
+                    + '<div class="actions">'
+                    + '<button onclick="reconcileUser(\'' + username + '\')">Reconcile</button>'
+                    + '<button onclick="clearSquare(\'' + username + '\')">Clear Square</button>'
+                    + '<button onclick="openHistory(\'' + username + '\')">History</button>'
+                    + '</div>'
+                    + '</td>'
+                    + '</tr>';
+            }).join('');
+        }
+
+        function renderPager() {
+            document.getElementById('meta').textContent =
+                'Users: ' + state.totalItems + ' | Page size: ' + state.limit;
+            document.getElementById('page').textContent =
+                'Page ' + state.page + ' of ' + state.totalPages;
+            document.getElementById('prev').disabled = state.page <= 1;
+            document.getElementById('next').disabled = state.page >= state.totalPages;
+        }
+
+        async function loadUsers() {
+            const params = new URLSearchParams({
+                paginated: 'true',
+                page: String(state.page),
+                limit: String(state.limit)
+            });
+            if (state.query) params.set('query', state.query);
+
+            setStatus('Loading users...');
+            const res = await fetch('/api/admin/users?' + params.toString());
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                setStatus('Failed to load users: ' + (data.error || res.statusText));
+                return;
+            }
+
+            state.users = Array.isArray(data.users) ? data.users : [];
+            state.page = Number(data.page || 1);
+            state.totalPages = Number(data.totalPages || 1);
+            state.totalItems = Number(data.totalItems || state.users.length || 0);
+            state.limit = Number(data.limit || state.limit || 50);
+
+            renderRows();
+            renderPager();
+            setStatus('Loaded users successfully.');
+        }
+
+        async function postJson(url, payload, successMessage) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload || {})
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || ('Request failed: ' + res.status));
+            }
+            setStatus(successMessage);
+            return data;
+        }
+
+        async function normalizeUsers() {
+            try {
+                setStatus('Normalizing user data...');
+                const data = await postJson('/api/admin/users/normalize-data', {}, 'Normalization complete.');
+                setStatus('Normalization complete. Updated ' + data.updated + ' of ' + data.scanned + ' users.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Normalization failed: ' + err.message);
+            }
+        }
+
+        async function resetTrials() {
+            if (!confirm('Reset trial dates for all users to now?')) return;
+            try {
+                setStatus('Resetting trial windows for all users...');
+                const data = await postJson('/api/admin/users/reset-trials', { trialDays: 7 }, 'Trial reset complete.');
+                setStatus('Trial reset complete. Updated ' + data.updated + ' users.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Trial reset failed: ' + err.message);
+            }
+        }
+
+        async function resetSubscriptions() {
+            if (!confirm('Reset all subscription mappings and statuses for all users?')) return;
+            try {
+                setStatus('Resetting subscriptions...');
+                const data = await postJson('/api/admin/users/reset-subscriptions', { resetTrial: false }, 'Subscription reset complete.');
+                setStatus('Subscription reset complete. Updated ' + data.updated + ' users.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Subscription reset failed: ' + err.message);
+            }
+        }
+
+        async function reconcileUser(userKey) {
+            try {
+                setStatus('Reconciling subscription for ' + userKey + ' ...');
+                await postJson('/api/admin/users/' + encodeURIComponent(userKey) + '/reconcile-subscription', {}, 'Reconciled ' + userKey + '.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Reconcile failed for ' + userKey + ': ' + err.message);
+            }
+        }
+
+        async function clearSquare(userKey) {
+            if (!confirm('Clear Square linkage for ' + userKey + '?')) return;
+            try {
+                setStatus('Clearing Square linkage for ' + userKey + ' ...');
+                await postJson('/api/admin/users/' + encodeURIComponent(userKey) + '/clear-square-subscription', {}, 'Cleared Square linkage for ' + userKey + '.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Clear Square failed for ' + userKey + ': ' + err.message);
+            }
+        }
+
+        function openHistory(userKey) {
+            const url = '/api/admin/users/' + encodeURIComponent(userKey) + '/watch-history?limit=100';
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        document.getElementById('btn-apply').addEventListener('click', () => {
+            state.query = String(document.getElementById('search').value || '').trim();
+            state.limit = Number(document.getElementById('limit').value || 50);
+            state.page = 1;
+            loadUsers();
+        });
+
+        document.getElementById('btn-normalize').addEventListener('click', normalizeUsers);
+        document.getElementById('btn-reset-trials').addEventListener('click', resetTrials);
+        document.getElementById('btn-reset-subs').addEventListener('click', resetSubscriptions);
+
+        document.getElementById('search').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                document.getElementById('btn-apply').click();
+            }
+        });
+
+        document.getElementById('prev').addEventListener('click', () => {
+            if (state.page <= 1) return;
+            state.page -= 1;
+            loadUsers();
+        });
+
+        document.getElementById('next').addEventListener('click', () => {
+            if (state.page >= state.totalPages) return;
+            state.page += 1;
+            loadUsers();
+        });
+
+        loadUsers();
+    </script>
+</body>
+</html>

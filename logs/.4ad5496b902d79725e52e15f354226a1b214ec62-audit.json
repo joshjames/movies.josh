@@ -6,31 +6,6 @@
     "auditLog": "/home/epic/movie-streamer/logs/.4ad5496b902d79725e52e15f354226a1b214ec62-audit.json",
     "files": [
         {
-            "date": 1783095549020,
-            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-03.log",
-            "hash": "8e77f05b3f94511b71a9b34f56690b38479c7cf405be27714fc7dea810dfd812"
-        },
-        {
-            "date": 1783138347253,
-            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-04.log",
-            "hash": "ac2c7bd9e40f63ed54ce227b4bbdd6998a5b80c4e871934ef4dd490ecf327ce2"
-        },
-        {
-            "date": 1783477226012,
-            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-08.log",
-            "hash": "24b2959cb7aaa6372488682aa74537ff3aee63ac325775701744a0bf989de27f"
-        },
-        {
-            "date": 1783750107218,
-            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-11.log",
-            "hash": "b660165389b55f24ca3a612ec6b6ad149a23b249229efa41b49a7ea5c0d3bcec"
-        },
-        {
-            "date": 1783841477171,
-            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-12.log",
-            "hash": "e89e75ced01cc067c624a2fc9da98680c7acd9a38290867abc769b9d4733f4b0"
-        },
-        {
             "date": 1783927320840,
             "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-13.log",
             "hash": "d70801ef27238a4b90f436273a459b5c37000b6db6951053e2819fbe6a1421ff"
@@ -44,6 +19,11 @@
             "date": 1784250703138,
             "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-17.log",
             "hash": "fdad65f4d0baf8264365bd42a687e3a7ec9e9215f5614d10d985af09bb99d86d"
+        },
+        {
+            "date": 1785072872050,
+            "name": "/home/epic/movie-streamer/logs/anymovie-2026-07-26.log",
+            "hash": "c1625d42cc573614bb27d36649b262a28f27131b355e08a301f66969de43468d"
         }
     ],
     "hashType": "sha256"

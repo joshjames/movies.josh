@@ -250,6 +250,29 @@ app.get('/admin.html', async (req, res) => {
     return res.redirect('/login.html');
 });
 
+app.get('/admin-users.html', async (req, res) => {
+    const activeUser = req.cookies?.user_profile;
+    const cleanUser = String(activeUser || '').toLowerCase().trim();
+
+    const allowByIdentity = cleanUser === 'josh' || cleanUser.startsWith('josh@');
+    if (allowByIdentity) {
+        return res.sendFile(path.join(__dirname, 'public/admin-users.html'));
+    }
+
+    if (cleanUser) {
+        try {
+            const config = await ProfileService.readData(cleanUser, 'config', {});
+            if (config?.isAdmin === true) {
+                return res.sendFile(path.join(__dirname, 'public/admin-users.html'));
+            }
+        } catch (_err) {
+            // Fall through to login redirect.
+        }
+    }
+
+    return res.redirect('/login.html');
+});
+
 // =========================================================================
 // 🔐 THE SECURE BOUNDARY: Protect everything below this line
 // =========================================================================

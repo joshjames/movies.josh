@@ -486,6 +486,33 @@ class AccountService {
     try {
       response = await square.subscriptions.get({ subscriptionId });
     } catch (error) {
+      const notFound = hasSquareErrorCode(error, 'NOT_FOUND') || hasSquareErrorCode(error, 'BAD_REQUEST');
+      if (notFound) {
+        const trialEndsAtMs = currentConfig.trialEndsAt ? Date.parse(currentConfig.trialEndsAt) : NaN;
+        const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+        const nextConfig = {
+          ...currentConfig,
+          squareSubscriptionId: null,
+          squarePlanVariationId: null,
+          nextBillingDate: null,
+          cancelAtPeriodEnd: false,
+          subscriptionStatus: trialActive ? 'TRIAL' : 'GUEST',
+          billingTier: trialActive ? 'trial' : 'guest',
+          freeAccessActive: trialActive,
+          lastSquareSyncAt: new Date().toISOString(),
+          updatedAt: Date.now()
+        };
+
+        await ProfileService.writeData(userKey, 'config', nextConfig);
+        logger.warn(`[SQUARE] Cleared stale subscription reference for ${userKey} (${subscriptionId}).`);
+        return {
+          success: true,
+          staleReferenceCleared: true,
+          reason: 'subscription_not_found',
+          config: nextConfig
+        };
+      }
+
       logger.warn(`[SQUARE] Failed to reconcile subscription ${subscriptionId} for ${userKey}: ${error.message}`);
       return { success: false, error: error.message, config: currentConfig };
     }
