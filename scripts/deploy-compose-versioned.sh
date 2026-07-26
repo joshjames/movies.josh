@@ -78,7 +78,7 @@ if [[ -n "$NPM_URL" && -n "$NPM_ADMIN_USER" && -n "$NPM_ADMIN_PASSWORD" ]]; then
     NPM_URL="$NPM_URL" \
     NPM_ADMIN_USER="$NPM_ADMIN_USER" \
     NPM_ADMIN_PASSWORD="$NPM_ADMIN_PASSWORD" \
-    NPM_PROXY_DOMAINS="${NPM_PROXY_DOMAINS:-anyseries.online,anymovie.online}" \
+    NPM_PROXY_DOMAINS="${NPM_PROXY_DOMAINS:-any.movie,anymovie.online,anyseries.online}" \
     node scripts/npm-switch-proxy-hosts.js
 else
     echo "==> NPM API update skipped (missing NPM_URL/NPM_ADMIN_USER/NPM_ADMIN_PASSWORD in .env)"

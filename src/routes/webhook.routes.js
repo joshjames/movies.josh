@@ -4,7 +4,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const AccountService = require('../services/AccountService');
 const logger = require('../services/logger');
-const { getPrimaryAppUrl, getLegacyAppUrl } = require('../utils/publicOrigin');
+const { getPrimaryAppUrl, getAllowedAppUrls } = require('../utils/publicOrigin');
 
 function resolveWebhookConfig(req) {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -14,8 +14,11 @@ function resolveWebhookConfig(req) {
   const fallbackUrl = `${requestProto}://${requestHost}${req.originalUrl}`;
 
   const primaryAppUrl = getPrimaryAppUrl();
-  const legacyAppUrl = getLegacyAppUrl();
   const dualDomainEnabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.WEBHOOK_DUAL_DOMAIN || 'true').trim().toLowerCase());
+  const allowedAppUrls = getAllowedAppUrls();
+  const candidateAppUrls = dualDomainEnabled
+    ? allowedAppUrls
+    : [primaryAppUrl].filter(Boolean);
 
   const derivedWebhookPaths = [
     '/api/webhooks/subscription_payload',
@@ -23,14 +26,9 @@ function resolveWebhookConfig(req) {
   ];
 
   const derivedUrls = [];
-  if (primaryAppUrl) {
+  for (const appUrl of candidateAppUrls) {
     for (const path of derivedWebhookPaths) {
-      derivedUrls.push(`${primaryAppUrl}${path}`);
-    }
-  }
-  if (dualDomainEnabled && legacyAppUrl) {
-    for (const path of derivedWebhookPaths) {
-      derivedUrls.push(`${legacyAppUrl}${path}`);
+      derivedUrls.push(`${appUrl}${path}`);
     }
   }
 

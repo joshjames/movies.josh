@@ -10,30 +10,51 @@ function normalizeUrl(input) {
     }
 }
 
+const DEFAULT_APP_URLS = [
+    'https://any.movie',
+    'https://anymovie.online',
+    'https://anyseries.online'
+];
+
+function parseUrlList(...values) {
+    const items = values
+        .flatMap((value) => String(value || '').split(','))
+        .map((item) => normalizeUrl(item))
+        .filter(Boolean);
+
+    return Array.from(new Set(items));
+}
+
 function getPrimaryAppUrl() {
     return normalizeUrl(
         process.env.APP_URL ||
         process.env.APP_URL_PRIMARY ||
-        'https://anyseries.online'
-    ) || 'https://anyseries.online';
+        DEFAULT_APP_URLS[0]
+    ) || DEFAULT_APP_URLS[0];
 }
 
 function getLegacyAppUrl() {
-    return normalizeUrl(process.env.APP_URL_LEGACY || process.env.LEGACY_APP_URL || '');
+    const aliases = getLegacyAppUrls();
+    return aliases[0] || '';
+}
+
+function getLegacyAppUrls() {
+    return parseUrlList(
+        process.env.APP_URL_LEGACY,
+        process.env.LEGACY_APP_URL,
+        process.env.APP_URL_ALIASES
+    );
 }
 
 function getAllowedAppUrls() {
-    const urls = [
+    const urls = parseUrlList(
         getPrimaryAppUrl(),
-        getLegacyAppUrl()
-    ].filter(Boolean);
+        ...getLegacyAppUrls(),
+        ...DEFAULT_APP_URLS,
+        process.env.APP_ALLOWED_ORIGINS
+    );
 
-    const extras = String(process.env.APP_ALLOWED_ORIGINS || '')
-        .split(',')
-        .map((item) => normalizeUrl(item))
-        .filter(Boolean);
-
-    return Array.from(new Set([...urls, ...extras]));
+    return urls;
 }
 
 function buildAbsoluteAppUrl(pathname = '/') {
@@ -46,6 +67,7 @@ module.exports = {
     normalizeUrl,
     getPrimaryAppUrl,
     getLegacyAppUrl,
+    getLegacyAppUrls,
     getAllowedAppUrls,
     buildAbsoluteAppUrl
 };

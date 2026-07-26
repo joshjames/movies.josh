@@ -247,7 +247,7 @@ async function runQueueCompletionHooks(job, libraryItem) {
             await MailerService.sendTemplateEmail({
                 toEmail: targetEmail,
                 toName: displayName,
-                subject: `${mediaTitle} is ready in AnySeries`,
+                subject: `${mediaTitle} is ready on any.movie`,
                 templateName: 'queue-complete-email.html',
                 variables: {
                     title: 'Queue Item Completed',
@@ -258,7 +258,7 @@ async function runQueueCompletionHooks(job, libraryItem) {
                     watchUrl: destination,
                     supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
                     appUrl,
-                    senderName: process.env.SENDER_NAME || 'AnySeries Admin'
+                    senderName: process.env.SENDER_NAME || 'Any.Movie'
                 }
             });
         }

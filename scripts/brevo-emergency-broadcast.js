@@ -125,8 +125,8 @@ async function sendTransactionalEmail({ apiKey, senderName, senderEmail, subject
 async function main() {
   const args = parseArgs(process.argv);
   const apiKey = String(process.env.EMAIL_API_KEY || '').trim();
-  const senderEmail = String(process.env.SENDER_EMAIL || 'welcome@anyseries.online').trim();
-  const senderName = String(process.env.SENDER_NAME || 'AnySeries Online').trim();
+  const senderEmail = String(process.env.SENDER_EMAIL || 'welcome@any.movie').trim();
+  const senderName = String(process.env.SENDER_NAME || 'Any.Movie').trim();
 
   if (!args.subject) {
     throw new Error('Missing required --subject');

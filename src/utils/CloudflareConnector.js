@@ -3,7 +3,7 @@ const axios = require('axios');
 async function injectCloudflareGeoRoute(newServerIp) {
     const CF_ZONE_ID = process.env.CF_ZONE_ID;
     const CF_API_TOKEN = process.env.CF_API_TOKEN;
-    const CF_RECORD_NAME = process.env.CF_RECORD_NAME || 'anyseries.online';
+    const CF_RECORD_NAME = process.env.CF_RECORD_NAME || 'any.movie';
 
     // Trigger Cloudflare Routing Pool updates or DNS record pools
     await axios.post(

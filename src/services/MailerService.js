@@ -94,8 +94,8 @@ async function sendEmail({ toEmail, toName, subject, htmlContent }) {
 
     const payload = {
         sender: { 
-            name: process.env.SENDER_NAME || "AnySeries Admin", 
-            email: process.env.SENDER_EMAIL || "welcome@anyseries.online" 
+            name: process.env.SENDER_NAME || "Any.Movie", 
+            email: process.env.SENDER_EMAIL || "welcome@any.movie" 
         },
         to: [{ email: toEmail, name: toName || '' }],
         subject,
@@ -135,7 +135,7 @@ async function sendTemplateEmail({ toEmail, toName, subject, templateName, varia
 async function sendVerificationEmail(email, userKey, token, options = {}) {
     const verificationUrl = `${buildAuthUrl('/api/auth/verify')}?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
     const displayName = options.displayName || userKey;
-    const subject = options.subject || process.env.VERIFICATION_EMAIL_SUBJECT || 'Activate Your AnySeries Profile';
+    const subject = options.subject || process.env.VERIFICATION_EMAIL_SUBJECT || 'Activate Your Any.Movie profile';
 
     return sendTemplateEmail({
         toEmail: email,
@@ -143,13 +143,13 @@ async function sendVerificationEmail(email, userKey, token, options = {}) {
         subject,
         templateName: options.templateName || 'verification-email.html',
         variables: {
-            title: 'Activate Your AnySeries Profile',
+            title: 'Activate Your Any.Movie profile',
             preheader: 'Verify your account to finish setup.',
             username: displayName,
             verificationUrl,
             supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
             appUrl: buildAuthUrl('/'),
-            senderName: process.env.SENDER_NAME || 'AnySeries Admin'
+            senderName: process.env.SENDER_NAME || 'Any.Movie'
         }
     });
 }
@@ -158,7 +158,7 @@ async function sendPasswordResetEmail(email, userKey, token, options = {}) {
     const appUrl = buildAuthUrl('/');
     const resetUrl = `${appUrl}/login.html?reset=true&token=${encodeURIComponent(token)}&user=${encodeURIComponent(userKey)}`;
     const displayName = options.displayName || userKey;
-    const subject = options.subject || process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'Reset your AnySeries password';
+    const subject = options.subject || process.env.PASSWORD_RESET_EMAIL_SUBJECT || 'Reset your Any.Movie password';
 
     return sendTemplateEmail({
         toEmail: email,
@@ -166,13 +166,13 @@ async function sendPasswordResetEmail(email, userKey, token, options = {}) {
         subject,
         templateName: options.templateName || 'password-reset-email.html',
         variables: {
-            title: 'Reset Your AnySeries Password',
+            title: 'Reset your Any.Movie password',
             preheader: 'Use this secure link to set a new password.',
             username: displayName,
             resetUrl,
             supportEmail: process.env.SUPPORT_EMAIL || 'josh@joshjames.site',
             appUrl,
-            senderName: process.env.SENDER_NAME || 'AnySeries Admin'
+            senderName: process.env.SENDER_NAME || 'Any.Movie'
         }
     });
 }

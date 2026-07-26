@@ -1,28 +1,38 @@
-new
 
-The strategy to isolate "My Added Media" while keeping the underlying storage global is pure genius. It solves the classic community library problem (the "Westerns clutter" issue) without duplicating huge multi-gigabyte video files on your NVMe drives. If User A downloads a movie, the file sits globally on disk, but it only populates the personal dashboards of the users who care about it.
+WORKING LOG
 
-Here is a breakdown of how to structure these heavy features using your databaseless philosophy, including how to build that Dual-Result API Search Engine without a database.
 
-🚀 The anymovie.online Pre-Launch Feature Blueprint
-1. The Dual-Result Search & Deduplication Layer
+
+
+🚀 The any.movie Pre-Launch Feature Blueprint
+
+---------------------------------------------------------------------------------------------------------
+1. The Dual-Result Search & Deduplication Layer    REVISIT. *DONE* mostly.
 To search both local inventory and online torrent sources simultaneously without duplicates, your search API endpoint will act as a unified aggregator.
 
 How it works: When a user searches "Interstellar", the API fires two asynchronous tasks simultaneously:
 
 It queries your local Redis Index 3 (or files) to see if an asset with that title or IMDb ID already exists on your NVMe drive.
-
 It reaches out to your online scraping APIs (YTS/EZTV).
 
 The Deduplication Rule: The aggregator loops through the online results and cross-references their unique identifiers (IMDb IDs) against the local results. If a match is found, the online item is filtered out or marked as "status": "INSTANT_PLAY", while the others are marked as "status": "DOWNLOAD_AVAILABLE".
 
 I want to go about this in a few ways....
+  #####
 1. on the browse & add page.. we will have an omni search bar at the top.  but undernearth will also have a grid of recent/new/popular  (some of these will also appear on the main page in a carosoul like new)
 when they start typing in to the omni bar it has instant results you know how results come as you type...
 they will appear ini the search results... but then the api will have a show more results..
 when they add anyting it goes in to their library. 
 
+(DONE)   - however it passes to the search it could be more intuitive.
+
+have not implimented the ability to add existing in to mylibrary...   - this would blow out the my library...
+but.. i guess with the new grid view this is fine.. as the mylibrary on the home page only shows the most recent added like 14 items.... then "show all" grid view..
+
+--------------------------------------------------------------------------------------
+*DONE*
 2. User-Specific Library Scoping ("My Library")
+
 To keep the main dashboard clean, you don't need a database relation table. You can track library ownership straight inside the flat user profile files you are already creating.
 
 Update your user JSON schema (/app/storage/users/[username].json) to include tracking arrays:
@@ -39,6 +49,7 @@ JSON
         "tt0468569": { "resumePositionSeconds": 3420, "lastWatched": "2026-06-29T01:00:00Z" }
     }
 }
+
 The Dashboard Rule: When loading the index page, the frontend reads the user's myLibrary array of IMDb IDs. It grabs those specific assets out of your global Redis cache to render a personalized "Your Collection" shelf at the very top of the UI.
 
 this is not bad.. i just worry about performance... i also need to make the complex algorithm on what to add 
@@ -47,16 +58,91 @@ i will play with it... but yeah...
 I want it to feel seamnless... and like they have their media and its part of the whole thing..
 i will play with some ways to achieve this,
 
+as above... - all done but can be improved - i thnk TAGGING will be a thing... and in grid view.. they can add tags to the side view like their own categories..
+but also.. have categories...
+ of course.. this will add so much overlay and could blow out..
+
+--------------------------------------------------------------------------
+*NEEDS MORE WORK*
 3. Signup Security & Hardening Matrix
+
 Since this will face the open web on a public domain, you need defensive code borders right at the entry point:
 
 API Rate Limiting: Use express-rate-limit as a middleware layer mounted exclusively on /api/auth/register, /api/auth/login, and /api/auth/verify. Restrict signups to a strict maximum of 3 attempts per hour per IP address to prevent registration flooding.
+
+
+-------------------
+
+*NEEDS FINISHING*
 
 Input Sanitization: Run validation strings to ensure usernames are strictly alphanumeric (preventing directory traversal attacks since you map usernames directly to local file paths).
 
 Turnstile/Captcha: Drop Cloudflare’s free, non-intrusive Turnstile widget onto the registration page. It checks for bots silently without forcing your friends and family to solve annoying puzzle grids.
 
-4. The Premium Tier & "Silly AI Ads" Engine
+THIS IS PRIORITY. - api limits, bot blocking, signup blocking, cloudflare turnstile captcha..
+and any other security...  will go hand in hand with....
+----------------------------------------------------------------------------
+*PRIORITY*
+below
+---------------------------------------------------------------
+
+4.  cloudflare edge player for media player complete offloading.
+
+Edge player, edge cdn, cloud media
+
+
+---------------------------------------------------------------------
+
+5. load balance containers in particular for GREEN BLUE and performance. on a site level
+
+this is simple we just either configure npm with custom rules or replace it with HAproxy and load balance with sticky sessions
+? actually... if we move cookie session to redis sticky sessions wont matter... i think.
+all data is outside the container so we can scale up as many containers as needed..
+this will also work with a docker swarm like setup so multiple "servers at a site"
+
+
+---------------------------------------------------------------------------------------
+
+6. load balance across sites at a  GEO. dns level. (using cloud flare and routing rules to closes site.)
+
+FINAL ARCHITECTURE below.
+
+first stage:
+2 nodes. in active active..
+
+we have server 1. current... LA 
+and there is another server  snode.joshjames.site  (ill fix up dns to something better shortly but that address will auto ssh)
+
+ssh username epic  ssh keys setup and sudo
+
+i have another repo called anymovie.project   < this is the repo that automates all the higher infrastructure>
+
+it will look after deployment of containers to servers all the other infra... dependencies
+redis, npm, qbittorrent, (both levels... - we should be able to use qbittorrent ACROSS the wan link)
+
+
+
+
+final:
+so multi layers load balancing task here..
+  A) GEO load balancing and dns load balancing   - direct to closesnt node server...  (depends on multi server completion)
+        - using dns and workers / smart load balancing at cloudflare.
+
+  B) also impliment DNS security and multi host fail over... i am still unsure how to achieve this....
+     but basically id like it if... i can send everyone from say any.movie   > directs to a downstream dns like.. hostA.any.movie   OR anymovie.us   - anymovie.au   -   anymovie.eu - anymovie.ca - anymovie.nyc  - anymovie.la  - anymovie.uk
+
+     even those hosts have smart dns to route if there is load or health..
+
+    each host has a edge container   npm ?  or haproxy
+
+    assessment note: [docs/scaling-readiness-assessment.md](docs/scaling-readiness-assessment.md)
+
+
+-------------------------------------------------------------------
+
+* LOW PRIORITY *
+
+7. The Premium Tier & "Silly AI Ads" Engine
 This is an incredibly fun feature. Embedding custom AI-generated spoof ads for free-tier users is a brilliant touch that adds huge personality while acting as a gentle nudge to support the platform.
 
 The Seamless Playback Hack: Instead of physically modifying the underlying movie files (which would ruin the global file for premium users and consume massive Xeon CPU cycles to re-transcode), you handle ad insertion dynamically in the frontend player.
@@ -69,12 +155,18 @@ Once the ad finishes, it unhides the player seek bar and switches the stream sou
 
 At the halfway mark of the movie runtime, it pauses the stream, saves the position, pops up a "Commercial Break" overlay, plays ad clip #2, and then resumes the film.
 
-5. Advanced UI Components (Resume Watching & Categories)
+
+----------------------------------------------------------------------
+
+8. Advanced UI Components (Resume Watching & Categories)   DONE
 Resume Watching: Every 30 seconds during media playback, the video player hits a lightweight background endpoint: /api/profile/resume. It passes the current video progress timestamp, which writes instantly to their local user profile JSON. When they return to the main catalog, your backend feeds these states to display a "Resume Watching" rail.
 
 Sorting & Metadata Tags: Since your LibraryScanner already pulls full TMDB/IMDb metadata packets down into metadata.json, you already have access to the genres array for every film. You can use Redis to dynamically group your titles by genre tags on the fly during boot initialization.
 
 
+
+
+compled below.
 
 ------------past road map-------------------
 

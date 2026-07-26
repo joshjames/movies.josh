@@ -35,8 +35,12 @@
 
     var local = parseOriginList(localStorage.getItem('apiFailover.origins'));
     var defaults = [
+      'https://any.movie',
+      'https://anymovie.online',
       'https://anyseries.online',
-      'https://anymovie.online'
+      'https://anymovie.us',
+      'https://anymovie.au',
+      'https://anymovie.eu'
     ];
     var merged = windowConfigured.concat(local).concat(defaults);
     var normalized = merged

@@ -69,7 +69,7 @@ async function main() {
   const adminPassword = env('NPM_ADMIN_PASSWORD');
   const targetHost = env('TARGET_CONTAINER_HOST');
   const targetPort = env('TARGET_CONTAINER_PORT', '3000');
-  const domains = parseCsv(env('NPM_PROXY_DOMAINS', 'anyseries.online,anymovie.online'));
+  const domains = parseCsv(env('NPM_PROXY_DOMAINS', 'any.movie,anymovie.online,anyseries.online'));
   const dryRun = ['1', 'true', 'yes'].includes(env('NPM_DRY_RUN', 'false').toLowerCase());
 
   if (!npmUrl || !adminUser || !adminPassword || !targetHost) {
