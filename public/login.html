@@ -236,25 +236,25 @@
 
         <div class="banner" id="alertBlock"></div>
 
-        <form id="authForm" onsubmit="handleFormSubmit(event)">
+        <form id="authForm" method="post" action="/api/auth/login" onsubmit="handleFormSubmit(event)">
             <div class="form-group">
                 <label for="usernameIn" id="usernameLabel">Email Address</label>
-                <input type="text" id="usernameIn" required autocomplete="username">
+                <input type="text" id="usernameIn" name="username" required autocomplete="username">
             </div>
 
             <div class="form-group" id="nameFieldGroup">
                 <label for="nameIn">Full Name</label>
-                <input type="text" id="nameIn" autocomplete="name">
+                <input type="text" id="nameIn" name="name" autocomplete="name">
             </div>
 
             <div class="form-group">
                 <label for="passwordIn">Password</label>
-                <input type="password" id="passwordIn" required autocomplete="current-password">
+                <input type="password" id="passwordIn" name="password" required autocomplete="current-password">
             </div>
 
             <div class="form-group" id="confirmPasswordGroup" style="display:none;">
                 <label for="confirmPasswordIn">Confirm New Password</label>
-                <input type="password" id="confirmPasswordIn" autocomplete="new-password">
+                <input type="password" id="confirmPasswordIn" name="confirmPassword" autocomplete="new-password">
             </div>
 
             <div class="utility-row" id="utilityRow">
@@ -310,6 +310,7 @@
 
                 usernameLabel.innerText = 'Email Address';
                 userInput.setAttribute('type', 'text');
+                userInput.setAttribute('name', 'username');
                 userInput.value = resetUser;
                 userInput.setAttribute('readonly', 'true');
 
@@ -329,6 +330,7 @@
             userInput.removeAttribute('readonly');
             userInput.value = userInput.value || '';
             userInput.setAttribute('type', 'text');
+            userInput.setAttribute('name', 'username');
             passwordInput.setAttribute('autocomplete', isResetRequestMode ? 'off' : (isLoginMode ? 'current-password' : 'new-password'));
             document.querySelector('label[for="passwordIn"]').innerText = 'Password';
 
@@ -344,6 +346,7 @@
                 subtitle.innerText = 'Enter your email and we will send you a reset link.';
                 submitBtn.innerText = 'Send Reset Email';
                 usernameLabel.innerText = 'Email Address';
+                document.getElementById('authForm').setAttribute('action', '/api/auth/password-reset/request');
 
                 nameGroup.style.display = 'none';
                 nameInput.removeAttribute('required');
@@ -370,6 +373,7 @@
                 subtitle.innerText = 'Access your library, queue, and watch history.';
                 submitBtn.innerText = 'Login to Anymovie';
                 usernameLabel.innerText = 'Email or Username';
+                document.getElementById('authForm').setAttribute('action', '/api/auth/login');
                 toggleText.innerText = 'New to Anymovie?';
                 toggleLink.innerText = 'Create a profile';
 
@@ -380,6 +384,7 @@
                 subtitle.innerText = 'Start your account and unlock the full library experience.';
                 submitBtn.innerText = 'Register your account';
                 usernameLabel.innerText = 'Email Address';
+                document.getElementById('authForm').setAttribute('action', '/api/auth/register');
                 toggleText.innerText = 'Already registered?';
                 toggleLink.innerText = 'Sign in here';
 
@@ -473,7 +478,11 @@
                 try {
                     const response = await fetch('/api/auth/password-reset/confirm', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'same-origin',
                         body: JSON.stringify({
                             user: resetUser,
                             token: resetToken,
@@ -481,7 +490,7 @@
                         })
                     });
 
-                    const data = await response.json();
+                    const data = await response.json().catch(() => ({}));
                     if (response.ok && data.success) {
                         showAlert('Password updated successfully. Please log in with your new password.', 'success');
                         const url = new URL(window.location.href);
@@ -499,7 +508,7 @@
                         showAlert(data.error || 'Unable to reset password.', 'error');
                     }
                 } catch (_err) {
-                    showAlert('Network loop transmission exception dropped.', 'error');
+                    showAlert('Network error. Please try again.', 'error');
                 }
                 return;
             }
@@ -512,18 +521,22 @@
                 try {
                     const response = await fetch('/api/auth/password-reset/request', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'same-origin',
                         body: JSON.stringify({ email: username, username })
                     });
 
-                    const data = await response.json();
+                    const data = await response.json().catch(() => ({}));
                     if (response.ok && data.success) {
                         showAlert(data.message || 'If that email is registered, a reset link has been sent.', 'success');
                     } else {
                         showAlert(data.error || 'Unable to process password reset request.', 'error');
                     }
                 } catch (_err) {
-                    showAlert('Network loop transmission exception dropped.', 'error');
+                    showAlert('Network error. Please try again.', 'error');
                 }
                 return;
             }
@@ -540,15 +553,20 @@
             }
 
             const targetEndpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
+            document.getElementById('authForm').setAttribute('action', targetEndpoint);
 
             try {
                 const response = await fetch(targetEndpoint, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'same-origin',
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
 
                 if (response.ok && data.success) {
                     if (isLoginMode) {
@@ -559,10 +577,10 @@
                         showAlert(data.message, "success");
                     }
                 } else {
-                    showAlert(data.error || "Failed handling authorization state.", "error");
+                    showAlert(data.error || 'Unable to complete authentication request.', 'error');
                 }
-            } catch (err) {
-                showAlert("Network loop transmission exception dropped.", "error");
+            } catch (_err) {
+                showAlert('Network error. Please try again.', 'error');
             }
         }
 
