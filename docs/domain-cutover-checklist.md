@@ -1,14 +1,19 @@
 # any.movie Domain Cutover Checklist (Primary + Alias Domains)
 
-This checklist makes `any.movie` the canonical root while keeping `anymovie.online` and `anyseries.online` working during and after cutover.
+This checklist makes `any.movie` the canonical root while keeping supported alias domains active during and after cutover.
 
 ## Canonical Domain Policy
 
 1. Canonical root URL:
    - `https://any.movie`
 2. Supported alias URLs:
-   - `https://anymovie.online`
    - `https://anyseries.online`
+   - `https://anymovie.app`
+   - `https://anymovie.club`
+   - `https://anymovie.digital`
+   - `https://anymovie.today`
+   - `https://anymovie.us`
+   - `https://anymovie.website`
 3. Optional regional domains (future):
    - `https://anymovie.us`, `https://anymovie.au`, `https://anymovie.eu`
 
@@ -16,21 +21,21 @@ This checklist makes `any.movie` the canonical root while keeping `anymovie.onli
 
 1. Set primary and aliases:
    - `APP_URL=https://any.movie`
-   - `APP_URL_ALIASES=https://anymovie.online,https://anyseries.online`
+   - `APP_URL_ALIASES=https://anyseries.online`
 2. Keep multi-domain request/signature compatibility:
    - `WEBHOOK_DUAL_DOMAIN=true`
    - `SQUARE_WEBHOOK_ADDITIONAL_URLS=` include every Square webhook endpoint URL for all active domains
 3. Keep proxy host coverage for all public domains:
-   - `NPM_PROXY_DOMAINS=any.movie,anymovie.online,anyseries.online`
+   - `NPM_PROXY_DOMAINS=any.movie,anyseries.online,anymovie.app,anymovie.club,anymovie.digital,anymovie.today,anymovie.us,anymovie.website`
 4. Set cookie scope for all active domains:
-   - `COOKIE_DOMAIN=any.movie,anymovie.online,anyseries.online`
+   - `COOKIE_DOMAIN=any.movie,anyseries.online`
 5. Set email sender identity:
    - `SENDER_EMAIL=welcome@any.movie`
    - `SENDER_NAME=Any.Movie`
 
 ## DNS Records Checklist
 
-1. For each active public zone (`any.movie`, `anymovie.online`, `anyseries.online`):
+1. For each active public zone (`any.movie`, `anyseries.online`, and active `anymovie.*` domains except blocked zones):
    - `A`/`AAAA` (or proxied CNAME) for apex/root
    - `CNAME` for `www` pointing to preferred frontend target
 2. If using Cloudflare proxy/load balancing, ensure every active hostname is attached to a valid proxy record.
@@ -75,11 +80,10 @@ This checklist makes `any.movie` the canonical root while keeping `anymovie.onli
 
 ```bash
 # Verify domain defaults in code and scripts
-rg -n "any\.movie|anymovie\.online|anyseries\.online|APP_URL|APP_URL_ALIASES|NPM_PROXY_DOMAINS|COOKIE_DOMAIN|SENDER_EMAIL"
+rg -n "any\.movie|anyseries\.online|anymovie\.(app|club|digital|today|us|website)|APP_URL|APP_URL_ALIASES|NPM_PROXY_DOMAINS|COOKIE_DOMAIN|SENDER_EMAIL"
 
 # Verify DNS answers (example)
 dig +short any.movie
-dig +short anymovie.online
 dig +short anyseries.online
 ```
 

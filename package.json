@@ -4,7 +4,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node src/bootstrap/launcher.js",
-    "build:catalogs:tmdb": "node scripts/build-tmdb-catalogs.js"
+    "build:catalogs:tmdb": "node scripts/build-tmdb-catalogs.js",
+    "cf:dns:list-zones": "node scripts/cloudflare-dns.js list-zones",
+    "cf:dns:list-records": "node scripts/cloudflare-dns.js list-records",
+    "cf:dns:sync-record": "node scripts/cloudflare-dns.js sync-record",
+    "cf:dns:sync-file": "node scripts/cloudflare-dns.js sync-from-file"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",

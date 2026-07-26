@@ -1,0 +1,38 @@
+[
+  {
+    "zoneName": "any.movie",
+    "type": "A",
+    "name": "@",
+    "content": "203.0.113.10",
+    "ttl": 1,
+    "proxied": true,
+    "comment": "Primary any.movie apex"
+  },
+  {
+    "zoneName": "any.movie",
+    "type": "CNAME",
+    "name": "www",
+    "content": "any.movie",
+    "ttl": 1,
+    "proxied": true,
+    "comment": "Primary any.movie www alias"
+  },
+  {
+    "zoneName": "anymovie.app",
+    "type": "CNAME",
+    "name": "@",
+    "content": "any.movie",
+    "ttl": 1,
+    "proxied": true,
+    "comment": "Alias domain routed through canonical frontend"
+  },
+  {
+    "zoneName": "anyseries.online",
+    "type": "CNAME",
+    "name": "@",
+    "content": "any.movie",
+    "ttl": 1,
+    "proxied": true,
+    "comment": "Alias domain routed through canonical frontend"
+  }
+]

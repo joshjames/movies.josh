@@ -36,7 +36,6 @@
     var local = parseOriginList(localStorage.getItem('apiFailover.origins'));
     var defaults = [
       'https://any.movie',
-      'https://anymovie.online',
       'https://anyseries.online',
       'https://anymovie.us',
       'https://anymovie.au',

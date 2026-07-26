@@ -12,7 +12,6 @@ function normalizeUrl(input) {
 
 const DEFAULT_APP_URLS = [
     'https://any.movie',
-    'https://anymovie.online',
     'https://anyseries.online'
 ];
 
