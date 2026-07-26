@@ -20,7 +20,15 @@ function parseCsv(input) {
 }
 
 function withDefaultDomains(configured = []) {
-  const defaults = ['any.movie', 'www.any.movie', 'anyseries.online'];
+  const defaults = [
+    'any.movie',
+    'www.any.movie',
+    'anyseries.online',
+    'anymovie.app',
+    'anymovie.digital',
+    'anymovie.club',
+    'anymovie.today'
+  ];
   const merged = new Set([...(configured || []), ...defaults]);
   return Array.from(merged);
 }
@@ -75,7 +83,7 @@ async function main() {
   const adminPassword = env('NPM_ADMIN_PASSWORD');
   const targetHost = env('TARGET_CONTAINER_HOST');
   const targetPort = env('TARGET_CONTAINER_PORT', '3000');
-  const domains = withDefaultDomains(parseCsv(env('NPM_PROXY_DOMAINS', 'any.movie,www.any.movie,anyseries.online')));
+  const domains = withDefaultDomains(parseCsv(env('NPM_PROXY_DOMAINS', 'any.movie,www.any.movie,anyseries.online,anymovie.app,anymovie.digital,anymovie.club,anymovie.today')));
   const dryRun = ['1', 'true', 'yes'].includes(env('NPM_DRY_RUN', 'false').toLowerCase());
 
   if (!npmUrl || !adminUser || !adminPassword || !targetHost) {
