@@ -870,6 +870,22 @@
             const showTitle = String(options.showTitle || '').replace(/'/g, "\\'");
             const imdbId = String(options.imdbId || '');
 
+            const isEpisodeReleasable = (releasedValue) => {
+                const raw = String(releasedValue || '').trim();
+                if (!raw) return false;
+                if (/^1900-01-01/.test(raw) || /^1900\b/.test(raw)) return false;
+
+                const ts = Date.parse(raw);
+                if (!Number.isFinite(ts)) return false;
+
+                const releaseDate = new Date(ts);
+                releaseDate.setHours(0, 0, 0, 0);
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return releaseDate.getTime() <= today.getTime();
+            };
+
             return rows.map(row => {
                 const seasonNum = parseInt(row.season, 10) || 0;
                 const episodeNum = parseInt(row.episode, 10) || 0;
@@ -877,6 +893,11 @@
                 const episode = String(episodeNum).padStart(2, '0');
                 const key = `${seasonNum}-${episodeNum}`;
                 const inLibrary = availableEpisodeSet.has(key);
+                const releasable = isEpisodeReleasable(row.released);
+                const disableQueue = inLibrary || !releasable;
+                const buttonLabel = inLibrary
+                    ? 'In Library'
+                    : (releasable ? 'Queue Episode' : 'Coming Soon');
                 return `
                     <tr>
                         <td>
@@ -888,7 +909,8 @@
                         <td>${escapeHtml(row.released || 'Unknown')}</td>
                         <td class="episode-add">
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                <button class="add-btn" style="padding:6px 10px; ${inLibrary ? 'background:#475569;' : ''}" ${inLibrary ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${inLibrary ? 'In Library' : 'Queue Episode'}</button>
+                                <button class="add-btn" style="padding:6px 10px; ${disableQueue ? 'background:#475569;' : ''}" ${disableQueue ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${buttonLabel}</button>
+                                ${!releasable && !inLibrary ? '<span style="font-size:0.75rem; color:#94a3b8; font-style:italic; align-self:center;">Auto-adding new episodes for watched shows coming soon.</span>' : ''}
                             </div>
                         </td>
                     </tr>
@@ -1108,6 +1130,20 @@
                     .map((season) => {
                         const rows = Array.isArray(season.episodes) ? season.episodes : [];
                         const seasonNum = Number(season.seasonNumber) || 0;
+                        const releasableEpisodeCount = rows.filter((row) => {
+                            const raw = String(row?.released || '').trim();
+                            if (!raw) return false;
+                            if (/^1900-01-01/.test(raw) || /^1900\b/.test(raw)) return false;
+                            const ts = Date.parse(raw);
+                            if (!Number.isFinite(ts)) return false;
+                            const releaseDate = new Date(ts);
+                            releaseDate.setHours(0, 0, 0, 0);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            return releaseDate.getTime() <= today.getTime();
+                        }).length;
+                        const hasReleasedEpisodes = releasableEpisodeCount > 0;
+                        const seasonQueueDisabled = completeSeasonSet.has(Number(seasonNum)) || !hasReleasedEpisodes;
                         const inLibraryCount = rows.filter((row) => {
                             const key = `${seasonNum}-${parseInt(row.episodeNumber, 10) || 0}`;
                             return availableEpisodeSet.has(key);
@@ -1116,8 +1152,9 @@
                             <details class="season-panel" open>
                                 <summary class="season-summary"><strong>Season ${seasonNum}</strong><span>${rows.length} episodes • ${inLibraryCount} in library</span></summary>
                                 <div style="padding:8px 10px; border-top:1px solid #263247; background:#0f1b31; display:flex; gap:8px; flex-wrap:wrap;">
-                                    <button class="add-btn" style="padding:6px 10px;" ${completeSeasonSet.has(Number(seasonNum)) ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${seasonNum}, 0, 'pack')">${completeSeasonSet.has(Number(seasonNum)) ? 'Season Complete' : 'Queue Whole Season'}</button>
+                                    <button class="add-btn" style="padding:6px 10px;" ${seasonQueueDisabled ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${seasonNum}, 0, 'pack')">${completeSeasonSet.has(Number(seasonNum)) ? 'Season Complete' : (!hasReleasedEpisodes ? 'No Released Episodes' : 'Queue Whole Season')}</button>
                                     ${completeSeasonSet.has(Number(seasonNum)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
+                                    ${!completeSeasonSet.has(Number(seasonNum)) && !hasReleasedEpisodes ? '<span style="font-size:0.75rem; color:#94a3b8; font-style:italic; align-self:center;">Auto-adding new episodes for watched shows coming soon.</span>' : ''}
                                 </div>
                                 <table class="episode-table">
                                     <thead>
