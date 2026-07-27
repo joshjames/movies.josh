@@ -43,8 +43,6 @@ async function verifyRequest(req, options = {}) {
         body.set('remoteip', ip);
     }
 
-    const expectedAction = String(options.action || '').trim();
-
     try {
         const response = await fetch(VERIFY_URL, {
             method: 'POST',
@@ -62,10 +60,6 @@ async function verifyRequest(req, options = {}) {
                 errors: Array.isArray(payload['error-codes']) ? payload['error-codes'] : [],
                 publicMessage: 'Security verification failed. Please retry.'
             };
-        }
-
-        if (expectedAction && payload.action && String(payload.action) !== expectedAction) {
-            return { success: false, code: 'action_mismatch', publicMessage: 'Security verification failed. Please retry.' };
         }
 
         return { success: true, payload };

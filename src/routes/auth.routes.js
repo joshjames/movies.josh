@@ -22,10 +22,9 @@ function resolveTurnstileToken(req) {
     return headerToken;
 }
 
-async function enforceTurnstile(req, action) {
+async function enforceTurnstile(req) {
     return TurnstileService.verifyRequest(req, {
-        token: resolveTurnstileToken(req),
-        action
+        token: resolveTurnstileToken(req)
     });
 }
 
@@ -52,7 +51,7 @@ router.post('/register', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
     }
 
-    const turnstile = await enforceTurnstile(req, 'auth_register');
+    const turnstile = await enforceTurnstile(req);
     if (!turnstile.success) {
         return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
     }
@@ -142,7 +141,7 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ success: false, error: "Credentials cannot be blank." });
     }
 
-    const turnstile = await enforceTurnstile(req, 'auth_login');
+    const turnstile = await enforceTurnstile(req);
     if (!turnstile.success) {
         return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
     }
@@ -248,7 +247,7 @@ router.post('/change-password', async (req, res) => {
     }
 
     try {
-        const turnstile = await enforceTurnstile(req, 'auth_change_password');
+        const turnstile = await enforceTurnstile(req);
         if (!turnstile.success) {
             return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
         }
@@ -280,7 +279,7 @@ router.post('/change-password', async (req, res) => {
 // POST: /api/auth/password-reset/request
 router.post('/password-reset/request', async (req, res) => {
     try {
-        const turnstile = await enforceTurnstile(req, 'auth_password_reset_request');
+        const turnstile = await enforceTurnstile(req);
         if (!turnstile.success) {
             return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
         }
@@ -313,7 +312,7 @@ router.post('/password-reset/request', async (req, res) => {
 // POST: /api/auth/password-reset/confirm
 router.post('/password-reset/confirm', async (req, res) => {
     try {
-        const turnstile = await enforceTurnstile(req, 'auth_password_reset_confirm');
+        const turnstile = await enforceTurnstile(req);
         if (!turnstile.success) {
             return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
         }
