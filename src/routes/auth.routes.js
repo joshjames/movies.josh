@@ -7,7 +7,37 @@ const router = express.Router();
 // 📂 REAL SERVICE IMPORTS (Fixed depth from src/routes to src/services)
 const ProfileService = require('../services/ProfileService');
 const MailerService = require('../services/MailerService');
+const TurnstileService = require('../services/TurnstileService');
 const { getSessionCookieOptions, getClearCookieOptions } = require('../utils/cookieOptions');
+
+function resolveTurnstileToken(req) {
+    const bodyToken = String(
+        req.body?.turnstileToken
+        || req.body?.['cf-turnstile-response']
+        || req.body?.cfTurnstileResponse
+        || ''
+    ).trim();
+    if (bodyToken) return bodyToken;
+    const headerToken = String(req.headers['cf-turnstile-response'] || req.headers['x-turnstile-token'] || '').trim();
+    return headerToken;
+}
+
+async function enforceTurnstile(req, action) {
+    return TurnstileService.verifyRequest(req, {
+        token: resolveTurnstileToken(req),
+        action
+    });
+}
+
+router.get('/turnstile-config', (_req, res) => {
+    const siteKey = TurnstileService.getSiteKey() || null;
+    const enabled = Boolean(TurnstileService.isEnabled() && siteKey);
+    return res.json({
+        success: true,
+        enabled,
+        siteKey
+    });
+});
 
 // POST: /api/auth/register
 router.post('/register', async (req, res) => {
@@ -20,6 +50,11 @@ router.post('/register', async (req, res) => {
     }
     if (!cleanEmail.includes('@')) {
         return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
+    }
+
+    const turnstile = await enforceTurnstile(req, 'auth_register');
+    if (!turnstile.success) {
+        return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
     }
 
     try {
@@ -105,6 +140,11 @@ router.post('/login', async (req, res) => {
     const identifier = String(email || username || '').trim();
     if (!identifier || !password) {
         return res.status(400).json({ success: false, error: "Credentials cannot be blank." });
+    }
+
+    const turnstile = await enforceTurnstile(req, 'auth_login');
+    if (!turnstile.success) {
+        return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
     }
 
     try {
@@ -208,6 +248,11 @@ router.post('/change-password', async (req, res) => {
     }
 
     try {
+        const turnstile = await enforceTurnstile(req, 'auth_change_password');
+        if (!turnstile.success) {
+            return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
+        }
+
         const { currentPassword, newPassword } = req.body || {};
         if (!currentPassword || !newPassword) {
             return res.status(400).json({ success: false, error: 'Current and new passwords are required.' });
@@ -235,6 +280,11 @@ router.post('/change-password', async (req, res) => {
 // POST: /api/auth/password-reset/request
 router.post('/password-reset/request', async (req, res) => {
     try {
+        const turnstile = await enforceTurnstile(req, 'auth_password_reset_request');
+        if (!turnstile.success) {
+            return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
+        }
+
         const { email, username } = req.body || {};
         const identifier = String(email || username || '').trim().toLowerCase();
         if (!identifier || !identifier.includes('@')) {
@@ -263,6 +313,11 @@ router.post('/password-reset/request', async (req, res) => {
 // POST: /api/auth/password-reset/confirm
 router.post('/password-reset/confirm', async (req, res) => {
     try {
+        const turnstile = await enforceTurnstile(req, 'auth_password_reset_confirm');
+        if (!turnstile.success) {
+            return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
+        }
+
         const { user, token, newPassword } = req.body || {};
         const cleanUser = String(user || '').trim().toLowerCase();
         const cleanToken = String(token || '').trim();

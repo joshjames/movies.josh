@@ -205,6 +205,12 @@
             color: #34d399;
         }
 
+        .turnstile-wrap {
+            margin: 12px 0 8px;
+            display: none;
+            justify-content: center;
+        }
+
         @media (max-width: 560px) {
             body {
                 padding: 14px;
@@ -262,6 +268,10 @@
                 <span class="utility-link" id="backToLoginLink" onclick="exitResetMode()" style="display:none;">Back to login</span>
             </div>
 
+            <div class="turnstile-wrap" id="turnstileWrap">
+                <div class="cf-turnstile" data-action="turnstile-spin-v2" id="turnstileWidget"></div>
+            </div>
+
             <button type="submit" class="submit-btn" id="submitBtn">Login</button>
         </form>
 
@@ -277,6 +287,14 @@
         let isResetRequestMode = false;
         let resetToken = '';
         let resetUser = '';
+        const turnstileState = {
+            enabled: false,
+            siteKey: '',
+            widgetId: null,
+            token: '',
+            tokenIssuedAt: 0,
+            pendingResolvers: []
+        };
 
         function isResetConfirmMode() {
             return Boolean(resetToken && resetUser);
@@ -418,7 +436,131 @@
             }
 
             updateModeUI();
+            initializeTurnstile();
         });
+
+        function resolveTurnstileWaiters(token) {
+            const waiters = [...turnstileState.pendingResolvers];
+            turnstileState.pendingResolvers = [];
+            waiters.forEach((resolve) => {
+                try {
+                    resolve(token);
+                } catch (_err) {
+                    // no-op
+                }
+            });
+        }
+
+        function clearTurnstileToken() {
+            turnstileState.token = '';
+            turnstileState.tokenIssuedAt = 0;
+        }
+
+        function onTurnstileSuccess(token) {
+            turnstileState.token = String(token || '');
+            turnstileState.tokenIssuedAt = Date.now();
+            resolveTurnstileWaiters(turnstileState.token);
+        }
+
+        function onTurnstileExpired() {
+            clearTurnstileToken();
+        }
+
+        function onTurnstileError() {
+            clearTurnstileToken();
+            resolveTurnstileWaiters('');
+        }
+
+        function isTurnstileTokenFresh() {
+            return Boolean(turnstileState.token) && (Date.now() - Number(turnstileState.tokenIssuedAt || 0) < 240000);
+        }
+
+        function loadTurnstileScript() {
+            return new Promise((resolve, reject) => {
+                if (window.turnstile) return resolve();
+                const existing = document.querySelector('script[data-turnstile-sdk="true"]');
+                if (existing) {
+                    existing.addEventListener('load', () => resolve(), { once: true });
+                    existing.addEventListener('error', () => reject(new Error('turnstile_script_failed')), { once: true });
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+                script.async = true;
+                script.defer = true;
+                script.dataset.turnstileSdk = 'true';
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('turnstile_script_failed'));
+                document.head.appendChild(script);
+            });
+        }
+
+        function renderTurnstileWidget() {
+            if (!turnstileState.enabled || !turnstileState.siteKey || !window.turnstile) return;
+            if (turnstileState.widgetId !== null) return;
+
+            const wrap = document.getElementById('turnstileWrap');
+            wrap.style.display = 'flex';
+
+            turnstileState.widgetId = window.turnstile.render('#turnstileWidget', {
+                sitekey: turnstileState.siteKey,
+                action: 'turnstile-spin-v2',
+                appearance: 'interaction-only',
+                theme: 'dark',
+                callback: onTurnstileSuccess,
+                'expired-callback': onTurnstileExpired,
+                'error-callback': onTurnstileError
+            });
+        }
+
+        async function initializeTurnstile() {
+            try {
+                const response = await fetch('/api/auth/turnstile-config', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.success || !data.enabled || !data.siteKey) {
+                    turnstileState.enabled = false;
+                    return;
+                }
+
+                turnstileState.enabled = true;
+                turnstileState.siteKey = String(data.siteKey || '').trim();
+
+                await loadTurnstileScript();
+                renderTurnstileWidget();
+            } catch (_err) {
+                turnstileState.enabled = false;
+            }
+        }
+
+        async function ensureTurnstileToken() {
+            if (!turnstileState.enabled) return '';
+            if (isTurnstileTokenFresh()) return turnstileState.token;
+            if (!window.turnstile || turnstileState.widgetId === null) {
+                throw new Error('verification_unavailable');
+            }
+
+            return await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('verification_timeout'));
+                }, 12000);
+
+                turnstileState.pendingResolvers.push((token) => {
+                    clearTimeout(timeout);
+                    if (!token) {
+                        reject(new Error('verification_failed'));
+                        return;
+                    }
+                    resolve(token);
+                });
+
+                clearTurnstileToken();
+                window.turnstile.execute(turnstileState.widgetId);
+            });
+        }
 
         function showAlert(message, type) {
             const block = document.getElementById('alertBlock');
@@ -476,6 +618,7 @@
                 }
 
                 try {
+                    const turnstileToken = await ensureTurnstileToken();
                     const response = await fetch('/api/auth/password-reset/confirm', {
                         method: 'POST',
                         headers: {
@@ -486,7 +629,9 @@
                         body: JSON.stringify({
                             user: resetUser,
                             token: resetToken,
-                            newPassword: password
+                            newPassword: password,
+                            turnstileToken,
+                            'cf-turnstile-response': turnstileToken
                         })
                     });
 
@@ -508,7 +653,7 @@
                         showAlert(data.error || 'Unable to reset password.', 'error');
                     }
                 } catch (_err) {
-                    showAlert('Network error. Please try again.', 'error');
+                    showAlert('Security check failed or network error occurred. Please try again.', 'error');
                 }
                 return;
             }
@@ -519,6 +664,7 @@
                     return;
                 }
                 try {
+                    const turnstileToken = await ensureTurnstileToken();
                     const response = await fetch('/api/auth/password-reset/request', {
                         method: 'POST',
                         headers: {
@@ -526,7 +672,12 @@
                             'Content-Type': 'application/json'
                         },
                         credentials: 'same-origin',
-                        body: JSON.stringify({ email: username, username })
+                        body: JSON.stringify({
+                            email: username,
+                            username,
+                            turnstileToken,
+                            'cf-turnstile-response': turnstileToken
+                        })
                     });
 
                     const data = await response.json().catch(() => ({}));
@@ -536,7 +687,7 @@
                         showAlert(data.error || 'Unable to process password reset request.', 'error');
                     }
                 } catch (_err) {
-                    showAlert('Network error. Please try again.', 'error');
+                    showAlert('Security check failed or network error occurred. Please try again.', 'error');
                 }
                 return;
             }
@@ -556,6 +707,7 @@
             document.getElementById('authForm').setAttribute('action', targetEndpoint);
 
             try {
+                const turnstileToken = await ensureTurnstileToken();
                 const response = await fetch(targetEndpoint, {
                     method: 'POST',
                     headers: {
@@ -563,7 +715,11 @@
                         'Content-Type': 'application/json'
                     },
                     credentials: 'same-origin',
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        ...payload,
+                        turnstileToken,
+                        'cf-turnstile-response': turnstileToken
+                    })
                 });
 
                 const data = await response.json().catch(() => ({}));
@@ -580,7 +736,7 @@
                     showAlert(data.error || 'Unable to complete authentication request.', 'error');
                 }
             } catch (_err) {
-                showAlert('Network error. Please try again.', 'error');
+                showAlert('Security check failed or network error occurred. Please try again.', 'error');
             }
         }
 
