@@ -316,6 +316,8 @@
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                                 <button type="button" onclick="probeEpisode(${item.seasonNumber}, ${item.episodeNumber})" style="background:#1d4ed8;">Probe</button>
                                 <button type="button" onclick="audioFixEpisode(${item.seasonNumber}, ${item.episodeNumber})" style="background:#b45309;">Force Audio Fix</button>
+                                <button type="button" onclick="transcodeEpisodeProfile(${item.seasonNumber}, ${item.episodeNumber}, '1080p')" style="background:#0f766e;">Build 1080 (4K)</button>
+                                <button type="button" onclick="transcodeEpisodeProfile(${item.seasonNumber}, ${item.episodeNumber}, '720p')" style="background:#0369a1;">Build 720</button>
                             </div>
                         </td>
                     </tr>
@@ -407,6 +409,38 @@
                 await initPage();
             } catch (err) {
                 setEpisodeManagerStatus(`Audio fix failed: ${err.message}`, true);
+            }
+        }
+
+        async function transcodeEpisodeProfile(seasonNumber, episodeNumber, profile) {
+            try {
+                const cleanProfile = String(profile || '').trim().toLowerCase();
+                if (!['1080p', '720p'].includes(cleanProfile)) {
+                    throw new Error('Unsupported profile target.');
+                }
+
+                const confirmMessage = cleanProfile === '1080p'
+                    ? `Build 1080p web profile for S${seasonNumber}E${episodeNumber}? This is intended for 4K episode sources.`
+                    : `Build 720p profile for S${seasonNumber}E${episodeNumber}?`;
+                const ok = confirm(confirmMessage);
+                if (!ok) return;
+
+                setEpisodeManagerStatus(`Building ${cleanProfile} profile for S${seasonNumber}E${episodeNumber}...`);
+                const res = await fetch(`${managerApiPath()}/transcode-profile`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ seasonNumber, episodeNumber, profile: cleanProfile })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Profile build failed (${res.status})`);
+                }
+
+                setEpisodeManagerStatus(`Built ${cleanProfile} profile for S${seasonNumber}E${episodeNumber}.`);
+                await reloadEpisodeManager();
+                await initPage();
+            } catch (err) {
+                setEpisodeManagerStatus(`Profile build failed: ${err.message}`, true);
             }
         }
 

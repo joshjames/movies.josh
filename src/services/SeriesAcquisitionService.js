@@ -86,6 +86,15 @@ function inferQualityLabel(title) {
     return 'unknown';
 }
 
+function shouldAllow2160(context = {}) {
+    const explicit = String(context?.allow2160 ?? context?.allow4k ?? '').trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(explicit)) return true;
+    if (['0', 'false', 'no', 'off'].includes(explicit)) return false;
+
+    const env = String(process.env.AUTO_SERIES_ALLOW_2160 || '').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(env);
+}
+
 function mapRawSearchRow(raw = {}) {
     const title = String(raw?.fileName || raw?.title || raw?.name || '').trim();
     const magnetUrl = String(raw?.fileUrl || raw?.magnet || raw?.url || '').trim();
@@ -129,6 +138,11 @@ function scoreAutoSeriesCandidate(candidate, context = {}) {
     const season = Number.isFinite(parseInt(context.season, 10)) ? parseInt(context.season, 10) : null;
     const episode = Number.isFinite(parseInt(context.episode, 10)) ? parseInt(context.episode, 10) : null;
     const sourceType = String(context.sourceType || '').toLowerCase();
+    const allow2160 = Boolean(context.allow2160);
+
+    if (!allow2160 && candidate.quality === '2160p') {
+        return Number.NEGATIVE_INFINITY;
+    }
 
     if (sourceType === 'pack' && candidate.sourceType !== 'pack') {
         return Number.NEGATIVE_INFINITY;
@@ -159,6 +173,7 @@ function pickBestAutoSeriesCandidate(rows = [], context = {}) {
     const candidates = rows
         .map(mapRawSearchRow)
         .filter((row) => row.title && row.magnetUrl && row.magnetUrl.startsWith('magnet:?'))
+        .filter((row) => Boolean(context.allow2160) || row.quality !== '2160p')
         .filter((row) => String(context.sourceType || '').toLowerCase() !== 'pack' || row.sourceType === 'pack')
         .map((row) => ({
             ...row,
@@ -300,7 +315,7 @@ async function fetchEztvPages(imdbId, maxPages = 5) {
     };
 }
 
-async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = null, sourceType = 'episode' } = {}) {
+async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = null, sourceType = 'episode', allow2160 = false } = {}) {
     const normalizedImdb = normalizeImdbId(imdbId);
     if (!normalizedImdb) {
         return { best: null, diagnostics: { reason: 'missing_imdb' } };
@@ -317,6 +332,8 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
     const exact = rows
         .map((row) => {
             const title = String(row.title || row.filename || '').trim();
+            const quality = inferQualityLabel(title);
+            if (!allow2160 && quality === '2160p') return null;
             const parsed = parseSeasonEpisodeFromTitle(title);
             const seasonRaw = parseInt(row.season, 10);
             const episodeRaw = parseInt(row.episode, 10);
@@ -373,9 +390,10 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
     const sourceType = sourceTypeRaw === 'pack' || sourceTypeRaw === 'episode'
         ? sourceTypeRaw
         : (seasonNum && !episodeNum ? 'pack' : 'episode');
+    const allow2160 = shouldAllow2160(intent);
     const query = buildAutoSeriesSearchQuery(showTitle || imdbId || '', seasonNum, episodeNum, sourceType);
 
-    logger.info(`[AutoAcquire] Search start | title="${showTitle || 'n/a'}" imdb=${imdbId || 'n/a'} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${sourceType} query="${query}"`);
+    logger.info(`[AutoAcquire] Search start | title="${showTitle || 'n/a'}" imdb=${imdbId || 'n/a'} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${sourceType} allow2160=${allow2160} query="${query}"`);
 
     let eztvSelection = { best: null, diagnostics: { reason: 'not_attempted' } };
     try {
@@ -383,7 +401,8 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
             imdbId,
             season: seasonNum,
             episode: episodeNum,
-            sourceType
+            sourceType,
+            allow2160
         });
     } catch (err) {
         logger.warn(`[AutoAcquire] EZTV lookup failed, falling back to search-confidence | query="${query}" error="${err.message}"`);
@@ -435,7 +454,8 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
         imdbId,
         season: seasonNum,
         episode: episodeNum,
-        sourceType
+        sourceType,
+        allow2160
     }, {
         maxWaitMs: Number.isFinite(parseInt(intent.timeoutMs, 10)) ? parseInt(intent.timeoutMs, 10) : undefined,
         minWaitMs: parseInt(process.env.AUTO_SEARCH_MIN_WAIT_MS || '12000', 10),

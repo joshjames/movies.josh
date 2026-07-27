@@ -139,6 +139,18 @@ function normalizeQueueContext(existingContext, torrentName, imdbId) {
     };
 }
 
+function extractMagnetRuntimeInfo(magnetUrl = '') {
+    try {
+        const parsed = new URL(String(magnetUrl || '').trim());
+        const torrentName = parsed.searchParams.get('dn') || 'Unknown';
+        const xt = parsed.searchParams.get('xt') || '';
+        const infoHash = xt.includes('btih:') ? xt.split('btih:')[1].trim().toLowerCase() : null;
+        return { torrentName, infoHash };
+    } catch (_err) {
+        return { torrentName: 'Unknown', infoHash: null };
+    }
+}
+
 function resolveTorrentDownloadPath(torrent) {
     const contentPath = String(torrent.content_path || '').trim();
     const savePath = String(torrent.save_path || '').trim();

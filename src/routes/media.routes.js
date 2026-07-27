@@ -1260,6 +1260,8 @@ function runEpisodeAudioDownmixTranscode(videoPath) {
     const outputPath = path.join(parsed.dir, `${stem}.web.mp4`);
     const tempOutputPath = path.join(parsed.dir, `${stem}.web.audiofix.tmp.mp4`);
 
+    const subtitleExtraction = extractEmbeddedSubtitlesForEpisode(source);
+
     const args = [
         '-y',
         '-i', source,
@@ -1287,7 +1289,222 @@ function runEpisodeAudioDownmixTranscode(videoPath) {
     return {
         source,
         outputPath,
-        sourceReplaced: path.resolve(outputPath) === source
+        sourceReplaced: path.resolve(outputPath) === source,
+        subtitleExtraction
+    };
+}
+
+function inferSubtitleLanguage(stream = {}) {
+    const lang = String(stream?.tags?.language || '').trim().toLowerCase();
+    if (lang) return lang;
+    const title = String(stream?.tags?.title || '').toLowerCase();
+    if (title.includes('english')) return 'eng';
+    return 'und';
+}
+
+function normalizeSubtitleLangToken(value = '') {
+    const token = String(value || '').trim().toLowerCase();
+    if (token === 'en' || token === 'eng' || token === 'english') return 'eng';
+    if (!token) return 'und';
+    return token.slice(0, 3);
+}
+
+function exportSubtitleStreamToPath(videoPath, streamIndex, outPathBase) {
+    const outSrt = `${outPathBase}.srt`;
+    const outVtt = `${outPathBase}.vtt`;
+
+    const srtExtract = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'srt',
+        outSrt
+    ], { encoding: 'utf8' });
+
+    if (srtExtract.status === 0 && fs.existsSync(outSrt)) {
+        return { path: outSrt, format: 'srt' };
+    }
+
+    const vttExtract = spawnSync('ffmpeg', [
+        '-y',
+        '-i', videoPath,
+        '-map', `0:${streamIndex}`,
+        '-c:s', 'webvtt',
+        outVtt
+    ], { encoding: 'utf8' });
+
+    if (vttExtract.status === 0 && fs.existsSync(outVtt)) {
+        return { path: outVtt, format: 'vtt' };
+    }
+
+    return null;
+}
+
+function extractEmbeddedSubtitlesForEpisode(videoPath) {
+    const source = path.resolve(String(videoPath || ''));
+    if (!fs.existsSync(source)) return { exported: [], defaultRelativePath: null, backupDir: null };
+
+    const subtitleStreams = probeSubtitleStreams(source);
+    if (!Array.isArray(subtitleStreams) || subtitleStreams.length === 0) {
+        return { exported: [], defaultRelativePath: null, backupDir: null };
+    }
+
+    const dir = path.dirname(source);
+    const parsed = path.parse(source);
+    const baseName = String(parsed.name || '').replace(/\.web$/i, '');
+    const subsDir = path.join(dir, 'subs');
+    fs.mkdirSync(subsDir, { recursive: true });
+
+    const streams = subtitleStreams
+        .map((stream) => ({
+            stream,
+            streamIndex: Number(stream?.index),
+            lang: normalizeSubtitleLangToken(inferSubtitleLanguage(stream)),
+            isDefault: Number(stream?.disposition?.default) === 1,
+            isEnglish: ['eng', 'en'].includes(normalizeSubtitleLangToken(inferSubtitleLanguage(stream)))
+        }))
+        .filter((row) => Number.isFinite(row.streamIndex));
+
+    if (!streams.length) {
+        return { exported: [], defaultRelativePath: null, backupDir: absoluteToSeriesRelativePath(subsDir) || null };
+    }
+
+    const defaultCandidate = streams.find((row) => row.isDefault && row.isEnglish)
+        || streams.find((row) => row.isEnglish)
+        || streams.find((row) => row.isDefault)
+        || streams[0];
+
+    const exported = [];
+    let defaultRelativePath = null;
+
+    for (const row of streams) {
+        const isDefaultSubtitle = row.streamIndex === defaultCandidate.streamIndex;
+        const outBase = isDefaultSubtitle
+            ? path.join(dir, 'English')
+            : path.join(subsDir, `${baseName}.sub.${row.streamIndex}.${row.lang}`);
+
+        const extracted = exportSubtitleStreamToPath(source, row.streamIndex, outBase);
+        if (!extracted) continue;
+
+        const relativePath = absoluteToSeriesRelativePath(extracted.path) || null;
+        exported.push({
+            streamIndex: row.streamIndex,
+            lang: row.lang,
+            isDefault: isDefaultSubtitle,
+            relativePath
+        });
+
+        if (isDefaultSubtitle) {
+            defaultRelativePath = relativePath;
+        }
+    }
+
+    return {
+        exported,
+        defaultRelativePath,
+        backupDir: absoluteToSeriesRelativePath(subsDir) || null
+    };
+}
+
+function detectEpisodeVideoHeight(videoPath) {
+    const diagnostics = probeVideoDiagnostics(videoPath);
+    const videoStreams = Array.isArray(diagnostics?.streams)
+        ? diagnostics.streams.filter((stream) => stream.codec_type === 'video')
+        : [];
+    const heights = videoStreams.map((stream) => Number(stream.height) || 0).filter((h) => h > 0);
+    const maxHeight = heights.length ? Math.max(...heights) : 0;
+    return {
+        diagnostics,
+        maxHeight,
+        is4kLike: maxHeight >= 2000 || /\b(2160p|4k|uhd)\b/i.test(path.basename(String(videoPath || '')))
+    };
+}
+
+function runEpisodeProfileTranscode(videoPath, profile = '1080p') {
+    const targetProfile = String(profile || '').trim().toLowerCase();
+    if (!['1080p', '720p'].includes(targetProfile)) {
+        throw new Error(`Unsupported profile target: ${targetProfile}`);
+    }
+
+    const source = path.resolve(String(videoPath || ''));
+    const parsed = path.parse(source);
+    const stem = String(parsed.name || '').replace(/\.web$/i, '');
+
+    if (targetProfile === '1080p') {
+        const videoState = detectEpisodeVideoHeight(source);
+        if (!videoState.is4kLike) {
+            throw new Error('1080p build is restricted to 4K/UHD source episodes.');
+        }
+
+        const outputPath = path.join(parsed.dir, `${stem}.web.mp4`);
+        const tempOutputPath = path.join(parsed.dir, `${stem}.web.profile1080.tmp.mp4`);
+
+        const ffmpegArgs = [
+            '-y',
+            '-i', source,
+            '-map', '0:v:0',
+            '-map', '0:a:0',
+            '-vf', 'scale=-2:1080:sws_flags=lanczos',
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '22',
+            '-c:a', 'aac',
+            '-ac', '2',
+            '-b:a', '192k',
+            '-movflags', '+faststart',
+            tempOutputPath
+        ];
+
+        const transcode = spawnSync('ffmpeg', ffmpegArgs, { encoding: 'utf8' });
+        if (transcode.status !== 0 || !fs.existsSync(tempOutputPath)) {
+            const stderr = String(transcode.stderr || transcode.stdout || '').trim();
+            throw new Error(stderr || 'ffmpeg 1080p profile transcode failed.');
+        }
+
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        fs.renameSync(tempOutputPath, outputPath);
+        return {
+            profile: '1080p',
+            source,
+            outputPath,
+            sourceWas4k: true,
+            maxHeight: videoState.maxHeight
+        };
+    }
+
+    const preferred1080 = path.join(parsed.dir, `${stem}.web.mp4`);
+    const inputPath = fs.existsSync(preferred1080) ? preferred1080 : source;
+    const outputPath = path.join(parsed.dir, `${stem}.720p.mp4`);
+
+    const ffmpegArgs = [
+        '-y',
+        '-i', inputPath,
+        '-map', '0:v:0',
+        '-map', '0:a:0',
+        '-vf', 'scale=-2:720:sws_flags=lanczos',
+        '-c:v', 'libx264',
+        '-preset', 'medium',
+        '-crf', '25',
+        '-maxrate', '2500k',
+        '-bufsize', '5000k',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        outputPath
+    ];
+
+    const transcode = spawnSync('ffmpeg', ffmpegArgs, { encoding: 'utf8' });
+    if (transcode.status !== 0 || !fs.existsSync(outputPath)) {
+        const stderr = String(transcode.stderr || transcode.stdout || '').trim();
+        throw new Error(stderr || 'ffmpeg 720p profile transcode failed.');
+    }
+
+    return {
+        profile: '720p',
+        source,
+        inputPath,
+        outputPath
     };
 }
 
@@ -2628,6 +2845,9 @@ router.post('/series/:showFolder/episode-manager/audio-fix', async (req, res) =>
 
         entry.localRelativePath = sanitizeSeriesRelativePath(updatedRelativePath);
         entry.available = true;
+        if (transcodeResult?.subtitleExtraction?.defaultRelativePath) {
+            entry.subtitleRelativePath = sanitizeSeriesRelativePath(transcodeResult.subtitleExtraction.defaultRelativePath);
+        }
 
         await fsPromises.writeFile(path.join(resolved.path, 'series.json'), JSON.stringify(seriesData, null, 4), 'utf-8');
 
@@ -2646,9 +2866,90 @@ router.post('/series/:showFolder/episode-manager/audio-fix', async (req, res) =>
             episodeNumber,
             sourceRelativePath: localRelativePath,
             outputRelativePath: entry.localRelativePath,
+            subtitleExtraction: transcodeResult.subtitleExtraction,
             beforeProbe,
             afterProbe,
             message: 'Audio downmix transcode complete. Episode now points to browser-safe web profile.'
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/series/:showFolder/episode-manager/transcode-profile', async (req, res) => {
+    try {
+        const allowed = await isPrivilegedMediaAdmin(req);
+        if (!allowed) {
+            return res.status(403).json({ success: false, error: 'Admin privileges are required for Episode Manager.' });
+        }
+
+        const seasonNumber = parseInt(req.body?.seasonNumber, 10);
+        const episodeNumber = parseInt(req.body?.episodeNumber, 10);
+        const profile = String(req.body?.profile || '').trim().toLowerCase();
+
+        if (!Number.isFinite(seasonNumber) || seasonNumber <= 0 || !Number.isFinite(episodeNumber) || episodeNumber <= 0) {
+            return res.status(400).json({ success: false, error: 'seasonNumber and episodeNumber are required.' });
+        }
+        if (!['1080p', '720p'].includes(profile)) {
+            return res.status(400).json({ success: false, error: 'profile must be 1080p or 720p.' });
+        }
+
+        const resolved = await resolveSeriesShowFolder(req.params.showFolder);
+        if (!resolved) {
+            return res.status(404).json({ success: false, error: 'Show folder not found.' });
+        }
+
+        const seriesData = rebuildSeriesManifest(resolved.path, {
+            showFolderName: resolved.folder,
+            write: false
+        });
+
+        const entry = resolveEpisodeEntry(seriesData, seasonNumber, episodeNumber);
+        if (!entry) {
+            return res.status(404).json({ success: false, error: 'Episode entry not found in series manifest.' });
+        }
+
+        const localRelativePath = sanitizeSeriesRelativePath(entry.localRelativePath || '');
+        const sourceVideoPath = localRelativePath ? resolveRelativePathInSeriesRoots(localRelativePath) : '';
+        if (!sourceVideoPath || !fs.existsSync(sourceVideoPath)) {
+            return res.status(404).json({ success: false, error: 'Episode source video was not found on disk.' });
+        }
+
+        const beforeProbe = probeVideoDiagnostics(sourceVideoPath);
+        const transcodeResult = runEpisodeProfileTranscode(sourceVideoPath, profile);
+
+        if (profile === '1080p') {
+            const updatedRelativePath = absoluteToSeriesRelativePath(transcodeResult.outputPath);
+            if (!updatedRelativePath) {
+                return res.status(500).json({ success: false, error: 'Unable to compute updated relative path for 1080p output.' });
+            }
+            entry.localRelativePath = sanitizeSeriesRelativePath(updatedRelativePath);
+            entry.available = true;
+            await fsPromises.writeFile(path.join(resolved.path, 'series.json'), JSON.stringify(seriesData, null, 4), 'utf-8');
+        }
+
+        const refreshedManifest = rebuildSeriesManifest(resolved.path, {
+            showFolderName: resolved.folder,
+            write: false
+        });
+        const refreshedEntry = resolveEpisodeEntry(refreshedManifest, seasonNumber, episodeNumber);
+        const refreshedAbs = refreshedEntry?.localRelativePath ? resolveRelativePathInSeriesRoots(refreshedEntry.localRelativePath) : '';
+        const afterProbe = refreshedAbs && fs.existsSync(refreshedAbs) ? probeVideoDiagnostics(refreshedAbs) : null;
+
+        return res.json({
+            success: true,
+            showFolder: resolved.folder,
+            seasonNumber,
+            episodeNumber,
+            profile,
+            sourceRelativePath: localRelativePath,
+            outputRelativePath: absoluteToSeriesRelativePath(transcodeResult.outputPath),
+            beforeProbe,
+            afterProbe,
+            transcode: transcodeResult,
+            message: profile === '1080p'
+                ? '1080p web profile built from 4K/UHD source and set as default episode path.'
+                : '720p profile build completed.'
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
