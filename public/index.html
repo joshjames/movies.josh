@@ -118,6 +118,58 @@
             display: block;
         }
 
+        .news-banner-wrap {
+            max-width: 1200px;
+            margin: 14px auto 0 auto;
+            padding: 0 10px;
+        }
+
+        .news-banner-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            text-decoration: none;
+            border: 1px solid #334155;
+            border-left: 4px solid #f59e0b;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #111827 0%, #0b1220 100%);
+            color: #f8fafc;
+            padding: 12px 14px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .news-banner-link:hover {
+            transform: translateY(-1px);
+            border-color: #475569;
+            box-shadow: 0 12px 22px rgba(0, 0, 0, 0.32);
+        }
+
+        .news-banner-main {
+            display: grid;
+            gap: 2px;
+        }
+
+        .news-banner-title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            color: #fde68a;
+        }
+
+        .news-banner-sub {
+            font-size: 0.8rem;
+            color: #cbd5e1;
+        }
+
+        .news-banner-cta {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #93c5fd;
+            white-space: nowrap;
+        }
+
         .home-search-box {
             background: #0b1220;
             border: 1px solid #334155;
@@ -914,6 +966,16 @@
             <div class="home-search-meta" id="home-search-meta"></div>
             <div class="home-search-grid" id="home-search-grid"></div>
         </div>
+    </section>
+
+    <section class="news-banner-wrap" aria-label="News and updates">
+        <a href="/news.html" class="news-banner-link">
+            <div class="news-banner-main">
+                <div class="news-banner-title">📰✨ News & Updates</div>
+                <div class="news-banner-sub">Feature updates, fixes, and upcoming plans from the Any Movie team.</div>
+            </div>
+            <div class="news-banner-cta">Open Feed →</div>
+        </a>
     </section>
 
     <div class="collections" id="movie-grid"></div>

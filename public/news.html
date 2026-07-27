@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <title>Any Movie News</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 14px;
+            background: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .page-wrap {
+            max-width: 980px;
+            margin: 0 auto;
+        }
+
+        .top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 14px;
+            margin-bottom: 14px;
+        }
+
+        .back-link {
+            text-decoration: none;
+            color: #93c5fd;
+            font-size: 0.9rem;
+            font-weight: 700;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 12px;
+            background: #0b1220;
+        }
+
+        .back-link:hover {
+            background: #111827;
+        }
+
+        .hero {
+            border: 1px solid #334155;
+            border-left: 4px solid #f59e0b;
+            border-radius: 14px;
+            padding: 16px;
+            background: linear-gradient(140deg, #111827 0%, #0b1220 100%);
+            margin-bottom: 16px;
+        }
+
+        .hero h1 {
+            margin: 0 0 6px 0;
+            font-size: 1.35rem;
+            color: #fde68a;
+            letter-spacing: 0.02em;
+        }
+
+        .hero p {
+            margin: 0;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .news-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .news-card {
+            border: 1px solid #334155;
+            border-radius: 14px;
+            background: #111827;
+            overflow: hidden;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+        }
+
+        .news-head {
+            padding: 12px 14px;
+            border-bottom: 1px solid #1e293b;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .news-title {
+            margin: 0;
+            font-size: 1rem;
+            color: #f8fafc;
+            font-weight: 800;
+        }
+
+        .news-date {
+            color: #93c5fd;
+            font-size: 0.78rem;
+            white-space: nowrap;
+            padding-top: 2px;
+        }
+
+        .news-tags {
+            padding: 0 14px;
+            margin: 10px 0 0 0;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            display: inline-flex;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: 1px solid #334155;
+            background: #0b1220;
+            color: #cbd5e1;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: lowercase;
+        }
+
+        .news-content {
+            padding: 12px 14px 16px 14px;
+            color: #e2e8f0;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            white-space: pre-line;
+        }
+
+        .empty,
+        .error {
+            border: 1px dashed #334155;
+            border-radius: 12px;
+            background: #0b1220;
+            padding: 16px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.86rem;
+        }
+
+        .error {
+            color: #fca5a5;
+            border-style: solid;
+            border-color: #7f1d1d;
+            background: #1f1114;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrap">
+        <div class="top-row">
+            <a class="back-link" href="/index.html">← Back Home</a>
+            <a class="back-link" href="/browse.html">Browse Catalog</a>
+        </div>
+
+        <section class="hero">
+            <h1>📰✨ Any Movie News & Updates</h1>
+            <p>Simple update feed for release notes, fixes, and what is coming next.</p>
+        </section>
+
+        <section id="news-list" class="news-list">
+            <div class="empty">Loading news feed...</div>
+        </section>
+    </div>
+
+    <script>
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatDate(dateValue) {
+            const parsed = Date.parse(String(dateValue || ''));
+            if (!Number.isFinite(parsed)) return 'Unknown date';
+            return new Date(parsed).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit'
+            });
+        }
+
+        function sortPostsByDateDesc(posts) {
+            return [...posts].sort((a, b) => {
+                const at = Date.parse(String(a?.date || ''));
+                const bt = Date.parse(String(b?.date || ''));
+                return (Number.isFinite(bt) ? bt : 0) - (Number.isFinite(at) ? at : 0);
+            });
+        }
+
+        function renderPost(post) {
+            const tags = Array.isArray(post?.tags) ? post.tags : [];
+            return `
+                <article class="news-card">
+                    <div class="news-head">
+                        <h2 class="news-title">${escapeHtml(post?.title || 'Untitled update')}</h2>
+                        <div class="news-date">${escapeHtml(formatDate(post?.date))}</div>
+                    </div>
+                    <div class="news-tags">
+                        ${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                    <div class="news-content">${escapeHtml(post?.content || '')}</div>
+                </article>
+            `;
+        }
+
+        async function loadNews() {
+            const list = document.getElementById('news-list');
+            if (!list) return;
+
+            try {
+                const res = await fetch('/data/news.json', { cache: 'no-store' });
+                const data = await res.json();
+                const posts = Array.isArray(data?.posts) ? data.posts : [];
+
+                if (!res.ok) {
+                    throw new Error(`Request failed (${res.status})`);
+                }
+
+                if (!posts.length) {
+                    list.innerHTML = '<div class="empty">No news posts yet.</div>';
+                    return;
+                }
+
+                const sorted = sortPostsByDateDesc(posts);
+                list.innerHTML = sorted.map(renderPost).join('');
+            } catch (err) {
+                list.innerHTML = `<div class="error">Failed to load news feed. ${escapeHtml(err?.message || '')}</div>`;
+            }
+        }
+
+        loadNews();
+    </script>
+</body>
+</html>

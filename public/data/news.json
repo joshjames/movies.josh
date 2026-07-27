@@ -1,0 +1,18 @@
+{
+  "posts": [
+    {
+      "id": "news-2026-07-25-welcome",
+      "title": "Welcome to Any Movie News Updates",
+      "date": "2026-07-25",
+      "tags": ["announcement", "community", "roadmap"],
+      "content": "Hey guys, I figured I need to keep everyone update to date, I will get social media pages setup for this down the track but ive been so busy coding and fixing issues I have had zero time for any of that, but I promise I will get it and link it all together with news here so everyone can be informed and I can get more feedback etc.. - for now though I threw this news and updates feed together where I can update everyone on new features, anything going on etc... and the future plans.. oh and I will impliment comments here..  but you are of course always welcome to email me anytime at joshsaunders@gmail.com or welcome@any.movie\nstay safe everyone."
+    },
+    {
+      "id": "news-2026-07-27-tv-bugs",
+      "title": "fixed up bugs with tv episode adding",
+      "date": "2026-07-27",
+      "tags": ["tv", "bug-fix", "queue", "pipeline"],
+      "content": "hey guys theres been a lot of bugs with adding tv series, this has been a big piece of work and it will keep getting better over time... adding movies seems to be pretty much 90% perfect 0 unless you choose something super rare.. but I will have a long term solution for even the most rare of things soon.\nFor now, most tv shows seem to be adding clean, be patient though It can take anywhere up to 10 minutes or more sometimes to add tv shows the first time. this will improve... the long term plan here is that 90% of stuff will already be in the library over time so this service will just keep getting better. if theres ever something that doesnt add.. be patient they come through to my error queue after an hour or so and I will always fix them.. of course I keep updating the code so that they end up working faster and faster.\nI appreciate everyone being patient while we build the best streaming service in the world.\nThanks again\nJosh"
+    }
+  ]
+}
