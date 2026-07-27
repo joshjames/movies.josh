@@ -2358,6 +2358,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
+                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeManagerForItem('${item.folder}', '${currentTabMode}')">Open Episode Manager</button>` : ''}
                                         <button class="action-item" onclick="openGroupManagerForItem('${item.folder}', '${currentTabMode}')">Open Group Manager</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'addglobal')">Add To Global Group</button>
@@ -2366,6 +2367,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'setuseronly')">Set User-Only Group</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'removeuser')">Remove User Group</button>
                                         ${currentTabMode === 'series' ? `<button class="action-item" onclick="normalizeSeriesFolderNow('${item.folder}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
+                                        <button class="action-item" onclick="deleteEmptyFolderNow('${item.folder}', '${currentTabMode}')">Delete Empty Folder</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'purge')" ${hasQuarantinedArchive ? '' : 'disabled'}>Permanently Purge Archive</button>
@@ -2387,6 +2389,7 @@
                                     Force Reprocess (.web.mp4)
                                 </label>
                                 <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${item.folder}', '${currentTabMode}')">Run Worker</button>
+                                ${currentTabMode === 'series' ? `<button type="button" style="background:#0ea5e9;" onclick="openEpisodeManagerForItem('${item.folder}', '${currentTabMode}')">Episode Manager</button>` : ''}
                                 <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
                                 <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
                                 <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${item.folder}', '${currentTabMode}')">Apply Rename</button>
@@ -2652,6 +2655,8 @@
             if (action === 'worker') return runWorkerNow(folder, type);
             if (action === 'rename') return renameMediaNow(folder, type);
             if (action === 'normalize') return normalizeSeriesFolderNow(folder, type);
+            if (action === 'episode-manager') return openEpisodeManagerForItem(folder, type);
+            if (action === 'deletefolder') return deleteEmptyFolderNow(folder, type);
             if (action === 'addglobal') return manageLibraryGroup(folder, type, 'add-global');
             if (action === 'removeglobal') return manageLibraryGroup(folder, type, 'remove-global');
             if (action === 'adduser') return manageLibraryGroup(folder, type, 'add-user');
@@ -2752,6 +2757,54 @@
                 fetchLibraryData();
             } catch (_err) {
                 showToast('Sync request failed.', 'error', 4200);
+            }
+        }
+
+        function openEpisodeManagerForItem(folder, type) {
+            if (type !== 'series') {
+                showToast('Episode Manager is only available for series items.', 'info', 2800);
+                return;
+            }
+
+            const cleanFolder = String(folder || '').trim();
+            if (!cleanFolder) {
+                showToast('Missing series folder name.', 'error', 2800);
+                return;
+            }
+
+            const url = `/series.html?id=${encodeURIComponent(`series/${cleanFolder}`)}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        async function deleteEmptyFolderNow(folder, type) {
+            const cleanFolder = String(folder || '').trim();
+            if (!cleanFolder) {
+                showToast('Missing folder name.', 'error', 2800);
+                return;
+            }
+
+            const confirmLabel = type === 'series' ? 'series' : 'movie';
+            if (!confirm(`Delete the empty ${confirmLabel} folder ${cleanFolder}?\n\nThis only removes the folder if it is empty.`)) {
+                return;
+            }
+
+            try {
+                showToast(`Deleting empty folder ${cleanFolder}...`, 'info', 2400);
+                const res = await fetch('/api/admin/media/delete-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: cleanFolder, contentType: type })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Delete failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+
+                showToast(data.deleted ? `Deleted empty folder ${cleanFolder}.` : `Folder cleanup complete for ${cleanFolder}.`, 'success', 3600);
+                fetchLibraryData(true);
+            } catch (_err) {
+                showToast('Delete request failed.', 'error', 4200);
             }
         }
 

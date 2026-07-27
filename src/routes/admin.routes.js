@@ -87,6 +87,20 @@ function resolveContentFolderPath(contentType, folderName) {
         : resolveMovieFolderPath(folderName);
 }
 
+function deleteEmptyContentFolder(contentType, folderName) {
+    const folderPath = resolveContentFolderPath(contentType, folderName);
+    if (!folderPath || !fs.existsSync(folderPath) || !fs.lstatSync(folderPath).isDirectory()) {
+        return { folderPath, removed: false, reason: 'not-found' };
+    }
+
+    const removed = removeEmptyDirectories(folderPath);
+    return {
+        folderPath,
+        removed,
+        existsAfter: fs.existsSync(folderPath)
+    };
+}
+
 function sanitizeSeriesFolderName(folderName = '') {
     const clean = String(folderName || '').trim();
     if (!clean) return '';
@@ -1148,6 +1162,40 @@ router.post('/sync-item', async (req, res) => {
         }
 
         return res.json({ success: true, message: 'Library snapshot refreshed from disk.', summary, itemFound });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/media/delete-folder', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const folder = String(body.folder || '').trim();
+        const contentType = String(body.contentType || '').toLowerCase() === 'series' ? 'series' : 'movies';
+
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const cleanup = deleteEmptyContentFolder(contentType, folder);
+        if (cleanup.reason === 'not-found') {
+            return res.status(404).json({ success: false, error: 'Folder not found.' });
+        }
+
+        if (cleanup.existsAfter) {
+            return res.status(409).json({ success: false, error: 'Folder is not empty.', cleanup });
+        }
+
+        await LibraryScanner.runLibraryScanSweep();
+        await refreshLibraryFeeds();
+
+        return res.json({
+            success: true,
+            deleted: true,
+            folder,
+            contentType,
+            cleanup
+        });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

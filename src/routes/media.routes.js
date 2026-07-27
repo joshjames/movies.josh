@@ -1225,6 +1225,20 @@ function probeVideoDiagnostics(videoPath) {
 
     const parsed = JSON.parse(probe.stdout || '{}');
     const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const videoStreams = streams
+        .filter((stream) => stream.codec_type === 'video')
+        .map((stream) => ({
+            index: Number(stream.index),
+            codec: String(stream.codec_name || '').toLowerCase(),
+            width: Number(stream.width) || 0,
+            height: Number(stream.height) || 0,
+            resolution: Number(stream.width) > 0 && Number(stream.height) > 0
+                ? `${Number(stream.width)}x${Number(stream.height)}`
+                : 'unknown',
+            frameRate: String(stream.avg_frame_rate || ''),
+            language: String(stream.tags?.language || 'und').toLowerCase(),
+            title: String(stream.tags?.title || '')
+        }));
     const audioStreams = streams
         .filter((stream) => stream.codec_type === 'audio')
         .map((stream) => ({
@@ -1238,10 +1252,14 @@ function probeVideoDiagnostics(videoPath) {
 
     const browserSafeAudio = new Set(['aac', 'mp3']);
     const requiresDownmix = audioStreams.some((stream) => !browserSafeAudio.has(stream.codec) || (stream.channels > 2));
+    const primaryVideo = videoStreams[0] || null;
 
     return {
         file: path.basename(videoPath),
         path: videoPath,
+        videoCodec: primaryVideo?.codec || null,
+        videoResolution: primaryVideo?.resolution || null,
+        videoStreams,
         format: {
             durationSec: Number(parsed?.format?.duration || 0),
             bitRate: Number(parsed?.format?.bit_rate || 0),
@@ -1249,7 +1267,8 @@ function probeVideoDiagnostics(videoPath) {
         },
         streams,
         audioStreams,
-        requiresDownmix
+        requiresDownmix,
+        primaryVideo
     };
 }
 
@@ -1420,11 +1439,13 @@ function detectEpisodeVideoHeight(videoPath) {
     };
 }
 
-function runEpisodeProfileTranscode(videoPath, profile = '1080p') {
+function runEpisodeProfileTranscode(videoPath, profile = '1080p', options = {}) {
     const targetProfile = String(profile || '').trim().toLowerCase();
     if (!['1080p', '720p'].includes(targetProfile)) {
         throw new Error(`Unsupported profile target: ${targetProfile}`);
     }
+
+    const forceReprocess = options?.forceReprocess === true || String(options?.forceReprocess || '').toLowerCase() === 'true';
 
     const source = path.resolve(String(videoPath || ''));
     const parsed = path.parse(source);
@@ -1432,7 +1453,7 @@ function runEpisodeProfileTranscode(videoPath, profile = '1080p') {
 
     if (targetProfile === '1080p') {
         const videoState = detectEpisodeVideoHeight(source);
-        if (!videoState.is4kLike) {
+        if (!videoState.is4kLike && !forceReprocess) {
             throw new Error('1080p build is restricted to 4K/UHD source episodes.');
         }
 
@@ -1468,7 +1489,8 @@ function runEpisodeProfileTranscode(videoPath, profile = '1080p') {
             source,
             outputPath,
             sourceWas4k: true,
-            maxHeight: videoState.maxHeight
+            maxHeight: videoState.maxHeight,
+            forceReprocess
         };
     }
 
@@ -1504,7 +1526,8 @@ function runEpisodeProfileTranscode(videoPath, profile = '1080p') {
         profile: '720p',
         source,
         inputPath,
-        outputPath
+        outputPath,
+        forceReprocess
     };
 }
 
@@ -2795,7 +2818,9 @@ router.get('/series/:showFolder/episode-manager/probe', async (req, res) => {
             seasonNumber,
             episodeNumber,
             localRelativePath,
-            probe
+            probe,
+            videoCodec: probe.videoCodec || null,
+            videoResolution: probe.videoResolution || null
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
@@ -2886,6 +2911,7 @@ router.post('/series/:showFolder/episode-manager/transcode-profile', async (req,
         const seasonNumber = parseInt(req.body?.seasonNumber, 10);
         const episodeNumber = parseInt(req.body?.episodeNumber, 10);
         const profile = String(req.body?.profile || '').trim().toLowerCase();
+        const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
 
         if (!Number.isFinite(seasonNumber) || seasonNumber <= 0 || !Number.isFinite(episodeNumber) || episodeNumber <= 0) {
             return res.status(400).json({ success: false, error: 'seasonNumber and episodeNumber are required.' });
@@ -2916,7 +2942,7 @@ router.post('/series/:showFolder/episode-manager/transcode-profile', async (req,
         }
 
         const beforeProbe = probeVideoDiagnostics(sourceVideoPath);
-        const transcodeResult = runEpisodeProfileTranscode(sourceVideoPath, profile);
+    const transcodeResult = runEpisodeProfileTranscode(sourceVideoPath, profile, { forceReprocess });
 
         if (profile === '1080p') {
             const updatedRelativePath = absoluteToSeriesRelativePath(transcodeResult.outputPath);

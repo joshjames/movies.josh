@@ -162,6 +162,10 @@
             <div class="episode-manager-toolbar">
                 <button type="button" onclick="reloadEpisodeManager()" style="background:#1d4ed8;">Reload</button>
                 <button type="button" onclick="saveEpisodeManager()" style="background:#059669;">Save Changes</button>
+                <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; color:#cbd5e1; user-select:none; white-space:nowrap; margin-left:8px;">
+                    <input type="checkbox" id="episode-manager-force-reprocess">
+                    Force Reprocess (.web.mp4)
+                </label>
                 <span id="episode-manager-count" style="font-size:0.8rem;color:#94a3b8;">0 episodes</span>
             </div>
             <div class="episode-manager-table-wrap" id="episode-manager-table-wrap"></div>
@@ -380,8 +384,10 @@
                 const audioSummary = Array.isArray(data?.probe?.audioStreams)
                     ? data.probe.audioStreams.map((row) => `${row.codec || 'audio'} ${row.channels || 0}ch ${row.language || 'und'}`).join(' | ')
                     : 'No audio stream data';
+                const videoCodec = data?.probe?.videoCodec || data?.videoCodec || 'unknown';
+                const videoResolution = data?.probe?.videoResolution || data?.videoResolution || 'unknown';
 
-                alert(`Probe: S${seasonNumber}E${episodeNumber}\nFile: ${data?.probe?.file || 'unknown'}\nNeeds downmix: ${data?.probe?.requiresDownmix ? 'yes' : 'no'}\nAudio: ${audioSummary}`);
+                alert(`Probe: S${seasonNumber}E${episodeNumber}\nFile: ${data?.probe?.file || 'unknown'}\nVideo: ${videoCodec} ${videoResolution}\nNeeds downmix: ${data?.probe?.requiresDownmix ? 'yes' : 'no'}\nAudio: ${audioSummary}`);
                 setEpisodeManagerStatus(`Probe complete for S${seasonNumber}E${episodeNumber}.`);
             } catch (err) {
                 setEpisodeManagerStatus(`Probe failed: ${err.message}`, true);
@@ -419,8 +425,10 @@
                     throw new Error('Unsupported profile target.');
                 }
 
+                const forceReprocess = Boolean(document.getElementById('episode-manager-force-reprocess')?.checked);
+
                 const confirmMessage = cleanProfile === '1080p'
-                    ? `Build 1080p web profile for S${seasonNumber}E${episodeNumber}? This is intended for 4K episode sources.`
+                    ? `Build 1080p web profile for S${seasonNumber}E${episodeNumber}? This is intended for 4K episode sources.${forceReprocess ? ' Force mode is enabled.' : ''}`
                     : `Build 720p profile for S${seasonNumber}E${episodeNumber}?`;
                 const ok = confirm(confirmMessage);
                 if (!ok) return;
@@ -429,7 +437,7 @@
                 const res = await fetch(`${managerApiPath()}/transcode-profile`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ seasonNumber, episodeNumber, profile: cleanProfile })
+                    body: JSON.stringify({ seasonNumber, episodeNumber, profile: cleanProfile, forceReprocess })
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {

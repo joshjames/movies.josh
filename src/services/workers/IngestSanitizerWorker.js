@@ -931,6 +931,18 @@ async function autoDiscoverAndOrganize(currentDir) {
             }
         }
     }
+
+    try {
+        if (!isProtectedRootPath(currentDir) && fs.existsSync(currentDir)) {
+            const remainingEntries = fs.readdirSync(currentDir);
+            if (remainingEntries.length === 0) {
+                deleteFolderRecursive(currentDir);
+            }
+        }
+    } catch (_err) {
+        // Best-effort cleanup only.
+    }
+
     logger.debug(`🔄 [AUTOMATION DISCOVERY] Initiating auto-discovery and organization of: ${currentDir}`);
 }
 
