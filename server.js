@@ -179,11 +179,27 @@ app.get('/api/runtime/version', (_req, res) => {
     });
 });
 
-app.get('/api/runtime/metrics', (req, res) => {
+app.get('/api/runtime/metrics', async (req, res) => {
     if (METRICS_TOKEN) {
         const supplied = String(req.query?.token || req.headers['x-metrics-token'] || '').trim();
-        if (!supplied || supplied !== METRICS_TOKEN) {
-            return res.status(403).json({ success: false, error: 'Forbidden' });
+        const tokenAccepted = supplied && supplied === METRICS_TOKEN;
+
+        if (!tokenAccepted) {
+            const cookieUser = normalizeActiveUser(req.cookies?.user_profile);
+            let adminAccepted = cookieUser === 'josh' || cookieUser.startsWith('josh@');
+
+            if (!adminAccepted && cookieUser) {
+                try {
+                    const config = await ProfileService.readData(cookieUser, 'config', {});
+                    adminAccepted = config?.isAdmin === true;
+                } catch (_err) {
+                    adminAccepted = false;
+                }
+            }
+
+            if (!adminAccepted) {
+                return res.status(403).json({ success: false, error: 'Forbidden' });
+            }
         }
     }
 

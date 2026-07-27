@@ -79,6 +79,32 @@ function parseSeasonEpisodeFromName(name) {
     return { season: null, episode: null };
 }
 
+function normalizeDisplayTitle(value = '') {
+    return String(value || '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildQueueMediaTitle({ title = '', imdbId = null, contentType = 'movie', payload = {} } = {}) {
+    const queueContext = (payload && typeof payload.queueContext === 'object') ? payload.queueContext : {};
+    const season = parseInt(queueContext.season, 10);
+    const episode = parseInt(queueContext.episode, 10);
+    const isSeries = String(contentType || '').toLowerCase() === 'series'
+        || Boolean((Number.isFinite(season) && season > 0) || (Number.isFinite(episode) && episode > 0));
+
+    let baseTitle = normalizeDisplayTitle(payload.mediaTitle || queueContext.mediaTitle || title || payload.torrentName || 'Queue Item');
+
+    if (isSeries && baseTitle) {
+        const seasonPart = Number.isFinite(season) && season > 0 ? `S${String(season).padStart(2, '0')}` : '';
+        const episodePart = Number.isFinite(episode) && episode > 0 ? `E${String(episode).padStart(2, '0')}` : '';
+        if (seasonPart && episodePart) return `${baseTitle} ${seasonPart}${episodePart}`;
+        if (seasonPart) return `${baseTitle} ${seasonPart}`;
+    }
+
+    return baseTitle;
+}
+
 function normalizeImdbId(value) {
     const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
     if (!/^\d{5,10}$/.test(cleaned)) return null;
