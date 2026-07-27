@@ -116,6 +116,12 @@ router.post('/login', async (req, res) => {
             }
             
             const userConfig = await ProfileService.readData(cleanName, 'config', null);
+            if (userConfig && (userConfig.accountDisabled === true || userConfig.accountArchived === true)) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'This account is disabled. Please contact support if you believe this is a mistake.'
+                });
+            }
             if (userConfig && userConfig.isVerified === false) {
                 return res.status(403).json({ 
                     success: false, 

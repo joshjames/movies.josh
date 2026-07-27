@@ -40,7 +40,19 @@
 
         .toolbar {
             display: grid;
-            grid-template-columns: 1fr repeat(6, auto);
+            grid-template-columns: 1fr repeat(3, auto);
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(160px, 1fr));
             gap: 8px;
             align-items: center;
             margin-bottom: 12px;
@@ -175,6 +187,7 @@
 
         @media (max-width: 1200px) {
             .toolbar { grid-template-columns: 1fr 1fr; }
+            .action-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -189,10 +202,22 @@
                 <option value="150">150 per page</option>
             </select>
             <button class="btn-primary" id="btn-apply">Apply</button>
-            <button class="btn-cyan" id="btn-normalize">Normalize Missing Data</button>
-            <button class="btn-green" id="btn-reset-trials">Reset All Trials To Now</button>
-            <button class="btn-red" id="btn-reset-subs">Reset All Subscriptions</button>
             <a class="btn-muted" href="/admin.html">Back To Admin</a>
+        </div>
+
+        <div class="action-grid">
+            <button class="btn-cyan" id="btn-normalize">Normalize Selected</button>
+            <button class="btn-green" id="btn-reset-trials">Reset Trials (Selected)</button>
+            <button class="btn-red" id="btn-reset-subs">Reset Subs (Selected)</button>
+            <button class="btn-muted" id="btn-clear-square">Clear Square (Selected)</button>
+            <button class="btn-muted" id="btn-reconcile">Reconcile Square (Selected)</button>
+            <button class="btn-muted" id="btn-set-password">Set Password (Selected)</button>
+            <button class="btn-muted" id="btn-disable">Disable Accounts</button>
+            <button class="btn-muted" id="btn-enable">Enable Accounts</button>
+            <button class="btn-muted" id="btn-archive">Archive Accounts</button>
+            <button class="btn-red" id="btn-delete">Delete Accounts</button>
+            <button class="btn-muted" id="btn-details">Square + Account Details</button>
+            <button class="btn-primary" id="btn-create-user">Create User</button>
         </div>
 
         <div class="panel">
@@ -201,9 +226,11 @@
                 <table>
                     <thead>
                         <tr>
+                            <th><input id="select-all" type="checkbox" aria-label="Select all users on page"></th>
                             <th>User</th>
                             <th>Email</th>
                             <th>Display</th>
+                            <th>Flags</th>
                             <th>Status</th>
                             <th>Tier</th>
                             <th>Trial Ends</th>
@@ -214,7 +241,7 @@
                         </tr>
                     </thead>
                     <tbody id="rows">
-                        <tr><td colspan="10" style="color:#8ea2bd;">Loading...</td></tr>
+                        <tr><td colspan="12" style="color:#8ea2bd;">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -236,7 +263,8 @@
             totalItems: 0,
             limit: 50,
             query: '',
-            users: []
+            users: [],
+            selected: new Set()
         };
 
         function esc(value) {
@@ -266,23 +294,60 @@
             return '<span class="pill guest">' + esc(normalized || 'GUEST') + '</span>';
         }
 
+        function userFlags(user) {
+            const flags = [];
+            if (user.isVerified) flags.push('VERIFIED');
+            if (user.accountDisabled) flags.push('DISABLED');
+            if (user.accountArchived) flags.push('ARCHIVED');
+            if (user.passwordResetPending) flags.push('RESET_PENDING');
+            return flags.length ? flags.join(' | ') : '-';
+        }
+
+        function selectedKeys() {
+            return Array.from(state.selected.values());
+        }
+
         function setStatus(text) {
             document.getElementById('status').textContent = text;
+        }
+
+        function toggleSelectAllCurrentPage(enabled) {
+            const onPage = state.users.map((user) => String(user.username || '').toLowerCase()).filter(Boolean);
+            if (enabled) {
+                onPage.forEach((key) => state.selected.add(key));
+            } else {
+                onPage.forEach((key) => state.selected.delete(key));
+            }
+            renderRows();
+            renderPager();
+        }
+
+        function toggleUserSelection(userKey, enabled) {
+            const clean = String(userKey || '').toLowerCase();
+            if (!clean) return;
+            if (enabled) state.selected.add(clean);
+            else state.selected.delete(clean);
+            renderPager();
         }
 
         function renderRows() {
             const body = document.getElementById('rows');
             if (!Array.isArray(state.users) || state.users.length === 0) {
-                body.innerHTML = '<tr><td colspan="10" style="color:#8ea2bd;">No users found for current filter.</td></tr>';
+                body.innerHTML = '<tr><td colspan="12" style="color:#8ea2bd;">No users found for current filter.</td></tr>';
                 return;
             }
 
             body.innerHTML = state.users.map((user) => {
-                const username = esc(user.username || '');
+                const usernameRaw = String(user.username || '').toLowerCase();
+                const username = esc(usernameRaw);
+                const userArg = encodeURIComponent(usernameRaw);
+                const checked = state.selected.has(usernameRaw) ? ' checked' : '';
                 return '<tr>'
+                    + '<td><input type="checkbox" data-user="' + username + '"' + checked + '></td>'
                     + '<td>' + username + '</td>'
                     + '<td>' + esc(user.email || '-') + '</td>'
                     + '<td>' + esc(user.displayName || '-') + '</td>'
+                    + '<td>' + esc(userFlags(user)) + '</td>'
                     + '<td>' + statusPill(user.subscriptionStatus) + '</td>'
                     + '<td>' + esc(user.billingTier || '-') + '</td>'
                     + '<td>' + esc(fmtDate(user.trialEndsAt)) + '</td>'
@@ -291,18 +356,31 @@
                     + '<td>' + esc(fmtDate(user.updatedAt || user.signupDate || user.createdAt)) + '</td>'
                     + '<td>'
                     + '<div class="actions">'
-                    + '<button onclick="reconcileUser(\'' + username + '\')">Reconcile</button>'
-                    + '<button onclick="clearSquare(\'' + username + '\')">Clear Square</button>'
-                    + '<button onclick="openHistory(\'' + username + '\')">History</button>'
+                        + '<button onclick="singleReconcile(\'' + userArg + '\')">Reconcile</button>'
+                        + '<button onclick="singleClearSquare(\'' + userArg + '\')">Clear Square</button>'
+                        + '<button onclick="singleToggleDisable(\'' + userArg + '\', ' + (user.accountDisabled ? 'false' : 'true') + ')">' + (user.accountDisabled ? 'Enable' : 'Disable') + '</button>'
+                        + '<button onclick="singleDetails(\'' + userArg + '\')">Details</button>'
+                        + '<button onclick="openHistory(\'' + userArg + '\')">History</button>'
                     + '</div>'
                     + '</td>'
                     + '</tr>';
             }).join('');
+
+            body.querySelectorAll('input[type="checkbox"][data-user]').forEach((node) => {
+                node.addEventListener('change', () => {
+                    toggleUserSelection(node.getAttribute('data-user'), node.checked);
+                });
+            });
+
+            const onPage = state.users.map((user) => String(user.username || '').toLowerCase()).filter(Boolean);
+            const allChecked = onPage.length > 0 && onPage.every((key) => state.selected.has(key));
+            const selectAll = document.getElementById('select-all');
+            selectAll.checked = allChecked;
         }
 
         function renderPager() {
             document.getElementById('meta').textContent =
-                'Users: ' + state.totalItems + ' | Page size: ' + state.limit;
+                'Users: ' + state.totalItems + ' | Page size: ' + state.limit + ' | Selected: ' + selectedKeys().length;
             document.getElementById('page').textContent =
                 'Page ' + state.page + ' of ' + state.totalPages;
             document.getElementById('prev').disabled = state.page <= 1;
@@ -346,46 +424,33 @@
             if (!res.ok || !data.success) {
                 throw new Error(data.error || ('Request failed: ' + res.status));
             }
-            setStatus(successMessage);
+            if (successMessage) setStatus(successMessage);
             return data;
         }
 
-        async function normalizeUsers() {
+        function requireSelected() {
+            const keys = selectedKeys();
+            if (keys.length === 0) {
+                throw new Error('Select at least one user first.');
+            }
+            return keys;
+        }
+
+        async function runSelectedAction(label, endpoint, payload, confirmText) {
             try {
-                setStatus('Normalizing user data...');
-                const data = await postJson('/api/admin/users/normalize-data', {}, 'Normalization complete.');
-                setStatus('Normalization complete. Updated ' + data.updated + ' of ' + data.scanned + ' users.');
+                const userKeys = requireSelected();
+                if (confirmText && !confirm(confirmText.replace('{count}', String(userKeys.length)))) return;
+                setStatus(label + '...');
+                const data = await postJson(endpoint, { ...(payload || {}), userKeys }, label + ' complete.');
+                setStatus(label + ' complete. Updated: ' + (data.updated ?? data.reconciled ?? data.selected ?? userKeys.length));
                 await loadUsers();
             } catch (err) {
-                setStatus('Normalization failed: ' + err.message);
+                setStatus(label + ' failed: ' + err.message);
             }
         }
 
-        async function resetTrials() {
-            if (!confirm('Reset trial dates for all users to now?')) return;
-            try {
-                setStatus('Resetting trial windows for all users...');
-                const data = await postJson('/api/admin/users/reset-trials', { trialDays: 7 }, 'Trial reset complete.');
-                setStatus('Trial reset complete. Updated ' + data.updated + ' users.');
-                await loadUsers();
-            } catch (err) {
-                setStatus('Trial reset failed: ' + err.message);
-            }
-        }
-
-        async function resetSubscriptions() {
-            if (!confirm('Reset all subscription mappings and statuses for all users?')) return;
-            try {
-                setStatus('Resetting subscriptions...');
-                const data = await postJson('/api/admin/users/reset-subscriptions', { resetTrial: false }, 'Subscription reset complete.');
-                setStatus('Subscription reset complete. Updated ' + data.updated + ' users.');
-                await loadUsers();
-            } catch (err) {
-                setStatus('Subscription reset failed: ' + err.message);
-            }
-        }
-
-        async function reconcileUser(userKey) {
+        async function singleReconcile(userKeyEncoded) {
+            const userKey = decodeURIComponent(String(userKeyEncoded || ''));
             try {
                 setStatus('Reconciling subscription for ' + userKey + ' ...');
                 await postJson('/api/admin/users/' + encodeURIComponent(userKey) + '/reconcile-subscription', {}, 'Reconciled ' + userKey + '.');
@@ -395,7 +460,8 @@
             }
         }
 
-        async function clearSquare(userKey) {
+        async function singleClearSquare(userKeyEncoded) {
+            const userKey = decodeURIComponent(String(userKeyEncoded || ''));
             if (!confirm('Clear Square linkage for ' + userKey + '?')) return;
             try {
                 setStatus('Clearing Square linkage for ' + userKey + ' ...');
@@ -406,7 +472,34 @@
             }
         }
 
-        function openHistory(userKey) {
+        async function singleToggleDisable(userKeyEncoded, disabled) {
+            const userKey = decodeURIComponent(String(userKeyEncoded || ''));
+            try {
+                const action = disabled ? 'Disable' : 'Enable';
+                if (!confirm(action + ' account ' + userKey + '?')) return;
+                await postJson('/api/admin/users/set-disabled', {
+                    userKeys: [userKey],
+                    disabled: Boolean(disabled)
+                }, action + 'd account ' + userKey + '.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Account update failed: ' + err.message);
+            }
+        }
+
+        async function singleDetails(userKeyEncoded) {
+            const userKey = decodeURIComponent(String(userKeyEncoded || ''));
+            try {
+                const data = await postJson('/api/admin/users/details', { userKeys: [userKey] }, 'Loaded details.');
+                const details = data.details && data.details[0] ? data.details[0] : null;
+                alert(details ? JSON.stringify(details, null, 2) : 'No details found.');
+            } catch (err) {
+                setStatus('Details failed: ' + err.message);
+            }
+        }
+
+        function openHistory(userKeyEncoded) {
+            const userKey = decodeURIComponent(String(userKeyEncoded || ''));
             const url = '/api/admin/users/' + encodeURIComponent(userKey) + '/watch-history?limit=100';
             window.open(url, '_blank', 'noopener,noreferrer');
         }
@@ -418,14 +511,91 @@
             loadUsers();
         });
 
-        document.getElementById('btn-normalize').addEventListener('click', normalizeUsers);
-        document.getElementById('btn-reset-trials').addEventListener('click', resetTrials);
-        document.getElementById('btn-reset-subs').addEventListener('click', resetSubscriptions);
+        document.getElementById('btn-normalize').addEventListener('click', () =>
+            runSelectedAction('Normalization', '/api/admin/users/normalize-data', {}, 'Normalize {count} selected users?')
+        );
+
+        document.getElementById('btn-reset-trials').addEventListener('click', () =>
+            runSelectedAction('Trial reset', '/api/admin/users/reset-trials', { trialDays: 7 }, 'Reset trials for {count} selected users?')
+        );
+
+        document.getElementById('btn-reset-subs').addEventListener('click', () =>
+            runSelectedAction('Subscription reset', '/api/admin/users/reset-subscriptions', { resetTrial: false }, 'Reset subscriptions for {count} selected users?')
+        );
+
+        document.getElementById('btn-clear-square').addEventListener('click', () =>
+            runSelectedAction('Clear Square', '/api/admin/users/bulk-clear-square-subscription', {}, 'Clear Square links for {count} selected users?')
+        );
+
+        document.getElementById('btn-reconcile').addEventListener('click', () =>
+            runSelectedAction('Square reconcile', '/api/admin/users/bulk-reconcile-subscription', {}, 'Reconcile Square subscriptions for {count} selected users?')
+        );
+
+        document.getElementById('btn-set-password').addEventListener('click', async () => {
+            try {
+                const userKeys = requireSelected();
+                const newPassword = prompt('Enter new password for ' + userKeys.length + ' selected users (min 6 chars):');
+                if (!newPassword) return;
+                await postJson('/api/admin/users/set-password', { userKeys, newPassword }, 'Password update complete.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Password update failed: ' + err.message);
+            }
+        });
+
+        document.getElementById('btn-disable').addEventListener('click', () =>
+            runSelectedAction('Disable accounts', '/api/admin/users/set-disabled', { disabled: true }, 'Disable {count} selected accounts?')
+        );
+
+        document.getElementById('btn-enable').addEventListener('click', () =>
+            runSelectedAction('Enable accounts', '/api/admin/users/set-disabled', { disabled: false }, 'Enable {count} selected accounts?')
+        );
+
+        document.getElementById('btn-archive').addEventListener('click', () =>
+            runSelectedAction('Archive accounts', '/api/admin/users/archive', { mode: 'archive' }, 'Archive {count} selected accounts?')
+        );
+
+        document.getElementById('btn-delete').addEventListener('click', () =>
+            runSelectedAction('Delete accounts', '/api/admin/users/archive', { mode: 'delete' }, 'Delete {count} selected accounts permanently?')
+        );
+
+        document.getElementById('btn-details').addEventListener('click', async () => {
+            try {
+                const userKeys = requireSelected();
+                const data = await postJson('/api/admin/users/details', { userKeys }, 'Loaded selected details.');
+                alert(JSON.stringify(data.details || [], null, 2));
+            } catch (err) {
+                setStatus('Details failed: ' + err.message);
+            }
+        });
+
+        document.getElementById('btn-create-user').addEventListener('click', async () => {
+            try {
+                const email = String(prompt('New user email:') || '').trim().toLowerCase();
+                if (!email) return;
+                const displayName = String(prompt('Display name (optional):') || '').trim();
+                const password = String(prompt('Temporary password (min 6 chars):') || '');
+                if (!password) return;
+                await postJson('/api/admin/users/create', {
+                    email,
+                    displayName,
+                    password,
+                    autoVerify: true
+                }, 'User created.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Create user failed: ' + err.message);
+            }
+        });
 
         document.getElementById('search').addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 document.getElementById('btn-apply').click();
             }
+        });
+
+        document.getElementById('select-all').addEventListener('change', (event) => {
+            toggleSelectAllCurrentPage(event.target.checked);
         });
 
         document.getElementById('prev').addEventListener('click', () => {

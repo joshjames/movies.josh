@@ -3020,6 +3020,75 @@ router.post('/refetch-metadata', async (req, res) => {
     }
 });
 
+function resolveUserMetaDir() {
+    const configured = String(process.env.USER_BASE_DIR || '').trim();
+    const candidates = [
+        configured,
+        '/app/metadata/users',
+        path.join(__dirname, '../../metadata/users'),
+        path.join(__dirname, '../../../metadata/users')
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    return candidates[0] || path.join(__dirname, '../../metadata/users');
+}
+
+function parseUserKeyList(input) {
+    if (!Array.isArray(input)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const raw of input) {
+        const clean = String(raw || '').trim().toLowerCase();
+        if (!clean || seen.has(clean)) continue;
+        seen.add(clean);
+        out.push(clean);
+    }
+    return out;
+}
+
+async function resolveTargetUsers(userKeys = []) {
+    const requested = parseUserKeyList(userKeys);
+    const allUsers = await ProfileService.listUsers();
+    if (!Array.isArray(allUsers) || allUsers.length === 0) return [];
+    if (requested.length === 0) return allUsers;
+
+    const resolved = [];
+    const seen = new Set();
+
+    for (const key of requested) {
+        const resolvedKey = await ProfileService.resolveUserKey(key);
+        const clean = String(resolvedKey || '').trim().toLowerCase();
+        if (!clean || seen.has(clean)) continue;
+        seen.add(clean);
+        resolved.push(clean);
+    }
+
+    return resolved;
+}
+
+function readRosterSnapshot(userMetaDir) {
+    const rosterPath = path.join(userMetaDir, 'roster.json');
+    if (!fs.existsSync(rosterPath)) {
+        return { rosterPath, roster: {} };
+    }
+
+    try {
+        const raw = fs.readFileSync(rosterPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        return { rosterPath, roster: parsed && typeof parsed === 'object' ? parsed : {} };
+    } catch (_err) {
+        return { rosterPath, roster: {} };
+    }
+}
+
+async function writeRosterSnapshot(rosterPath, roster) {
+    await fsPromises.mkdir(path.dirname(rosterPath), { recursive: true });
+    await fsPromises.writeFile(rosterPath, JSON.stringify(roster || {}, null, 4), 'utf-8');
+}
+
 // GET: /api/admin/users
 router.get('/users', (req, res) => {
     try {
@@ -3030,7 +3099,7 @@ router.get('/users', (req, res) => {
         const page = parsePositiveInt(req.query.page, 1, 1, 100000);
         const limit = parsePositiveInt(req.query.limit, 50, 1, 200);
 
-        const userMetaDir = path.join(__dirname, '../../metadata', 'users');
+        const userMetaDir = resolveUserMetaDir();
         if (!fs.existsSync(userMetaDir)) return res.json({ success: true, users: [] });
 
         const profiles = fs.readdirSync(userMetaDir).map(folder => {
@@ -3067,6 +3136,12 @@ router.get('/users', (req, res) => {
                 hasPlayback,
                 hasPremium,
                 isVerified: Boolean(config.isVerified),
+                accountDisabled: Boolean(config.accountDisabled),
+                accountDisabledAt: config.accountDisabledAt || null,
+                accountArchived: Boolean(config.accountArchived),
+                accountArchivedAt: config.accountArchivedAt || null,
+                passwordResetPending: Boolean(config.passwordResetToken),
+                passwordResetExpires: config.passwordResetExpires || null,
                 subscriptionStatus,
                 billingTier: config.billingTier || null,
                 nextBillingDate: config.nextBillingDate || null,
@@ -3131,7 +3206,8 @@ router.get('/users', (req, res) => {
 // Repair legacy/missing account fields and enforce a standard config baseline.
 router.post('/users/normalize-data', async (req, res) => {
     try {
-        const users = await ProfileService.listUsers();
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
         if (!Array.isArray(users) || users.length === 0) {
             return res.json({ success: true, scanned: 0, updated: 0, errors: [] });
         }
@@ -3214,7 +3290,7 @@ router.post('/users/reset-trials', async (req, res) => {
             3650
         );
 
-        const users = await ProfileService.listUsers();
+        const users = await resolveTargetUsers(body.userKeys);
         if (!Array.isArray(users) || users.length === 0) {
             return res.json({ success: true, updated: 0, users: [], trialDays });
         }
@@ -3319,7 +3395,7 @@ router.post('/users/reset-subscriptions', async (req, res) => {
         const body = (req.body && typeof req.body === 'object') ? req.body : {};
         const resetTrial = body.resetTrial !== false;
 
-        const users = await ProfileService.listUsers();
+        const users = await resolveTargetUsers(body.userKeys);
         if (!Array.isArray(users) || users.length === 0) {
             return res.json({ success: true, updated: 0, users: [], message: 'No users found.' });
         }
@@ -3368,6 +3444,348 @@ router.post('/users/reset-subscriptions', async (req, res) => {
             errors,
             resetTrial
         });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/bulk-clear-square-subscription
+router.post('/users/bulk-clear-square-subscription', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
+        if (!users.length) {
+            return res.status(400).json({ success: false, error: 'No users selected.' });
+        }
+
+        const updatedUsers = [];
+        const errors = [];
+
+        for (const userKey of users) {
+            try {
+                const config = await ProfileService.readData(userKey, 'config', {});
+                const trialEndsAtMs = config.trialEndsAt ? Date.parse(config.trialEndsAt) : NaN;
+                const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+
+                const nextConfig = {
+                    ...config,
+                    squareCustomerId: null,
+                    squareCardId: null,
+                    squareSubscriptionId: null,
+                    squarePlanVariationId: null,
+                    nextBillingDate: null,
+                    cancelAtPeriodEnd: false,
+                    subscriptionStatus: trialActive ? 'TRIAL' : 'GUEST',
+                    billingTier: trialActive ? 'trial' : 'guest',
+                    freeAccessActive: trialActive,
+                    updatedAt: Date.now()
+                };
+
+                await ProfileService.writeData(userKey, 'config', nextConfig);
+                updatedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            updated: updatedUsers.length,
+            users: updatedUsers,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/bulk-reconcile-subscription
+router.post('/users/bulk-reconcile-subscription', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
+        if (!users.length) {
+            return res.status(400).json({ success: false, error: 'No users selected.' });
+        }
+
+        const reconciled = [];
+        const staleCleared = [];
+        const failed = [];
+
+        for (const userKey of users) {
+            try {
+                const result = await AccountService.reconcileSubscriptionState(userKey);
+                if (result?.staleReferenceCleared) staleCleared.push(userKey);
+                if (result?.success) {
+                    reconciled.push(userKey);
+                } else {
+                    failed.push({ userKey, error: result?.error || 'unknown_failure' });
+                }
+            } catch (err) {
+                failed.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: failed.length === 0,
+            selected: users.length,
+            reconciled: reconciled.length,
+            staleCleared: staleCleared.length,
+            failed
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/set-password
+router.post('/users/set-password', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
+        const nextPassword = String(body.newPassword || '');
+
+        if (!users.length) {
+            return res.status(400).json({ success: false, error: 'No users selected.' });
+        }
+        if (nextPassword.length < 6) {
+            return res.status(400).json({ success: false, error: 'New password must be at least 6 characters.' });
+        }
+
+        const updatedUsers = [];
+        const errors = [];
+
+        for (const userKey of users) {
+            try {
+                const result = await ProfileService.setPassword(userKey, nextPassword);
+                if (!result.success) {
+                    errors.push({ userKey, error: result.error || 'password_update_failed' });
+                    continue;
+                }
+
+                const config = await ProfileService.readData(userKey, 'config', {});
+                if (config.passwordResetToken || config.passwordResetExpires) {
+                    delete config.passwordResetToken;
+                    delete config.passwordResetExpires;
+                    config.updatedAt = Date.now();
+                    await ProfileService.writeData(userKey, 'config', config);
+                }
+
+                updatedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            updated: updatedUsers.length,
+            users: updatedUsers,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/set-disabled
+router.post('/users/set-disabled', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
+        const disabled = body.disabled !== false;
+        const reason = String(body.reason || '').trim();
+        const now = Date.now();
+
+        if (!users.length) {
+            return res.status(400).json({ success: false, error: 'No users selected.' });
+        }
+
+        const updatedUsers = [];
+        const errors = [];
+
+        for (const userKey of users) {
+            try {
+                const config = await ProfileService.readData(userKey, 'config', {});
+                const nextConfig = {
+                    ...config,
+                    accountDisabled: disabled,
+                    accountDisabledAt: disabled ? new Date(now).toISOString() : null,
+                    accountDisabledReason: disabled ? reason || null : null,
+                    updatedAt: now
+                };
+                await ProfileService.writeData(userKey, 'config', nextConfig);
+                updatedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            updated: updatedUsers.length,
+            disabled,
+            users: updatedUsers,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/archive
+router.post('/users/archive', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
+        const mode = String(body.mode || 'archive').trim().toLowerCase();
+        if (!users.length) {
+            return res.status(400).json({ success: false, error: 'No users selected.' });
+        }
+        if (!['archive', 'delete'].includes(mode)) {
+            return res.status(400).json({ success: false, error: 'Invalid mode. Use archive or delete.' });
+        }
+
+        const userMetaDir = resolveUserMetaDir();
+        const nowIso = new Date().toISOString();
+        const archivedUsers = [];
+        const deletedUsers = [];
+        const errors = [];
+
+        const { rosterPath, roster } = readRosterSnapshot(userMetaDir);
+
+        for (const userKey of users) {
+            try {
+                const userPath = path.join(userMetaDir, userKey);
+
+                if (mode === 'archive') {
+                    const config = await ProfileService.readData(userKey, 'config', {});
+                    const nextConfig = {
+                        ...config,
+                        accountArchived: true,
+                        accountArchivedAt: nowIso,
+                        accountDisabled: true,
+                        accountDisabledAt: nowIso,
+                        updatedAt: Date.now()
+                    };
+                    await ProfileService.writeData(userKey, 'config', nextConfig);
+                    archivedUsers.push(userKey);
+                    continue;
+                }
+
+                await fsPromises.rm(userPath, { recursive: true, force: true });
+                if (roster[userKey]) {
+                    delete roster[userKey];
+                }
+                deletedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        if (mode === 'delete') {
+            await writeRosterSnapshot(rosterPath, roster);
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            mode,
+            archived: archivedUsers.length,
+            deleted: deletedUsers.length,
+            archivedUsers,
+            deletedUsers,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/create
+router.post('/users/create', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const email = String(body.email || '').trim().toLowerCase();
+        const password = String(body.password || '');
+        const displayName = String(body.displayName || body.name || '').trim();
+        const autoVerify = body.autoVerify !== false;
+
+        if (!email || !email.includes('@')) {
+            return res.status(400).json({ success: false, error: 'A valid email is required.' });
+        }
+        if (password.length < 6) {
+            return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+        }
+
+        const createResult = await ProfileService.registerUser(email, password, email, displayName);
+        if (!createResult.success) {
+            return res.status(400).json({ success: false, error: createResult.error || 'Unable to create user.' });
+        }
+
+        const userKey = await ProfileService.resolveUserKey(email);
+        if (userKey && autoVerify) {
+            const config = await ProfileService.readData(userKey, 'config', {});
+            config.isVerified = true;
+            delete config.verificationToken;
+            delete config.verificationExpires;
+            config.updatedAt = Date.now();
+            await ProfileService.writeData(userKey, 'config', config);
+        }
+
+        return res.json({ success: true, userKey: userKey || email, autoVerify });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST: /api/admin/users/details
+router.post('/users/details', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const users = await resolveTargetUsers(body.userKeys);
+        if (!users.length) {
+            return res.status(400).json({ success: false, error: 'No users selected.' });
+        }
+
+        const details = [];
+        for (const userKey of users) {
+            const config = await ProfileService.readData(userKey, 'config', {});
+            details.push({
+                userKey,
+                email: config.email || userKey,
+                displayName: config.displayName || config.name || config.username || userKey,
+                isVerified: Boolean(config.isVerified),
+                accountDisabled: Boolean(config.accountDisabled),
+                accountArchived: Boolean(config.accountArchived),
+                subscriptionStatus: normalizeSubscriptionStatus(config.subscriptionStatus),
+                billingTier: config.billingTier || null,
+                trialDays: Number(config.trialDays || 0),
+                trialEndsAt: config.trialEndsAt || null,
+                square: {
+                    customerId: config.squareCustomerId || null,
+                    subscriptionId: config.squareSubscriptionId || null,
+                    cardId: config.squareCardId || null,
+                    planVariationId: config.squarePlanVariationId || null,
+                    nextBillingDate: config.nextBillingDate || null,
+                    cancelAtPeriodEnd: Boolean(config.cancelAtPeriodEnd)
+                },
+                flags: {
+                    freeAccessActive: Boolean(config.freeAccessActive),
+                    hasPasswordResetToken: Boolean(config.passwordResetToken),
+                    lastSquareWebhookType: config.lastSquareWebhookType || null,
+                    lastSquareWebhookAt: config.lastSquareWebhookAt || null
+                },
+                timestamps: {
+                    createdAt: config.createdAt || null,
+                    signupDate: config.signupDate || null,
+                    updatedAt: config.updatedAt || null,
+                    accountDisabledAt: config.accountDisabledAt || null,
+                    accountArchivedAt: config.accountArchivedAt || null
+                }
+            });
+        }
+
+        return res.json({ success: true, selected: users.length, details });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
