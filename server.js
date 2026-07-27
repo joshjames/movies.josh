@@ -5,6 +5,7 @@ require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const cookieParser = require('cookie-parser');
 
 // All relative imports explicitly point down into the src/ directory tree
@@ -192,10 +193,19 @@ app.get('/api/runtime/metrics', (req, res) => {
         version: BUILD_VERSION,
         deployedAt: DEPLOYED_AT,
         startedAt: new Date(SERVER_STARTED_AT_MS).toISOString(),
+        pid: process.pid,
         uptimeSec: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         requestMetrics,
-        sessionMetrics: buildSessionMetrics()
+        sessionMetrics: buildSessionMetrics(),
+        system: {
+            hostname: os.hostname(),
+            platform: os.platform(),
+            arch: os.arch(),
+            release: os.release(),
+            cpuCount: os.cpus().length,
+            loadAverage: os.loadavg()
+        }
     });
 });
 

@@ -369,7 +369,10 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
     const imdbId = normalizeImdbId(intent.imdbId);
     const seasonNum = Number.isFinite(parseInt(intent.season, 10)) && parseInt(intent.season, 10) > 0 ? parseInt(intent.season, 10) : null;
     const episodeNum = Number.isFinite(parseInt(intent.episode, 10)) && parseInt(intent.episode, 10) > 0 ? parseInt(intent.episode, 10) : null;
-    const sourceType = String(intent.sourceType || '').toLowerCase() === 'pack' ? 'pack' : 'episode';
+    const sourceTypeRaw = String(intent.sourceType || '').toLowerCase();
+    const sourceType = sourceTypeRaw === 'pack' || sourceTypeRaw === 'episode'
+        ? sourceTypeRaw
+        : (seasonNum && !episodeNum ? 'pack' : 'episode');
     const query = buildAutoSeriesSearchQuery(showTitle || imdbId || '', seasonNum, episodeNum, sourceType);
 
     logger.info(`[AutoAcquire] Search start | title="${showTitle || 'n/a'}" imdb=${imdbId || 'n/a'} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${sourceType} query="${query}"`);

@@ -23,6 +23,7 @@ const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
 const TorrentSearchService = require('../services/TorrentSearchService');
 const SeriesAcquisitionService = require('../services/SeriesAcquisitionService');
+const PipelineWorker = require('../services/workers/PipelineWorker');
 const MetadataRegistry = require('../services/MetadataRegistry');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { resolveSeriesFolderPath } = require('../services/StoragePathResolver');
@@ -1581,7 +1582,10 @@ router.post('/downloader/add-auto', async (req, res) => {
     const cleanTitle = normalizeDisplayTitle(title || '');
     const seasonNum = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
     const episodeNum = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
-    const normalizedSourceType = String(sourceType || '').toLowerCase() === 'pack' ? 'pack' : 'episode';
+    const requestedSourceType = String(sourceType || '').toLowerCase();
+    const normalizedSourceType = requestedSourceType === 'pack' || requestedSourceType === 'episode'
+        ? requestedSourceType
+        : (seasonNum && !episodeNum ? 'pack' : 'episode');
 
     if (!cleanImdbId) {
         return res.status(400).json({ success: false, error: 'imdbId is required for auto add dedupe.' });
@@ -1610,7 +1614,9 @@ router.post('/downloader/add-auto', async (req, res) => {
             });
         }
 
-        const showTitle = cleanTitle || cleanImdbId;
+        const indexedShow = getSeriesByImdbId(cleanImdbId);
+        const indexedTitle = normalizeDisplayTitle(indexedShow?.title || indexedShow?.originalTitle || '');
+        const showTitle = cleanTitle || indexedTitle || cleanImdbId;
         const query = SeriesAcquisitionService.buildAutoSeriesSearchQuery(showTitle, seasonNum, episodeNum, normalizedSourceType);
         logger.info(`[Auto Queue] Request | user=${activeUser || 'unknown'} imdb=${cleanImdbId} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${normalizedSourceType} query="${query}"`);
         const searchIntent = {
@@ -1626,6 +1632,21 @@ router.post('/downloader/add-auto', async (req, res) => {
             addedByUser: activeUser || null
         };
 
+        const queueContext = {
+            imdbId: cleanImdbId,
+            season: seasonNum,
+            episode: episodeNum,
+            sourceType: normalizedSourceType,
+            addedByUser: activeUser || null
+        };
+
+        const mediaTitle = buildQueueMediaTitle({
+            title: showTitle,
+            imdbId: cleanImdbId,
+            contentType: 'series',
+            payload: { queueContext }
+        });
+
         const queuedJob = createJob({
             status: 'QUEUED',
             currentStep: 'SEARCH',
@@ -1633,15 +1654,20 @@ router.post('/downloader/add-auto', async (req, res) => {
             contentType: 'series',
             payload: {
                 searchIntent,
-                queueContext: {
-                    imdbId: cleanImdbId,
-                    season: seasonNum,
-                    episode: episodeNum,
-                    sourceType: normalizedSourceType,
-                    addedByUser: activeUser || null
-                }
+                mediaTitle,
+                queueContext
             }
         });
+
+        PipelineWorker.kickQueueJob(queuedJob.id)
+            .then((result) => {
+                if (result?.triggered) {
+                    logger.info(`[Auto Queue] Immediate kick accepted for ${queuedJob.id}`);
+                }
+            })
+            .catch((kickErr) => {
+                logger.warn(`[Auto Queue] Immediate kick failed for ${queuedJob.id}: ${kickErr.message}`);
+            });
 
         return res.json({
             success: true,

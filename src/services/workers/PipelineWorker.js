@@ -1031,6 +1031,30 @@ async function checkPipelineCompletions() {
     }
 }
 
+async function kickQueueJob(jobId = null) {
+    const targetId = String(jobId || '').trim();
+    if (!targetId) return { triggered: false, reason: 'missing_job_id' };
+    if (isProcessingPipeline) return { triggered: false, reason: 'pipeline_busy' };
+
+    const candidate = getJob(targetId);
+    if (!candidate) return { triggered: false, reason: 'job_not_found' };
+    if (candidate.status !== 'QUEUED') return { triggered: false, reason: 'job_not_queued', status: candidate.status };
+
+    isProcessingPipeline = true;
+    try {
+        await withDistributedLock(`pipeline:job:${candidate.id}`, async () => {
+            const fresh = getJob(candidate.id);
+            if (!fresh || fresh.status !== 'QUEUED') return;
+            logger.debug(`🚦 [Queue] Manual kick processing ${fresh.id} at step ${fresh.currentStep}`);
+            await processNextJob(fresh);
+        }, { ttlMs: 15000, waitMs: 2000 });
+
+        return { triggered: true, jobId: candidate.id };
+    } finally {
+        isProcessingPipeline = false;
+    }
+}
+
 function hasUsableJobPath(job) {
     const candidatePaths = [job?.payload?.cleanPath, job?.payload?.rawPath]
         .map((value) => String(value || '').trim())
@@ -1119,6 +1143,7 @@ module.exports = {
         logger.debug(`⚙️  Autonomous pipeline queue manager active. Monitoring completions every ${intervalMs}ms...`);
         setInterval(checkPipelineCompletions, intervalMs);
     },
+    kickQueueJob,
     reconcileQueueStartupState,
     createJob,
     getJob,

@@ -21,7 +21,7 @@
         }
         .panel.fullscreen-log .console-box { flex: 1; height: 100% !important; }
 
-        .panel.fullscreen-users {
+        .panel.fullscreen-metrics {
             position: fixed;
             top: 20px;
             left: 20px;
@@ -33,7 +33,7 @@
             flex-direction: column;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
         }
-        .panel.fullscreen-users .users-panel-body {
+        .panel.fullscreen-metrics .metrics-panel-body {
             flex: 1;
             min-height: 0;
             overflow: auto;
@@ -287,41 +287,73 @@
         .user-name { font-weight: bold; color: #f1f5f9; }
         .user-meta-flags { font-size: 0.75rem; color: #64748b; }
 
-        .users-panel-body {
+        .metrics-panel-body {
             max-height: 320px;
             overflow: auto;
         }
 
-        .users-table-wrap {
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .metric-tile {
+            background: #020617;
             border: 1px solid #334155;
             border-radius: 8px;
-            overflow: auto;
-            background: #020617;
-        }
-
-        .users-table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 880px;
-        }
-
-        .users-table th,
-        .users-table td {
             padding: 10px 12px;
-            border-bottom: 1px solid #1e293b;
-            text-align: left;
-            font-size: 0.8rem;
+            display: grid;
+            gap: 4px;
         }
 
-        .users-table th {
-            position: sticky;
-            top: 0;
-            background: #0b1220;
-            color: #93c5fd;
-            font-size: 0.74rem;
+        .metric-label {
+            color: #94a3b8;
+            font-size: 0.72rem;
             text-transform: uppercase;
             letter-spacing: 0.04em;
-            z-index: 1;
+            font-weight: 700;
+        }
+
+        .metric-value {
+            color: #f8fafc;
+            font-size: 1.2rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .metric-subtext {
+            color: #64748b;
+            font-size: 0.72rem;
+        }
+
+        .metrics-users-list {
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #020617;
+            overflow: hidden;
+        }
+
+        .metrics-user-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            border-bottom: 1px solid #1e293b;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+        }
+
+        .metrics-user-row:last-child {
+            border-bottom: none;
+        }
+
+        @media(max-width: 1200px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         .pill {
@@ -888,13 +920,16 @@
             </div>
 
             <div>
-                <div class="panel" id="users-panel">
+                <div class="panel" id="runtime-metrics-panel">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
-                        <h3 style="margin:0; border:none; padding:0;">👥 Authorized System Profiles</h3>
-                        <button onclick="toggleUsersSize()" id="expand-users-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                        <h3 style="margin:0; border:none; padding:0;">📈 Runtime Metrics</h3>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <button onclick="fetchRuntimeMetrics()" style="background:#0f766e; font-size:0.75rem; padding:4px 10px;">Refresh</button>
+                            <button onclick="toggleMetricsSize()" id="expand-metrics-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                        </div>
                     </div>
-                    <div class="users-panel-body" id="users-panel-body">
-                        <div id="users-list">Querying user indexes...</div>
+                    <div class="metrics-panel-body" id="metrics-panel-body">
+                        <div id="runtime-metrics-content">Loading runtime telemetry...</div>
                     </div>
                 </div>
 
@@ -1069,12 +1104,12 @@
             setTimeout(() => { consoleTerminal.scrollTop = consoleTerminal.scrollHeight; }, 50);
         }
 
-        function toggleUsersSize() {
-            const panel = document.getElementById('users-panel');
-            const btn = document.getElementById('expand-users-btn');
+        function toggleMetricsSize() {
+            const panel = document.getElementById('runtime-metrics-panel');
+            const btn = document.getElementById('expand-metrics-btn');
             if (!panel || !btn) return;
 
-            const isFull = panel.classList.toggle('fullscreen-users');
+            const isFull = panel.classList.toggle('fullscreen-metrics');
             btn.textContent = isFull ? 'Collapse Window ↙' : 'Expand Window ⛶';
             btn.style.background = isFull ? '#b91c1c' : '#334155';
         }
@@ -3192,73 +3227,102 @@
             } catch (err) { alert("❌ Critical transport loop disruption."); }
         }
 
-        async function fetchUserProfileIndexes() {
+        function formatBytes(bytes) {
+            const value = Number(bytes);
+            if (!Number.isFinite(value) || value <= 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let idx = 0;
+            let size = value;
+            while (size >= 1024 && idx < units.length - 1) {
+                size /= 1024;
+                idx += 1;
+            }
+            return `${size.toFixed(size >= 100 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+        }
+
+        function formatUptime(seconds) {
+            const total = Math.max(0, parseInt(seconds, 10) || 0);
+            const days = Math.floor(total / 86400);
+            const hours = Math.floor((total % 86400) / 3600);
+            const minutes = Math.floor((total % 3600) / 60);
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        function formatRelativeTime(isoValue) {
+            const ts = Date.parse(isoValue || '');
+            if (!Number.isFinite(ts)) return 'n/a';
+            const deltaSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+            if (deltaSec < 60) return `${deltaSec}s ago`;
+            if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
+            if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
+            return `${Math.floor(deltaSec / 86400)}d ago`;
+        }
+
+        function metricTile(label, value, subtext = '') {
+            return `
+                <div class="metric-tile">
+                    <div class="metric-label">${label}</div>
+                    <div class="metric-value">${value}</div>
+                    <div class="metric-subtext">${subtext}</div>
+                </div>
+            `;
+        }
+
+        async function fetchRuntimeMetrics() {
             try {
-                const res = await fetch('/api/admin/users');
+                const res = await fetch('/api/runtime/metrics', { credentials: 'include' });
                 const data = await res.json();
-                const container = document.getElementById('users-list');
+                const container = document.getElementById('runtime-metrics-content');
+                if (!container) return;
 
-                if (data.success && data.users.length > 0) {
-                    const fmtDate = (value) => {
-                        if (!value) return '-';
-                        const date = new Date(value);
-                        if (Number.isNaN(date.getTime())) return '-';
-                        return date.toLocaleDateString();
-                    };
-
-                    const escapeHtml = (value) => String(value || '')
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#39;');
-
-                    container.innerHTML = `
-                        <div class="users-table-wrap">
-                            <table class="users-table">
-                                <thead>
-                                    <tr>
-                                        <th>User</th>
-                                        <th>Email</th>
-                                        <th>Plan</th>
-                                        <th>Status</th>
-                                        <th>Tier</th>
-                                        <th>Next Bill</th>
-                                        <th>Activity</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${data.users.map((u) => {
-                                        const display = u.displayName || u.username || 'Unknown';
-                                        const flags = [u.hasHistory ? 'History' : null, u.hasPlayback ? 'Progress' : null].filter(Boolean);
-                                        const premiumLabel = u.hasPremium ? 'Premium' : 'Free';
-                                        return `
-                                            <tr>
-                                                <td>
-                                                    <div style="font-weight:700;color:#f8fafc;">${escapeHtml(display)}</div>
-                                                    <div style="font-size:0.72rem;color:#94a3b8;">${escapeHtml(u.username || '')}</div>
-                                                </td>
-                                                <td style="color:#cbd5e1;">${escapeHtml(u.email || '-')}</td>
-                                                <td><span class="pill ${u.hasPremium ? 'premium' : 'free'}">${premiumLabel}</span></td>
-                                                <td><span class="pill status">${escapeHtml(u.subscriptionStatus || 'NONE')}</span></td>
-                                                <td style="color:#cbd5e1;">${escapeHtml(u.billingTier || '-')}</td>
-                                                <td style="color:#cbd5e1;">${fmtDate(u.nextBillingDate || u.trialEndsAt)}</td>
-                                                <td style="color:#94a3b8;">${escapeHtml(flags.join(' • ') || '-')}</td>
-                                                <td>
-                                                    <button type="button" style="background:#1d4ed8; font-size:0.72rem; padding:6px 10px;" onclick="viewUserWatchHistory('${escapeHtml(u.username || '')}')">View History</button>
-                                                </td>
-                                            </tr>
-                                        `;
-                                    }).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                } else {
-                    container.innerHTML = `<p style="color: #64748b; font-size: 0.85rem; text-align: center;">No local records discovered.</p>`;
+                if (!res.ok || !data.success) {
+                    const reason = data?.error || `HTTP ${res.status}`;
+                    container.innerHTML = `<div style="color:#fca5a5; font-size:0.82rem; border:1px solid #7f1d1d; border-radius:8px; padding:10px; background:#1f1114;">Metrics unavailable: ${reason}</div>`;
+                    return;
                 }
-            } catch (e) { console.error(e); }
+
+                const memory = data.memory || {};
+                const requestMetrics = data.requestMetrics || {};
+                const byStatus = requestMetrics.byStatusClass || {};
+                const sessionMetrics = data.sessionMetrics || {};
+                const activeUsers = Array.isArray(sessionMetrics.activeUsers) ? sessionMetrics.activeUsers : [];
+                const startedAt = data.startedAt ? formatRelativeTime(data.startedAt) : 'n/a';
+                const loadTriplet = data.system && Array.isArray(data.system.loadAverage)
+                    ? data.system.loadAverage.map((n) => Number(n).toFixed(2)).join(' / ')
+                    : 'n/a';
+
+                const activeUserRows = activeUsers.length
+                    ? activeUsers.slice(0, 8).map((row) => `
+                        <div class="metrics-user-row">
+                            <span>${row.user}</span>
+                            <span style="color:#94a3b8;">${row.requestCount || 0} req • ${formatRelativeTime(row.lastSeenAt)}</span>
+                        </div>
+                    `).join('')
+                    : '<div class="metrics-user-row" style="justify-content:center; color:#64748b;">No active users in current window.</div>';
+
+                container.innerHTML = `
+                    <div class="metrics-grid">
+                        ${metricTile('Active Users', String(sessionMetrics.activeUserCount || 0), `${sessionMetrics.windowMinutes || 15}m activity window`)}
+                        ${metricTile('Open Requests', String(requestMetrics.activeRequests || 0), `${requestMetrics.totalRequests || 0} total requests`)}
+                        ${metricTile('Error Rate', `${requestMetrics.totalErrors || 0}`, `5xx total, 4xx=${byStatus['4xx'] || 0} | 5xx=${byStatus['5xx'] || 0}`)}
+                        ${metricTile('Runtime', formatUptime(data.uptimeSec), `started ${startedAt}`)}
+                        ${metricTile('Heap Used', formatBytes(memory.heapUsed), `${formatBytes(memory.heapTotal)} total heap`)}
+                        ${metricTile('RSS Memory', formatBytes(memory.rss), `external ${formatBytes(memory.external)}`)}
+                        ${metricTile('Node', String(data.version || 'dev'), `pid ${data.pid || '-'} | ${data.service || 'service'}`)}
+                        ${metricTile('System Load', loadTriplet, data.system?.cpuCount ? `${data.system.cpuCount} vCPU` : 'load metrics pending')}
+                    </div>
+                    <div style="margin-top:4px; margin-bottom:6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Most Active Sessions</div>
+                    <div class="metrics-users-list">${activeUserRows}</div>
+                `;
+            } catch (err) {
+                const container = document.getElementById('runtime-metrics-content');
+                if (container) {
+                    container.innerHTML = '<div style="color:#f87171; font-size:0.82rem;">Runtime metrics request failed.</div>';
+                }
+                console.error('[Admin] fetchRuntimeMetrics failed:', err);
+            }
         }
 
         async function fetchFailedJobs() {
@@ -3295,20 +3359,6 @@
             }
         }
 
-        function viewUserWatchHistory(userKey) {
-            const cleanUser = String(userKey || '').trim().toLowerCase();
-            if (!cleanUser) {
-                showToast('Unable to resolve user key for history view.', 'error', 3200);
-                return;
-            }
-
-            watchHistoryPanel.open({
-                endpoint: `/api/admin/users/${encodeURIComponent(cleanUser)}/watch-history`,
-                title: `Watch History: ${cleanUser}`,
-                subtitle: 'Recent playback activity for selected profile'
-            });
-        }
-
         async function retryFailedJob(jobId) {
             try {
                 console.debug('[Admin] Retrying failed job:', jobId);
@@ -3337,8 +3387,9 @@
         // Execution mounts
         connectToLogStream();
         fetchLibraryData(true);
-        fetchUserProfileIndexes();
+        fetchRuntimeMetrics();
         fetchFailedJobs();
+        setInterval(fetchRuntimeMetrics, 30000);
 
         const groupManagerSearch = document.getElementById('group-manager-search');
         if (groupManagerSearch) {
