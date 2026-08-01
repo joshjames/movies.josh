@@ -247,4 +247,14 @@ router.delete('/subscriptions/:imdbId', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/subscriptions/:imdbId/ack', requireAuth, async (req, res) => {
+  try {
+    const userKey = getActiveUser(req);
+    const result = await SeriesSubscriptionService.clearNewEpisodeBadge(userKey, req.params.imdbId);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

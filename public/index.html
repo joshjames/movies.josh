@@ -1149,8 +1149,9 @@
 
         function renderFeedRow(collection) {
             const cards = Array.isArray(collection.cards) && collection.cards.length > 0
-                ? collection.cards.map(card => {
-                    const badgeHtml = card.badge ? '<span class="slider-badge">TV Show</span>' : '';
+                    ? collection.cards.map(card => {
+                        const badgeText = escapeHtml(String(card.badge || '').trim());
+                        const badgeHtml = badgeText ? `<span class="slider-badge">${badgeText}</span>` : '';
                     const metaBits = [card.year || '', card.genre || '', card.imdbScore ? `IMDb ${card.imdbScore}` : ''].filter(Boolean).join(' · ');
                     const cover = sanitizeImageSrc(card.cover);
 

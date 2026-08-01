@@ -26,6 +26,7 @@ const SERIES_ROOTS = getSeriesRoots();
 const SERIES_DOWNLOAD_DIR = process.env.SERIES_DOWNLOAD_DIR || '/series-media/Series';
 const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || process.env.QBIT_DOWNLOAD_DIR || '/downloads';
 const KEEP_EXTENSIONS = ['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.srt', '.vtt', '.mpeg', '.nfo', '.ogg', '.ogv', '.json', '.jpg', '.jpeg', '.png', '.ts'];
+const SCAN_IGNORE_MARKER = '.scan-ignore';
 const OMDB_API_KEY = process.env.OMDB_API_KEY || '84196d01';
 
 const PROTECTED_ROOTS = new Set(
@@ -114,6 +115,75 @@ function deleteFolderRecursive(directoryPath) {
         });
         fs.rmdirSync(directoryPath);
     }
+}
+
+function removeEmptyDirectoriesRecursive(directoryPath) {
+    if (!fs.existsSync(directoryPath)) return false;
+    const stat = fs.lstatSync(directoryPath);
+    if (!stat.isDirectory()) return false;
+
+    let removable = true;
+    const entries = fs.readdirSync(directoryPath, { withFileTypes: true });
+    for (const entry of entries) {
+        const childPath = path.join(directoryPath, entry.name);
+        if (entry.isDirectory()) {
+            const removed = removeEmptyDirectoriesRecursive(childPath);
+            if (!removed) removable = false;
+            continue;
+        }
+        removable = false;
+    }
+
+    if (!removable) return false;
+
+    try {
+        fs.rmdirSync(directoryPath);
+        return true;
+    } catch (_err) {
+        return false;
+    }
+}
+
+function markFolderScanIgnored(folderPath, reason = 'ingest-residue') {
+    try {
+        if (!fs.existsSync(folderPath) || !fs.lstatSync(folderPath).isDirectory()) return false;
+        const markerPath = path.join(folderPath, SCAN_IGNORE_MARKER);
+        const payload = {
+            reason,
+            markedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(markerPath, JSON.stringify(payload, null, 2), 'utf-8');
+        return true;
+    } catch (_err) {
+        return false;
+    }
+}
+
+function cleanupResidualSeriesFolder(folderPath, { allowForceDelete = false } = {}) {
+    if (!folderPath || !fs.existsSync(folderPath)) {
+        return { removed: false, markedIgnored: false, skipped: true };
+    }
+
+    if (isProtectedRootPath(folderPath)) {
+        return { removed: false, markedIgnored: false, skipped: true };
+    }
+
+    if (allowForceDelete) {
+        try {
+            deleteFolderRecursive(folderPath);
+            return { removed: !fs.existsSync(folderPath), markedIgnored: false, skipped: false };
+        } catch (_err) {
+            // Fall through to marker strategy.
+        }
+    }
+
+    const removed = removeEmptyDirectoriesRecursive(folderPath);
+    if (removed || !fs.existsSync(folderPath)) {
+        return { removed: true, markedIgnored: false, skipped: false };
+    }
+
+    const markedIgnored = markFolderScanIgnored(folderPath, allowForceDelete ? 'ingest-cleanup-force-delete-failed' : 'ingest-residue-non-empty');
+    return { removed: false, markedIgnored, skipped: false };
 }
 
 function generateSkeletonSeason(seasonNum, structure, physicalFileMap) {
@@ -739,10 +809,17 @@ app.post('/process', async (req, res) => {
                 logger.debug(`✨ [Smart Ingest] Tree expansion complete for ${cleanTitle}. Purging remaining download residue...`);
                 if (path.resolve(finalPath) === path.resolve(showRootPath)) {
                     logger.warn(`⚠️ [Ingest] Skip cleanup for show root path: ${finalPath}`);
-                } else if (isSafeTransientCleanupPath(finalPath, contentType)) {
-                    deleteFolderRecursive(finalPath);
                 } else {
-                    logger.warn(`⚠️ [Ingest] Skip cleanup for non-transient path: ${finalPath}`);
+                    const cleanup = cleanupResidualSeriesFolder(finalPath, {
+                        allowForceDelete: isSafeTransientCleanupPath(finalPath, contentType)
+                    });
+                    if (cleanup.removed) {
+                        logger.debug(`🧹 [Ingest] Removed residual series ingest folder: ${finalPath}`);
+                    } else if (cleanup.markedIgnored) {
+                        logger.warn(`🪧 [Ingest] Marked residual series folder ignored for scanner: ${finalPath}`);
+                    } else {
+                        logger.warn(`⚠️ [Ingest] Residual series folder cleanup skipped: ${finalPath}`);
+                    }
                 }
 
                 return res.json({
@@ -856,10 +933,13 @@ app.post('/process', async (req, res) => {
                 logger.debug(`⚙️ [Ingest Sanitizer] Saved metadata.json for ${showFolder} and advanced pipeline to METADATA.`);
 
                 if (finalPath !== showRootPath && fs.existsSync(finalPath)) {
-                    try {
-                        deleteFolderRecursive(finalPath);
-                    } catch (_err) {
-                        // Ignore cleanup failures; the library root is already populated.
+                    const cleanup = cleanupResidualSeriesFolder(finalPath, {
+                        allowForceDelete: isSafeTransientCleanupPath(finalPath, contentType)
+                    });
+                    if (cleanup.removed) {
+                        logger.debug(`🧹 [Ingest] Removed post-move ingest folder: ${finalPath}`);
+                    } else if (cleanup.markedIgnored) {
+                        logger.warn(`🪧 [Ingest] Marked post-move ingest folder ignored for scanner: ${finalPath}`);
                     }
                 }
             }

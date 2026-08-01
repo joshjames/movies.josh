@@ -21,9 +21,19 @@ function normalizeSeriesRef(input = {}) {
         title,
         autoGet: input.autoGet !== false,
         addedAt: input.addedAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        lastNotifiedEpisode: input.lastNotifiedEpisode || null
+        updatedAt: input.updatedAt || new Date().toISOString(),
+        lastNotifiedEpisode: input.lastNotifiedEpisode || null,
+        lastNotifiedAt: input.lastNotifiedAt || null,
+        newEpisodeCount: Math.max(0, parseInt(input.newEpisodeCount, 10) || 0)
     };
+}
+
+function normalizeEpisodeKey({ season = null, episode = null } = {}) {
+    const s = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
+    const e = Number.isFinite(parseInt(episode, 10)) && parseInt(episode, 10) > 0 ? parseInt(episode, 10) : null;
+    if (s && e) return `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+    if (s) return `S${String(s).padStart(2, '0')}`;
+    return '';
 }
 
 async function readSubscriptions(userKey) {
@@ -112,6 +122,84 @@ async function removeSubscription(userKey, ref = {}) {
     return { success: true, count: next.length };
 }
 
+async function clearNewEpisodeBadge(userKey, imdbId) {
+    const cleanUser = String(userKey || '').trim().toLowerCase();
+    const cleanImdb = normalizeImdbId(imdbId || '');
+    if (!cleanUser || !cleanImdb) {
+        return { success: false, error: 'Missing user or imdbId.' };
+    }
+
+    const current = await readSubscriptions(cleanUser);
+    let changed = false;
+    const next = current.items.map((item) => {
+        if (normalizeImdbId(item.imdbId || '') !== cleanImdb) return item;
+        changed = true;
+        return {
+            ...item,
+            newEpisodeCount: 0,
+            updatedAt: new Date().toISOString()
+        };
+    });
+
+    if (changed) {
+        await writeSubscriptions(cleanUser, next);
+    }
+
+    return { success: true, cleared: changed };
+}
+
+async function markEpisodeReadyForSubscribers(imdbId, options = {}) {
+    const cleanImdb = normalizeImdbId(imdbId || '');
+    if (!cleanImdb) {
+        return { success: false, error: 'Missing imdbId.', updatedCount: 0, subscribers: [] };
+    }
+
+    const users = await ProfileService.listUsers();
+    const episodeKey = normalizeEpisodeKey({ season: options.season, episode: options.episode });
+    const now = new Date().toISOString();
+    const subscribers = [];
+
+    for (const userKey of users) {
+        const current = await readSubscriptions(userKey);
+        let changed = false;
+
+        const next = current.items.map((item) => {
+            if (normalizeImdbId(item.imdbId || '') !== cleanImdb) return item;
+            if (item.autoGet === false) return item;
+            if (episodeKey && item.lastNotifiedEpisode === episodeKey) return item;
+
+            changed = true;
+            const currentCount = Math.max(0, parseInt(item.newEpisodeCount, 10) || 0);
+            const updated = {
+                ...item,
+                newEpisodeCount: Math.min(999, currentCount + 1),
+                lastNotifiedEpisode: episodeKey || item.lastNotifiedEpisode || null,
+                lastNotifiedAt: now,
+                updatedAt: now
+            };
+
+            subscribers.push({
+                userKey,
+                imdbId: cleanImdb,
+                newEpisodeCount: updated.newEpisodeCount,
+                episodeKey: updated.lastNotifiedEpisode || null
+            });
+
+            return updated;
+        });
+
+        if (changed) {
+            await writeSubscriptions(userKey, next);
+        }
+    }
+
+    return {
+        success: true,
+        updatedCount: subscribers.length,
+        subscribers
+    };
+}
+
 function buildMyShowsCollection(library = {}, userKey = '', options = {}) {
     const cleanUser = String(userKey || '').trim().toLowerCase();
     const maxCards = Math.max(1, Math.min(parseInt(options.limit, 10) || 18, 60));
@@ -122,9 +210,11 @@ function buildMyShowsCollection(library = {}, userKey = '', options = {}) {
     const libraryShows = Array.isArray(library.shows) ? library.shows : [];
     const registry = loadIndex();
     const subscriptions = Array.isArray(options.subscriptions) ? options.subscriptions : [];
-    const subKeys = new Set(subscriptions
-        .map((item) => normalizeImdbId(item.imdbId || item.id || ''))
-        .filter(Boolean));
+    const normalizedSubs = subscriptions
+        .map((item) => normalizeSeriesRef(item))
+        .filter((item) => item.imdbId);
+    const subKeys = new Set(normalizedSubs.map((item) => item.imdbId));
+    const subMap = new Map(normalizedSubs.map((item) => [item.imdbId, item]));
 
     if (subKeys.size === 0) {
         return {
@@ -137,13 +227,21 @@ function buildMyShowsCollection(library = {}, userKey = '', options = {}) {
 
     const cards = [];
     const seen = new Set();
+    let newEpisodeTotal = 0;
 
     for (const show of libraryShows) {
         const imdbId = normalizeImdbId(show.imdbId || show.imdb_id || '');
         if (!imdbId || !subKeys.has(imdbId)) continue;
         if (seen.has(show.id)) continue;
         seen.add(show.id);
-        cards.push(normalizeCard(show));
+        const card = normalizeCard(show);
+        const sub = subMap.get(imdbId);
+        const count = Math.max(0, parseInt(sub?.newEpisodeCount, 10) || 0);
+        if (count > 0) {
+            card.badge = `${count} New`;
+            newEpisodeTotal += count;
+        }
+        cards.push(card);
     }
 
     for (const item of registry.items || []) {
@@ -164,7 +262,14 @@ function buildMyShowsCollection(library = {}, userKey = '', options = {}) {
         };
         if (seen.has(synthetic.id)) continue;
         seen.add(synthetic.id);
-        cards.push(normalizeCard(synthetic));
+        const card = normalizeCard(synthetic);
+        const sub = subMap.get(imdbId);
+        const count = Math.max(0, parseInt(sub?.newEpisodeCount, 10) || 0);
+        if (count > 0) {
+            card.badge = `${count} New`;
+            newEpisodeTotal += count;
+        }
+        cards.push(card);
     }
 
     cards.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
@@ -173,7 +278,7 @@ function buildMyShowsCollection(library = {}, userKey = '', options = {}) {
         id: 'my-shows-row',
         title: 'My Shows',
         subtitle: cards.length > 0
-            ? `${cards.length} subscribed show${cards.length === 1 ? '' : 's'}`
+            ? `${cards.length} subscribed show${cards.length === 1 ? '' : 's'}${newEpisodeTotal > 0 ? ` • ${newEpisodeTotal} new` : ''}`
             : 'subscribe to tv shows from the show page',
         cards: cards.slice(0, maxCards)
     };
@@ -184,6 +289,8 @@ module.exports = {
     writeSubscriptions,
     addSubscription,
     removeSubscription,
+    clearNewEpisodeBadge,
+    markEpisodeReadyForSubscribers,
     buildMyShowsCollection,
     normalizeSeriesRef
 };

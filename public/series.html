@@ -218,6 +218,10 @@
                 document.getElementById('show-meta').innerText = `${serverShowData.year} • ${serverShowData.genre}`;
                 document.getElementById('show-plot').innerText = serverShowData.plot || "No description loaded.";
 
+                acknowledgeSubscriptionBadge().catch(() => {
+                    // Ignore auth/network failures; this endpoint is best-effort.
+                });
+
                 const seasonsAvailable = Object.keys(serverShowData.seasons).sort((a,b) => a - b);
                 const seasonSelect = document.getElementById('season-select');
                 
@@ -616,6 +620,20 @@
                 alert(data.alreadyAvailable ? data.message : `Queued S${seasonNumber}E${episodeNumber} for acquisition.`);
             } catch (err) {
                 alert(`Unable to queue missing episode: ${err.message}`);
+            }
+        }
+
+        async function acknowledgeSubscriptionBadge() {
+            const effectiveImdbId = serverShowData?.imdbId || serverShowData?.imdb_id || '';
+            if (!effectiveImdbId) return;
+
+            try {
+                await fetch(`/api/account/subscriptions/${encodeURIComponent(effectiveImdbId)}/ack`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (_err) {
+                // Best-effort only.
             }
         }
 

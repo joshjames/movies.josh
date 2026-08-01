@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-08-01T05:17:54.216Z",
+    "updatedAt": "2026-08-01T06:11:01.194Z",
     "totalItems": 37,
     "items": [
         {
@@ -670,26 +670,26 @@
             "registryVersion": 1
         },
         {
-            "id": "series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB",
+            "id": "series/Stuart.Fails.to.Save.the.Universe",
             "imdbId": "tt27497393",
             "title": "Stuart Fails to Save the Universe",
             "originalTitle": "Stuart Fails to Save the Universe",
-            "folderName": "Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB",
-            "folderPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB",
-            "seriesPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB",
-            "metadataPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB/metadata.json",
-            "seriesManifestPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB/series.json",
+            "folderName": "Stuart.Fails.to.Save.the.Universe",
+            "folderPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe",
+            "seriesPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe",
+            "metadataPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe/metadata.json",
+            "seriesManifestPath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe/series.json",
             "contentType": "series",
             "storageLocation": "local",
-            "updatedAt": "2026-07-29T10:13:41.051Z",
+            "updatedAt": "2026-08-01T05:41:24.875Z",
             "addedAt": "2026-07-29T10:13:41.052Z",
             "year": "2026–",
             "genres": "Comedy, Fantasy, Sci-Fi",
-            "cover": "/movie-assets/series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB/cover.jpg",
+            "cover": "/movie-assets/series/Stuart.Fails.to.Save.the.Universe/cover.jpg",
             "searchText": "stuart fails to save the universe stuart fails to save the universe comedy fantasy sci fi tt27497393",
             "episodeCount": 10,
             "totalSeasons": null,
-            "sourcePath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB",
+            "sourcePath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe",
             "registryVersion": 1
         },
         {

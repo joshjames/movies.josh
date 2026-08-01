@@ -14,6 +14,7 @@ const MetadataRegistry = require('../MetadataRegistry');
 const ProfileService = require('../ProfileService');
 const NotificationService = require('../NotificationService');
 const MailerService = require('../MailerService');
+const SeriesSubscriptionService = require('../SeriesSubscriptionService');
 const SeriesFolderResolver = require('../SeriesFolderResolver');
 const { rebuildSeriesManifest } = require('../SeriesIndexService');
 const { buildDefaultWorkerEndpoints } = require('../WorkerEndpoints');
@@ -300,6 +301,64 @@ async function runQueueCompletionHooks(job, libraryItem) {
                 }
             });
         }
+    }
+}
+
+async function runSeriesSubscriberNotifications(job, libraryItem) {
+    if (String(job?.contentType || '').toLowerCase() !== 'series') return;
+
+    const imdbId = normalizeImdbId(
+        job?.imdbId ||
+        job?.payload?.imdbId ||
+        job?.payload?.queueContext?.imdbId ||
+        libraryItem?.imdbId ||
+        libraryItem?.imdb_id ||
+        ''
+    );
+    if (!imdbId) return;
+
+    const queueContext = (job?.payload && typeof job.payload.queueContext === 'object') ? job.payload.queueContext : {};
+    const season = Number.isFinite(parseInt(queueContext.season, 10)) ? parseInt(queueContext.season, 10) : null;
+    const episode = Number.isFinite(parseInt(queueContext.episode, 10)) ? parseInt(queueContext.episode, 10) : null;
+    const sourceType = String(queueContext.sourceType || '').toLowerCase() === 'pack' ? 'pack' : 'episode';
+    const showTitle = String(
+        libraryItem?.title ||
+        job?.payload?.mediaTitle ||
+        job?.payload?.torrentName ||
+        'TV Show'
+    ).trim();
+
+    const marked = await SeriesSubscriptionService.markEpisodeReadyForSubscribers(imdbId, {
+        season,
+        episode,
+        sourceType,
+        title: showTitle
+    });
+
+    const subscribers = Array.isArray(marked?.subscribers) ? marked.subscribers : [];
+    if (!subscribers.length) return;
+
+    const seasonLabel = Number.isFinite(season) && season > 0 ? `S${String(season).padStart(2, '0')}` : '';
+    const episodeLabel = Number.isFinite(episode) && episode > 0 ? `E${String(episode).padStart(2, '0')}` : '';
+    const episodeKey = `${seasonLabel}${episodeLabel}`.trim();
+
+    for (const subscriber of subscribers) {
+        await NotificationService.push(subscriber.userKey, {
+            category: 'library',
+            title: episodeKey
+                ? `${showTitle} ${episodeKey} added`
+                : `${showTitle} updated`,
+            message: 'A new episode was added to your subscribed show and marked in My Shows.',
+            href: buildLibraryHref(libraryItem || {}, 'series'),
+            payload: {
+                jobId: job.id,
+                imdbId,
+                season,
+                episode,
+                sourceType,
+                newEpisodeCount: subscriber.newEpisodeCount || 0
+            }
+        });
     }
 }
 
@@ -921,6 +980,12 @@ async function processNextJob(job) {
                         await runQueueCompletionHooks(updated, libraryItem || null);
                     } catch (completionErr) {
                         logger.warn(`⚠️ [Queue] Completion hooks failed for ${updated.id}: ${completionErr.message}`);
+                    }
+
+                    try {
+                        await runSeriesSubscriberNotifications(updated, libraryItem || null);
+                    } catch (subscriptionErr) {
+                        logger.warn(`⚠️ [Queue] Series subscriber notification hooks failed for ${updated.id}: ${subscriptionErr.message}`);
                     }
                 }
             } catch (scanErr) {

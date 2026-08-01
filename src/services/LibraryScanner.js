@@ -27,6 +27,8 @@ const REQUIRE_METADATA_FOR_MOVIE_SCAN = !['false', '0', 'no'].includes(
 const REQUIRE_METADATA_FOR_SERIES_SCAN = ['true', '1', 'yes'].includes(
     String(process.env.REQUIRE_METADATA_FOR_SERIES_SCAN || 'false').trim().toLowerCase()
 );
+const SERIES_SCAN_IGNORE_MARKERS = ['.scan-ignore', '.series-ignore', '.ingest-ignore'];
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.m4v', '.avi', '.mov', '.mpeg', '.ogv', '.ts']);
 
 function normalizeImdbId(value) {
     const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
@@ -169,6 +171,55 @@ function hasPartialDownloadMarkers(itemPath) {
     }
 }
 
+function hasScanIgnoreMarker(itemPath) {
+    try {
+        return SERIES_SCAN_IGNORE_MARKERS.some((fileName) => fs.existsSync(path.join(itemPath, fileName)));
+    } catch (_err) {
+        return false;
+    }
+}
+
+function hasSeriesVideoAssets(itemPath) {
+    try {
+        const seriesPath = path.join(itemPath, 'series.json');
+        if (fs.existsSync(seriesPath)) {
+            const parsed = JSON.parse(fs.readFileSync(seriesPath, 'utf-8'));
+            const seasons = parsed?.seasons || {};
+            for (const seasonKey of Object.keys(seasons)) {
+                const episodes = Array.isArray(seasons[seasonKey]?.episodes) ? seasons[seasonKey].episodes : [];
+                if (episodes.some((ep) => Boolean(ep?.available) || Boolean(String(ep?.localRelativePath || '').trim()))) {
+                    return true;
+                }
+            }
+        }
+    } catch (_err) {
+        // Best-effort only.
+    }
+
+    try {
+        const entries = fs.readdirSync(itemPath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isFile()) {
+                const ext = path.extname(entry.name).toLowerCase();
+                if (VIDEO_EXTENSIONS.has(ext)) return true;
+                continue;
+            }
+            if (!entry.isDirectory()) continue;
+            const childPath = path.join(itemPath, entry.name);
+            const childFiles = fs.readdirSync(childPath, { withFileTypes: true });
+            for (const child of childFiles) {
+                if (!child.isFile()) continue;
+                const ext = path.extname(child.name).toLowerCase();
+                if (VIDEO_EXTENSIONS.has(ext)) return true;
+            }
+        }
+    } catch (_err) {
+        return false;
+    }
+
+    return false;
+}
+
 function scanDirectory(basePath, contentType) {
     const registry = [];
     if (!fs.existsSync(basePath)) {
@@ -277,6 +328,8 @@ function scanDirectory(basePath, contentType) {
         }
 
         const hasPartialMarkers = hasPartialDownloadMarkers(itemPath);
+        const hasIgnoreMarker = contentType === 'series' ? hasScanIgnoreMarker(itemPath) : false;
+        const hasSeriesAssets = contentType === 'series' ? hasSeriesVideoAssets(itemPath) : mediaFiles.length > 0;
         const mustHaveMetadata = contentType === 'series'
             ? REQUIRE_METADATA_FOR_SERIES_SCAN
             : REQUIRE_METADATA_FOR_MOVIE_SCAN;
@@ -297,7 +350,20 @@ function scanDirectory(basePath, contentType) {
             continue;
         }
 
-        if (mediaFiles.length > 0 || isRemote || contentType === 'series') {
+        if (hasIgnoreMarker) {
+            logger.debug(`⏭️ Skipping ignored series folder from scan: ${folder}`);
+            continue;
+        }
+
+        if (contentType === 'series' && !isRemote && !hasSeriesAssets && !hasMetadataFile) {
+            logger.debug(`⏭️ Skipping empty/unmanaged series folder: ${folder}`);
+            continue;
+        }
+
+        if (
+            (contentType === 'series' && (hasSeriesAssets || isRemote || (hasMetadataFile && hasImdbReference))) ||
+            (contentType !== 'series' && (mediaFiles.length > 0 || isRemote))
+        ) {
             registry.push({
                 // 🚨 FLATTENED ROOT PROPERTIES FOR THE FRONTEND
                 id: contentType === 'series' ? `series/${encodeURIComponent(folder)}` : encodeURIComponent(folder),

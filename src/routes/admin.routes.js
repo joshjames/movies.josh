@@ -41,7 +41,8 @@ const {
     processRule: processTvAutoGetRule,
     processDueRules: processDueTvAutoGetRules,
     getRuleByImdbId: getTvAutoGetRuleByImdb,
-    normalizeRule: normalizeTvAutoGetRule
+    normalizeRule: normalizeTvAutoGetRule,
+    getWorkerStatus: getTvAutoGetWorkerStatus
 } = require('../services/SeriesAutoGetService');
 const { loadIndex: loadTvIndex } = require('../services/TvSeriesIndexService');
 const {
@@ -1380,6 +1381,17 @@ router.get('/tv-auto-get/rules', async (_req, res) => {
             success: true,
             updatedAt: payload.updatedAt || null,
             items: Array.isArray(payload.items) ? payload.items : []
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-auto-get/status', async (_req, res) => {
+    try {
+        return res.json({
+            success: true,
+            worker: getTvAutoGetWorkerStatus()
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

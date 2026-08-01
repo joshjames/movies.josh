@@ -15361,10 +15361,10 @@
             "sourcePath": "/data/blockchain/media/Series/Star.City"
         },
         {
-            "id": "series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB",
+            "id": "series/Stuart.Fails.to.Save.the.Universe",
             "title": "Stuart Fails to Save the Universe",
             "year": "2026–",
-            "plot": "Comic book store owner Stuart Bloom from The Big Bang Theory (2007) returns in a new series where he attempts - and apparently fails - to save the universe, staying true to his unlucky nature.",
+            "plot": "Comic book store owner Stuart Bloom, from The Big Bang Theory (2007), returns in a new series where he attempts—and apparently fails—to save the universe, staying true to his unlucky nature.",
             "genre": "Comedy, Fantasy, Sci-Fi",
             "imdbId": "tt27497393",
             "imdb_id": "tt27497393",
@@ -15378,9 +15378,9 @@
                 "Fantasy",
                 "Sci-Fi"
             ],
-            "imdbScore": "N/A",
-            "parentalRating": "N/A",
-            "popularity": "N/A",
+            "imdbScore": "7.0",
+            "parentalRating": "TV-MA",
+            "popularity": "2,078",
             "enrichment": {
                 "genre": "Comedy, Fantasy, Sci-Fi",
                 "tags": [
@@ -15388,21 +15388,21 @@
                     "Fantasy",
                     "Sci-Fi"
                 ],
-                "imdbScore": "N/A",
-                "parentalRating": "N/A",
-                "popularity": "N/A",
+                "imdbScore": "7.0",
+                "parentalRating": "TV-MA",
+                "popularity": "2,078",
                 "popularitySource": "imdbVotes"
             },
             "contentType": "series",
             "storageLocation": "local",
-            "cover": "/movie-assets/series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB/cover.jpg",
+            "cover": "/movie-assets/series/Stuart.Fails.to.Save.the.Universe/cover.jpg",
             "storage": {
                 "location": "local",
                 "files": {}
             },
             "addedAt": "2026-07-29T10:13:41.052Z",
-            "updatedAt": "2026-07-29T10:13:41.051Z",
-            "sourcePath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe.S01E01.Spoiler.Gary.Dies.AMZN.WEB.DL.DDP5.1.H.264.playWEB"
+            "updatedAt": "2026-08-01T05:41:24.875Z",
+            "sourcePath": "/data/blockchain/media/Series/Stuart.Fails.to.Save.the.Universe"
         },
         {
             "id": "series/The.Last.Dance",
@@ -15767,5 +15767,5 @@
             "sourcePath": "/data/blockchain/media/Series/the.three.body.problem"
         }
     ],
-    "lastScan": "2026-08-01T05:17:54.207Z"
+    "lastScan": "2026-08-01T06:11:01.186Z"
 }

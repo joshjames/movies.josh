@@ -15,11 +15,14 @@ const { createJob, getAllJobs } = require('./PipelineQueueService');
 const DATA_ROOT = path.join(__dirname, '../../movie-streamer-data');
 const RULES_FILE = path.join(DATA_ROOT, 'tv-auto-get-rules.json');
 const DEFAULT_CHECK_CYCLE_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_DEFAULT_CHECK_CYCLE_MINUTES || 120));
-const WORKER_INTERVAL_MS = Math.max(60 * 1000, Number(process.env.TV_AUTO_GET_WORKER_INTERVAL_MS || 30 * 60 * 1000));
+const WORKER_INTERVAL_MS = Math.max(60 * 1000, Number(process.env.TV_AUTO_GET_WORKER_INTERVAL_MS || 15 * 60 * 1000));
 const WORKER_ENABLED = !['false', '0', 'no'].includes(String(process.env.ENABLE_TV_AUTO_GET_WORKER || 'true').trim().toLowerCase());
 
 let workerTimer = null;
 let workerRunning = false;
+let workerLastRunAt = null;
+let workerLastSummary = null;
+let workerLastError = null;
 
 function ensureDataDir() {
     fs.mkdirSync(path.dirname(RULES_FILE), { recursive: true });
@@ -594,6 +597,34 @@ async function processDueRules(options = {}) {
     };
 }
 
+async function runWorkerTick(reason = 'interval') {
+    if (workerRunning) return { skipped: true, reason: 'already-running' };
+    workerRunning = true;
+    try {
+        const summary = await processDueRules();
+        workerLastRunAt = new Date().toISOString();
+        workerLastSummary = {
+            ...summary,
+            reason,
+            runAt: workerLastRunAt
+        };
+        workerLastError = null;
+
+        if (summary.queuedCount > 0 || summary.scannedRules > 0) {
+            logger.info(`📺 [AutoGet] reason=${reason} scannedRules=${summary.scannedRules} queued=${summary.queuedCount}`);
+        }
+
+        return summary;
+    } catch (err) {
+        workerLastRunAt = new Date().toISOString();
+        workerLastError = err.message;
+        logger.warn(`TV auto-get worker tick failed: ${err.message}`);
+        throw err;
+    } finally {
+        workerRunning = false;
+    }
+}
+
 function startWorker() {
     if (!WORKER_ENABLED) {
         logger.info('TV auto-get worker disabled via ENABLE_TV_AUTO_GET_WORKER=false.');
@@ -601,20 +632,15 @@ function startWorker() {
     }
     if (workerTimer) return;
 
-    workerTimer = setInterval(async () => {
-        if (workerRunning) return;
-        workerRunning = true;
-        try {
-            const summary = await processDueRules();
-            if (summary.queuedCount > 0 || summary.scannedRules > 0) {
-                logger.info(`📺 [AutoGet] scannedRules=${summary.scannedRules} queued=${summary.queuedCount}`);
-            }
-        } catch (err) {
-            logger.warn(`TV auto-get worker tick failed: ${err.message}`);
-        } finally {
-            workerRunning = false;
-        }
+    workerTimer = setInterval(() => {
+        runWorkerTick('interval').catch(() => {
+            // Logged in runWorkerTick.
+        });
     }, WORKER_INTERVAL_MS);
+
+    runWorkerTick('startup').catch(() => {
+        // Logged in runWorkerTick.
+    });
 
     logger.info(`TV auto-get worker started with interval ${WORKER_INTERVAL_MS}ms`);
 }
@@ -623,6 +649,18 @@ function stopWorker() {
     if (!workerTimer) return;
     clearInterval(workerTimer);
     workerTimer = null;
+}
+
+function getWorkerStatus() {
+    return {
+        enabled: WORKER_ENABLED,
+        running: workerRunning,
+        intervalMs: WORKER_INTERVAL_MS,
+        hasTimer: Boolean(workerTimer),
+        lastRunAt: workerLastRunAt,
+        lastError: workerLastError,
+        lastSummary: workerLastSummary
+    };
 }
 
 async function getRuleView(showFolder = '') {
@@ -654,8 +692,10 @@ module.exports = {
     previewRule,
     processRule,
     processDueRules,
+    runWorkerTick,
     startWorker,
     stopWorker,
+    getWorkerStatus,
     normalizeRule,
     listSubscribersForImdb
 };
