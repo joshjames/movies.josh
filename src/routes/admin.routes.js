@@ -1898,11 +1898,22 @@ router.post('/manual-worker-run', async (req, res) => {
             folderPath,
             folderName: folder,
             contentType: contentType || metadata.contentType || (folderPath.includes('/series') ? 'series' : 'movie'),
-            imdbId: metadata.imdbId || null,
-            manualImdbId: metadata.imdbId || null,
+            imdbId: metadata.imdbId || metadata.imdb_id || metadata.imdbID || null,
+            manualImdbId: metadata.imdbId || metadata.imdb_id || metadata.imdbID || null,
             forceActualUpload: cleanWorker === 'CLOUDSYNC',
             forceReprocess: cleanWorker === 'TRANSCODE' ? forceReprocess : undefined
         };
+
+        let preflight = null;
+        if (cleanWorker === 'TRANSCODE' && payload.contentType === 'series') {
+            const subtitleResponse = await axios.post(WORKER_ENDPOINTS.SUBTITLES, payload, { timeout: 1800000 });
+            if (subtitleResponse?.data?.success !== false) {
+                preflight = {
+                    worker: 'SUBTITLES',
+                    response: subtitleResponse.data
+                };
+            }
+        }
 
         const workerResponse = await axios.post(workerUrl, payload, { timeout: 1800000 });
 
@@ -1920,6 +1931,7 @@ router.post('/manual-worker-run', async (req, res) => {
         return res.json({
             success: true,
             worker: cleanWorker,
+            preflight,
             response: workerResponse.data
         });
     } catch (err) {

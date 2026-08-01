@@ -1431,12 +1431,20 @@ function detectEpisodeVideoHeight(videoPath) {
     const videoStreams = Array.isArray(diagnostics?.streams)
         ? diagnostics.streams.filter((stream) => stream.codec_type === 'video')
         : [];
+    const widths = videoStreams.map((stream) => Number(stream.width) || 0).filter((w) => w > 0);
     const heights = videoStreams.map((stream) => Number(stream.height) || 0).filter((h) => h > 0);
+    const maxWidth = widths.length ? Math.max(...widths) : 0;
     const maxHeight = heights.length ? Math.max(...heights) : 0;
     return {
         diagnostics,
+        maxWidth,
         maxHeight,
-        is4kLike: maxHeight >= 2000 || /\b(2160p|4k|uhd)\b/i.test(path.basename(String(videoPath || '')))
+        isHighResLike:
+            maxWidth >= 3000 ||
+            maxHeight >= 1600 ||
+            maxWidth >= 1920 ||
+            maxHeight >= 1080 ||
+            /\b(2160p|4k|uhd)\b/i.test(path.basename(String(videoPath || '')))
     };
 }
 
@@ -1454,8 +1462,8 @@ function runEpisodeProfileTranscode(videoPath, profile = '1080p', options = {}) 
 
     if (targetProfile === '1080p') {
         const videoState = detectEpisodeVideoHeight(source);
-        if (!videoState.is4kLike && !forceReprocess) {
-            throw new Error('1080p build is restricted to 4K/UHD source episodes.');
+        if (!videoState.isHighResLike && !forceReprocess) {
+            throw new Error('1080p build requires a source at least 1920-wide or 1080-high unless force is enabled.');
         }
 
         const outputPath = path.join(parsed.dir, `${stem}.web.mp4`);
@@ -1489,7 +1497,9 @@ function runEpisodeProfileTranscode(videoPath, profile = '1080p', options = {}) 
             profile: '1080p',
             source,
             outputPath,
-            sourceWas4k: true,
+            sourceWas4k: videoState.maxWidth >= 3000 || videoState.maxHeight >= 1600,
+            sourceWasHighRes: videoState.isHighResLike,
+            maxWidth: videoState.maxWidth,
             maxHeight: videoState.maxHeight,
             forceReprocess
         };
