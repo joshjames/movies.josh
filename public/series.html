@@ -133,7 +133,7 @@
                 <div class="show-meta" id="show-meta"></div>
                 <p class="show-plot" id="show-plot"></p>
                 <div style="display:flex; flex-direction:column; gap:8px; margin: 14px 0 18px 0;">
-                    <button type="button" onclick="addToMyShows()" style="background:#0ea5e9; width:100%;">Add to My Shows</button>
+                    <button id="my-shows-btn" type="button" onclick="addToMyShows()" style="background:#0ea5e9; width:100%;">Add to My Shows</button>
                     <div id="my-shows-status" style="font-size:0.78rem; color:#93c5fd; line-height:1.4; text-align:left;">
                         Add this show to your personal row and automatically include future episodes when it is still airing.
                     </div>
@@ -188,6 +188,7 @@
         let serverShowData = null;
         let episodeManagerCache = null;
         let episodeManagerIsAdmin = false;
+        let isInMyShows = false;
 
         async function initPage() {
             if (!showId) {
@@ -217,6 +218,8 @@
                 document.getElementById('show-title').innerText = serverShowData.title;
                 document.getElementById('show-meta').innerText = `${serverShowData.year} • ${serverShowData.genre}`;
                 document.getElementById('show-plot').innerText = serverShowData.plot || "No description loaded.";
+
+                await hydrateMyShowsState();
 
                 acknowledgeSubscriptionBadge().catch(() => {
                     // Ignore auth/network failures; this endpoint is best-effort.
@@ -290,6 +293,11 @@
 
         async function addToMyShows() {
             try {
+                if (isInMyShows) {
+                    document.getElementById('my-shows-status').textContent = `${serverShowData?.title || 'Show'} is already in My Shows.`;
+                    return;
+                }
+
                 const payload = {
                     imdbId: serverShowData?.imdbId || serverShowData?.imdb_id || '',
                     showFolder: showId.replace('series/', ''),
@@ -313,9 +321,81 @@
                     throw new Error(data.error || `Subscription failed (${res.status})`);
                 }
 
-                document.getElementById('my-shows-status').textContent = `${serverShowData?.title || 'Show'} added to My Shows.`;
+                isInMyShows = true;
+                updateMyShowsButton();
+                document.getElementById('my-shows-status').textContent = `${serverShowData?.title || 'Show'} added to My Shows. Future unreleased episodes will auto-queue from your subscription rule path.`;
+                const seasonSelect = document.getElementById('season-select');
+                if (seasonSelect && seasonSelect.value) {
+                    loadSeasonEpisodes(seasonSelect.value);
+                }
             } catch (err) {
                 document.getElementById('my-shows-status').textContent = `Add to My Shows failed: ${err.message}`;
+            }
+        }
+
+        function updateMyShowsButton() {
+            const btn = document.getElementById('my-shows-btn');
+            if (!btn) return;
+
+            if (isInMyShows) {
+                btn.textContent = 'In My Shows';
+                btn.disabled = true;
+                btn.style.background = '#475569';
+                btn.style.cursor = 'default';
+                return;
+            }
+
+            btn.textContent = 'Add to My Shows';
+            btn.disabled = false;
+            btn.style.background = '#0ea5e9';
+            btn.style.cursor = 'pointer';
+        }
+
+        function isEpisodeReleased(releasedValue) {
+            const raw = String(releasedValue || '').trim();
+            if (!raw) return null;
+            if (/^1900-01-01/.test(raw) || /^1900\b/.test(raw)) return null;
+
+            const ts = Date.parse(raw);
+            if (!Number.isFinite(ts)) return null;
+
+            const releaseDate = new Date(ts);
+            releaseDate.setHours(0, 0, 0, 0);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return releaseDate.getTime() <= today.getTime();
+        }
+
+        async function hydrateMyShowsState() {
+            const effectiveImdbId = serverShowData?.imdbId || serverShowData?.imdb_id || '';
+            isInMyShows = false;
+
+            if (!effectiveImdbId) {
+                updateMyShowsButton();
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/account/subscriptions', {
+                    credentials: 'include'
+                });
+
+                if (res.status === 401 || res.status === 403) {
+                    updateMyShowsButton();
+                    return;
+                }
+
+                const data = await res.json();
+                const items = Array.isArray(data?.items) ? data.items : [];
+                isInMyShows = items.some((item) => String(item?.imdbId || '').trim().toLowerCase() === String(effectiveImdbId).trim().toLowerCase());
+                updateMyShowsButton();
+
+                if (isInMyShows) {
+                    document.getElementById('my-shows-status').textContent = `${serverShowData?.title || 'Show'} is already in My Shows. Future released episodes can be auto-queued.`;
+                }
+            } catch (_err) {
+                updateMyShowsButton();
             }
         }
 
@@ -555,6 +635,7 @@
             }
 
             container.innerHTML = episodes.map(ep => {
+                const releasedState = isEpisodeReleased(ep.released);
                 if (ep.available) {
                     return `
                         <div class="episode-row" style="border-left: 4px solid #22c55e;">
@@ -568,18 +649,26 @@
                         </div>
                     `;
                 } else {
+                    const unreleased = releasedState === false;
+                    const queueDisabled = unreleased;
+                    const queueLabel = unreleased ? 'Not Released' : 'Get Missing';
+                    const helperText = unreleased
+                        ? (isInMyShows
+                            ? 'Episode not released yet. It will be picked up automatically from My Shows once available.'
+                            : 'Episode not released yet. Add show to My Shows to auto-add it when it releases.')
+                        : 'Aired: ' + (ep.released || 'Unknown') + ' | Online Meta Data Sync Available';
                     return `
                         <div class="episode-row" style="opacity: 0.4; background: #0b0f19; border-left: 4px solid #475569;">
                             <div class="ep-info">
                                 <span class="ep-title" style="color: #94a3b8;">${ep.episodeNumber}. ${ep.title} (Missing)</span>
-                                <span class="ep-meta">Aired: ${ep.released} | Online Meta Data Sync Available</span>
+                                <span class="ep-meta">${helperText}</span>
                             </div>
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <button class="play-btn" style="background:#334155; cursor:not-allowed;" disabled>
                                     Unacquired
                                 </button>
-                                <button class="play-btn" type="button" style="background:#0ea5e9;" onclick="fetchMissingEpisode(${seasonNum}, ${ep.episodeNumber})">
-                                    Get Missing
+                                <button class="play-btn" type="button" style="background:${queueDisabled ? '#475569' : '#0ea5e9'}; cursor:${queueDisabled ? 'not-allowed' : 'pointer'};" ${queueDisabled ? 'disabled' : ''} onclick="fetchMissingEpisode(${seasonNum}, ${ep.episodeNumber})">
+                                    ${queueLabel}
                                 </button>
                             </div>
                         </div>

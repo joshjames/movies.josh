@@ -897,7 +897,7 @@
                 const disableQueue = inLibrary || !releasable;
                 const buttonLabel = inLibrary
                     ? 'In Library'
-                    : (releasable ? 'Queue Episode' : 'Coming Soon');
+                    : (releasable ? 'Queue Episode' : 'Not Released');
                 return `
                     <tr>
                         <td>
@@ -910,7 +910,7 @@
                         <td class="episode-add">
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                                 <button class="add-btn" style="padding:6px 10px; ${disableQueue ? 'background:#475569;' : ''}" ${disableQueue ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${showTitle}', '${imdbId || row.imdbId || ''}', ${seasonNum}, ${episodeNum}, 'episode')">${buttonLabel}</button>
-                                ${!releasable && !inLibrary ? '<span style="font-size:0.75rem; color:#94a3b8; font-style:italic; align-self:center;">Auto-adding new episodes for watched shows coming soon.</span>' : ''}
+                                ${!releasable && !inLibrary ? '<span style="font-size:0.75rem; color:#94a3b8; font-style:italic; align-self:center;">Add this show to My Shows to auto-add the episode when it releases.</span>' : ''}
                             </div>
                         </td>
                     </tr>
@@ -1154,7 +1154,7 @@
                                 <div style="padding:8px 10px; border-top:1px solid #263247; background:#0f1b31; display:flex; gap:8px; flex-wrap:wrap;">
                                     <button class="add-btn" style="padding:6px 10px;" ${seasonQueueDisabled ? 'disabled' : ''} onclick="addSeriesAutoAsset(this, '${String(showTitle || '').replace(/'/g, "\\'")}', '${imdbId}', ${seasonNum}, 0, 'pack')">${completeSeasonSet.has(Number(seasonNum)) ? 'Season Complete' : (!hasReleasedEpisodes ? 'No Released Episodes' : 'Queue Whole Season')}</button>
                                     ${completeSeasonSet.has(Number(seasonNum)) ? '<span style="font-size:0.75rem; color:#86efac; align-self:center;">Season already complete in library.</span>' : ''}
-                                    ${!completeSeasonSet.has(Number(seasonNum)) && !hasReleasedEpisodes ? '<span style="font-size:0.75rem; color:#94a3b8; font-style:italic; align-self:center;">Auto-adding new episodes for watched shows coming soon.</span>' : ''}
+                                    ${!completeSeasonSet.has(Number(seasonNum)) && !hasReleasedEpisodes ? '<span style="font-size:0.75rem; color:#94a3b8; font-style:italic; align-self:center;">Add this show to My Shows to auto-add episodes as they release.</span>' : ''}
                                 </div>
                                 <table class="episode-table">
                                     <thead>
