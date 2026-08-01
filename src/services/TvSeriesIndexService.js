@@ -61,7 +61,15 @@ function readManifestEpisodeCount(seriesPath) {
 function buildSeriesRegistryItem(item = {}, index = 0) {
     const sourcePath = String(item.sourcePath || item.folderPath || '').trim();
     const folderName = normalizeFolderName(item.folder || item.folderName || decodeSeriesId(item.id || ''));
-    const imdbId = normalizeImdbId(item.imdbId || item.imdb_id || '');
+    const imdbId = normalizeImdbId(
+        item.imdbId ||
+        item.imdb_id ||
+        item.imdbID ||
+        item.metadata?.imdbId ||
+        item.metadata?.imdb_id ||
+        item.metadata?.imdbID ||
+        ''
+    );
     const seriesPath = sourcePath || null;
     const metadataPath = seriesPath ? path.join(seriesPath, 'metadata.json') : null;
     const seriesManifestPath = seriesPath ? path.join(seriesPath, 'series.json') : null;

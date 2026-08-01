@@ -78,7 +78,15 @@ function consumeImdbMarker(itemPath, folder, metaPath, meta, hasMetadataFile) {
         return markerImdbId || '';
     }
 
-    const existingImdb = normalizeImdbId(meta?.imdbId || meta?.imdb_id || meta?.metadata?.imdbId || meta?.metadata?.imdb_id || '');
+    const existingImdb = normalizeImdbId(
+        meta?.imdbId ||
+        meta?.imdb_id ||
+        meta?.imdbID ||
+        meta?.metadata?.imdbId ||
+        meta?.metadata?.imdb_id ||
+        meta?.metadata?.imdbID ||
+        ''
+    );
     if (existingImdb) {
         try {
             if (markerPath && fs.existsSync(markerPath)) {
@@ -187,7 +195,15 @@ function scanDirectory(basePath, contentType) {
             }
         }
 
-        const metadataImdbId = normalizeImdbId(meta.imdbId || meta.imdb_id || meta.metadata?.imdbId || meta.metadata?.imdb_id || '');
+        const metadataImdbId = normalizeImdbId(
+            meta.imdbId ||
+            meta.imdb_id ||
+            meta.imdbID ||
+            meta.metadata?.imdbId ||
+            meta.metadata?.imdb_id ||
+            meta.metadata?.imdbID ||
+            ''
+        );
         const markerImdbId = consumeImdbMarker(itemPath, folder, metaPath, meta, hasMetadataFile);
         const effectiveImdbId = metadataImdbId || markerImdbId;
 

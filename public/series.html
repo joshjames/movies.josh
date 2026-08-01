@@ -586,7 +586,8 @@
 
         async function fetchMissingEpisode(seasonNumber, episodeNumber) {
             try {
-                if (!serverShowData?.imdbId) {
+                const effectiveImdbId = serverShowData?.imdbId || serverShowData?.imdb_id || '';
+                if (!effectiveImdbId) {
                     alert('Missing IMDb ID for this series.');
                     return;
                 }
@@ -600,7 +601,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: serverShowData.title || '',
-                        imdbId: serverShowData.imdbId,
+                        imdbId: effectiveImdbId,
                         season: seasonNumber,
                         episode: episodeNumber,
                         sourceType: 'episode',

@@ -2672,6 +2672,8 @@ router.get('/series/:showFolder', async (req, res) => {
             year: metaData.year,
             plot: metaData.plot,
             genre: metaData.genre,
+            imdbId: formatImdbId(metaData.imdbId || metaData.imdb_id || metaData.imdbID || metaData.metadata?.imdbId || metaData.metadata?.imdb_id || metaData.metadata?.imdbID || '') || '',
+            imdb_id: formatImdbId(metaData.imdbId || metaData.imdb_id || metaData.imdbID || metaData.metadata?.imdbId || metaData.metadata?.imdb_id || metaData.metadata?.imdbID || '') || '',
             poster: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
             seasons: seriesData.seasons,
             totalSeasons: seriesData.totalSeasons,
