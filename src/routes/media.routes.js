@@ -13,6 +13,7 @@ const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback, normalizeCard } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const SeriesSubscriptionService = require('../services/SeriesSubscriptionService');
 const metadataProvider = require('../services/MetadataProvider');
 const ProfileService = require('../services/ProfileService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
@@ -1685,7 +1686,7 @@ router.get('/home-feed', (req, res) => {
     const activeUser = getActiveUser(req);
 
     return getLibrary()
-        .then((library) => {
+        .then(async (library) => {
             const allLibraryRows = [
                 ...(Array.isArray(library?.movies) ? library.movies : []),
                 ...(Array.isArray(library?.shows) ? library.shows : [])
@@ -1706,9 +1707,22 @@ router.get('/home-feed', (req, res) => {
             const myLibraryCollection = buildMyLibraryCollection(library, activeUser, { limit: 18 });
             myLibraryCollection.cards = (myLibraryCollection.cards || []).map((item) => normalizeCard(item));
 
+            let myShowsCollection = null;
+            if (activeUser) {
+                const subscriptions = await SeriesSubscriptionService.readSubscriptions(activeUser);
+                myShowsCollection = SeriesSubscriptionService.buildMyShowsCollection(library, activeUser, {
+                    limit: 18,
+                    subscriptions: subscriptions.items
+                });
+                if (myShowsCollection) {
+                    myShowsCollection.cards = (myShowsCollection.cards || []).map((item) => normalizeCard(item));
+                }
+            }
+
             const existing = Array.isArray(homeFeed.collections) ? homeFeed.collections : [];
             const withoutExistingMyShelf = existing
                 .filter((collection) => collection.id !== 'my-library-row')
+                .filter((collection) => collection.id !== 'my-shows-row')
                 .map((collection) => {
                     const cards = Array.isArray(collection.cards) ? collection.cards : [];
 
@@ -1733,9 +1747,17 @@ router.get('/home-feed', (req, res) => {
             const first = withoutExistingMyShelf[0] || null;
             const tail = withoutExistingMyShelf.slice(1);
 
-            const collections = first
-                ? [first, myLibraryCollection, ...tail]
-                : [myLibraryCollection, ...tail];
+            const collectionsWithPersonalShelves = [];
+            if (first) {
+                collectionsWithPersonalShelves.push(first);
+            }
+            collectionsWithPersonalShelves.push(myLibraryCollection);
+            if (myShowsCollection && Array.isArray(myShowsCollection.cards) && myShowsCollection.cards.length > 0) {
+                collectionsWithPersonalShelves.push(myShowsCollection);
+            }
+            collectionsWithPersonalShelves.push(...tail);
+
+            const collections = collectionsWithPersonalShelves;
 
             return res.json({
                 success: true,
@@ -1819,6 +1841,18 @@ router.get('/tv-shows/search', async (req, res) => {
             count: mappedItems.length,
             items: mappedItems,
             missingBasics: index.totalItems === 0 && items.length === 0
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-series/index', async (_req, res) => {
+    try {
+        const index = loadIndex();
+        return res.json({
+            success: true,
+            ...index
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

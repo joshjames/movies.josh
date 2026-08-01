@@ -34,6 +34,17 @@ const AccountService = require('../services/AccountService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const ProfileService = require('../services/ProfileService');
 const {
+    loadRules: loadTvAutoGetRules,
+    saveRules: saveTvAutoGetRules,
+    upsertRule: upsertTvAutoGetRule,
+    previewRule: previewTvAutoGetRule,
+    processRule: processTvAutoGetRule,
+    processDueRules: processDueTvAutoGetRules,
+    getRuleByImdbId: getTvAutoGetRuleByImdb,
+    normalizeRule: normalizeTvAutoGetRule
+} = require('../services/SeriesAutoGetService');
+const { loadIndex: loadTvIndex } = require('../services/TvSeriesIndexService');
+const {
     getPrimaryMovieRoot,
     getPrimarySeriesRoot,
     resolveMovieFolderPath: resolveMovieFolderPathFromResolver,
@@ -156,6 +167,30 @@ function toSeriesFolderName(value = '') {
         .filter(Boolean)
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
         .join('.');
+}
+
+function normalizeImdbId(value = '') {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^[0-9]{5,10}$/.test(cleaned)) return '';
+    return `tt${cleaned}`;
+}
+
+function findTvIndexItem({ imdbId = '', folder = '' } = {}) {
+    const index = loadTvIndex();
+    const items = Array.isArray(index?.items) ? index.items : [];
+    const cleanImdb = normalizeImdbId(imdbId);
+    if (cleanImdb) {
+        const match = items.find((item) => normalizeImdbId(item.imdbId || '') === cleanImdb);
+        if (match) return match;
+    }
+
+    const cleanFolder = sanitizeSeriesFolderName(folder || '');
+    if (!cleanFolder) return null;
+
+    return items.find((item) => {
+        const folderName = sanitizeSeriesFolderName(item.folderName || '') || '';
+        return folderName.toLowerCase() === cleanFolder.toLowerCase();
+    }) || null;
 }
 
 function removeEmptyDirectories(dirPath) {
@@ -1333,6 +1368,141 @@ router.post('/series/manual-add', async (req, res) => {
             totalSeasons: seriesManifest.totalSeasons,
             scanSummary
         });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-auto-get/rules', async (_req, res) => {
+    try {
+        const payload = loadTvAutoGetRules();
+        return res.json({
+            success: true,
+            updatedAt: payload.updatedAt || null,
+            items: Array.isArray(payload.items) ? payload.items : []
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/tv-auto-get/rule-view', async (req, res) => {
+    try {
+        const imdbId = String(req.query?.imdbId || '').trim();
+        const folder = String(req.query?.folder || '').trim();
+        const cleanImdb = normalizeImdbId(imdbId);
+        const indexItem = findTvIndexItem({ imdbId: cleanImdb, folder });
+        const resolvedImdb = cleanImdb || normalizeImdbId(indexItem?.imdbId || '');
+
+        if (!resolvedImdb) {
+            return res.status(400).json({ success: false, error: 'Provide a valid imdbId or series folder.' });
+        }
+
+        const rule = getTvAutoGetRuleByImdb(resolvedImdb);
+        return res.json({
+            success: true,
+            imdbId: resolvedImdb,
+            rule: rule || null,
+            indexItem: indexItem || null
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/tv-auto-get/rule', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const indexItem = findTvIndexItem({ imdbId: body.imdbId, folder: body.showFolder || body.folder });
+        const resolvedImdb = normalizeImdbId(body.imdbId || indexItem?.imdbId || '');
+
+        if (!resolvedImdb) {
+            return res.status(400).json({ success: false, error: 'A valid IMDb ID is required.' });
+        }
+
+        const nextInput = {
+            ...body,
+            imdbId: resolvedImdb,
+            showFolder: body.showFolder || body.folder || indexItem?.folderName || '',
+            title: body.title || indexItem?.title || ''
+        };
+        const saved = upsertTvAutoGetRule(nextInput);
+        return res.json({ success: true, rule: saved });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.delete('/tv-auto-get/rule/:imdbId', async (req, res) => {
+    try {
+        const cleanImdb = normalizeImdbId(req.params.imdbId || '');
+        if (!cleanImdb) {
+            return res.status(400).json({ success: false, error: 'Invalid IMDb ID.' });
+        }
+
+        const payload = loadTvAutoGetRules();
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        const nextItems = items.filter((item) => normalizeImdbId(item.imdbId || '') !== cleanImdb);
+        if (nextItems.length === items.length) {
+            return res.status(404).json({ success: false, error: 'Rule not found.' });
+        }
+
+        const saved = saveTvAutoGetRules({ items: nextItems });
+        return res.json({ success: true, removedImdbId: cleanImdb, remaining: saved.items.length });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/tv-auto-get/preview', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const indexItem = findTvIndexItem({ imdbId: body.imdbId, folder: body.showFolder || body.folder });
+        const resolvedImdb = normalizeImdbId(body.imdbId || indexItem?.imdbId || '');
+        if (!resolvedImdb) {
+            return res.status(400).json({ success: false, error: 'A valid IMDb ID is required for preview.' });
+        }
+
+        const previewInput = normalizeTvAutoGetRule({
+            ...body,
+            imdbId: resolvedImdb,
+            showFolder: body.showFolder || body.folder || indexItem?.folderName || '',
+            title: body.title || indexItem?.title || ''
+        });
+
+        const result = await previewTvAutoGetRule(previewInput);
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/tv-auto-get/run-rule', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const cleanImdb = normalizeImdbId(body.imdbId || '');
+        if (!cleanImdb) {
+            return res.status(400).json({ success: false, error: 'A valid IMDb ID is required.' });
+        }
+
+        const rule = getTvAutoGetRuleByImdb(cleanImdb);
+        if (!rule) {
+            return res.status(404).json({ success: false, error: 'Rule not found.' });
+        }
+
+        const result = await processTvAutoGetRule(rule, { forceAll: true });
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/tv-auto-get/run-due', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const forceAll = body.forceAll === true || String(body.forceAll || '').toLowerCase() === 'true';
+        const result = await processDueTvAutoGetRules({ forceAll });
+        return res.json(result);
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

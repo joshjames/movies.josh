@@ -132,6 +132,12 @@
                 <h1 id="show-title">Loading Show...</h1>
                 <div class="show-meta" id="show-meta"></div>
                 <p class="show-plot" id="show-plot"></p>
+                <div style="display:flex; flex-direction:column; gap:8px; margin: 14px 0 18px 0;">
+                    <button type="button" onclick="addToMyShows()" style="background:#0ea5e9; width:100%;">Add to My Shows</button>
+                    <div id="my-shows-status" style="font-size:0.78rem; color:#93c5fd; line-height:1.4; text-align:left;">
+                        Add this show to your personal row and automatically include future episodes when it is still airing.
+                    </div>
+                </div>
             </div>
 
             <div class="content-browser">
@@ -275,6 +281,37 @@
                 episodeManagerIsAdmin = false;
                 const btn = document.querySelector('button[onclick="openEpisodeManager()"]');
                 if (btn) btn.style.display = 'none';
+            }
+        }
+
+        async function addToMyShows() {
+            try {
+                const payload = {
+                    imdbId: serverShowData?.imdbId || serverShowData?.imdb_id || '',
+                    showFolder: showId.replace('series/', ''),
+                    title: serverShowData?.title || '',
+                    folderName: showId.replace('series/', ''),
+                    href: window.location.pathname + window.location.search
+                };
+
+                const res = await fetch('/api/account/subscriptions', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.status === 401 || res.status === 403) {
+                    document.getElementById('my-shows-status').textContent = 'Sign in to add this show to My Shows.';
+                    return;
+                }
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Subscription failed (${res.status})`);
+                }
+
+                document.getElementById('my-shows-status').textContent = `${serverShowData?.title || 'Show'} added to My Shows.`;
+            } catch (err) {
+                document.getElementById('my-shows-status').textContent = `Add to My Shows failed: ${err.message}`;
             }
         }
 
@@ -533,18 +570,58 @@
                                 <span class="ep-title" style="color: #94a3b8;">${ep.episodeNumber}. ${ep.title} (Missing)</span>
                                 <span class="ep-meta">Aired: ${ep.released} | Online Meta Data Sync Available</span>
                             </div>
-                            <button class="play-btn" style="background:#334155; cursor:not-allowed;" disabled>
-                                Unacquired
-                            </button>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <button class="play-btn" style="background:#334155; cursor:not-allowed;" disabled>
+                                    Unacquired
+                                </button>
+                                <button class="play-btn" type="button" style="background:#0ea5e9;" onclick="fetchMissingEpisode(${seasonNum}, ${ep.episodeNumber})">
+                                    Get Missing
+                                </button>
+                            </div>
                         </div>
                     `;
                 }
             }).join('');
         }
 
+        async function fetchMissingEpisode(seasonNumber, episodeNumber) {
+            try {
+                if (!serverShowData?.imdbId) {
+                    alert('Missing IMDb ID for this series.');
+                    return;
+                }
+
+                const ok = confirm(`Queue S${seasonNumber}E${episodeNumber} for download?`);
+                if (!ok) return;
+
+                const res = await fetch('/api/downloader/add-auto', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: serverShowData.title || '',
+                        imdbId: serverShowData.imdbId,
+                        season: seasonNumber,
+                        episode: episodeNumber,
+                        sourceType: 'episode',
+                        category: 'tv'
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || `Queue request failed (${res.status})`);
+                }
+
+                alert(data.alreadyAvailable ? data.message : `Queued S${seasonNumber}E${episodeNumber} for acquisition.`);
+            } catch (err) {
+                alert(`Unable to queue missing episode: ${err.message}`);
+            }
+        }
+
         window.onload = initPage;
         window.probeEpisode = probeEpisode;
         window.audioFixEpisode = audioFixEpisode;
+        window.fetchMissingEpisode = fetchMissingEpisode;
     </script>
     <script src="/js/api-failover.js"></script>
 </body>

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Episode Subscriber Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-a: #ecfeff;
+            --bg-b: #fff7ed;
+            --panel: rgba(255, 255, 255, 0.84);
+            --line: rgba(15, 23, 42, 0.15);
+            --ink: #0f172a;
+            --muted: #334155;
+            --brand: #0f766e;
+            --brand-2: #ea580c;
+            --good: #166534;
+            --warn: #92400e;
+            --bad: #b91c1c;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(900px 700px at -5% -30%, rgba(20, 184, 166, 0.22), transparent 58%),
+                radial-gradient(760px 500px at 110% 0%, rgba(251, 146, 60, 0.25), transparent 50%),
+                linear-gradient(135deg, var(--bg-a), var(--bg-b));
+            padding: 16px;
+        }
+
+        .shell { max-width: 1380px; margin: 0 auto; }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 14px;
+            background: var(--panel);
+            backdrop-filter: blur(8px);
+        }
+
+        h1 {
+            margin: 0;
+            font-family: 'Archivo Black', sans-serif;
+            letter-spacing: 0.4px;
+            font-size: clamp(1.2rem, 3.6vw, 2rem);
+        }
+
+        .subline {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        .btn, .field, textarea, select {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font: inherit;
+            padding: 9px 11px;
+            background: #fff;
+            color: var(--ink);
+        }
+
+        .btn {
+            border-color: transparent;
+            cursor: pointer;
+            font-weight: 700;
+            background: linear-gradient(140deg, var(--brand), #155e75);
+            color: #fff;
+        }
+
+        .btn.alt {
+            background: linear-gradient(140deg, var(--brand-2), #9a3412);
+        }
+
+        .btn.light {
+            background: #fff;
+            color: #0f766e;
+            border-color: #99f6e4;
+        }
+
+        .layout {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: 430px minmax(0, 1fr);
+            gap: 12px;
+        }
+
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--panel);
+            backdrop-filter: blur(8px);
+            padding: 12px;
+        }
+
+        .panel h2 {
+            margin: 0 0 8px;
+            font-size: 1rem;
+        }
+
+        .controls { display: grid; gap: 10px; }
+        .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+        label {
+            display: grid;
+            gap: 5px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        textarea { min-height: 74px; resize: vertical; }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--ink);
+        }
+
+        .status {
+            border: 1px solid #fdba74;
+            border-radius: 10px;
+            background: #fff7ed;
+            color: var(--warn);
+            font-size: 0.82rem;
+            padding: 10px;
+            white-space: pre-wrap;
+        }
+
+        .status.good { color: var(--good); border-color: #86efac; background: #f0fdf4; }
+        .status.bad { color: var(--bad); border-color: #fca5a5; background: #fef2f2; }
+
+        .table-wrap {
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 12px;
+            overflow: auto;
+            background: rgba(255, 255, 255, 0.8);
+            max-height: 430px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th, td {
+            border-top: 1px solid rgba(148, 163, 184, 0.3);
+            padding: 8px 6px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #475569;
+        }
+
+        .tiny {
+            border: 1px solid #99f6e4;
+            color: #115e59;
+            background: #fff;
+            border-radius: 8px;
+            padding: 4px 7px;
+            font-size: 0.72rem;
+            cursor: pointer;
+        }
+
+        .json-wrap {
+            margin-top: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 10px;
+            background: #f8fafc;
+            overflow: auto;
+            max-height: 260px;
+        }
+
+        pre {
+            margin: 0;
+            padding: 10px;
+            font-size: 0.73rem;
+            line-height: 1.4;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .pill-row { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 8px; }
+
+        .pill {
+            border: 1px solid #99f6e4;
+            background: #fff;
+            border-radius: 999px;
+            padding: 5px 10px;
+            color: #115e59;
+            font-size: 0.76rem;
+            font-weight: 700;
+        }
+
+        @media (max-width: 1100px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main class="shell">
+    <section class="topbar">
+        <div>
+            <h1>Episode Subscriber Console</h1>
+            <p class="subline">Tune TV auto-get rules, preview EZTV matches, and queue missing episodes with one click.</p>
+        </div>
+        <div class="actions">
+            <a href="/admin.html" class="btn light">Back to Admin</a>
+            <button class="btn" type="button" id="refreshRulesBtn">Refresh Rules</button>
+            <button class="btn alt" type="button" id="runDueBtn">Run Due Rules</button>
+        </div>
+    </section>
+
+    <section class="layout">
+        <aside class="panel controls">
+            <h2>Rule Builder</h2>
+            <div class="row2">
+                <label>Series Folder
+                    <input class="field" id="showFolderIn" placeholder="The.Last.of.Us">
+                </label>
+                <label>IMDb ID
+                    <input class="field" id="imdbIn" placeholder="tt3581920">
+                </label>
+            </div>
+
+            <div class="row2">
+                <label>Title
+                    <input class="field" id="titleIn" placeholder="The Last of Us">
+                </label>
+                <label>Source Type
+                    <select id="sourceTypeIn" class="field">
+                        <option value="episode">Episode</option>
+                        <option value="pack">Season Pack</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="row3">
+                <label>Season Start
+                    <input class="field" id="seasonStartIn" type="number" min="1" value="1">
+                </label>
+                <label>Episode Start
+                    <input class="field" id="episodeStartIn" type="number" min="1" value="1">
+                </label>
+                <label>Air Day
+                    <select id="airDayIn" class="field">
+                        <option value="">Any</option>
+                        <option value="sun">Sunday</option>
+                        <option value="mon">Monday</option>
+                        <option value="tue">Tuesday</option>
+                        <option value="wed">Wednesday</option>
+                        <option value="thu">Thursday</option>
+                        <option value="fri">Friday</option>
+                        <option value="sat">Saturday</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="row3">
+                <label>Min Seeds
+                    <input class="field" id="minSeedsIn" type="number" min="0" value="0">
+                </label>
+                <label>Min Size (MB)
+                    <input class="field" id="minSizeMbIn" type="number" min="0" value="0">
+                </label>
+                <label>Max Size (MB)
+                    <input class="field" id="maxSizeMbIn" type="number" min="0" value="0">
+                </label>
+            </div>
+
+            <label>Quality Allow (comma or newline)
+                <textarea id="qualityAllowIn">1080p,720p</textarea>
+            </label>
+            <label>Exclude Quality (comma or newline)
+                <textarea id="excludeQualityIn" placeholder="2160p"></textarea>
+            </label>
+            <label>Must Contain Tokens
+                <textarea id="mustContainIn" placeholder="proper,repack"></textarea>
+            </label>
+            <label>Exclude Words
+                <textarea id="excludeWordsIn" placeholder="cam,x265,10bit"></textarea>
+            </label>
+
+            <div class="row2">
+                <label>Check Cycle Minutes
+                    <input class="field" id="checkCycleMinutesIn" type="number" min="5" value="120">
+                </label>
+                <label class="toggle">Enabled
+                    <input id="enabledIn" type="checkbox" checked>
+                </label>
+            </div>
+
+            <div class="actions">
+                <button class="btn" type="button" id="loadViewBtn">Load Rule View</button>
+                <button class="btn" type="button" id="saveRuleBtn">Save Rule</button>
+                <button class="btn alt" type="button" id="previewBtn">Preview Matches</button>
+                <button class="btn alt" type="button" id="runRuleBtn">Run This Rule</button>
+                <button class="btn light" type="button" id="deleteRuleBtn">Delete Rule</button>
+            </div>
+
+            <div id="statusBox" class="status">Ready.</div>
+        </aside>
+
+        <section class="panel">
+            <h2>Rules and Preview</h2>
+            <div class="pill-row" id="statsPills"></div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Show</th>
+                        <th>IMDb</th>
+                        <th>Quality</th>
+                        <th>Cycle</th>
+                        <th>State</th>
+                        <th>Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="rulesBody"></tbody>
+                </table>
+            </div>
+
+            <div class="json-wrap">
+                <pre id="previewOut">No preview yet.</pre>
+            </div>
+        </section>
+    </section>
+</main>
+
+<script>
+    function tokenList(value) {
+        return String(value || '')
+            .split(/[\n,]+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+    }
+
+    function parseNum(id, fallback = 0) {
+        const raw = document.getElementById(id)?.value;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function setStatus(message, tone = 'warn') {
+        const box = document.getElementById('statusBox');
+        if (!box) return;
+        box.textContent = message;
+        box.className = 'status';
+        if (tone === 'good') box.classList.add('good');
+        if (tone === 'bad') box.classList.add('bad');
+    }
+
+    function buildPayload() {
+        return {
+            imdbId: (document.getElementById('imdbIn')?.value || '').trim(),
+            showFolder: (document.getElementById('showFolderIn')?.value || '').trim(),
+            title: (document.getElementById('titleIn')?.value || '').trim(),
+            enabled: Boolean(document.getElementById('enabledIn')?.checked),
+            sourceType: document.getElementById('sourceTypeIn')?.value || 'episode',
+            qualityAllow: tokenList(document.getElementById('qualityAllowIn')?.value || ''),
+            excludeQuality: tokenList(document.getElementById('excludeQualityIn')?.value || ''),
+            mustContain: tokenList(document.getElementById('mustContainIn')?.value || ''),
+            excludeWords: tokenList(document.getElementById('excludeWordsIn')?.value || ''),
+            minSeeds: parseNum('minSeedsIn', 0),
+            minSizeMb: parseNum('minSizeMbIn', 0),
+            maxSizeMb: parseNum('maxSizeMbIn', 0),
+            seasonStart: parseNum('seasonStartIn', 1),
+            episodeStart: parseNum('episodeStartIn', 1),
+            airDay: document.getElementById('airDayIn')?.value || '',
+            checkCycleMinutes: parseNum('checkCycleMinutesIn', 120)
+        };
+    }
+
+    function hydrateForm(rule = {}) {
+        document.getElementById('imdbIn').value = rule.imdbId || '';
+        document.getElementById('showFolderIn').value = rule.showFolder || '';
+        document.getElementById('titleIn').value = rule.title || '';
+        document.getElementById('enabledIn').checked = rule.enabled !== false;
+        document.getElementById('sourceTypeIn').value = rule.sourceType || 'episode';
+        document.getElementById('qualityAllowIn').value = Array.isArray(rule.qualityAllow) ? rule.qualityAllow.join(',') : '1080p,720p';
+        document.getElementById('excludeQualityIn').value = Array.isArray(rule.excludeQuality) ? rule.excludeQuality.join(',') : '';
+        document.getElementById('mustContainIn').value = Array.isArray(rule.mustContain) ? rule.mustContain.join(',') : '';
+        document.getElementById('excludeWordsIn').value = Array.isArray(rule.excludeWords) ? rule.excludeWords.join(',') : '';
+        document.getElementById('minSeedsIn').value = Number(rule.minSeeds || 0);
+        document.getElementById('minSizeMbIn').value = Number(rule.minSizeMb || 0);
+        document.getElementById('maxSizeMbIn').value = Number(rule.maxSizeMb || 0);
+        document.getElementById('seasonStartIn').value = Number(rule.seasonStart || 1);
+        document.getElementById('episodeStartIn').value = Number(rule.episodeStart || 1);
+        document.getElementById('airDayIn').value = rule.airDay || '';
+        document.getElementById('checkCycleMinutesIn').value = Number(rule.checkCycleMinutes || 120);
+    }
+
+    async function api(url, options = {}) {
+        const res = await fetch(url, options);
+        const data = await res.json().catch(() => ({ success: false, error: 'Invalid JSON response.' }));
+        if (!res.ok || data.success === false) {
+            throw new Error(data.error || `Request failed (${res.status})`);
+        }
+        return data;
+    }
+
+    function renderRules(items = []) {
+        const body = document.getElementById('rulesBody');
+        if (!body) return;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            body.innerHTML = '<tr><td colspan="6">No rules yet.</td></tr>';
+            return;
+        }
+
+        body.innerHTML = items.map(item => {
+            const quality = Array.isArray(item.qualityAllow) ? item.qualityAllow.join(', ') : 'default';
+            const state = item.enabled === false ? 'Disabled' : 'Active';
+            return `
+                <tr>
+                    <td>${item.title || item.showFolder || 'Untitled'}</td>
+                    <td>${item.imdbId || ''}</td>
+                    <td>${quality}</td>
+                    <td>${item.checkCycleMinutes || 120}m</td>
+                    <td>${state}</td>
+                    <td>
+                        <button class="tiny" type="button" onclick="selectRule('${item.imdbId || ''}')">Load</button>
+                        <button class="tiny" type="button" onclick="runRule('${item.imdbId || ''}')">Run</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderStats(items = []) {
+        const target = document.getElementById('statsPills');
+        if (!target) return;
+        const enabled = items.filter(x => x.enabled !== false).length;
+        const disabled = items.length - enabled;
+        const queuedRecent = items.filter(x => x?.state?.lastQueuedAt).length;
+        target.innerHTML = `
+            <span class="pill">Rules: ${items.length}</span>
+            <span class="pill">Enabled: ${enabled}</span>
+            <span class="pill">Disabled: ${disabled}</span>
+            <span class="pill">Ever Queued: ${queuedRecent}</span>
+        `;
+    }
+
+    async function refreshRules() {
+        try {
+            const data = await api('/api/admin/tv-auto-get/rules');
+            renderRules(data.items || []);
+            renderStats(data.items || []);
+            setStatus(`Loaded ${Array.isArray(data.items) ? data.items.length : 0} rule(s).`, 'good');
+        } catch (err) {
+            setStatus(`Failed to load rules: ${err.message}`, 'bad');
+        }
+    }
+
+    async function selectRule(imdbId) {
+        if (!imdbId) return;
+        try {
+            const data = await api(`/api/admin/tv-auto-get/rule-view?imdbId=${encodeURIComponent(imdbId)}`);
+            if (data.rule) {
+                hydrateForm(data.rule);
+                setStatus(`Loaded rule for ${data.rule.title || data.imdbId}.`, 'good');
+            } else {
+                const indexItem = data.indexItem || {};
+                hydrateForm({
+                    imdbId: data.imdbId,
+                    showFolder: indexItem.folderName || '',
+                    title: indexItem.title || '',
+                    enabled: true,
+                    qualityAllow: ['1080p', '720p']
+                });
+                setStatus('No existing rule found. Form seeded from TV index.', 'warn');
+            }
+        } catch (err) {
+            setStatus(`Load failed: ${err.message}`, 'bad');
+        }
+    }
+
+    async function loadRuleView() {
+        const imdb = (document.getElementById('imdbIn')?.value || '').trim();
+        const folder = (document.getElementById('showFolderIn')?.value || '').trim();
+        if (!imdb && !folder) {
+            setStatus('Enter IMDb ID or series folder first.', 'warn');
+            return;
+        }
+
+        try {
+            const query = imdb ? `imdbId=${encodeURIComponent(imdb)}` : `folder=${encodeURIComponent(folder)}`;
+            const data = await api(`/api/admin/tv-auto-get/rule-view?${query}`);
+            if (data.rule) {
+                hydrateForm(data.rule);
+                setStatus(`Loaded existing rule for ${data.rule.title || data.imdbId}.`, 'good');
+            } else {
+                const indexItem = data.indexItem || {};
+                hydrateForm({
+                    imdbId: data.imdbId,
+                    showFolder: indexItem.folderName || folder,
+                    title: indexItem.title || '',
+                    enabled: true,
+                    qualityAllow: ['1080p', '720p']
+                });
+                setStatus('No rule exists yet. Ready to save a new one.', 'warn');
+            }
+        } catch (err) {
+            setStatus(`Rule view failed: ${err.message}`, 'bad');
+        }
+    }
+
+    async function saveRule() {
+        try {
+            const payload = buildPayload();
+            const data = await api('/api/admin/tv-auto-get/rule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const imdbId = payload.imdbId || data.rule?.imdbId || 'show';
+            setStatus(`Saved rule for ${imdbId}.`, 'good');
+            await refreshRules();
+            if (payload.imdbId) {
+                await selectRule(payload.imdbId);
+            }
+        } catch (err) {
+            setStatus(`Save failed: ${err.message}`, 'bad');
+        }
+    }
+
+    async function deleteRule() {
+        const imdbId = (document.getElementById('imdbIn')?.value || '').trim();
+        if (!imdbId) {
+            setStatus('IMDb ID is required to delete a rule.', 'warn');
+            return;
+        }
+        if (!window.confirm(`Delete auto-get rule for ${imdbId}?`)) return;
+
+        try {
+            await api(`/api/admin/tv-auto-get/rule/${encodeURIComponent(imdbId)}`, { method: 'DELETE' });
+            setStatus(`Deleted rule for ${imdbId}.`, 'good');
+            await refreshRules();
+        } catch (err) {
+            setStatus(`Delete failed: ${err.message}`, 'bad');
+        }
+    }
+
+    async function previewRule() {
+        try {
+            const payload = buildPayload();
+            const data = await api('/api/admin/tv-auto-get/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const previewRows = Array.isArray(data.items) ? data.items.slice(0, 20) : [];
+            document.getElementById('previewOut').textContent = JSON.stringify({
+                imdbId: data.rule?.imdbId || payload.imdbId || null,
+                scanned: data.rawCount,
+                filtered: data.filteredCount,
+                warnings: data.upstreamWarnings || [],
+                topCandidates: previewRows.map(row => ({
+                    season: row.season,
+                    episode: row.episode,
+                    quality: row.quality,
+                    seeds: row.seeds,
+                    sizeMb: row.sizeMb,
+                    title: row.title
+                }))
+            }, null, 2);
+
+            setStatus(`Preview complete: ${data.filteredCount || 0} candidate(s) after filters.`, 'good');
+        } catch (err) {
+            setStatus(`Preview failed: ${err.message}`, 'bad');
+        }
+    }
+
+    async function runRule(imdbIdOverride = '') {
+        const imdbId = imdbIdOverride || (document.getElementById('imdbIn')?.value || '').trim();
+        if (!imdbId) {
+            setStatus('IMDb ID is required to run a rule.', 'warn');
+            return;
+        }
+
+        try {
+            const data = await api('/api/admin/tv-auto-get/run-rule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imdbId })
+            });
+
+            document.getElementById('previewOut').textContent = JSON.stringify(data, null, 2);
+            if (data.queued) {
+                setStatus(`Queued ${data.queued.title || 'episode'} via rule run.`, 'good');
+            } else {
+                setStatus('Rule run completed with no new queue item.', 'warn');
+            }
+            await refreshRules();
+        } catch (err) {
+            setStatus(`Run failed: ${err.message}`, 'bad');
+        }
+    }
+
+    async function runDue(forceAll = false) {
+        try {
+            const data = await api('/api/admin/tv-auto-get/run-due', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ forceAll })
+            });
+            document.getElementById('previewOut').textContent = JSON.stringify(data, null, 2);
+            setStatus(`Processed ${data.scannedRules || 0} rule(s), queued ${data.queuedCount || 0}.`, 'good');
+            await refreshRules();
+        } catch (err) {
+            setStatus(`Run-due failed: ${err.message}`, 'bad');
+        }
+    }
+
+    function bindEvents() {
+        document.getElementById('refreshRulesBtn')?.addEventListener('click', refreshRules);
+        document.getElementById('runDueBtn')?.addEventListener('click', () => runDue(false));
+        document.getElementById('loadViewBtn')?.addEventListener('click', loadRuleView);
+        document.getElementById('saveRuleBtn')?.addEventListener('click', saveRule);
+        document.getElementById('previewBtn')?.addEventListener('click', previewRule);
+        document.getElementById('runRuleBtn')?.addEventListener('click', () => runRule(''));
+        document.getElementById('deleteRuleBtn')?.addEventListener('click', deleteRule);
+    }
+
+    function seedFromQuery() {
+        const params = new URLSearchParams(window.location.search || '');
+        const folder = (params.get('folder') || '').trim();
+        const imdbId = (params.get('imdbId') || '').trim();
+        const title = (params.get('title') || '').trim();
+        if (folder) document.getElementById('showFolderIn').value = folder;
+        if (imdbId) document.getElementById('imdbIn').value = imdbId;
+        if (title) document.getElementById('titleIn').value = title;
+    }
+
+    window.selectRule = selectRule;
+    window.runRule = runRule;
+
+    bindEvents();
+    seedFromQuery();
+    refreshRules();
+</script>
+</body>
+</html>

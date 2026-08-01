@@ -2359,6 +2359,7 @@
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
                                         <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
                                         ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeManagerForItem('${item.folder}', '${currentTabMode}')">Open Episode Manager</button>` : ''}
+                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeSubscriberForItem('${item.folder}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${(item.title || '').replace(/'/g, '&#39;')}')">Open Episode Subscriber</button>` : ''}
                                         <button class="action-item" onclick="openGroupManagerForItem('${item.folder}', '${currentTabMode}')">Open Group Manager</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
                                         <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'addglobal')">Add To Global Group</button>
@@ -2390,6 +2391,7 @@
                                 </label>
                                 <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${item.folder}', '${currentTabMode}')">Run Worker</button>
                                 ${currentTabMode === 'series' ? `<button type="button" style="background:#0ea5e9;" onclick="openEpisodeManagerForItem('${item.folder}', '${currentTabMode}')">Episode Manager</button>` : ''}
+                                ${currentTabMode === 'series' ? `<button type="button" style="background:#0891b2;" onclick="openEpisodeSubscriberForItem('${item.folder}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${(item.title || '').replace(/'/g, '&#39;')}')">Episode Subscriber</button>` : ''}
                                 <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
                                 <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
                                 <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${item.folder}', '${currentTabMode}')">Apply Rename</button>
@@ -2773,6 +2775,27 @@
             }
 
             const url = `/series.html?id=${encodeURIComponent(`series/${cleanFolder}`)}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        function openEpisodeSubscriberForItem(folder, type, imdbId = '', title = '') {
+            if (type !== 'series') {
+                showToast('Episode Subscriber is only available for series items.', 'info', 2800);
+                return;
+            }
+
+            const cleanFolder = String(folder || '').trim();
+            if (!cleanFolder) {
+                showToast('Missing series folder name.', 'error', 2800);
+                return;
+            }
+
+            const params = new URLSearchParams();
+            params.set('folder', cleanFolder);
+            if (String(imdbId || '').trim()) params.set('imdbId', String(imdbId || '').trim());
+            if (String(title || '').trim()) params.set('title', String(title || '').trim());
+
+            const url = `/episode-subscriber.html?${params.toString()}`;
             window.open(url, '_blank', 'noopener,noreferrer');
         }
 

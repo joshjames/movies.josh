@@ -7,6 +7,7 @@ const AcquisitionQuotaService = require('../services/AcquisitionQuotaService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
 const { config: squareConfig } = require('../config/square');
 const { getSessionCookieOptions } = require('../utils/cookieOptions');
+const SeriesSubscriptionService = require('../services/SeriesSubscriptionService');
 
 /**
  * Handle initial registration payload from signup.html
@@ -208,6 +209,39 @@ router.put('/profile', requireAuth, async (req, res) => {
     }
 
     return res.json({ success: true, userKey: updated.userKey, config: updated.config });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/subscriptions', requireAuth, async (req, res) => {
+  try {
+    const userKey = getActiveUser(req);
+    const store = await SeriesSubscriptionService.readSubscriptions(userKey);
+    return res.json({ success: true, userKey, items: store.items });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/subscriptions', requireAuth, async (req, res) => {
+  try {
+    const userKey = getActiveUser(req);
+    const result = await SeriesSubscriptionService.addSubscription(userKey, req.body || {});
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json({ success: true, item: result.item, count: result.count });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/subscriptions/:imdbId', requireAuth, async (req, res) => {
+  try {
+    const userKey = getActiveUser(req);
+    const result = await SeriesSubscriptionService.removeSubscription(userKey, { imdbId: req.params.imdbId });
+    return res.json(result);
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

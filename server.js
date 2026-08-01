@@ -14,6 +14,7 @@ const LibraryScanner = require('./src/services/LibraryScanner');
 const { startPipelineWorker, reconcileQueueStartupState } = require('./src/services/workers/PipelineWorker');
 const { initRedis } = require('./src/services/PipelineQueueService');
 const ProfileService = require('./src/services/ProfileService');
+const { startWorker: startTvAutoGetWorker } = require('./src/services/SeriesAutoGetService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -299,6 +300,29 @@ app.get('/admin-users.html', async (req, res) => {
     return res.redirect('/login.html');
 });
 
+app.get('/episode-subscriber.html', async (req, res) => {
+    const activeUser = req.cookies?.user_profile;
+    const cleanUser = String(activeUser || '').toLowerCase().trim();
+
+    const allowByIdentity = cleanUser === 'josh' || cleanUser.startsWith('josh@');
+    if (allowByIdentity) {
+        return res.sendFile(path.join(__dirname, 'public/episode-subscriber.html'));
+    }
+
+    if (cleanUser) {
+        try {
+            const config = await ProfileService.readData(cleanUser, 'config', {});
+            if (config?.isAdmin === true) {
+                return res.sendFile(path.join(__dirname, 'public/episode-subscriber.html'));
+            }
+        } catch (_err) {
+            // Fall through to login redirect.
+        }
+    }
+
+    return res.redirect('/login.html');
+});
+
 // =========================================================================
 // 🔐 THE SECURE BOUNDARY: Protect everything below this line
 // =========================================================================
@@ -376,6 +400,12 @@ app.use('/api/*', (req, res) => {
         startPipelineWorker(10000);
     } else {
         logger.info('Pipeline watcher disabled on this node via ENABLE_PIPELINE_WATCHER=false.');
+    }
+
+    try {
+        startTvAutoGetWorker();
+    } catch (err) {
+        logger.warn(`TV auto-get worker start failed: ${err.message}`);
     }
 })();
 

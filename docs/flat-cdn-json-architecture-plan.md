@@ -92,6 +92,44 @@ Index page loads in this order:
 
 This gives a fast first paint while still allowing personalization.
 
+## Multi-client compatibility (Web, Android, Android TV, future iOS)
+
+Your flat JSON contracts should be treated as client APIs, not just files.
+
+### Why this matters
+
+- Android TV should be able to fetch manifests and row payloads directly client-side for responsive card rendering.
+- Mobile clients and web should share one contract so feature rollout stays consistent.
+- Future iOS support is much easier if contracts are versioned and stable from day one.
+
+### Recommended contract approach
+
+- Introduce schema version in every manifest and row payload:
+  - `schemaVersion`
+  - `surface`
+  - `generatedAt`
+  - `expiresAt` (optional)
+- Keep card payload minimal and client-friendly:
+  - stable identity (`id`, `mediaType`, `imdbId`)
+  - display fields (`title`, `subtitle`, `badge`, `cover`, `backdrop`)
+  - actions (`playHref`, `detailsHref`)
+  - state hints (`progressPct`, `isNewEpisode`, `isContinueWatching`)
+- Use additive evolution only for minor changes (do not break existing keys).
+- Use `schemaVersion` bump only when a breaking shape change is unavoidable.
+
+### Android TV implementation note
+
+The current Android TV app is still demo-like and static-list oriented.
+Before full cutover, update card/domain models so rows are materialized from manifest JSON rather than hardcoded lists.
+
+Client behavior target:
+1. Fetch global manifest.
+2. Fetch row payloads in parallel.
+3. Render rows immediately as each row payload returns.
+4. Fetch user manifest after auth and append personalized rows.
+
+This gives very fast perceived performance on TV interfaces.
+
 ## User collections data model
 
 Treat user collections as metadata references, not duplicated media blobs.
@@ -157,6 +195,96 @@ Recommended:
 Alternative:
 - Keep user manifest/rows behind API proxy initially, then shift to direct signed CDN access later.
 
+## User path sharding and geo-routing strategy
+
+You are correct to plan sharding now, not later.
+
+### Recommended user path format
+
+Use a path format that supports both performance and routing flexibility:
+
+- `v1/users/<homeRegion>/<shard>/<userKey>/manifest.json`
+- `v1/users/<homeRegion>/<shard>/<userKey>/rows/<row-id>.<version>.json`
+
+Where:
+- `homeRegion` is a stable region code assigned at user creation (for example: `na`, `eu`, `ap`).
+- `shard` is hash-derived from `userKey` (for even distribution).
+- `userKey` is opaque and non-guessable.
+
+### Region code recommendation
+
+- Prefer region-level routing (`na`, `eu`, `ap`) over country-level folders.
+- Country-code partitioning is usually too granular for operational simplicity and can create rebalancing pain.
+- If needed, store country as metadata in profile/config for policy, not object path partitioning.
+
+### Replication and cost guidance
+
+- Do not force global eager replication for private user payloads unless required.
+- Keep origin/write in user home region.
+- Allow CDN cache fill on demand in other regions when users travel.
+- Optionally pre-warm only top active users or top regions based on observed traffic.
+
+This keeps cost lower while preserving good latency.
+
+### Routing behavior
+
+- Login/session resolves user `homeRegion`.
+- Token grants access only to that user prefix.
+- Read requests prefer nearest edge; edge pulls from home-region origin when cold.
+- Optional async migration flow can change `homeRegion` for long-term relocation.
+
+## Backend database sync service (without sacrificing flat frontend)
+
+Your intuition is right: a database layer can improve durability, rebuild speed, and analytics while keeping edge delivery flat.
+
+### Principle
+
+- Frontend serving layer remains JSON manifests and row payloads on CDN/object storage.
+- Backend source-of-truth and sync orchestration can use database + queue + Redis.
+
+### Recommended role split
+
+- Redis:
+  - hot cache
+  - transient coordination locks
+  - pub/sub style invalidation events
+- Operational database (document or relational):
+  - user collections source records
+  - manifest publish ledger
+  - job state and replay metadata
+  - idempotency keys and audit trail
+- Object storage/CDN:
+  - immutable row payloads
+  - mutable manifests
+- Analytics warehouse (separate stack):
+  - watch behavior events
+  - trend computation
+  - recommendation feature generation
+
+### Database choice guidance
+
+- MongoDB is a practical fit for document-heavy collection payloads and schema evolution.
+- CouchDB can work for replication-oriented use cases but is less common in modern managed infra.
+- PostgreSQL with JSONB is also a strong option if you want strict transactional semantics plus flexible JSON.
+
+Pick based on team operational comfort first. For this workload, operational maturity matters more than theoretical model purity.
+
+### Sync and rebuild flow
+
+1. Writes enter API and are committed to operational DB (authoritative write event).
+2. Change event is emitted to queue/stream.
+3. Materializer rebuilds affected manifest/row JSON objects.
+4. Publisher writes objects and atomically updates manifest pointers.
+5. Redis cache is updated/invalidated for hot paths.
+6. Event copy is sent to warehouse ingestion for analytics/recommendations.
+
+### Why this helps
+
+- Faster disaster recovery (rebuild manifests from DB state + object versions).
+- Better failover control and auditing.
+- Cleaner foundation for recommendations, trends, and reporting pipelines.
+- Keeps user-facing read path lightweight and edge-first.
+
 ## Consistency and write authority
 
 Given current architecture, keep one write authority for generation in phase 1:
@@ -215,71 +343,128 @@ Do not wait for a "perfect" entire data model. Instead:
 
 This avoids large rework while preserving momentum.
 
-## Phased implementation plan
+## 3-phase rollout plan
 
-### Phase 0: Contract and observability (1-3 days)
+### Phase 1: Transition period (bridge architecture)
 
-- Define schema files for manifest/row/card and collection records.
-- Add versioning/hash naming helper.
-- Add metrics: generation latency, manifest publish success, stale age.
+Timeline: 2-4 weeks
+
+Work needed:
+- Freeze JSON contracts for manifest, row payload, and card payload.
+- Implement a shared publisher that writes immutable row files and mutable manifests.
+- Convert home/index global rows to CDN-first loading with API fallback.
+- Keep dynamic rows (recently added, notifications, queue status) on API for now.
+- Add observability: generation latency, publish success, stale manifest age, CDN fetch error rate.
+- Add contract test fixtures consumed by web + Android + Android TV clients.
+
+Services and ownership:
+- Add `FeedPublishService` for global rows and manifest writes.
+- Keep `HomeFeedService` and `/api/home-feed` as fallback surface.
+- Add a small frontend reader abstraction that prioritizes CDN manifest then API fallback.
+
+Changes:
+- Introduce versioned global row objects under `v1/global/**`.
+- Add CI/admin trigger to regenerate and publish manifests.
+- Standardize cache headers for rows and manifests.
+
+Considerations:
+- Preserve existing UI behavior while swapping data source order.
+- Do not purge CDN aggressively; rely on immutable row files + manifest pointer swap.
+- Keep one write authority for publish jobs to avoid dual-writer races.
+
+Impact:
+- Immediate drop in browse/home API compute and latency.
+- Low migration risk because fallback path remains active.
+- Establishes the core pattern for all later phases.
 
 Exit criteria:
-- Schemas approved.
-- Example global and user manifests validated by frontend parser.
+- Home page renders from CDN manifests on normal path.
+- API fallback works when CDN/global manifest is unavailable.
+- Publish metrics and alerts are visible and stable.
 
-### Phase 1: Global home flattening (3-7 days)
+### Phase 2: Foundation rewrite (major structural changes)
 
-- Add publisher that writes global manifests + immutable rows to object storage.
-- Keep existing `/api/home-feed` as fallback.
-- Frontend reads CDN manifest first, API fallback second.
+Timeline: 4-8 weeks
 
-Exit criteria:
-- Home/index works fully from CDN on cache hit.
-- API load reduced significantly for browse traffic.
+Work needed:
+- Build user collections domain model (collection + collection items).
+- Add collection CRUD APIs and authorization checks.
+- Implement per-user materialization pipeline for user manifests and row payloads.
+- Add private object storage prefix model and short-lived scoped token issuance.
+- Move catalog generation to the same manifest/row contract for consistency.
+- Introduce `homeRegion` + shard assignment logic and user-prefix routing.
+- Introduce operational database-backed sync ledger for publish/rebuild control.
 
-### Phase 2: Catalog flattening (3-7 days)
+Services and ownership:
+- New `CollectionService` for collection lifecycle and item mutation.
+- New `UserManifestService` for per-user row assembly.
+- Extend auth/session service for scoped user-path access tokens.
+- Optional worker/job queue for debounced user row regeneration.
 
-- Move catalog JSON generation to same manifest/row format.
-- Normalize naming for movie/tv catalogs.
-
-Exit criteria:
-- Catalog browsing no longer requires expensive runtime aggregation.
-
-### Phase 3: User collections model + APIs (5-10 days)
-
+Changes:
 - Add endpoints:
   - `POST /api/collections`
   - `PATCH /api/collections/:id`
   - `DELETE /api/collections/:id`
   - `POST /api/collections/:id/items`
   - `DELETE /api/collections/:id/items/:mediaId`
-- Persist source-of-truth records (Redis + disk mirror or DB).
-- Build per-user manifest materializer.
+- Persist source-of-truth collection records (Redis + disk mirror or DB-backed store).
+- Publish user manifests under private `v1/users/<shard>/<userKey>/**` prefixes.
+- Add left-drawer payload model (Search, My Library, Queue, Collections).
+
+Considerations:
+- Keep user identifiers opaque; never expose raw profile identifiers in object paths.
+- Debounce writes to prevent object explosion from rapid collection edits.
+- Ensure row generation is idempotent and lock-protected.
+- Maintain API proxy fallback for private row fetch during rollout.
+
+Impact:
+- Enables user-created rows/collections at scale with CDN-backed reads.
+- Shifts read load from API/database to object storage + edge cache.
+- Introduces the major new complexity area: token security and manifest consistency.
 
 Exit criteria:
-- Users can create rows and add movie/series titles.
-- User manifest reflects changes quickly.
+- Users can create collections and add movie/series titles.
+- User manifests update reliably after collection/library changes.
+- Private CDN access works with scoped short-lived tokens.
 
-### Phase 4: Private CDN delivery for user rows (4-8 days)
+### Phase 3: Full switchover and scale architecture
 
-- Add short-lived scoped token issuance at login refresh.
-- Serve user manifest/rows directly from private CDN path.
-- Keep API proxy fallback path.
+Timeline: 2-6 weeks
+
+Work needed:
+- Make CDN manifest path primary for global + user surfaces in all clients.
+- Remove legacy runtime aggregation paths that are now redundant.
+- Keep only explicitly dynamic APIs for volatile rows/events.
+- Add cross-site publish safety and reconciliation for multi-region reads.
+- Finalize mobile drawer and TV clients to consume manifest contracts natively.
+- Finalize analytics export to warehouse and recommendation/trending input feeds.
+
+Services and ownership:
+- Publish pipeline becomes the primary browse data control plane.
+- API is narrowed to auth, writes, dynamic events, and mutation endpoints.
+- Reconciliation/repair job verifies manifests reference existing row files.
+
+Changes:
+- Deprecate old direct feed-building code paths after parity validation.
+- Remove or downgrade legacy fallbacks that hide production issues.
+- Add stricter SLOs for manifest freshness and publish success.
+- Add continue-watching and new-episode dynamic contracts (user activity-driven).
+
+Considerations:
+- Perform rollback-safe cutover with feature flags per surface.
+- Run dual-read validation window before full deprecation.
+- Keep single writer for publish authority until distributed locking/versioning is proven.
+
+Impact:
+- Frontend browse experience becomes mostly flat, cacheable, and edge-first.
+- API and storage costs shift toward predictable publish workloads.
+- Platform is ready for broader active/active read scaling with controlled write authority.
 
 Exit criteria:
-- User rows fetched directly from CDN with scoped auth.
-
-### Phase 5: Dynamic row split and mobile drawer integration (3-6 days)
-
-- Keep only dynamic rows via API polling/stream.
-- Build left drawer payload contract:
-  - Search
-  - My Library
-  - Queue
-  - User Collections list
-
-Exit criteria:
-- Mobile drawer is fully data-driven from manifests + dynamic endpoints.
+- 90%+ browse/index reads served from CDN objects (global + user manifests/rows).
+- Legacy aggregation paths removed or disabled behind emergency-only flags.
+- Manifest freshness and publish error SLOs meet production targets.
 
 ## Suggested JSON examples
 

@@ -4,6 +4,7 @@ const path = require('path');
 const logger = require('./logger');
 const { syncLibraryToStorage } = require('./db');
 const { normalizeGroups } = require('./LibraryAccessService');
+const { refreshIndexFromLibrary } = require('./TvSeriesIndexService');
 
 const MOVIE_SCAN_PATHS = [
     process.env.MOVIES_DIR,
@@ -352,6 +353,11 @@ async function runLibraryScanSweep() {
     
     // Sync to Redis hot memory + Fallback storage file instantly
     await syncLibraryToStorage(masterPayload);
+    try {
+        refreshIndexFromLibrary(masterPayload);
+    } catch (indexErr) {
+        logger.warn(`⚠️ Failed refreshing TV series registry: ${indexErr.message}`);
+    }
     logger.info(
         `✨ Inventory sweep complete. Cached [${movies.length}] Movies and [${shows.length}] Series. ` +
         `Movie roots: ${existingMovieRoots.join(', ') || '(none)'} | ` +
