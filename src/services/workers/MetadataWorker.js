@@ -32,6 +32,18 @@ function buildEnrichmentBlock(data = {}, fallback = {}) {
     };
 }
 
+function splitPeopleList(value) {
+    const source = Array.isArray(value) ? value : String(value || '').split(',');
+    return [...new Set(source.map(item => String(item || '').trim()).filter(Boolean))];
+}
+
+function findRatingValue(ratings = [], sourceName = '') {
+    const rows = Array.isArray(ratings) ? ratings : [];
+    const lookup = String(sourceName || '').toLowerCase();
+    const matched = rows.find((row) => String(row?.Source || row?.source || '').toLowerCase() === lookup);
+    return String(matched?.Value || matched?.value || '').trim();
+}
+
 // =========================================================================
 // ATOMIC PROCESS API ENDPOINT
 // =========================================================================
@@ -107,18 +119,41 @@ app.post('/process', async (req, res) => {
 
         // Core metadata structure to apply back to metadata.json
         const enrichment = buildEnrichmentBlock(data);
+        const omdbRatings = Array.isArray(data.Ratings) ? data.Ratings : [];
+        const rottenTomatoesScore = findRatingValue(omdbRatings, 'Rotten Tomatoes');
+        const imdbLink = data.imdbID ? `https://www.imdb.com/title/${data.imdbID}/` : '';
         let basePatchData = {
             imdbId: data.imdbID,
             title: data.Title,
             year: data.Year,
             plot: data.Plot,
+            synopsis: data.Plot || '',
             genre: data.Genre,
+            actors: splitPeopleList(data.Actors),
+            writers: splitPeopleList(data.Writer),
+            directors: splitPeopleList(data.Director),
             tags: enrichment.tags,
             imdbScore: enrichment.imdbScore,
             parentalRating: enrichment.parentalRating,
             popularity: enrichment.popularity,
             enrichment,
             rating: enrichment.imdbScore,
+            ratings: {
+                imdb: {
+                    score: data.imdbRating || enrichment.imdbScore || 'N/A',
+                    votes: data.imdbVotes || enrichment.popularity || 'N/A',
+                    url: imdbLink
+                },
+                rottenTomatoes: {
+                    score: rottenTomatoesScore || '',
+                    url: ''
+                }
+            },
+            links: {
+                imdb: imdbLink,
+                rottenTomatoes: '',
+                trailer: ''
+            },
             runtime: data.Runtime || 'N/A',
             contentType: targetType,
             pipelineState: { currentStep: 'SUBTITLES', lastUpdated: new Date().toISOString() }

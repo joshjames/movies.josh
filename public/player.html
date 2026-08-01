@@ -111,6 +111,171 @@
             transform: translateX(2px);
         }
 
+        .info-overlay-btn {
+            position: absolute;
+            top: 24px;
+            right: 170px;
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            color: #f1f5f9;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.84rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            opacity: 0.34;
+        }
+
+        .info-overlay-btn:hover {
+            opacity: 1;
+            background: rgba(15, 23, 42, 0.94);
+        }
+
+        .player-info-drawer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            height: 100%;
+            width: min(460px, 92vw);
+            z-index: 16;
+            transform: translateX(102%);
+            transition: transform 0.25s ease;
+            background: linear-gradient(180deg, rgba(2, 6, 23, 0.95), rgba(15, 23, 42, 0.92));
+            border-left: 1px solid rgba(148, 163, 184, 0.28);
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+            backdrop-filter: blur(8px);
+        }
+
+        .player-info-drawer.show {
+            transform: translateX(0);
+            pointer-events: auto;
+        }
+
+        .player-info-head {
+            padding: 16px 16px 10px 16px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.7);
+        }
+
+        .player-info-kicker {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #93c5fd;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .player-info-title {
+            margin: 4px 0 2px 0;
+            color: #f8fafc;
+            font-size: 1.03rem;
+            line-height: 1.25;
+        }
+
+        .player-info-sub {
+            color: #94a3b8;
+            font-size: 0.75rem;
+        }
+
+        .player-info-close {
+            width: 30px;
+            height: 30px;
+            border: 1px solid rgba(100, 116, 139, 0.8);
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.8);
+            color: #e2e8f0;
+            font-size: 1rem;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+
+        .player-info-content {
+            padding: 12px 16px 18px 16px;
+            overflow: auto;
+            display: grid;
+            gap: 12px;
+        }
+
+        .player-info-synopsis {
+            color: #e2e8f0;
+            font-size: 0.84rem;
+            line-height: 1.5;
+        }
+
+        .player-info-group {
+            border: 1px solid rgba(51, 65, 85, 0.7);
+            border-radius: 10px;
+            padding: 10px;
+            background: rgba(15, 23, 42, 0.58);
+        }
+
+        .player-info-label {
+            color: #94a3b8;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .player-info-value {
+            color: #f8fafc;
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
+
+        .player-rating-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .player-rating-chip {
+            border: 1px solid rgba(51, 65, 85, 0.9);
+            border-radius: 999px;
+            padding: 6px 10px;
+            color: #f8fafc;
+            text-decoration: none;
+            font-size: 0.72rem;
+            font-weight: 700;
+            background: rgba(15, 23, 42, 0.7);
+        }
+
+        .player-rating-chip:hover {
+            border-color: #93c5fd;
+            color: #dbeafe;
+        }
+
+        .player-trailer-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            background: #b91c1c;
+            color: #fff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            width: fit-content;
+        }
+
+        .player-trailer-cta:hover {
+            background: #dc2626;
+        }
+
         .subtitle-track-select {
             position: absolute;
             bottom: 24px;
@@ -191,6 +356,12 @@
                 opacity: 0.82;
             }
 
+            .info-overlay-btn {
+                top: 62px;
+                right: 16px;
+                opacity: 0.82;
+            }
+
             .subtitle-track-select {
                 top: 68px;
                 bottom: auto;
@@ -226,6 +397,7 @@
     <div class="player-container" id="stage">
         <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
         <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
+        <button class="info-overlay-btn hide-controls" id="infoBtn" type="button">ℹ Info</button>
         <select class="audio-track-select" id="audioTrackSelect" title="Audio track selector">
             <option value="auto">Audio: Auto</option>
         </select>
@@ -242,6 +414,34 @@
         
         <div class="quality-badge" id="qualityTag">DETECTING...</div>
         <video id="cinemaVideo" controls autoplay playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
+
+        <aside class="player-info-drawer" id="playerInfoDrawer" aria-hidden="true">
+            <header class="player-info-head">
+                <div>
+                    <div class="player-info-kicker" id="playerInfoKicker">Media</div>
+                    <h3 class="player-info-title" id="playerInfoTitle">Loading details...</h3>
+                    <div class="player-info-sub" id="playerInfoSub"></div>
+                </div>
+                <button type="button" class="player-info-close" id="playerInfoClose" aria-label="Close details">×</button>
+            </header>
+            <section class="player-info-content">
+                <div class="player-info-synopsis" id="playerInfoSynopsis">Loading synopsis...</div>
+                <div class="player-info-group">
+                    <div class="player-info-label">Actors</div>
+                    <div class="player-info-value" id="playerInfoActors">Not available</div>
+                </div>
+                <div class="player-info-group">
+                    <div class="player-info-label">Writers</div>
+                    <div class="player-info-value" id="playerInfoWriters">Not available</div>
+                </div>
+                <div class="player-info-group">
+                    <div class="player-info-label">Director</div>
+                    <div class="player-info-value" id="playerInfoDirectors">Not available</div>
+                </div>
+                <div class="player-rating-row" id="playerInfoRatings"></div>
+                <a id="playerInfoTrailer" class="player-trailer-cta" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">▶ Watch Trailer</a>
+            </section>
+        </aside>
     </div>
 
     <script>
@@ -258,6 +458,9 @@
         const qualityTag = document.getElementById('qualityTag');
         const backBtn = document.getElementById('backBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const infoBtn = document.getElementById('infoBtn');
+        const playerInfoDrawer = document.getElementById('playerInfoDrawer');
+        const playerInfoClose = document.getElementById('playerInfoClose');
         const audioTrackSelect = document.getElementById('audioTrackSelect');
         const subtitleTrackSelect = document.getElementById('subtitleTrackSelect');
         const iosSeekOverlay = document.getElementById('iosSeekOverlay');
@@ -277,6 +480,135 @@
         let cloudFallbackFile = '';
         let remoteFallbackTriggered = false;
         let isSeekingWithOverlay = false;
+
+        function joinPeopleList(items = []) {
+            return Array.isArray(items) && items.length > 0
+                ? items.map(item => String(item || '').trim()).filter(Boolean).join(', ')
+                : 'Not available';
+        }
+
+        function makePlayerRatingChip(label, score, href) {
+            const safeLabel = String(label || '').trim();
+            const safeScore = String(score || '').trim() || 'N/A';
+            const safeHref = String(href || '').trim();
+
+            if (/^https?:\/\//i.test(safeHref)) {
+                return `<a class="player-rating-chip" href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeLabel} · ${safeScore}</a>`;
+            }
+            return `<span class="player-rating-chip">${safeLabel} · ${safeScore}</span>`;
+        }
+
+        function setPlayerDetailsLoadingState(title = 'Loading details...') {
+            const titleEl = document.getElementById('playerInfoTitle');
+            const subEl = document.getElementById('playerInfoSub');
+            const synopsisEl = document.getElementById('playerInfoSynopsis');
+            const actorsEl = document.getElementById('playerInfoActors');
+            const writersEl = document.getElementById('playerInfoWriters');
+            const directorsEl = document.getElementById('playerInfoDirectors');
+            const ratingsEl = document.getElementById('playerInfoRatings');
+            const trailerEl = document.getElementById('playerInfoTrailer');
+
+            if (titleEl) titleEl.textContent = title;
+            if (subEl) subEl.textContent = '';
+            if (synopsisEl) synopsisEl.textContent = 'Loading synopsis...';
+            if (actorsEl) actorsEl.textContent = 'Not available';
+            if (writersEl) writersEl.textContent = 'Not available';
+            if (directorsEl) directorsEl.textContent = 'Not available';
+            if (ratingsEl) ratingsEl.innerHTML = '';
+            if (trailerEl) {
+                trailerEl.style.display = 'none';
+                trailerEl.href = '#';
+            }
+        }
+
+        function renderPlayerDetails(details = {}) {
+            const kickerEl = document.getElementById('playerInfoKicker');
+            const titleEl = document.getElementById('playerInfoTitle');
+            const subEl = document.getElementById('playerInfoSub');
+            const synopsisEl = document.getElementById('playerInfoSynopsis');
+            const actorsEl = document.getElementById('playerInfoActors');
+            const writersEl = document.getElementById('playerInfoWriters');
+            const directorsEl = document.getElementById('playerInfoDirectors');
+            const ratingsEl = document.getElementById('playerInfoRatings');
+            const trailerEl = document.getElementById('playerInfoTrailer');
+
+            const typeLabel = String(details.contentType || '').toLowerCase() === 'series' ? 'TV Series' : 'Movie';
+            const subline = [details.year || '', details.genre || ''].filter(Boolean).join(' · ');
+
+            if (kickerEl) kickerEl.textContent = typeLabel;
+            if (titleEl) titleEl.textContent = details.title || 'Untitled';
+            if (subEl) subEl.textContent = subline;
+            if (synopsisEl) synopsisEl.textContent = details?.synopsis?.full || details?.synopsis?.short || 'Synopsis is not available yet for this title.';
+            if (actorsEl) actorsEl.textContent = joinPeopleList(details?.credits?.actors || []);
+            if (writersEl) writersEl.textContent = joinPeopleList(details?.credits?.writers || []);
+            if (directorsEl) directorsEl.textContent = joinPeopleList(details?.credits?.directors || []);
+
+            if (ratingsEl) {
+                const imdb = details?.ratings?.imdb || {};
+                const rotten = details?.ratings?.rottenTomatoes || {};
+                ratingsEl.innerHTML = `${makePlayerRatingChip('IMDb', imdb.score, imdb.url)}${makePlayerRatingChip('Rotten Tomatoes', rotten.score, rotten.url)}`;
+            }
+
+            const trailerUrl = String(details?.trailer?.url || details?.links?.trailer || '').trim();
+            if (trailerEl) {
+                if (/^https?:\/\//i.test(trailerUrl)) {
+                    trailerEl.href = trailerUrl;
+                    trailerEl.style.display = 'inline-flex';
+                } else {
+                    trailerEl.href = '#';
+                    trailerEl.style.display = 'none';
+                }
+            }
+        }
+
+        async function loadPlayerDetails() {
+            if (!movieId) return;
+
+            const contentType = (seasonParam && episodeParam) || String(movieId).startsWith('series/') ? 'series' : 'movie';
+            setPlayerDetailsLoadingState();
+            try {
+                const query = new URLSearchParams({
+                    id: movieId,
+                    type: contentType
+                });
+                const response = await fetch(`/api/media/details?${query.toString()}`);
+                const payload = await response.json();
+                if (!payload?.success || !payload?.details) {
+                    throw new Error(payload?.error || 'Details not available.');
+                }
+                renderPlayerDetails(payload.details);
+            } catch (_err) {
+                setPlayerDetailsLoadingState('Details unavailable');
+                const synopsisEl = document.getElementById('playerInfoSynopsis');
+                if (synopsisEl) synopsisEl.textContent = 'Unable to load metadata details for this title right now.';
+            }
+        }
+
+        function openPlayerInfoDrawer() {
+            if (!playerInfoDrawer) return;
+            playerInfoDrawer.classList.add('show');
+            playerInfoDrawer.setAttribute('aria-hidden', 'false');
+        }
+
+        function closePlayerInfoDrawer() {
+            if (!playerInfoDrawer) return;
+            playerInfoDrawer.classList.remove('show');
+            playerInfoDrawer.setAttribute('aria-hidden', 'true');
+        }
+
+        function initPlayerInfoDrawer() {
+            if (infoBtn) {
+                infoBtn.addEventListener('click', () => {
+                    const isOpen = playerInfoDrawer && playerInfoDrawer.classList.contains('show');
+                    if (isOpen) closePlayerInfoDrawer();
+                    else openPlayerInfoDrawer();
+                });
+            }
+
+            if (playerInfoClose) {
+                playerInfoClose.addEventListener('click', closePlayerInfoDrawer);
+            }
+        }
 
         videoEl.controls = true;
         videoEl.playsInline = true;
@@ -822,6 +1154,7 @@
             if (isTouchDevice) {
                 backBtn.classList.remove('hide-controls');
                 nextBtn.classList.remove('hide-controls');
+                if (infoBtn) infoBtn.classList.remove('hide-controls');
                 qualityTag.classList.remove('hide-controls');
                 stage.style.cursor = 'default';
                 return;
@@ -829,6 +1162,7 @@
 
             backBtn.classList.remove('hide-controls');
             nextBtn.classList.remove('hide-controls');
+            if (infoBtn) infoBtn.classList.remove('hide-controls');
             qualityTag.classList.remove('hide-controls');
             stage.style.cursor = 'default';
             
@@ -837,6 +1171,7 @@
                 mouseMoveTimeout = setTimeout(() => {
                     backBtn.classList.add('hide-controls');
                     nextBtn.classList.add('hide-controls');
+                    if (infoBtn) infoBtn.classList.add('hide-controls');
                     qualityTag.classList.add('hide-controls');
                     stage.style.cursor = 'none';
                 }, 3000); 
@@ -859,8 +1194,18 @@
                 const nextIdx = getNextAvailableIndex();
                 if (nextIdx !== -1) playEpisodeIndex(nextIdx);
             }
+            if (e.key.toLowerCase() === 'i') {
+                const isOpen = playerInfoDrawer && playerInfoDrawer.classList.contains('show');
+                if (isOpen) closePlayerInfoDrawer();
+                else openPlayerInfoDrawer();
+            }
+            if (e.key === 'Escape') {
+                closePlayerInfoDrawer();
+            }
         });
 
+        initPlayerInfoDrawer();
+        loadPlayerDetails();
         initializePremiumStream();
     </script>
     <script src="/js/api-failover.js"></script>

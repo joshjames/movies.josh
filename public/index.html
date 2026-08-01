@@ -667,6 +667,202 @@
             text-transform: uppercase;
         }
 
+        .info-pill-btn {
+            position: absolute;
+            left: 8px;
+            top: 8px;
+            z-index: 4;
+            width: 28px;
+            height: 28px;
+            border: 1px solid rgba(148, 163, 184, 0.6);
+            border-radius: 999px;
+            background: rgba(2, 6, 23, 0.72);
+            color: #e2e8f0;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(3px);
+        }
+
+        .info-pill-btn:hover {
+            background: rgba(30, 41, 59, 0.95);
+            border-color: #93c5fd;
+            color: #dbeafe;
+        }
+
+        .media-info-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 120;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(2, 6, 23, 0.62);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+        }
+
+        .media-info-modal.show {
+            display: flex;
+        }
+
+        .media-info-dialog {
+            width: min(860px, 100%);
+            max-height: min(90vh, 900px);
+            overflow: auto;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: linear-gradient(155deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.84));
+            box-shadow: 0 20px 46px rgba(2, 6, 23, 0.55);
+        }
+
+        .media-info-head {
+            padding: 16px 18px 10px 18px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+        }
+
+        .media-info-kicker {
+            color: #93c5fd;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .media-info-title {
+            color: #f8fafc;
+            font-size: 1.22rem;
+            margin: 4px 0 2px 0;
+            line-height: 1.25;
+        }
+
+        .media-info-subline {
+            color: #94a3b8;
+            font-size: 0.82rem;
+        }
+
+        .media-info-close {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #334155;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.7);
+            color: #e2e8f0;
+            font-size: 1.05rem;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+
+        .media-info-close:hover {
+            border-color: #64748b;
+            background: rgba(30, 41, 59, 0.95);
+        }
+
+        .media-info-body {
+            padding: 14px 18px 18px 18px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .media-info-synopsis {
+            color: #e2e8f0;
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        .media-info-credits {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .media-info-card {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(51, 65, 85, 0.7);
+            border-radius: 10px;
+            padding: 10px;
+            display: grid;
+            gap: 4px;
+        }
+
+        .media-info-label {
+            color: #94a3b8;
+            font-size: 0.72rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .media-info-value {
+            color: #f8fafc;
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+
+        .media-info-ratings {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .rating-chip {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(51, 65, 85, 0.7);
+            border-radius: 999px;
+            padding: 8px 12px;
+            color: #f8fafc;
+            text-decoration: none;
+            font-size: 0.76rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .rating-chip:hover {
+            border-color: #93c5fd;
+            color: #dbeafe;
+        }
+
+        .trailer-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            background: #b91c1c;
+            color: #fff;
+            border-radius: 9px;
+            font-size: 0.8rem;
+            font-weight: 800;
+            padding: 9px 12px;
+            width: fit-content;
+        }
+
+        .trailer-cta:hover {
+            background: #dc2626;
+        }
+
+        @media (max-width: 760px) {
+            .media-info-modal {
+                padding: 12px;
+            }
+
+            .media-info-dialog {
+                width: 100%;
+                border-radius: 14px;
+            }
+
+            .media-info-credits {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .arrow__btn {
             position: absolute;
             top: 50%;
@@ -980,6 +1176,25 @@
 
     <div class="collections" id="movie-grid"></div>
 
+    <div class="media-info-modal" id="media-info-modal" aria-hidden="true">
+        <article class="media-info-dialog" role="dialog" aria-modal="true" aria-labelledby="media-info-title">
+            <header class="media-info-head">
+                <div>
+                    <div class="media-info-kicker" id="media-info-kicker">Media Details</div>
+                    <h3 class="media-info-title" id="media-info-title">Loading...</h3>
+                    <div class="media-info-subline" id="media-info-subline"></div>
+                </div>
+                <button type="button" class="media-info-close" id="media-info-close" aria-label="Close details">×</button>
+            </header>
+            <section class="media-info-body">
+                <div class="media-info-synopsis" id="media-info-synopsis">Loading synopsis...</div>
+                <div class="media-info-credits" id="media-info-credits"></div>
+                <div class="media-info-ratings" id="media-info-ratings"></div>
+                <a id="media-info-trailer" class="trailer-cta" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">▶ Watch Trailer</a>
+            </section>
+        </article>
+    </div>
+
     <div id="pagination-container" style="display: none;"></div>
 
     <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
@@ -1004,6 +1219,7 @@
         let homeSearchCards = [];
         let deferredInstallPrompt = null;
         let headerNotifications = null;
+        let activeMediaInfoId = '';
         const NO_COVER_DATA_URI = "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'200'%20height%3D'300'%3E%3Crect%20width%3D'100%25'%20height%3D'100%25'%20fill%3D'%23020617'%2F%3E%3Ctext%20x%3D'50%25'%20y%3D'50%25'%20dominant-baseline%3D'middle'%20text-anchor%3D'middle'%20fill%3D'%23475569'%3ENo%20Cover%3C%2Ftext%3E%3C%2Fsvg%3E";
 
         function isStandaloneMode() {
@@ -1080,6 +1296,8 @@
             const badgeHtml = (media.contentType === 'series')
                 ? '<span class="slider-badge">TV Show</span>'
                 : '';
+            const encodedId = encodeURIComponent(String(media.id || ''));
+            const encodedType = encodeURIComponent(String(media.contentType || 'movie'));
             const genreText = media.genre || media.enrichment?.genre || '';
             const scoreText = media.imdbScore || media.rating || media.enrichment?.imdbScore || '';
             const metaBits = [media.year || '', genreText, scoreText ? `IMDb ${scoreText}` : ''].filter(Boolean).join(' · ');
@@ -1088,6 +1306,7 @@
             return `
                 <a class="slider-card" href="${targetEndpoint}?id=${media.id}">
                     ${badgeHtml}
+                    <button class="info-pill-btn" type="button" data-media-id="${encodedId}" data-content-type="${encodedType}" aria-label="Open info">i</button>
                     <img src="${cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${media.title}">
                     <div class="slider-card-overlay">
                         <div class="title">${media.title}</div>
@@ -1152,12 +1371,15 @@
                     ? collection.cards.map(card => {
                         const badgeText = escapeHtml(String(card.badge || '').trim());
                         const badgeHtml = badgeText ? `<span class="slider-badge">${badgeText}</span>` : '';
+                        const encodedId = encodeURIComponent(String(card.id || ''));
+                        const encodedType = encodeURIComponent(String(card.contentType || 'movie'));
                     const metaBits = [card.year || '', card.genre || '', card.imdbScore ? `IMDb ${card.imdbScore}` : ''].filter(Boolean).join(' · ');
                     const cover = sanitizeImageSrc(card.cover);
 
                     return `
                         <a class="slider-card" href="${card.href}">
                             ${badgeHtml}
+                                <button class="info-pill-btn" type="button" data-media-id="${encodedId}" data-content-type="${encodedType}" aria-label="Open info">i</button>
                             <img src="${cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${card.title}">
                             <div class="slider-card-overlay">
                                 <div class="title">${card.title}</div>
@@ -1422,6 +1644,176 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function decodeInfoAttr(value) {
+            try {
+                return decodeURIComponent(String(value || ''));
+            } catch (_err) {
+                return String(value || '');
+            }
+        }
+
+        function renderInfoValue(items = []) {
+            if (!Array.isArray(items) || items.length === 0) return 'Not available';
+            return items.map(item => escapeHtml(item)).join(', ');
+        }
+
+        function renderRatingChip(label, score, href) {
+            const safeScore = escapeHtml(String(score || '').trim() || 'N/A');
+            const safeLabel = escapeHtml(label);
+            const safeHref = String(href || '').trim();
+            if (/^https?:\/\//i.test(safeHref)) {
+                return `<a class="rating-chip" href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeLabel} · ${safeScore}</a>`;
+            }
+            return `<span class="rating-chip">${safeLabel} · ${safeScore}</span>`;
+        }
+
+        function setMediaInfoLoadingState(titleText = 'Loading...') {
+            const title = document.getElementById('media-info-title');
+            const kicker = document.getElementById('media-info-kicker');
+            const subline = document.getElementById('media-info-subline');
+            const synopsis = document.getElementById('media-info-synopsis');
+            const credits = document.getElementById('media-info-credits');
+            const ratings = document.getElementById('media-info-ratings');
+            const trailer = document.getElementById('media-info-trailer');
+
+            if (title) title.textContent = titleText;
+            if (kicker) kicker.textContent = 'Media Details';
+            if (subline) subline.textContent = '';
+            if (synopsis) synopsis.textContent = 'Loading synopsis...';
+            if (credits) credits.innerHTML = '';
+            if (ratings) ratings.innerHTML = '';
+            if (trailer) {
+                trailer.style.display = 'none';
+                trailer.href = '#';
+            }
+        }
+
+        function renderMediaDetails(details = {}) {
+            const title = document.getElementById('media-info-title');
+            const kicker = document.getElementById('media-info-kicker');
+            const subline = document.getElementById('media-info-subline');
+            const synopsis = document.getElementById('media-info-synopsis');
+            const credits = document.getElementById('media-info-credits');
+            const ratings = document.getElementById('media-info-ratings');
+            const trailer = document.getElementById('media-info-trailer');
+
+            const safeTitle = String(details.title || 'Untitled').trim() || 'Untitled';
+            const typeLabel = String(details.contentType || '').toLowerCase() === 'series' ? 'TV Series' : 'Movie';
+            const subBits = [details.year || '', details.genre || ''].filter(Boolean).join(' · ');
+
+            if (title) title.textContent = safeTitle;
+            if (kicker) kicker.textContent = typeLabel;
+            if (subline) subline.textContent = subBits;
+            if (synopsis) {
+                synopsis.textContent = details?.synopsis?.full || details?.synopsis?.short || 'Synopsis is not available yet for this title.';
+            }
+
+            if (credits) {
+                const cast = renderInfoValue(details?.credits?.actors || []);
+                const writers = renderInfoValue(details?.credits?.writers || []);
+                const directors = renderInfoValue(details?.credits?.directors || []);
+                credits.innerHTML = `
+                    <section class="media-info-card">
+                        <div class="media-info-label">Actors</div>
+                        <div class="media-info-value">${cast}</div>
+                    </section>
+                    <section class="media-info-card">
+                        <div class="media-info-label">Writers</div>
+                        <div class="media-info-value">${writers}</div>
+                    </section>
+                    <section class="media-info-card">
+                        <div class="media-info-label">Director</div>
+                        <div class="media-info-value">${directors}</div>
+                    </section>
+                `;
+            }
+
+            if (ratings) {
+                const imdb = details?.ratings?.imdb || {};
+                const rotten = details?.ratings?.rottenTomatoes || {};
+                ratings.innerHTML = `${renderRatingChip('IMDb', imdb.score, imdb.url)}${renderRatingChip('Rotten Tomatoes', rotten.score, rotten.url)}`;
+            }
+
+            const trailerUrl = String(details?.trailer?.url || details?.links?.trailer || '').trim();
+            if (trailer) {
+                if (/^https?:\/\//i.test(trailerUrl)) {
+                    trailer.href = trailerUrl;
+                    trailer.style.display = 'inline-flex';
+                } else {
+                    trailer.href = '#';
+                    trailer.style.display = 'none';
+                }
+            }
+        }
+
+        async function openMediaInfoModal(mediaId, contentType) {
+            const modal = document.getElementById('media-info-modal');
+            if (!modal || !mediaId) return;
+            activeMediaInfoId = mediaId;
+            setMediaInfoLoadingState('Loading details...');
+            modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+
+            try {
+                const query = new URLSearchParams({
+                    id: mediaId,
+                    type: contentType || 'movie'
+                });
+                const response = await fetch(`/api/media/details?${query.toString()}`);
+                const payload = await response.json();
+                if (!payload?.success || !payload?.details) {
+                    throw new Error(payload?.error || 'Details payload unavailable.');
+                }
+
+                if (activeMediaInfoId !== mediaId) return;
+                renderMediaDetails(payload.details);
+            } catch (_err) {
+                if (activeMediaInfoId !== mediaId) return;
+                setMediaInfoLoadingState('Details unavailable');
+                const synopsis = document.getElementById('media-info-synopsis');
+                if (synopsis) synopsis.textContent = 'Unable to load metadata right now. Please try again.';
+            }
+        }
+
+        function closeMediaInfoModal() {
+            const modal = document.getElementById('media-info-modal');
+            if (!modal) return;
+            activeMediaInfoId = '';
+            modal.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        function initMediaInfoModal() {
+            const modal = document.getElementById('media-info-modal');
+            const closeBtn = document.getElementById('media-info-close');
+
+            document.addEventListener('click', (event) => {
+                const infoBtn = event.target.closest('.info-pill-btn');
+                if (infoBtn) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const mediaId = decodeInfoAttr(infoBtn.getAttribute('data-media-id'));
+                    const contentType = decodeInfoAttr(infoBtn.getAttribute('data-content-type')) || 'movie';
+                    openMediaInfoModal(mediaId, contentType);
+                    return;
+                }
+
+                if (modal && event.target === modal) {
+                    closeMediaInfoModal();
+                }
+            });
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeMediaInfoModal);
+            }
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeMediaInfoModal();
+                }
+            });
         }
 
         function formatRelativeNotificationTime(isoString) {
@@ -1766,6 +2158,7 @@
             initAvatarMenu();
             initInstallPrompt();
             initHomeSearch();
+            initMediaInfoModal();
             hydrateUserProfileHeader();
             loadMovies(1);
             refreshNotificationsPanel();

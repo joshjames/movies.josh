@@ -31,6 +31,7 @@ function normalizeCard(media) {
         id: media.id,
         title: media.title || '',
         year: media.year || '',
+        imdbId: media.imdbId || media.imdbID || media.imdb_id || media.enrichment?.imdbId || '',
         genre: media.genre || media.enrichment?.genre || '',
         imdbScore: media.imdbScore || media.rating || media.enrichment?.imdbScore || '',
         contentType: media.contentType || 'movie',

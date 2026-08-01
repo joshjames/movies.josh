@@ -1115,6 +1115,142 @@ function readMovieMetadataIfPresent(mediaId) {
     }
 }
 
+function getNestedValue(source, keyPath) {
+    if (!source || !keyPath) return undefined;
+    return String(keyPath)
+        .split('.')
+        .reduce((acc, segment) => (acc && Object.prototype.hasOwnProperty.call(acc, segment) ? acc[segment] : undefined), source);
+}
+
+function firstNonEmptyValue(source, candidates = []) {
+    for (const keyPath of candidates) {
+        const value = getNestedValue(source, keyPath);
+        if (Array.isArray(value) && value.length > 0) {
+            return value;
+        }
+        const clean = String(value || '').trim();
+        if (clean) return clean;
+    }
+    return '';
+}
+
+function splitPeopleList(value) {
+    const source = Array.isArray(value) ? value : String(value || '').split(',');
+    return [...new Set(source.map(item => String(item || '').trim()).filter(Boolean))];
+}
+
+function buildShortSynopsis(fullText) {
+    const clean = String(fullText || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return '';
+    if (clean.length <= 240) return clean;
+    const sentenceEnd = clean.indexOf('. ');
+    if (sentenceEnd > 60 && sentenceEnd < 220) {
+        return `${clean.slice(0, sentenceEnd + 1).trim()}…`;
+    }
+    return `${clean.slice(0, 237).trim()}…`;
+}
+
+function normalizeHttpUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (!/^https?:\/\//i.test(raw)) return '';
+    return raw;
+}
+
+function readRatingFromArray(ratings = [], sourceName = '') {
+    const rows = Array.isArray(ratings) ? ratings : [];
+    const lookup = String(sourceName || '').toLowerCase();
+    const matched = rows.find((row) => String(row?.Source || row?.source || '').toLowerCase() === lookup);
+    return String(matched?.Value || matched?.value || '').trim();
+}
+
+function normalizeRottenTomatoesScore(value) {
+    const clean = String(value || '').trim();
+    if (!clean) return '';
+    if (/%$/.test(clean)) return clean;
+    const numeric = Number(clean);
+    if (Number.isFinite(numeric) && numeric >= 0 && numeric <= 100) {
+        return `${Math.round(numeric)}%`;
+    }
+    return clean;
+}
+
+function buildMediaDetailsPayload({
+    id = '',
+    contentType = 'movie',
+    title = '',
+    year = '',
+    genre = '',
+    cover = '',
+    href = '',
+    metadata = {}
+} = {}) {
+    const synopsisFull = firstNonEmptyValue(metadata, ['synopsis', 'plot', 'Plot', 'overview', 'description']);
+    const imdbId = formatImdbId(firstNonEmptyValue(metadata, ['imdbId', 'imdb_id', 'imdbID', 'metadata.imdbId', 'metadata.imdb_id', 'metadata.imdbID']));
+
+    const actors = splitPeopleList(firstNonEmptyValue(metadata, ['actors', 'Actors', 'cast', 'credits.actors']));
+    const writers = splitPeopleList(firstNonEmptyValue(metadata, ['writer', 'writers', 'Writer', 'credits.writers']));
+    const directors = splitPeopleList(firstNonEmptyValue(metadata, ['director', 'directors', 'Director', 'credits.directors']));
+
+    const ratingsArray = Array.isArray(metadata?.ratings)
+        ? metadata.ratings
+        : (Array.isArray(metadata?.Ratings) ? metadata.Ratings : []);
+
+    const imdbScore = firstNonEmptyValue(metadata, ['imdbScore', 'imdbRating', 'rating', 'enrichment.imdbScore'])
+        || readRatingFromArray(ratingsArray, 'Internet Movie Database');
+    const imdbVotes = firstNonEmptyValue(metadata, ['imdbVotes', 'popularity', 'enrichment.popularity']);
+
+    const rtScore = normalizeRottenTomatoesScore(
+        firstNonEmptyValue(metadata, ['ratings.rottenTomatoes.score', 'rottenTomatoesScore'])
+        || readRatingFromArray(ratingsArray, 'Rotten Tomatoes')
+    );
+
+    const imdbLink = normalizeHttpUrl(firstNonEmptyValue(metadata, ['ratings.imdb.url', 'links.imdb']))
+        || (imdbId ? `https://www.imdb.com/title/${imdbId}/` : '');
+    const rtLink = normalizeHttpUrl(firstNonEmptyValue(metadata, ['ratings.rottenTomatoes.url', 'links.rottenTomatoes', 'links.rotten_tomatoes']));
+    const trailerUrl = normalizeHttpUrl(firstNonEmptyValue(metadata, ['trailerUrl', 'trailer', 'links.trailer', 'enrichment.trailerUrl', 'videos.trailer']));
+
+    return {
+        id: String(id || '').trim(),
+        contentType: contentType === 'series' ? 'series' : 'movie',
+        title: String(title || firstNonEmptyValue(metadata, ['title', 'Title']) || '').trim(),
+        year: String(year || firstNonEmptyValue(metadata, ['year', 'Year']) || '').trim(),
+        genre: String(genre || firstNonEmptyValue(metadata, ['genre', 'Genre', 'enrichment.genre']) || '').trim(),
+        cover: String(cover || '').trim(),
+        href: String(href || '').trim(),
+        imdbId,
+        synopsis: {
+            short: buildShortSynopsis(synopsisFull),
+            full: String(synopsisFull || '').trim()
+        },
+        credits: {
+            actors,
+            writers,
+            directors
+        },
+        ratings: {
+            imdb: {
+                score: String(imdbScore || '').trim(),
+                votes: String(imdbVotes || '').trim(),
+                url: imdbLink
+            },
+            rottenTomatoes: {
+                score: String(rtScore || '').trim(),
+                url: rtLink
+            }
+        },
+        trailer: {
+            url: trailerUrl
+        },
+        links: {
+            imdb: imdbLink,
+            rottenTomatoes: rtLink,
+            trailer: trailerUrl
+        },
+        updatedAt: String(firstNonEmptyValue(metadata, ['updatedAt', 'pipelineState.lastUpdated']) || '').trim()
+    };
+}
+
 function isRemoteAllocatedMovie(mediaId) {
     if (String(mediaId || '').startsWith('series/')) return false;
     const metadata = readMovieMetadataIfPresent(mediaId);
@@ -2491,6 +2627,20 @@ router.get('/movies/:id', async (req, res) => {
     const infoFilePath = path.join(movieFolder, 'movie_info.json');
     const metaFilePath = path.join(movieFolder, 'metadata.json'); 
 
+    const movieMetadata = readMovieMetadataIfPresent(movieId) || {};
+    const attachDetails = (metadataSource = movieMetadata) => {
+        streamPayload.details = buildMediaDetailsPayload({
+            id: movieId,
+            contentType: 'movie',
+            title: streamPayload.title,
+            year: metadataSource?.year || '',
+            genre: metadataSource?.genre || metadataSource?.enrichment?.genre || '',
+            cover: metadataSource?.cover || '',
+            href: `/player.html?id=${encodeURIComponent(movieId)}`,
+            metadata: metadataSource
+        });
+    };
+
     let streamPayload = {
         id: movieId,
         title: movieId.replace(/\./g, ' '), 
@@ -2567,6 +2717,8 @@ router.get('/movies/:id', async (req, res) => {
                     null
                 );
 
+                attachDetails(metaData);
+
                 if (streamPayload.file1080p || streamPayload.file720p || streamPayload.file480p) {
                     return res.json(streamPayload);
                 }
@@ -2576,6 +2728,7 @@ router.get('/movies/:id', async (req, res) => {
                     streamPayload.file720p = streamPayload.localFallback720p;
                     streamPayload.file480p = streamPayload.localFallback480p;
                     streamPayload.fallbackReason = 'remote_unavailable';
+                    attachDetails(metaData);
                     return res.json(streamPayload);
                 }
 
@@ -2639,7 +2792,77 @@ router.get('/movies/:id', async (req, res) => {
         }
     }
 
+    attachDetails(movieMetadata);
+
     res.json(streamPayload);
+});
+
+router.get('/media/details', async (req, res) => {
+    try {
+        const rawId = String(req.query.id || '').trim();
+        const rawType = String(req.query.type || '').trim().toLowerCase();
+        if (!rawId) {
+            return res.status(400).json({ success: false, error: 'Missing media id.' });
+        }
+
+        const normalizedId = normalizeMediaIdInput(rawId);
+        const inferredType = rawType === 'series' || normalizedId.startsWith('series/') ? 'series' : 'movie';
+
+        if (inferredType === 'series') {
+            const lookupFolder = normalizeShowFolderInput(normalizedId);
+            const resolved = await resolveSeriesShowFolder(lookupFolder);
+            if (!resolved) {
+                return res.status(404).json({ success: false, error: 'Series not found.' });
+            }
+
+            const showFolder = resolved.folder;
+            const showPath = resolved.path;
+            const { metadata } = readMediaMetadataForMovieFolder(showPath);
+
+            const library = await getLibrary();
+            const showRows = Array.isArray(library?.shows) ? library.shows : [];
+            const showRow = showRows.find((item) => String(item?.id || '') === `series/${showFolder}`) || {};
+
+            const details = buildMediaDetailsPayload({
+                id: `series/${showFolder}`,
+                contentType: 'series',
+                title: metadata?.title || showRow?.title || showFolder,
+                year: metadata?.year || showRow?.year || '',
+                genre: metadata?.genre || metadata?.enrichment?.genre || showRow?.genre || '',
+                cover: showRow?.cover || `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
+                href: `/series.html?id=${encodeURIComponent(`series/${showFolder}`)}`,
+                metadata
+            });
+
+            return res.json({ success: true, details });
+        }
+
+        const movieId = normalizedId.replace(/^series\//i, '');
+        const movieFolder = resolveMovieFolderPath(movieId);
+        if (!movieFolder || !fs.existsSync(movieFolder)) {
+            return res.status(404).json({ success: false, error: 'Movie not found.' });
+        }
+
+        const metadata = readMovieMetadataIfPresent(movieId) || {};
+        const library = await getLibrary();
+        const movieRows = Array.isArray(library?.movies) ? library.movies : [];
+        const movieRow = movieRows.find((item) => String(item?.id || '') === movieId) || {};
+
+        const details = buildMediaDetailsPayload({
+            id: movieId,
+            contentType: 'movie',
+            title: metadata?.title || movieRow?.title || movieId.replace(/\./g, ' '),
+            year: metadata?.year || movieRow?.year || '',
+            genre: metadata?.genre || metadata?.enrichment?.genre || movieRow?.genre || '',
+            cover: movieRow?.cover || '',
+            href: `/player.html?id=${encodeURIComponent(movieId)}`,
+            metadata
+        });
+
+        return res.json({ success: true, details });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // GET: /api/series/:showFolder (Unified Series Hierarchy Aggregator)
@@ -2687,7 +2910,17 @@ router.get('/series/:showFolder', async (req, res) => {
             poster: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
             seasons: seriesData.seasons,
             totalSeasons: seriesData.totalSeasons,
-            canonicalFolder: showFolder
+            canonicalFolder: showFolder,
+            details: buildMediaDetailsPayload({
+                id: `series/${showFolder}`,
+                contentType: 'series',
+                title: metaData.title,
+                year: metaData.year,
+                genre: metaData.genre,
+                cover: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
+                href: `/series.html?id=${encodeURIComponent(`series/${showFolder}`)}`,
+                metadata: metaData
+            })
         });
     } catch (err) {
         console.error("❌ Unified Series router failure:", err);
