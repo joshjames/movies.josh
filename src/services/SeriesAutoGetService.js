@@ -12,8 +12,16 @@ const { getSeriesByImdbId, loadIndex } = require('./TvSeriesIndexService');
 const { resolveSeriesFolderPath } = require('./StoragePathResolver');
 const { createJob, getAllJobs } = require('./PipelineQueueService');
 
-const DATA_ROOT = path.join(__dirname, '../../movie-streamer-data');
+const DATA_ROOT_CANDIDATES = [
+    String(process.env.APP_DATA_DIR || '').trim(),
+    '/app/metadata',
+    path.join(__dirname, '../../metadata'),
+    path.join(__dirname, '../../movie-streamer-data')
+].filter(Boolean);
+const LEGACY_DATA_ROOT = path.join(__dirname, '../../movie-streamer-data');
+const DATA_ROOT = DATA_ROOT_CANDIDATES[0];
 const RULES_FILE = path.join(DATA_ROOT, 'tv-auto-get-rules.json');
+const LEGACY_RULES_FILE = path.join(LEGACY_DATA_ROOT, 'tv-auto-get-rules.json');
 const DEFAULT_CHECK_CYCLE_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_DEFAULT_CHECK_CYCLE_MINUTES || 120));
 const WORKER_INTERVAL_MS = Math.max(60 * 1000, Number(process.env.TV_AUTO_GET_WORKER_INTERVAL_MS || 15 * 60 * 1000));
 const WORKER_ENABLED = !['false', '0', 'no'].includes(String(process.env.ENABLE_TV_AUTO_GET_WORKER || 'true').trim().toLowerCase());
@@ -103,6 +111,29 @@ function readJsonSafe(filePath, fallback) {
     }
 }
 
+function loadRulesFileWithFallback() {
+    const primary = readJsonSafe(RULES_FILE, null);
+    if (primary && Array.isArray(primary.items)) {
+        return primary;
+    }
+
+    if (RULES_FILE !== LEGACY_RULES_FILE) {
+        const legacy = readJsonSafe(LEGACY_RULES_FILE, null);
+        if (legacy && Array.isArray(legacy.items)) {
+            try {
+                ensureDataDir();
+                fs.writeFileSync(RULES_FILE, JSON.stringify(legacy, null, 4), 'utf-8');
+                logger.info(`Migrated TV auto-get rules into persistent data root: ${RULES_FILE}`);
+            } catch (err) {
+                logger.warn(`Failed migrating TV auto-get rules to persistent data root: ${err.message}`);
+            }
+            return legacy;
+        }
+    }
+
+    return { updatedAt: null, items: [] };
+}
+
 function normalizeRule(input = {}) {
     const imdbId = normalizeImdbId(input.imdbId || '');
     const qualityAllow = Array.isArray(input.qualityAllow)
@@ -143,7 +174,7 @@ function normalizeRule(input = {}) {
 }
 
 function loadRules() {
-    const raw = readJsonSafe(RULES_FILE, { updatedAt: null, items: [] }) || { updatedAt: null, items: [] };
+    const raw = loadRulesFileWithFallback();
     const items = Array.isArray(raw.items) ? raw.items.map((item) => normalizeRule(item)).filter((item) => item.imdbId) : [];
     items.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
     return {

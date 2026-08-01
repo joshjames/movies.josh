@@ -1,7 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_ROOT = path.join(__dirname, '../../movie-streamer-data');
+const DATA_ROOT_CANDIDATES = [
+    String(process.env.APP_DATA_DIR || '').trim(),
+    '/app/metadata',
+    path.join(__dirname, '../../metadata'),
+    path.join(__dirname, '../../movie-streamer-data')
+].filter(Boolean);
+const DATA_ROOT = DATA_ROOT_CANDIDATES[0];
 const PRIMARY_INDEX_FILE = path.join(DATA_ROOT, 'tv-series-index.json');
 const LEGACY_INDEX_FILE = path.join(__dirname, '../../metadata/tv-show-index.json');
 
