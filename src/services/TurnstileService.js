@@ -54,6 +54,15 @@ async function verifyRequest(req, options = {}) {
         const success = Boolean(payload && payload.success);
 
         if (!success) {
+            // Log the payload and request host for debugging Turnstile failures.
+            try {
+                const host = String(req.headers?.host || req.hostname || '').trim();
+                console.error('[Turnstile] verification failed', { host, payload, tokenLength: String(token || '').length });
+            } catch (logErr) {
+                // swallow logging errors to avoid interrupting normal failure flow
+                console.error('[Turnstile] logging failed', String(logErr && logErr.message || logErr));
+            }
+
             return {
                 success: false,
                 code: 'verification_failed',
