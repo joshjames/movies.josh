@@ -13,6 +13,8 @@ const REDIS_URL = process.env.REDIS_URL || `redis://${DEFAULT_REDIS_HOST}:${DEFA
 const REDIS_ENABLED = !['false', '0', 'no'].includes(
     String(process.env.ENABLE_REDIS || 'true').trim().toLowerCase()
 );
+const REDIS_RECONNECT_INTERVAL_MS = 15000;
+let lastRedisConnectAttempt = 0;
 
 function createDisabledRedisClient() {
     return {
@@ -46,11 +48,20 @@ async function connectDb() {
         return;
     }
 
+    if (redisClient.isOpen) {
+        return;
+    }
+
+    const now = Date.now();
+    if (now - lastRedisConnectAttempt < REDIS_RECONNECT_INTERVAL_MS) {
+        return;
+    }
+
+    lastRedisConnectAttempt = now;
+
     try {
-        if (!redisClient.isOpen) {
-            await redisClient.connect();
-            logger.info(`🚀 Connected to Redis Instance Successfully [Isolated DB Index Path: ${REDIS_URL.split('/').pop()}]`);
-        }
+        await redisClient.connect();
+        logger.info(`🚀 Connected to Redis Instance Successfully [Isolated DB Index Path: ${REDIS_URL.split('/').pop()}]`);
     } catch (e) {
         logger.warn('⚠️ Redis engine unreachable. Shifting operational layout to Cold JSON storage layers.');
     }

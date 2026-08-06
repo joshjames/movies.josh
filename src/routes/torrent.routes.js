@@ -1786,6 +1786,7 @@ router.post('/yts/add', async (req, res) => {
 // GET: /api/pipeline/status - Returns active downloads and queue jobs with stage info
 router.get('/pipeline/status', async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         const activeUser = normalizeUserKey(getActiveUser(req));
         const requestScope = String(req.query.scope || '').trim().toLowerCase();
         const includeAll = requestScope === 'all' && await hasQueueAdminAccess(activeUser);

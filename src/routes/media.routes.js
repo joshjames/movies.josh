@@ -1821,6 +1821,7 @@ router.get('/library', async (req, res) => {
 
 // GET: /api/home-feed (Serves the pre-generated home page collections cache)
 router.get('/home-feed', (req, res) => {
+    res.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
     const homeFeed = loadHomeFeedWithFallback();
     if (!homeFeed) {
         return res.status(503).json({

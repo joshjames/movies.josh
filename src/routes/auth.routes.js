@@ -31,12 +31,6 @@ async function enforceTurnstile(req) {
 router.get('/turnstile-config', (req, res) => {
     const siteKey = TurnstileService.getSiteKey() || null;
     const enabled = Boolean(TurnstileService.isEnabled() && siteKey);
-    try {
-        const host = String(req.headers?.host || req.hostname || '').trim();
-        console.info('[TurnstileConfig] request', { host, enabled, siteKeyProvided: Boolean(siteKey) });
-    } catch (logErr) {
-        console.error('[TurnstileConfig] logging failed', String(logErr && logErr.message || logErr));
-    }
     return res.json({
         success: true,
         enabled,
