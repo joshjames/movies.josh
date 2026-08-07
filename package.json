@@ -10,7 +10,11 @@
     "cf:dns:list-zones": "node scripts/cloudflare-dns.js list-zones",
     "cf:dns:list-records": "node scripts/cloudflare-dns.js list-records",
     "cf:dns:sync-record": "node scripts/cloudflare-dns.js sync-record",
-    "cf:dns:sync-file": "node scripts/cloudflare-dns.js sync-from-file"
+    "cf:dns:sync-file": "node scripts/cloudflare-dns.js sync-from-file",
+    "cdn:sync:images": "./scripts/cdn-sync-images.sh",
+    "cdn:sync:images:dry": "./scripts/cdn-sync-images.sh --dry-run",
+    "cdn:manifest": "./scripts/cdn-sync-images.sh --manifest-only",
+    "cdn:purge": "node scripts/cdn-purge.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",

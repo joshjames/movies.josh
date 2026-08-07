@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { toCdnUrl } = require('./CdnAssetService');
 
 const MOVIES_DIR = () => String(process.env.MOVIES_DIR || global.MOVIES_DIR || '').trim();
 const SERIES_DIR = () => String(process.env.SERIES_DIR || global.SERIES_DIR || '').trim();
@@ -48,6 +49,12 @@ function resolvePublicAssetPath(publicUrl = '') {
         return path.join(TV_COVER_DIR, fileName);
     }
 
+    // The TV cover API route caches into TV_COVER_DIR, so it versions off the same file.
+    const tvApiMatch = cleanUrl.match(/^\/api\/tv-shows\/(tt\d+)\/cover$/i);
+    if (tvApiMatch) {
+        return path.join(TV_COVER_DIR, `${tvApiMatch[1].toLowerCase()}.jpg`);
+    }
+
     return null;
 }
 
@@ -57,12 +64,30 @@ function versionCoverUrl(publicUrl = '') {
 
     const filePath = resolvePublicAssetPath(cleanUrl);
     const version = getVersionToken(filePath);
-    if (!version) return cleanUrl;
 
-    const separator = cleanUrl.includes('?') ? '&' : '?';
-    return `${cleanUrl}${separator}v=${encodeURIComponent(version)}`;
+    // Prefer the CDN when the sync job has confirmed this object is in the bucket.
+    // toCdnUrl returns '' for anything unmapped, unsynced, or when the CDN is off,
+    // in which case we fall through to the origin path unchanged.
+    const cdnUrl = toCdnUrl(cleanUrl);
+    const targetUrl = cdnUrl || cleanUrl;
+
+    if (!version) return targetUrl;
+
+    const separator = targetUrl.includes('?') ? '&' : '?';
+    return `${targetUrl}${separator}v=${encodeURIComponent(version)}`;
+}
+
+/**
+ * Canonical TV show cover URL. Resolves to the CDN object when it has been synced,
+ * otherwise to the on-demand /api/tv-shows/:imdbId/cover route which fetches and caches.
+ */
+function tvCoverUrl(imdbId = '') {
+    const raw = String(imdbId || '').trim();
+    if (!raw) return '';
+    return versionCoverUrl(`/api/tv-shows/${encodeURIComponent(raw)}/cover`);
 }
 
 module.exports = {
-    versionCoverUrl
+    versionCoverUrl,
+    tvCoverUrl
 };

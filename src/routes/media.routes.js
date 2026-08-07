@@ -24,7 +24,7 @@ const {
     canUserSeeMedia,
     getGroupsFromMedia
 } = require('../services/LibraryAccessService');
-const { versionCoverUrl } = require('../services/CoverUrlService');
+const { versionCoverUrl, tvCoverUrl } = require('../services/CoverUrlService');
 const {
     getSeriesRoots,
     resolveMovieFolderPath,
@@ -415,7 +415,7 @@ function withCover(item) {
     return {
         ...item,
         imdbId: formattedId,
-        cover: formattedId ? `/api/tv-shows/${encodeURIComponent(formattedId)}/cover` : ''
+        cover: tvCoverUrl(formattedId)
     };
 }
 
@@ -1989,7 +1989,7 @@ async function buildTvSeasonBrowser(imdbId) {
         endYear: String(metadata.endYear || '').trim(),
         plot: String(metadata.Plot || '').trim(),
         genres: String(metadata.Genre || '').trim(),
-        cover: cleanImdbId ? `/api/tv-shows/${encodeURIComponent(cleanImdbId)}/cover` : '',
+        cover: tvCoverUrl(cleanImdbId),
         provider: metadataLookup.provider || 'unknown',
         totalSeasons: String(totalSeasons || seasons.length || 0),
         episodeCount,
@@ -2703,7 +2703,7 @@ router.get('/catalogs/tv/:slug', async (req, res) => {
 
         const mapped = catalogRows.map((item) => {
             const imdbId = formatImdbId(item.imdbId || item.id || '');
-            const fallbackCover = imdbId ? `/api/tv-shows/${encodeURIComponent(imdbId)}/cover` : '';
+            const fallbackCover = tvCoverUrl(imdbId);
             const title = String(item.title || item.name || '').trim();
             const localMatch = (imdbId && seriesIndex.byImdb.get(imdbId)) || seriesIndex.byTitle.get(normalizeSearchText(title)) || null;
 
