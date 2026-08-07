@@ -8,8 +8,32 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
 const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
-const { exec } = require('child_process'); // Restored explicit missing shell execution utility
+const { execFile } = require('child_process');
 const logger = require('../utils/logger');
+const ROOT = path.join(__dirname, '..', '..');
+const IMDB_DATA_FILES = [
+    'title.basics.tsv.gz',
+    'title.ratings.tsv.gz',
+    'title.episode.tsv.gz',
+    'title.akas.tsv.gz',
+    'name.basics.tsv.gz'
+];
+
+function runNodeScript(scriptName, args = []) {
+    return new Promise((resolve, reject) => {
+        const scriptPath = path.join(ROOT, 'scripts', scriptName);
+        execFile(process.execPath, [scriptPath, ...args], {
+            cwd: ROOT,
+            maxBuffer: 50 * 1024 * 1024
+        }, (err, stdout, stderr) => {
+            if (err) {
+                return reject({ err, stdout, stderr });
+            }
+            resolve({ stdout, stderr });
+        });
+    });
+}
+
 //const logger = require('../services/logger'); 
 const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
@@ -2610,6 +2634,84 @@ router.post('/trigger-automation', async (req, res) => {
         console.log(`✅ Automated background library sync completed flawlessly.`);
     } catch (err) {
         console.error(`❌ Automated orchestration cycle block exception:`, err.message);
+    }
+});
+
+// =========================================================================
+// 📦 IMDb Dataset Operations Endpoints
+// =========================================================================
+router.post('/operations/update-imdb-data', async (req, res) => {
+    try {
+        const { files, force } = req.body || {};
+        const requestedFiles = Array.isArray(files)
+            ? files.filter((file) => IMDB_DATA_FILES.includes(String(file).trim()))
+            : [];
+
+        const args = [];
+        if (force) args.push('--force');
+        if (requestedFiles.length) args.push(...requestedFiles);
+
+        const { stdout, stderr } = await runNodeScript('update-imdb-data.js', args);
+        res.json({ success: true, output: stdout.trim(), errorOutput: stderr.trim() });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.err?.message || err.message || 'IMDb update failed',
+            output: err.stdout?.trim?.(),
+            errorOutput: err.stderr?.trim?.()
+        });
+    }
+});
+
+router.post('/operations/build-imdb-catalogs', async (req, res) => {
+    try {
+        const { skipTv, skipMovies } = req.body || {};
+        const args = [];
+        if (skipTv) args.push('--skip-tv');
+        if (skipMovies) args.push('--skip-movies');
+
+        const { stdout, stderr } = await runNodeScript('build-imdb-catalogs.js', args);
+        res.json({ success: true, output: stdout.trim(), errorOutput: stderr.trim() });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.err?.message || err.message || 'IMDb catalog build failed',
+            output: err.stdout?.trim?.(),
+            errorOutput: err.stderr?.trim?.()
+        });
+    }
+});
+
+router.post('/operations/refresh-imdb', async (req, res) => {
+    try {
+        const { force, files, skipTv, skipMovies } = req.body || {};
+        const updateArgs = [];
+        const buildArgs = [];
+
+        if (force) updateArgs.push('--force');
+        if (Array.isArray(files) && files.length) {
+            updateArgs.push(...files.filter((file) => IMDB_DATA_FILES.includes(String(file).trim())));
+        }
+        if (skipTv) buildArgs.push('--skip-tv');
+        if (skipMovies) buildArgs.push('--skip-movies');
+
+        const updateResult = await runNodeScript('update-imdb-data.js', updateArgs);
+        const buildResult = await runNodeScript('build-imdb-catalogs.js', buildArgs);
+
+        res.json({
+            success: true,
+            updateOutput: updateResult.stdout.trim(),
+            updateErrorOutput: updateResult.stderr.trim(),
+            buildOutput: buildResult.stdout.trim(),
+            buildErrorOutput: buildResult.stderr.trim()
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.err?.message || err.message || 'IMDb refresh failed',
+            output: err.stdout?.trim?.(),
+            errorOutput: err.stderr?.trim?.()
+        });
     }
 });
 

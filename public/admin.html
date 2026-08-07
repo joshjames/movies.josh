@@ -872,6 +872,31 @@
             </div>
         </div>
     </aside>
+    <div id="operations-backdrop" class="subtitle-drawer-backdrop" onclick="closeOperationsPanel()"></div>
+    <aside id="operations-drawer" class="subtitle-drawer" aria-hidden="true">
+        <div class="subtitle-drawer-header">
+            <div>
+                <div class="subtitle-drawer-title">Operations Center</div>
+                <div class="subtitle-drawer-subtitle">Run IMDb dataset refreshes and catalog rebuilds from the admin operations panel.</div>
+            </div>
+            <button type="button" style="background:#1e293b;" onclick="closeOperationsPanel()">Close</button>
+        </div>
+        <div class="subtitle-drawer-body">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+                <div style="color:#cbd5e1; font-size:0.95rem; line-height:1.6;">
+                    Use these operations to refresh the local IMDb data dump and rebuild the static TV/movie catalogs used by search and discovery. This panel is designed to keep frequent maintenance work separate from manual library and metadata actions.
+                </div>
+                <button class="btn-trigger" style="background:#9333ea;" onclick="runImdbDataUpdate()">Download / Update IMDb Dataset</button>
+                <button class="btn-trigger" style="background:#0f766e;" onclick="runImdbBuildCatalogs()">Build IMDb TV & Movie Catalogs</button>
+                <button class="btn-trigger" style="background:#2dd4bf;" onclick="runImdbRefreshAll()">Refresh IMDb Data and Rebuild Catalogs</button>
+                <div id="operations-status" style="padding:14px; border:1px solid #334155; border-radius:10px; background:#020617; color:#e2e8f0; font-size:0.9rem; min-height:96px; white-space:pre-wrap; overflow:auto;"></div>
+                <div style="display:flex; gap: 10px; flex-wrap:wrap;">
+                    <a href="/admin-users.html" style="background:#0e7490; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Open User Manager</a>
+                    <a href="/feed-diagnostics.html" style="background:#334155; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Feed Diagnostics</a>
+                </div>
+            </div>
+        </div>
+    </aside>
     <div class="container">
         <h1>🛠️ Joshflix Library Override Desk</h1>
         
@@ -881,9 +906,8 @@
             <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
             <button class="btn-trigger" style="background:#1d4ed8;" onclick="backfillGlobalGroups()">Backfill Global + All-Media</button>
             <button class="btn-trigger" style="background:#4f46e5;" onclick="openGroupManager()">Open Group Manager</button>
+            <button class="btn-trigger" style="background:#8b5cf6;" onclick="openOperationsPanel()">Operations</button>
             <button class="btn-trigger" style="background:#0f766e;" onclick="openAdminQueueManager()">Open Queue Manager</button>
-            <a href="/admin-users.html" style="background:#0e7490; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Open User Manager</a>
-            <a href="/feed-diagnostics.html" style="background:#334155; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Feed Diagnostics</a>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
 
@@ -1200,6 +1224,73 @@
             if (drawer) drawer.classList.remove('show');
             if (backdrop) backdrop.classList.remove('show');
             if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        function openOperationsPanel() {
+            const drawer = document.getElementById('operations-drawer');
+            const backdrop = document.getElementById('operations-backdrop');
+            if (!drawer || !backdrop) return;
+            drawer.classList.add('show');
+            backdrop.classList.add('show');
+            drawer.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeOperationsPanel() {
+            const drawer = document.getElementById('operations-drawer');
+            const backdrop = document.getElementById('operations-backdrop');
+            if (drawer) drawer.classList.remove('show');
+            if (backdrop) backdrop.classList.remove('show');
+            if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        async function runImdbOperation(endpoint, body, successLabel) {
+            const statusEl = document.getElementById('operations-status');
+            if (statusEl) {
+                statusEl.textContent = 'Running ' + successLabel + '...';
+            }
+
+            try {
+                const res = await fetch(`/api/admin/operations/${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body || {})
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    const message = `Operation failed: ${data.error || 'Unknown error'}`;
+                    if (statusEl) statusEl.textContent = message;
+                    showToast(message, 'error', 5000);
+                    return;
+                }
+
+                const output = [
+                    data.output && `Output:\n${data.output}`,
+                    data.errorOutput && `Errors:\n${data.errorOutput}`,
+                    data.updateOutput && `Update Output:\n${data.updateOutput}`,
+                    data.buildOutput && `Build Output:\n${data.buildOutput}`
+                ].filter(Boolean).join('\n\n');
+
+                if (statusEl) {
+                    statusEl.textContent = output || successLabel + ' completed successfully.';
+                }
+                showToast(successLabel + ' completed.', 'success', 4500);
+            } catch (err) {
+                const message = `Operation request failed: ${err.message || err}`;
+                if (statusEl) statusEl.textContent = message;
+                showToast(message, 'error', 5000);
+            }
+        }
+
+        function runImdbDataUpdate() {
+            return runImdbOperation('update-imdb-data', {}, 'IMDb data download');
+        }
+
+        function runImdbBuildCatalogs() {
+            return runImdbOperation('build-imdb-catalogs', {}, 'IMDb catalog build');
+        }
+
+        function runImdbRefreshAll() {
+            return runImdbOperation('refresh-imdb', {}, 'IMDb refresh and catalog rebuild');
         }
 
         function queueBadgeClass(item) {

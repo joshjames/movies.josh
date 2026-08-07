@@ -1,1142 +1,2018 @@
 [
   {
-    "id": "tt0111161",
+    "imdbId": "tt0111161",
     "title": "The Shawshank Redemption",
-    "year": 1994,
-    "rating": 9.3,
-    "votes": 3201561,
+    "year": "1994",
     "genres": [
       "Drama"
-    ]
+    ],
+    "rating": 9.3,
+    "votes": 3218955,
+    "source": "imdb-movie-index",
+    "searchText": "tt0111161 the shawshank redemption 1994 drama"
   },
   {
-    "id": "tt0068646",
+    "imdbId": "tt0068646",
     "title": "The Godfather",
-    "year": 1972,
-    "rating": 9.2,
-    "votes": 2233551,
+    "year": "1972",
     "genres": [
       "Crime",
       "Drama"
-    ]
+    ],
+    "rating": 9.2,
+    "votes": 2244172,
+    "source": "imdb-movie-index",
+    "searchText": "tt0068646 the godfather 1972 crime drama"
   },
   {
-    "id": "tt0252487",
-    "title": "The Chaos Class",
-    "year": 1975,
+    "imdbId": "tt0468569",
+    "title": "The Dark Knight",
+    "year": "2008",
+    "genres": [
+      "Crime",
+      "Thriller"
+    ],
     "rating": 9.1,
-    "votes": 46378,
+    "votes": 3204558,
+    "source": "imdb-movie-index",
+    "searchText": "tt0468569 the dark knight 2008 crime thriller"
+  },
+  {
+    "imdbId": "tt0252487",
+    "title": "The Chaos Class",
+    "year": "1975",
     "genres": [
       "Comedy"
-    ]
+    ],
+    "rating": 9.1,
+    "votes": 46552,
+    "source": "imdb-movie-index",
+    "searchText": "tt0252487 the chaos class 1975 comedy"
   },
   {
-    "id": "tt0259534",
+    "imdbId": "tt0259534",
     "title": "Ramayana: The Legend of Prince Rama",
-    "year": 1993,
-    "rating": 9.1,
-    "votes": 17811,
+    "year": "1993",
     "genres": [
       "Action",
       "Adventure",
       "Animation"
-    ]
-  },
-  {
-    "id": "tt0468569",
-    "title": "The Dark Knight",
-    "year": 2008,
+    ],
     "rating": 9.1,
-    "votes": 3182342,
-    "genres": [
-      "Crime",
-      "Thriller"
-    ]
+    "votes": 17924,
+    "source": "imdb-movie-index",
+    "searchText": "tt0259534 ramayana the legend of prince rama 1993 action adventure animation"
   },
   {
-    "id": "tt0050083",
-    "title": "12 Angry Men",
-    "year": 1957,
-    "rating": 9.0,
-    "votes": 988738,
-    "genres": [
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0071562",
-    "title": "The Godfather Part II",
-    "year": 1974,
-    "rating": 9.0,
-    "votes": 1499019,
-    "genres": [
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0108052",
-    "title": "Schindler's List",
-    "year": 1993,
-    "rating": 9.0,
-    "votes": 1589460,
-    "genres": [
-      "Biography",
-      "Drama",
-      "History"
-    ]
-  },
-  {
-    "id": "tt0167260",
+    "imdbId": "tt0167260",
     "title": "The Lord of the Rings: The Return of the King",
-    "year": 2003,
-    "rating": 9.0,
-    "votes": 2171730,
+    "year": "2003",
     "genres": [
       "Adventure",
       "Drama",
       "Fantasy"
-    ]
+    ],
+    "rating": 9,
+    "votes": 2181594,
+    "source": "imdb-movie-index",
+    "searchText": "tt0167260 the lord of the rings the return of the king 2003 adventure drama fantasy"
   },
   {
-    "id": "tt33175825",
+    "imdbId": "tt0108052",
+    "title": "Schindler's List",
+    "year": "1993",
+    "genres": [
+      "Biography",
+      "Drama",
+      "History"
+    ],
+    "rating": 9,
+    "votes": 1595797,
+    "source": "imdb-movie-index",
+    "searchText": "tt0108052 schindler s list 1993 biography drama history"
+  },
+  {
+    "imdbId": "tt0071562",
+    "title": "The Godfather Part II",
+    "year": "1974",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "rating": 9,
+    "votes": 1505398,
+    "source": "imdb-movie-index",
+    "searchText": "tt0071562 the godfather part ii 1974 crime drama"
+  },
+  {
+    "imdbId": "tt0050083",
+    "title": "12 Angry Men",
+    "year": "1957",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "rating": 9,
+    "votes": 996009,
+    "source": "imdb-movie-index",
+    "searchText": "tt0050083 12 angry men 1957 crime drama"
+  },
+  {
+    "imdbId": "tt0120737",
+    "title": "The Lord of the Rings: The Fellowship of the Ring",
+    "year": "2001",
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy"
+    ],
+    "rating": 8.9,
+    "votes": 2224751,
+    "source": "imdb-movie-index",
+    "searchText": "tt0120737 the lord of the rings the fellowship of the ring 2001 adventure drama fantasy"
+  },
+  {
+    "imdbId": "tt28089784",
+    "title": "Punjab '95",
+    "year": "2026",
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.9,
+    "votes": 105700,
+    "source": "imdb-movie-index",
+    "searchText": "tt28089784 punjab 95 2026 biography crime drama"
+  },
+  {
+    "imdbId": "tt11989890",
+    "title": "David Attenborough: A Life on Our Planet",
+    "year": "2020",
+    "genres": [
+      "Biography",
+      "Documentary"
+    ],
+    "rating": 8.9,
+    "votes": 36309,
+    "source": "imdb-movie-index",
+    "searchText": "tt11989890 david attenborough a life on our planet 2020 biography documentary"
+  },
+  {
+    "imdbId": "tt33175825",
     "title": "Attack on Titan: The Last Attack",
-    "year": 2024,
-    "rating": 9.0,
-    "votes": 31518,
+    "year": "2024",
     "genres": [
       "Action",
       "Adventure",
       "Animation"
-    ]
-  },
-  {
-    "id": "tt0120737",
-    "title": "The Lord of the Rings: The Fellowship of the Ring",
-    "year": 2001,
+    ],
     "rating": 8.9,
-    "votes": 2213970,
-    "genres": [
-      "Adventure",
-      "Drama",
-      "Fantasy"
-    ]
+    "votes": 34126,
+    "source": "imdb-movie-index",
+    "searchText": "tt33175825 attack on titan the last attack 2024 action adventure animation"
   },
   {
-    "id": "tt0253828",
+    "imdbId": "tt0253828",
     "title": "Tosun Pasha",
-    "year": 1976,
-    "rating": 8.9,
-    "votes": 26474,
+    "year": "1976",
     "genres": [
       "Comedy",
       "History"
-    ]
-  },
-  {
-    "id": "tt11989890",
-    "title": "David Attenborough: A Life on Our Planet",
-    "year": 2020,
+    ],
     "rating": 8.9,
-    "votes": 36229,
-    "genres": [
-      "Biography",
-      "Documentary"
-    ]
+    "votes": 26580,
+    "source": "imdb-movie-index",
+    "searchText": "tt0253828 tosun pasha 1976 comedy history"
   },
   {
-    "id": "tt5275892",
+    "imdbId": "tt5275892",
     "title": "O.J.: Made in America",
-    "year": 2016,
-    "rating": 8.9,
-    "votes": 23990,
+    "year": "2016",
     "genres": [
       "Biography",
       "Crime",
       "Documentary"
-    ]
-  },
-  {
-    "id": "tt5354160",
-    "title": "Mirror Game",
-    "year": 2016,
+    ],
     "rating": 8.9,
-    "votes": 31057,
-    "genres": [
-      "Crime",
-      "Mystery",
-      "Thriller"
-    ]
+    "votes": 24049,
+    "source": "imdb-movie-index",
+    "searchText": "tt5275892 o j made in america 2016 biography crime documentary"
   },
   {
-    "id": "tt0060196",
-    "title": "The Good, the Bad and the Ugly",
-    "year": 1966,
-    "rating": 8.8,
-    "votes": 892797,
-    "genres": [
-      "Adventure",
-      "Drama",
-      "Western"
-    ]
-  },
-  {
-    "id": "tt0084302",
-    "title": "The Marathon Family",
-    "year": 1982,
-    "rating": 8.8,
-    "votes": 18205,
-    "genres": [
-      "Comedy",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0109830",
-    "title": "Forrest Gump",
-    "year": 1994,
-    "rating": 8.8,
-    "votes": 2505851,
-    "genres": [
-      "Drama",
-      "Romance"
-    ]
-  },
-  {
-    "id": "tt0110912",
-    "title": "Pulp Fiction",
-    "year": 1994,
-    "rating": 8.8,
-    "votes": 2443878,
-    "genres": [
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0137523",
-    "title": "Fight Club",
-    "year": 1999,
-    "rating": 8.8,
-    "votes": 2622581,
-    "genres": [
-      "Crime",
-      "Drama",
-      "Thriller"
-    ]
-  },
-  {
-    "id": "tt0167261",
-    "title": "The Lord of the Rings: The Two Towers",
-    "year": 2002,
-    "rating": 8.8,
-    "votes": 1963746,
-    "genres": [
-      "Adventure",
-      "Drama",
-      "Fantasy"
-    ]
-  },
-  {
-    "id": "tt0253779",
-    "title": "The Foster Brothers",
-    "year": 1976,
-    "rating": 8.8,
-    "votes": 22606,
-    "genres": [
-      "Comedy",
-      "History"
-    ]
-  },
-  {
-    "id": "tt1375666",
+    "imdbId": "tt1375666",
     "title": "Inception",
-    "year": 2010,
-    "rating": 8.8,
-    "votes": 2828931,
+    "year": "2010",
     "genres": [
       "Adventure",
       "Sci-Fi",
       "Thriller"
-    ]
+    ],
+    "rating": 8.8,
+    "votes": 2849004,
+    "source": "imdb-movie-index",
+    "searchText": "tt1375666 inception 2010 adventure sci fi thriller"
   },
   {
-    "id": "tt0076276",
-    "title": "Who's Singin' Over There?",
-    "year": 1980,
-    "rating": 8.7,
-    "votes": 17970,
+    "imdbId": "tt0137523",
+    "title": "Fight Club",
+    "year": "1999",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "rating": 8.8,
+    "votes": 2641918,
+    "source": "imdb-movie-index",
+    "searchText": "tt0137523 fight club 1999 crime drama thriller"
+  },
+  {
+    "imdbId": "tt0109830",
+    "title": "Forrest Gump",
+    "year": "1994",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.8,
+    "votes": 2519668,
+    "source": "imdb-movie-index",
+    "searchText": "tt0109830 forrest gump 1994 drama romance"
+  },
+  {
+    "imdbId": "tt0110912",
+    "title": "Pulp Fiction",
+    "year": "1994",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.8,
+    "votes": 2455079,
+    "source": "imdb-movie-index",
+    "searchText": "tt0110912 pulp fiction 1994 crime drama"
+  },
+  {
+    "imdbId": "tt0167261",
+    "title": "The Lord of the Rings: The Two Towers",
+    "year": "2002",
     "genres": [
       "Adventure",
-      "Comedy",
-      "Drama"
-    ]
+      "Drama",
+      "Fantasy"
+    ],
+    "rating": 8.8,
+    "votes": 1973273,
+    "source": "imdb-movie-index",
+    "searchText": "tt0167261 the lord of the rings the two towers 2002 adventure drama fantasy"
   },
   {
-    "id": "tt0080684",
-    "title": "Star Wars: Episode V - The Empire Strikes Back",
-    "year": 1980,
+    "imdbId": "tt0060196",
+    "title": "The Good, the Bad and the Ugly",
+    "year": "1966",
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Western"
+    ],
+    "rating": 8.8,
+    "votes": 896322,
+    "source": "imdb-movie-index",
+    "searchText": "tt0060196 the good the bad and the ugly 1966 adventure drama western"
+  },
+  {
+    "imdbId": "tt5354160",
+    "title": "Mirror Game",
+    "year": "2016",
+    "genres": [
+      "Crime",
+      "Mystery",
+      "Thriller"
+    ],
+    "rating": 8.8,
+    "votes": 31104,
+    "source": "imdb-movie-index",
+    "searchText": "tt5354160 mirror game 2016 crime mystery thriller"
+  },
+  {
+    "imdbId": "tt0253779",
+    "title": "The Foster Brothers",
+    "year": "1976",
+    "genres": [
+      "Comedy",
+      "History"
+    ],
+    "rating": 8.8,
+    "votes": 22709,
+    "source": "imdb-movie-index",
+    "searchText": "tt0253779 the foster brothers 1976 comedy history"
+  },
+  {
+    "imdbId": "tt0084302",
+    "title": "The Marathon Family",
+    "year": "1982",
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "rating": 8.8,
+    "votes": 18248,
+    "source": "imdb-movie-index",
+    "searchText": "tt0084302 the marathon family 1982 comedy drama"
+  },
+  {
+    "imdbId": "tt0816692",
+    "title": "Interstellar",
+    "year": "2014",
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Sci-Fi"
+    ],
     "rating": 8.7,
-    "votes": 1509865,
+    "votes": 2579890,
+    "source": "imdb-movie-index",
+    "searchText": "tt0816692 interstellar 2014 adventure drama sci fi"
+  },
+  {
+    "imdbId": "tt0133093",
+    "title": "The Matrix",
+    "year": "1999",
+    "genres": [
+      "Action",
+      "Sci-Fi"
+    ],
+    "rating": 8.7,
+    "votes": 2266111,
+    "source": "imdb-movie-index",
+    "searchText": "tt0133093 the matrix 1999 action sci fi"
+  },
+  {
+    "imdbId": "tt0080684",
+    "title": "Star Wars: Episode V - The Empire Strikes Back",
+    "year": "1980",
     "genres": [
       "Adventure",
       "Fantasy",
       "Sci-Fi"
-    ]
-  },
-  {
-    "id": "tt0088178",
-    "title": "Stop Making Sense",
-    "year": 1984,
+    ],
     "rating": 8.7,
-    "votes": 24254,
-    "genres": [
-      "Documentary",
-      "Music"
-    ]
+    "votes": 1516369,
+    "source": "imdb-movie-index",
+    "searchText": "tt0080684 star wars episode v the empire strikes back 1980 adventure fantasy sci fi"
   },
   {
-    "id": "tt0099685",
+    "imdbId": "tt0099685",
     "title": "GoodFellas",
-    "year": 1990,
-    "rating": 8.7,
-    "votes": 1397578,
+    "year": "1990",
     "genres": [
       "Biography",
       "Crime",
       "Drama"
-    ]
+    ],
+    "rating": 8.7,
+    "votes": 1404648,
+    "source": "imdb-movie-index",
+    "searchText": "tt0099685 goodfellas 1990 biography crime drama"
   },
   {
-    "id": "tt0133093",
-    "title": "The Matrix",
-    "year": 1999,
+    "imdbId": "tt23849204",
+    "title": "12th Fail",
+    "year": "2023",
+    "genres": [
+      "Biography",
+      "Drama"
+    ],
     "rating": 8.7,
-    "votes": 2256147,
+    "votes": 175234,
+    "source": "imdb-movie-index",
+    "searchText": "tt23849204 12th fail 2023 biography drama"
+  },
+  {
+    "imdbId": "tt6019206",
+    "title": "Kill Bill: The Whole Bloody Affair",
+    "year": "2004",
     "genres": [
       "Action",
-      "Sci-Fi"
-    ]
+      "Crime",
+      "Thriller"
+    ],
+    "rating": 8.7,
+    "votes": 51797,
+    "source": "imdb-movie-index",
+    "searchText": "tt6019206 kill bill the whole bloody affair 2004 action crime thriller"
   },
   {
-    "id": "tt0252490",
-    "title": "The Chaos Class Is Waking Up",
-    "year": 1976,
+    "imdbId": "tt7466810",
+    "title": "777 Charlie",
+    "year": "2022",
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Drama"
+    ],
     "rating": 8.7,
-    "votes": 22478,
+    "votes": 48142,
+    "source": "imdb-movie-index",
+    "searchText": "tt7466810 777 charlie 2022 adventure comedy drama"
+  },
+  {
+    "imdbId": "tt0088178",
+    "title": "Stop Making Sense",
+    "year": "1984",
+    "genres": [
+      "Documentary",
+      "Music"
+    ],
+    "rating": 8.7,
+    "votes": 24376,
+    "source": "imdb-movie-index",
+    "searchText": "tt0088178 stop making sense 1984 documentary music"
+  },
+  {
+    "imdbId": "tt0252490",
+    "title": "The Chaos Class Is Waking Up",
+    "year": "1976",
     "genres": [
       "Comedy"
-    ]
+    ],
+    "rating": 8.7,
+    "votes": 22551,
+    "source": "imdb-movie-index",
+    "searchText": "tt0252490 the chaos class is waking up 1976 comedy"
   },
   {
-    "id": "tt0253614",
+    "imdbId": "tt0253614",
     "title": "Saban, Son of Saban",
-    "year": 1977,
-    "rating": 8.7,
-    "votes": 20078,
+    "year": "1977",
     "genres": [
       "Comedy",
       "History"
-    ]
-  },
-  {
-    "id": "tt0816692",
-    "title": "Interstellar",
-    "year": 2014,
+    ],
     "rating": 8.7,
-    "votes": 2549522,
-    "genres": [
-      "Adventure",
-      "Drama",
-      "Sci-Fi"
-    ]
+    "votes": 20153,
+    "source": "imdb-movie-index",
+    "searchText": "tt0253614 saban son of saban 1977 comedy history"
   },
   {
-    "id": "tt10534500",
+    "imdbId": "tt10534500",
     "title": "#Home",
-    "year": 2021,
-    "rating": 8.7,
-    "votes": 19850,
+    "year": "2021",
     "genres": [
       "Drama",
       "Family"
-    ]
+    ],
+    "rating": 8.7,
+    "votes": 19965,
+    "source": "imdb-movie-index",
+    "searchText": "tt10534500 home 2021 drama family"
   },
   {
-    "id": "tt14888874",
+    "imdbId": "tt14888874",
     "title": "Demon Slayer: Kimetsu no Yaiba - Mt. Natagumo Arc",
-    "year": 2020,
-    "rating": 8.7,
-    "votes": 18728,
+    "year": "2020",
     "genres": [
       "Action",
       "Animation",
       "Fantasy"
-    ]
+    ],
+    "rating": 8.7,
+    "votes": 18830,
+    "source": "imdb-movie-index",
+    "searchText": "tt14888874 demon slayer kimetsu no yaiba mt natagumo arc 2020 action animation fantasy"
   },
   {
-    "id": "tt23849204",
-    "title": "12th Fail",
-    "year": 2023,
-    "rating": 8.7,
-    "votes": 173463,
+    "imdbId": "tt0076276",
+    "title": "Who's Singin' Over There?",
+    "year": "1980",
     "genres": [
-      "Biography",
+      "Adventure",
+      "Comedy",
       "Drama"
-    ]
+    ],
+    "rating": 8.7,
+    "votes": 18025,
+    "source": "imdb-movie-index",
+    "searchText": "tt0076276 who s singin over there 1980 adventure comedy drama"
   },
   {
-    "id": "tt33428606",
+    "imdbId": "tt33428606",
     "title": "Solo Leveling: ReAwakening",
-    "year": 2024,
-    "rating": 8.7,
-    "votes": 17336,
+    "year": "2024",
     "genres": [
       "Action",
       "Adventure",
       "Animation"
-    ]
+    ],
+    "rating": 8.7,
+    "votes": 17565,
+    "source": "imdb-movie-index",
+    "searchText": "tt33428606 solo leveling reawakening 2024 action adventure animation"
   },
   {
-    "id": "tt6019206",
-    "title": "Kill Bill: The Whole Bloody Affair",
-    "year": 2004,
-    "rating": 8.7,
-    "votes": 45596,
+    "imdbId": "tt0114369",
+    "title": "Seven",
+    "year": "1995",
     "genres": [
-      "Action",
       "Crime",
-      "Thriller"
-    ]
-  },
-  {
-    "id": "tt7466810",
-    "title": "777 Charlie",
-    "year": 2022,
-    "rating": 8.7,
-    "votes": 47904,
-    "genres": [
-      "Adventure",
-      "Comedy",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt7738784",
-    "title": "Resurrection",
-    "year": 2018,
-    "rating": 8.7,
-    "votes": 18843,
-    "genres": [
-      "Drama",
-      "Family"
-    ]
-  },
-  {
-    "id": "tt0038650",
-    "title": "It's a Wonderful Life",
-    "year": 1946,
-    "rating": 8.6,
-    "votes": 555192,
-    "genres": [
-      "Drama",
-      "Family",
-      "Fantasy"
-    ]
-  },
-  {
-    "id": "tt0047478",
-    "title": "Seven Samurai",
-    "year": 1954,
-    "rating": 8.6,
-    "votes": 402828,
-    "genres": [
-      "Action",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0056058",
-    "title": "Harakiri",
-    "year": 1962,
-    "rating": 8.6,
-    "votes": 92079,
-    "genres": [
       "Drama",
       "Mystery"
-    ]
-  },
-  {
-    "id": "tt0073486",
-    "title": "One Flew Over the Cuckoo's Nest",
-    "year": 1975,
+    ],
     "rating": 8.6,
-    "votes": 1159074,
-    "genres": [
-      "Drama"
-    ]
+    "votes": 2044597,
+    "source": "imdb-movie-index",
+    "searchText": "tt0114369 seven 1995 crime drama mystery"
   },
   {
-    "id": "tt0076759",
-    "title": "Star Wars: Episode IV - A New Hope",
-    "year": 1977,
-    "rating": 8.6,
-    "votes": 1575169,
-    "genres": [
-      "Action",
-      "Adventure",
-      "Fantasy"
-    ]
-  },
-  {
-    "id": "tt0093603",
-    "title": "Nayakan",
-    "year": 1987,
-    "rating": 8.6,
-    "votes": 27962,
-    "genres": [
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0102926",
+    "imdbId": "tt0102926",
     "title": "The Silence of the Lambs",
-    "year": 1991,
-    "rating": 8.6,
-    "votes": 1729913,
+    "year": "1991",
     "genres": [
       "Crime",
       "Drama",
       "Horror"
-    ]
+    ],
+    "rating": 8.6,
+    "votes": 1738836,
+    "source": "imdb-movie-index",
+    "searchText": "tt0102926 the silence of the lambs 1991 crime drama horror"
   },
   {
-    "id": "tt0103064",
-    "title": "Terminator 2: Judgment Day",
-    "year": 1991,
+    "imdbId": "tt0120815",
+    "title": "Saving Private Ryan",
+    "year": "1998",
+    "genres": [
+      "Drama",
+      "War"
+    ],
     "rating": 8.6,
-    "votes": 1287811,
+    "votes": 1653523,
+    "source": "imdb-movie-index",
+    "searchText": "tt0120815 saving private ryan 1998 drama war"
+  },
+  {
+    "imdbId": "tt0076759",
+    "title": "Star Wars: Episode IV - A New Hope",
+    "year": "1977",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
+    "rating": 8.6,
+    "votes": 1581510,
+    "source": "imdb-movie-index",
+    "searchText": "tt0076759 star wars episode iv a new hope 1977 action adventure fantasy"
+  },
+  {
+    "imdbId": "tt0120689",
+    "title": "The Green Mile",
+    "year": "1999",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Fantasy"
+    ],
+    "rating": 8.6,
+    "votes": 1575765,
+    "source": "imdb-movie-index",
+    "searchText": "tt0120689 the green mile 1999 crime drama fantasy"
+  },
+  {
+    "imdbId": "tt0103064",
+    "title": "Terminator 2: Judgment Day",
+    "year": "1991",
     "genres": [
       "Action",
       "Adventure",
       "Sci-Fi"
-    ]
+    ],
+    "rating": 8.6,
+    "votes": 1293284,
+    "source": "imdb-movie-index",
+    "searchText": "tt0103064 terminator 2 judgment day 1991 action adventure sci fi"
   },
   {
-    "id": "tt0114369",
-    "title": "Seven",
-    "year": 1995,
+    "imdbId": "tt0073486",
+    "title": "One Flew Over the Cuckoo's Nest",
+    "year": "1975",
+    "genres": [
+      "Drama"
+    ],
     "rating": 8.6,
-    "votes": 2031024,
+    "votes": 1162632,
+    "source": "imdb-movie-index",
+    "searchText": "tt0073486 one flew over the cuckoo s nest 1975 drama"
+  },
+  {
+    "imdbId": "tt0245429",
+    "title": "Spirited Away",
+    "year": "2001",
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Family"
+    ],
+    "rating": 8.6,
+    "votes": 978469,
+    "source": "imdb-movie-index",
+    "searchText": "tt0245429 spirited away 2001 adventure animation family"
+  },
+  {
+    "imdbId": "tt0317248",
+    "title": "City of God",
+    "year": "2002",
     "genres": [
       "Crime",
-      "Drama",
-      "Mystery"
-    ]
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 877688,
+    "source": "imdb-movie-index",
+    "searchText": "tt0317248 city of god 2002 crime drama"
   },
   {
-    "id": "tt0116860",
-    "title": "Pretty Village, Pretty Flame",
-    "year": 1996,
+    "imdbId": "tt0118799",
+    "title": "Life Is Beautiful",
+    "year": "1997",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ],
     "rating": 8.6,
-    "votes": 19040,
+    "votes": 818773,
+    "source": "imdb-movie-index",
+    "searchText": "tt0118799 life is beautiful 1997 comedy drama romance"
+  },
+  {
+    "imdbId": "tt0038650",
+    "title": "It's a Wonderful Life",
+    "year": "1946",
+    "genres": [
+      "Drama",
+      "Family",
+      "Fantasy"
+    ],
+    "rating": 8.6,
+    "votes": 557061,
+    "source": "imdb-movie-index",
+    "searchText": "tt0038650 it s a wonderful life 1946 drama family fantasy"
+  },
+  {
+    "imdbId": "tt0047478",
+    "title": "Seven Samurai",
+    "year": "1954",
+    "genres": [
+      "Action",
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 404158,
+    "source": "imdb-movie-index",
+    "searchText": "tt0047478 seven samurai 1954 action drama"
+  },
+  {
+    "imdbId": "tt15097216",
+    "title": "Jai Bhim",
+    "year": "2021",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 235529,
+    "source": "imdb-movie-index",
+    "searchText": "tt15097216 jai bhim 2021 crime drama"
+  },
+  {
+    "imdbId": "tt10189514",
+    "title": "Soorarai Pottru",
+    "year": "2020",
+    "genres": [
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 132468,
+    "source": "imdb-movie-index",
+    "searchText": "tt10189514 soorarai pottru 2020 drama"
+  },
+  {
+    "imdbId": "tt0056058",
+    "title": "Harakiri",
+    "year": "1962",
+    "genres": [
+      "Drama",
+      "Mystery"
+    ],
+    "rating": 8.6,
+    "votes": 93025,
+    "source": "imdb-movie-index",
+    "searchText": "tt0056058 harakiri 1962 drama mystery"
+  },
+  {
+    "imdbId": "tt24082438",
+    "title": "20 Days in Mariupol",
+    "year": "2023",
+    "genres": [
+      "Documentary",
+      "War"
+    ],
+    "rating": 8.6,
+    "votes": 65347,
+    "source": "imdb-movie-index",
+    "searchText": "tt24082438 20 days in mariupol 2023 documentary war"
+  },
+  {
+    "imdbId": "tt9263550",
+    "title": "Rocketry: The Nambi Effect",
+    "year": "2022",
+    "genres": [
+      "Biography",
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 62420,
+    "source": "imdb-movie-index",
+    "searchText": "tt9263550 rocketry the nambi effect 2022 biography drama"
+  },
+  {
+    "imdbId": "tt0367495",
+    "title": "Anbe Sivam",
+    "year": "2003",
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 28465,
+    "source": "imdb-movie-index",
+    "searchText": "tt0367495 anbe sivam 2003 adventure comedy drama"
+  },
+  {
+    "imdbId": "tt0093603",
+    "title": "Nayakan",
+    "year": "1987",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 28064,
+    "source": "imdb-movie-index",
+    "searchText": "tt0093603 nayakan 1987 crime drama"
+  },
+  {
+    "imdbId": "tt0271383",
+    "title": "A Dog's Will",
+    "year": "2000",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Fantasy"
+    ],
+    "rating": 8.6,
+    "votes": 21908,
+    "source": "imdb-movie-index",
+    "searchText": "tt0271383 a dog s will 2000 comedy drama fantasy"
+  },
+  {
+    "imdbId": "tt8176054",
+    "title": "Pariyerum Perumal",
+    "year": "2018",
+    "genres": [
+      "Drama"
+    ],
+    "rating": 8.6,
+    "votes": 20635,
+    "source": "imdb-movie-index",
+    "searchText": "tt8176054 pariyerum perumal 2018 drama"
+  },
+  {
+    "imdbId": "tt0358456",
+    "title": "Earthlings",
+    "year": "2005",
+    "genres": [
+      "Documentary"
+    ],
+    "rating": 8.6,
+    "votes": 20582,
+    "source": "imdb-movie-index",
+    "searchText": "tt0358456 earthlings 2005 documentary"
+  },
+  {
+    "imdbId": "tt0252489",
+    "title": "The Chaos Class Is on Vacation",
+    "year": "1977",
+    "genres": [
+      "Comedy"
+    ],
+    "rating": 8.6,
+    "votes": 20399,
+    "source": "imdb-movie-index",
+    "searchText": "tt0252489 the chaos class is on vacation 1977 comedy"
+  },
+  {
+    "imdbId": "tt0116860",
+    "title": "Pretty Village, Pretty Flame",
+    "year": "1996",
     "genres": [
       "Drama",
       "History",
       "War"
-    ]
+    ],
+    "rating": 8.6,
+    "votes": 19111,
+    "source": "imdb-movie-index",
+    "searchText": "tt0116860 pretty village pretty flame 1996 drama history war"
   },
   {
-    "id": "tt0118799",
-    "title": "Life Is Beautiful",
-    "year": 1997,
-    "rating": 8.6,
-    "votes": 815425,
-    "genres": [
-      "Comedy",
-      "Drama",
-      "Romance"
-    ]
-  },
-  {
-    "id": "tt0120689",
-    "title": "The Green Mile",
-    "year": 1999,
-    "rating": 8.6,
-    "votes": 1567187,
-    "genres": [
-      "Crime",
-      "Drama",
-      "Fantasy"
-    ]
-  },
-  {
-    "id": "tt0120815",
-    "title": "Saving Private Ryan",
-    "year": 1998,
-    "rating": 8.6,
-    "votes": 1646034,
+    "imdbId": "tt7738784",
+    "title": "Resurrection",
+    "year": "2018",
     "genres": [
       "Drama",
-      "War"
-    ]
-  },
-  {
-    "id": "tt0201368",
-    "title": "The Broken Landlord",
-    "year": 1985,
-    "rating": 8.6,
-    "votes": 17748,
-    "genres": [
-      "Comedy",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0245429",
-    "title": "Spirited Away",
-    "year": 2001,
-    "rating": 8.6,
-    "votes": 972611,
-    "genres": [
-      "Adventure",
-      "Animation",
       "Family"
-    ]
-  },
-  {
-    "id": "tt0252489",
-    "title": "The Chaos Class Is on Vacation",
-    "year": 1977,
+    ],
     "rating": 8.6,
-    "votes": 20334,
-    "genres": [
-      "Comedy"
-    ]
+    "votes": 18871,
+    "source": "imdb-movie-index",
+    "searchText": "tt7738784 resurrection 2018 drama family"
   },
   {
-    "id": "tt0252597",
+    "imdbId": "tt0252597",
     "title": "Feyzo, the Polite One",
-    "year": 1978,
-    "rating": 8.6,
-    "votes": 18707,
+    "year": "1978",
     "genres": [
       "Comedy",
       "Drama"
-    ]
+    ],
+    "rating": 8.6,
+    "votes": 18775,
+    "source": "imdb-movie-index",
+    "searchText": "tt0252597 feyzo the polite one 1978 comedy drama"
   },
   {
-    "id": "tt0271383",
-    "title": "A Dog's Will",
-    "year": 2000,
-    "rating": 8.6,
-    "votes": 21722,
+    "imdbId": "tt0201368",
+    "title": "The Broken Landlord",
+    "year": "1985",
     "genres": [
       "Comedy",
-      "Drama",
-      "Fantasy"
-    ]
-  },
-  {
-    "id": "tt0317248",
-    "title": "City of God",
-    "year": 2002,
-    "rating": 8.6,
-    "votes": 873758,
-    "genres": [
-      "Crime",
       "Drama"
-    ]
-  },
-  {
-    "id": "tt0358456",
-    "title": "Earthlings",
-    "year": 2005,
+    ],
     "rating": 8.6,
-    "votes": 20548,
-    "genres": [
-      "Documentary"
-    ]
+    "votes": 17822,
+    "source": "imdb-movie-index",
+    "searchText": "tt0201368 the broken landlord 1985 comedy drama"
   },
   {
-    "id": "tt0367495",
-    "title": "Anbe Sivam",
-    "year": 2003,
-    "rating": 8.6,
-    "votes": 28370,
-    "genres": [
-      "Adventure",
-      "Comedy",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt10189514",
-    "title": "Soorarai Pottru",
-    "year": 2020,
-    "rating": 8.6,
-    "votes": 132212,
-    "genres": [
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt15097216",
-    "title": "Jai Bhim",
-    "year": 2021,
-    "rating": 8.6,
-    "votes": 234925,
-    "genres": [
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt24082438",
-    "title": "20 Days in Mariupol",
-    "year": 2023,
-    "rating": 8.6,
-    "votes": 61803,
-    "genres": [
-      "Documentary",
-      "War"
-    ]
-  },
-  {
-    "id": "tt8176054",
-    "title": "Pariyerum Perumal",
-    "year": 2018,
-    "rating": 8.6,
-    "votes": 20571,
-    "genres": [
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt9263550",
-    "title": "Rocketry: The Nambi Effect",
-    "year": 2022,
-    "rating": 8.6,
-    "votes": 62273,
-    "genres": [
-      "Biography",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0021749",
-    "title": "City Lights",
-    "year": 1931,
-    "rating": 8.5,
-    "votes": 216911,
-    "genres": [
-      "Comedy",
-      "Drama",
-      "Romance"
-    ]
-  },
-  {
-    "id": "tt0027977",
-    "title": "Modern Times",
-    "year": 1936,
-    "rating": 8.5,
-    "votes": 285896,
-    "genres": [
-      "Comedy",
-      "Drama",
-      "Romance"
-    ]
-  },
-  {
-    "id": "tt0034583",
-    "title": "Casablanca",
-    "year": 1942,
-    "rating": 8.5,
-    "votes": 656378,
-    "genres": [
-      "Drama",
-      "Romance",
-      "War"
-    ]
-  },
-  {
-    "id": "tt0054215",
-    "title": "Psycho",
-    "year": 1960,
-    "rating": 8.5,
-    "votes": 787847,
-    "genres": [
-      "Drama",
-      "Horror",
-      "Mystery"
-    ]
-  },
-  {
-    "id": "tt0054407",
-    "title": "Le Trou",
-    "year": 1960,
-    "rating": 8.5,
-    "votes": 23745,
-    "genres": [
-      "Crime",
-      "Drama",
-      "Thriller"
-    ]
-  },
-  {
-    "id": "tt0064116",
-    "title": "Once Upon a Time in the West",
-    "year": 1968,
-    "rating": 8.5,
-    "votes": 385118,
+    "imdbId": "tt1853728",
+    "title": "Django Unchained",
+    "year": "2012",
     "genres": [
       "Drama",
       "Western"
-    ]
-  },
-  {
-    "id": "tt0073000",
-    "title": "The Pinchcliffe Grand Prix",
-    "year": 1975,
+    ],
     "rating": 8.5,
-    "votes": 15409,
-    "genres": [
-      "Animation",
-      "Comedy",
-      "Family"
-    ]
+    "votes": 1902126,
+    "source": "imdb-movie-index",
+    "searchText": "tt1853728 django unchained 2012 drama western"
   },
   {
-    "id": "tt0079221",
-    "title": "Gol Maal",
-    "year": 1979,
-    "rating": 8.5,
-    "votes": 22135,
-    "genres": [
-      "Comedy",
-      "Romance"
-    ]
-  },
-  {
-    "id": "tt0088763",
-    "title": "Back to the Future",
-    "year": 1985,
-    "rating": 8.5,
-    "votes": 1458978,
-    "genres": [
-      "Adventure",
-      "Comedy",
-      "Sci-Fi"
-    ]
-  },
-  {
-    "id": "tt0095327",
-    "title": "Grave of the Fireflies",
-    "year": 1988,
-    "rating": 8.5,
-    "votes": 388748,
-    "genres": [
-      "Animation",
-      "Drama",
-      "War"
-    ]
-  },
-  {
-    "id": "tt0095765",
-    "title": "Cinema Paradiso",
-    "year": 1988,
-    "rating": 8.5,
-    "votes": 317665,
-    "genres": [
-      "Drama",
-      "Romance"
-    ]
-  },
-  {
-    "id": "tt0101649",
-    "title": "Thalapathi",
-    "year": 1991,
-    "rating": 8.5,
-    "votes": 16037,
-    "genres": [
-      "Action",
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0103767",
-    "title": "Baraka",
-    "year": 1992,
-    "rating": 8.5,
-    "votes": 43236,
-    "genres": [
-      "Documentary"
-    ]
-  },
-  {
-    "id": "tt0110357",
-    "title": "The Lion King",
-    "year": 1994,
-    "rating": 8.5,
-    "votes": 1264121,
-    "genres": [
-      "Adventure",
-      "Animation",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0110413",
-    "title": "Léon: The Professional",
-    "year": 1994,
-    "rating": 8.5,
-    "votes": 1354983,
-    "genres": [
-      "Action",
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0114814",
-    "title": "The Usual Suspects",
-    "year": 1995,
-    "rating": 8.5,
-    "votes": 1242218,
-    "genres": [
-      "Crime",
-      "Drama",
-      "Mystery"
-    ]
-  },
-  {
-    "id": "tt0120586",
-    "title": "American History X",
-    "year": 1998,
-    "rating": 8.5,
-    "votes": 1276748,
-    "genres": [
-      "Crime",
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt0172495",
+    "imdbId": "tt0172495",
     "title": "Gladiator",
-    "year": 2000,
-    "rating": 8.5,
-    "votes": 1857332,
+    "year": "2000",
     "genres": [
       "Action",
       "Adventure",
       "Drama"
-    ]
-  },
-  {
-    "id": "tt0253474",
-    "title": "The Pianist",
-    "year": 2002,
+    ],
     "rating": 8.5,
-    "votes": 1015196,
-    "genres": [
-      "Biography",
-      "Drama",
-      "Music"
-    ]
+    "votes": 1869392,
+    "source": "imdb-movie-index",
+    "searchText": "tt0172495 gladiator 2000 action adventure drama"
   },
   {
-    "id": "tt0253997",
-    "title": "The King of the Street Cleaners",
-    "year": 1977,
-    "rating": 8.5,
-    "votes": 23071,
-    "genres": [
-      "Comedy"
-    ]
-  },
-  {
-    "id": "tt0407887",
-    "title": "The Departed",
-    "year": 2006,
-    "rating": 8.5,
-    "votes": 1560407,
-    "genres": [
-      "Crime",
-      "Drama",
-      "Thriller"
-    ]
-  },
-  {
-    "id": "tt0482571",
+    "imdbId": "tt0482571",
     "title": "The Prestige",
-    "year": 2006,
-    "rating": 8.5,
-    "votes": 1596076,
+    "year": "2006",
     "genres": [
       "Drama",
       "Mystery",
       "Sci-Fi"
-    ]
+    ],
+    "rating": 8.5,
+    "votes": 1611285,
+    "source": "imdb-movie-index",
+    "searchText": "tt0482571 the prestige 2006 drama mystery sci fi"
   },
   {
-    "id": "tt1014762",
-    "title": "Home",
-    "year": 2009,
-    "rating": 8.5,
-    "votes": 23300,
+    "imdbId": "tt0407887",
+    "title": "The Departed",
+    "year": "2006",
     "genres": [
-      "Documentary",
-      "Family"
-    ]
-  },
-  {
-    "id": "tt10811166",
-    "title": "The Kashmir Files",
-    "year": 2022,
-    "rating": 8.5,
-    "votes": 579218,
-    "genres": [
-      "Drama"
-    ]
-  },
-  {
-    "id": "tt1152758",
-    "title": "Dear Zachary: A Letter to a Son About His Father",
-    "year": 2008,
-    "rating": 8.5,
-    "votes": 45897,
-    "genres": [
-      "Biography",
       "Crime",
-      "Documentary"
-    ]
+      "Drama",
+      "Thriller"
+    ],
+    "rating": 8.5,
+    "votes": 1568786,
+    "source": "imdb-movie-index",
+    "searchText": "tt0407887 the departed 2006 crime drama thriller"
   },
   {
-    "id": "tt11580854",
-    "title": "Sarpatta Parambarai",
-    "year": 2021,
+    "imdbId": "tt0088763",
+    "title": "Back to the Future",
+    "year": "1985",
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Sci-Fi"
+    ],
     "rating": 8.5,
-    "votes": 28742,
+    "votes": 1466696,
+    "source": "imdb-movie-index",
+    "searchText": "tt0088763 back to the future 1985 adventure comedy sci fi"
+  },
+  {
+    "imdbId": "tt0110413",
+    "title": "Léon: The Professional",
+    "year": "1994",
     "genres": [
       "Action",
-      "Drama",
-      "Sport"
-    ]
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.5,
+    "votes": 1359748,
+    "source": "imdb-movie-index",
+    "searchText": "tt0110413 l on the professional 1994 action crime drama"
   },
   {
-    "id": "tt1675434",
-    "title": "The Intouchables",
-    "year": 2011,
+    "imdbId": "tt0120586",
+    "title": "American History X",
+    "year": "1998",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
     "rating": 8.5,
-    "votes": 1031532,
+    "votes": 1281152,
+    "source": "imdb-movie-index",
+    "searchText": "tt0120586 american history x 1998 crime drama"
+  },
+  {
+    "imdbId": "tt0110357",
+    "title": "The Lion King",
+    "year": "1994",
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Drama"
+    ],
+    "rating": 8.5,
+    "votes": 1270636,
+    "source": "imdb-movie-index",
+    "searchText": "tt0110357 the lion king 1994 adventure animation drama"
+  },
+  {
+    "imdbId": "tt0114814",
+    "title": "The Usual Suspects",
+    "year": "1995",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "rating": 8.5,
+    "votes": 1247330,
+    "source": "imdb-movie-index",
+    "searchText": "tt0114814 the usual suspects 1995 crime drama mystery"
+  },
+  {
+    "imdbId": "tt6751668",
+    "title": "Parasite",
+    "year": "2019",
+    "genres": [
+      "Drama",
+      "Thriller"
+    ],
+    "rating": 8.5,
+    "votes": 1183861,
+    "source": "imdb-movie-index",
+    "searchText": "tt6751668 parasite 2019 drama thriller"
+  },
+  {
+    "imdbId": "tt2582802",
+    "title": "Whiplash",
+    "year": "2014",
+    "genres": [
+      "Drama",
+      "Music"
+    ],
+    "rating": 8.5,
+    "votes": 1171562,
+    "source": "imdb-movie-index",
+    "searchText": "tt2582802 whiplash 2014 drama music"
+  },
+  {
+    "imdbId": "tt1675434",
+    "title": "The Intouchables",
+    "year": "2011",
     "genres": [
       "Comedy",
       "Drama"
-    ]
+    ],
+    "rating": 8.5,
+    "votes": 1036512,
+    "source": "imdb-movie-index",
+    "searchText": "tt1675434 the intouchables 2011 comedy drama"
   },
   {
-    "id": "tt1853728",
-    "title": "Django Unchained",
-    "year": 2012,
+    "imdbId": "tt0253474",
+    "title": "The Pianist",
+    "year": "2002",
+    "genres": [
+      "Biography",
+      "Drama",
+      "Music"
+    ],
     "rating": 8.5,
-    "votes": 1891514,
+    "votes": 1019703,
+    "source": "imdb-movie-index",
+    "searchText": "tt0253474 the pianist 2002 biography drama music"
+  },
+  {
+    "imdbId": "tt0054215",
+    "title": "Psycho",
+    "year": "1960",
+    "genres": [
+      "Drama",
+      "Horror",
+      "Mystery"
+    ],
+    "rating": 8.5,
+    "votes": 790832,
+    "source": "imdb-movie-index",
+    "searchText": "tt0054215 psycho 1960 drama horror mystery"
+  },
+  {
+    "imdbId": "tt0034583",
+    "title": "Casablanca",
+    "year": "1942",
+    "genres": [
+      "Drama",
+      "Romance",
+      "War"
+    ],
+    "rating": 8.5,
+    "votes": 658480,
+    "source": "imdb-movie-index",
+    "searchText": "tt0034583 casablanca 1942 drama romance war"
+  },
+  {
+    "imdbId": "tt10811166",
+    "title": "The Kashmir Files",
+    "year": "2022",
+    "genres": [
+      "Drama"
+    ],
+    "rating": 8.5,
+    "votes": 579496,
+    "source": "imdb-movie-index",
+    "searchText": "tt10811166 the kashmir files 2022 drama"
+  },
+  {
+    "imdbId": "tt9362722",
+    "title": "Spider-Man: Across the Spider-Verse",
+    "year": "2023",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ],
+    "rating": 8.5,
+    "votes": 541269,
+    "source": "imdb-movie-index",
+    "searchText": "tt9362722 spider man across the spider verse 2023 action adventure animation"
+  },
+  {
+    "imdbId": "tt0095327",
+    "title": "Grave of the Fireflies",
+    "year": "1988",
+    "genres": [
+      "Animation",
+      "Drama",
+      "War"
+    ],
+    "rating": 8.5,
+    "votes": 392279,
+    "source": "imdb-movie-index",
+    "searchText": "tt0095327 grave of the fireflies 1988 animation drama war"
+  },
+  {
+    "imdbId": "tt0064116",
+    "title": "Once Upon a Time in the West",
+    "year": "1968",
     "genres": [
       "Drama",
       "Western"
-    ]
+    ],
+    "rating": 8.5,
+    "votes": 386335,
+    "source": "imdb-movie-index",
+    "searchText": "tt0064116 once upon a time in the west 1968 drama western"
   },
   {
-    "id": "tt20850406",
-    "title": "Sita Ramam",
-    "year": 2022,
+    "imdbId": "tt33764258",
+    "title": "The Odyssey",
+    "year": "2026",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
     "rating": 8.5,
-    "votes": 84385,
+    "votes": 346683,
+    "source": "imdb-movie-index",
+    "searchText": "tt33764258 the odyssey 2026 action adventure fantasy"
+  },
+  {
+    "imdbId": "tt0095765",
+    "title": "Cinema Paradiso",
+    "year": "1988",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.5,
+    "votes": 319058,
+    "source": "imdb-movie-index",
+    "searchText": "tt0095765 cinema paradiso 1988 drama romance"
+  },
+  {
+    "imdbId": "tt0027977",
+    "title": "Modern Times",
+    "year": "1936",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.5,
+    "votes": 286814,
+    "source": "imdb-movie-index",
+    "searchText": "tt0027977 modern times 1936 comedy drama romance"
+  },
+  {
+    "imdbId": "tt0021749",
+    "title": "City Lights",
+    "year": "1931",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.5,
+    "votes": 217544,
+    "source": "imdb-movie-index",
+    "searchText": "tt0021749 city lights 1931 comedy drama romance"
+  },
+  {
+    "imdbId": "tt20850406",
+    "title": "Sita Ramam",
+    "year": "2022",
     "genres": [
       "Action",
       "Drama",
       "Musical"
-    ]
-  },
-  {
-    "id": "tt2582802",
-    "title": "Whiplash",
-    "year": 2014,
+    ],
     "rating": 8.5,
-    "votes": 1162631,
-    "genres": [
-      "Drama",
-      "Music"
-    ]
+    "votes": 84916,
+    "source": "imdb-movie-index",
+    "searchText": "tt20850406 sita ramam 2022 action drama musical"
   },
   {
-    "id": "tt26758372",
-    "title": "Meiyazhagan",
-    "year": 2024,
-    "rating": 8.5,
-    "votes": 23087,
-    "genres": [
-      "Drama",
-      "Family"
-    ]
-  },
-  {
-    "id": "tt34365591",
+    "imdbId": "tt34365591",
     "title": "Mahavatar Narsimha",
-    "year": 2024,
-    "rating": 8.5,
-    "votes": 47816,
+    "year": "2024",
     "genres": [
       "Action",
       "Animation",
       "Drama"
-    ]
+    ],
+    "rating": 8.5,
+    "votes": 48336,
+    "source": "imdb-movie-index",
+    "searchText": "tt34365591 mahavatar narsimha 2024 action animation drama"
   },
   {
-    "id": "tt6751668",
-    "title": "Parasite",
-    "year": 2019,
-    "rating": 8.5,
-    "votes": 1173286,
+    "imdbId": "tt1152758",
+    "title": "Dear Zachary: A Letter to a Son About His Father",
+    "year": "2008",
     "genres": [
-      "Drama",
-      "Thriller"
-    ]
+      "Biography",
+      "Crime",
+      "Documentary"
+    ],
+    "rating": 8.5,
+    "votes": 46203,
+    "source": "imdb-movie-index",
+    "searchText": "tt1152758 dear zachary a letter to a son about his father 2008 biography crime documentary"
   },
   {
-    "id": "tt7019842",
+    "imdbId": "tt7019842",
     "title": "96",
-    "year": 2018,
-    "rating": 8.5,
-    "votes": 45715,
+    "year": "2018",
     "genres": [
       "Drama",
       "Romance"
-    ]
+    ],
+    "rating": 8.5,
+    "votes": 46022,
+    "source": "imdb-movie-index",
+    "searchText": "tt7019842 96 2018 drama romance"
   },
   {
-    "id": "tt8413338",
-    "title": "Kumbalangi Nights",
-    "year": 2019,
+    "imdbId": "tt0103767",
+    "title": "Baraka",
+    "year": "1992",
+    "genres": [
+      "Documentary"
+    ],
     "rating": 8.5,
-    "votes": 21853,
+    "votes": 43350,
+    "source": "imdb-movie-index",
+    "searchText": "tt0103767 baraka 1992 documentary"
+  },
+  {
+    "imdbId": "tt8948790",
+    "title": "Jersey",
+    "year": "2019",
+    "genres": [
+      "Drama",
+      "Sport"
+    ],
+    "rating": 8.5,
+    "votes": 30106,
+    "source": "imdb-movie-index",
+    "searchText": "tt8948790 jersey 2019 drama sport"
+  },
+  {
+    "imdbId": "tt0054407",
+    "title": "Le Trou",
+    "year": "1960",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "rating": 8.5,
+    "votes": 23949,
+    "source": "imdb-movie-index",
+    "searchText": "tt0054407 le trou 1960 crime drama thriller"
+  },
+  {
+    "imdbId": "tt26758372",
+    "title": "Meiyazhagan",
+    "year": "2024",
+    "genres": [
+      "Drama",
+      "Family"
+    ],
+    "rating": 8.5,
+    "votes": 23486,
+    "source": "imdb-movie-index",
+    "searchText": "tt26758372 meiyazhagan 2024 drama family"
+  },
+  {
+    "imdbId": "tt1014762",
+    "title": "Home",
+    "year": "2009",
+    "genres": [
+      "Documentary",
+      "Family"
+    ],
+    "rating": 8.5,
+    "votes": 23323,
+    "source": "imdb-movie-index",
+    "searchText": "tt1014762 home 2009 documentary family"
+  },
+  {
+    "imdbId": "tt0253997",
+    "title": "The King of the Street Cleaners",
+    "year": "1977",
+    "genres": [
+      "Comedy"
+    ],
+    "rating": 8.5,
+    "votes": 23152,
+    "source": "imdb-movie-index",
+    "searchText": "tt0253997 the king of the street cleaners 1977 comedy"
+  },
+  {
+    "imdbId": "tt0079221",
+    "title": "Gol Maal",
+    "year": "1979",
+    "genres": [
+      "Comedy",
+      "Romance"
+    ],
+    "rating": 8.5,
+    "votes": 22212,
+    "source": "imdb-movie-index",
+    "searchText": "tt0079221 gol maal 1979 comedy romance"
+  },
+  {
+    "imdbId": "tt8413338",
+    "title": "Kumbalangi Nights",
+    "year": "2019",
     "genres": [
       "Comedy",
       "Drama",
       "Romance"
-    ]
+    ],
+    "rating": 8.5,
+    "votes": 21983,
+    "source": "imdb-movie-index",
+    "searchText": "tt8413338 kumbalangi nights 2019 comedy drama romance"
   },
   {
-    "id": "tt8948790",
-    "title": "Jersey",
-    "year": 2019,
+    "imdbId": "tt0101649",
+    "title": "Thalapathi",
+    "year": "1991",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
     "rating": 8.5,
-    "votes": 28605,
+    "votes": 16105,
+    "source": "imdb-movie-index",
+    "searchText": "tt0101649 thalapathi 1991 action crime drama"
+  },
+  {
+    "imdbId": "tt0073000",
+    "title": "The Pinchcliffe Grand Prix",
+    "year": "1975",
+    "genres": [
+      "Animation",
+      "Comedy",
+      "Family"
+    ],
+    "rating": 8.5,
+    "votes": 15461,
+    "source": "imdb-movie-index",
+    "searchText": "tt0073000 the pinchcliffe grand prix 1975 animation comedy family"
+  },
+  {
+    "imdbId": "tt1345836",
+    "title": "The Dark Knight Rises",
+    "year": "2012",
+    "genres": [
+      "Crime",
+      "Thriller"
+    ],
+    "rating": 8.4,
+    "votes": 2015283,
+    "source": "imdb-movie-index",
+    "searchText": "tt1345836 the dark knight rises 2012 crime thriller"
+  },
+  {
+    "imdbId": "tt0361748",
+    "title": "Inglourious Basterds",
+    "year": "2009",
     "genres": [
       "Drama",
+      "War"
+    ],
+    "rating": 8.4,
+    "votes": 1806250,
+    "source": "imdb-movie-index",
+    "searchText": "tt0361748 inglourious basterds 2009 drama war"
+  },
+  {
+    "imdbId": "tt4154796",
+    "title": "Avengers: Endgame",
+    "year": "2019",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "rating": 8.4,
+    "votes": 1469268,
+    "source": "imdb-movie-index",
+    "searchText": "tt4154796 avengers endgame 2019 action adventure sci fi"
+  },
+  {
+    "imdbId": "tt0209144",
+    "title": "Memento",
+    "year": "2000",
+    "genres": [
+      "Mystery",
+      "Thriller"
+    ],
+    "rating": 8.4,
+    "votes": 1450110,
+    "source": "imdb-movie-index",
+    "searchText": "tt0209144 memento 2000 mystery thriller"
+  },
+  {
+    "imdbId": "tt4154756",
+    "title": "Avengers: Infinity War",
+    "year": "2018",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "rating": 8.4,
+    "votes": 1393765,
+    "source": "imdb-movie-index",
+    "searchText": "tt4154756 avengers infinity war 2018 action adventure sci fi"
+  },
+  {
+    "imdbId": "tt0910970",
+    "title": "WALL·E",
+    "year": "2008",
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Family"
+    ],
+    "rating": 8.4,
+    "votes": 1334092,
+    "source": "imdb-movie-index",
+    "searchText": "tt0910970 wall e 2008 adventure animation family"
+  },
+  {
+    "imdbId": "tt0081505",
+    "title": "The Shining",
+    "year": "1980",
+    "genres": [
+      "Drama",
+      "Horror"
+    ],
+    "rating": 8.4,
+    "votes": 1236755,
+    "source": "imdb-movie-index",
+    "searchText": "tt0081505 the shining 1980 drama horror"
+  },
+  {
+    "imdbId": "tt0119217",
+    "title": "Good Will Hunting",
+    "year": "1997",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.4,
+    "votes": 1232696,
+    "source": "imdb-movie-index",
+    "searchText": "tt0119217 good will hunting 1997 drama romance"
+  },
+  {
+    "imdbId": "tt0082971",
+    "title": "Raiders of the Lost Ark",
+    "year": "1981",
+    "genres": [
+      "Adventure"
+    ],
+    "rating": 8.4,
+    "votes": 1116656,
+    "source": "imdb-movie-index",
+    "searchText": "tt0082971 raiders of the lost ark 1981 adventure"
+  },
+  {
+    "imdbId": "tt0078748",
+    "title": "Alien",
+    "year": "1979",
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ],
+    "rating": 8.4,
+    "votes": 1071653,
+    "source": "imdb-movie-index",
+    "searchText": "tt0078748 alien 1979 horror sci fi"
+  },
+  {
+    "imdbId": "tt0090605",
+    "title": "Aliens",
+    "year": "1986",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Horror"
+    ],
+    "rating": 8.4,
+    "votes": 844770,
+    "source": "imdb-movie-index",
+    "searchText": "tt0090605 aliens 1986 action adventure horror"
+  },
+  {
+    "imdbId": "tt4633694",
+    "title": "Spider-Man: Into the Spider-Verse",
+    "year": "2018",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ],
+    "rating": 8.4,
+    "votes": 804699,
+    "source": "imdb-movie-index",
+    "searchText": "tt4633694 spider man into the spider verse 2018 action adventure animation"
+  },
+  {
+    "imdbId": "tt15239678",
+    "title": "Dune: Part Two",
+    "year": "2024",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 781487,
+    "source": "imdb-movie-index",
+    "searchText": "tt15239678 dune part two 2024 action adventure drama"
+  },
+  {
+    "imdbId": "tt0078788",
+    "title": "Apocalypse Now",
+    "year": "1979",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "War"
+    ],
+    "rating": 8.4,
+    "votes": 774959,
+    "source": "imdb-movie-index",
+    "searchText": "tt0078788 apocalypse now 1979 drama mystery war"
+  },
+  {
+    "imdbId": "tt2380307",
+    "title": "Coco",
+    "year": "2017",
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 719938,
+    "source": "imdb-movie-index",
+    "searchText": "tt2380307 coco 2017 adventure animation drama"
+  },
+  {
+    "imdbId": "tt0047396",
+    "title": "Rear Window",
+    "year": "1954",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ],
+    "rating": 8.4,
+    "votes": 571653,
+    "source": "imdb-movie-index",
+    "searchText": "tt0047396 rear window 1954 drama mystery thriller"
+  },
+  {
+    "imdbId": "tt1187043",
+    "title": "3 Idiots",
+    "year": "2009",
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 486964,
+    "source": "imdb-movie-index",
+    "searchText": "tt1187043 3 idiots 2009 comedy drama"
+  },
+  {
+    "imdbId": "tt0086879",
+    "title": "Amadeus",
+    "year": "1984",
+    "genres": [
+      "Biography",
+      "Drama",
+      "Music"
+    ],
+    "rating": 8.4,
+    "votes": 471286,
+    "source": "imdb-movie-index",
+    "searchText": "tt0086879 amadeus 1984 biography drama music"
+  },
+  {
+    "imdbId": "tt0405094",
+    "title": "The Lives of Others",
+    "year": "2006",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ],
+    "rating": 8.4,
+    "votes": 445567,
+    "source": "imdb-movie-index",
+    "searchText": "tt0405094 the lives of others 2006 drama mystery thriller"
+  },
+  {
+    "imdbId": "tt5311514",
+    "title": "Your Name.",
+    "year": "2016",
+    "genres": [
+      "Animation",
+      "Drama",
+      "Fantasy"
+    ],
+    "rating": 8.4,
+    "votes": 400208,
+    "source": "imdb-movie-index",
+    "searchText": "tt5311514 your name 2016 animation drama fantasy"
+  },
+  {
+    "imdbId": "tt0043014",
+    "title": "Sunset Boulevard",
+    "year": "1950",
+    "genres": [
+      "Drama",
+      "Film-Noir"
+    ],
+    "rating": 8.4,
+    "votes": 262822,
+    "source": "imdb-movie-index",
+    "searchText": "tt0043014 sunset boulevard 1950 drama film noir"
+  },
+  {
+    "imdbId": "tt0032553",
+    "title": "The Great Dictator",
+    "year": "1940",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "War"
+    ],
+    "rating": 8.4,
+    "votes": 259509,
+    "source": "imdb-movie-index",
+    "searchText": "tt0032553 the great dictator 1940 comedy drama war"
+  },
+  {
+    "imdbId": "tt0050825",
+    "title": "Paths of Glory",
+    "year": "1957",
+    "genres": [
+      "Drama",
+      "War"
+    ],
+    "rating": 8.4,
+    "votes": 241536,
+    "source": "imdb-movie-index",
+    "searchText": "tt0050825 paths of glory 1957 drama war"
+  },
+  {
+    "imdbId": "tt0051201",
+    "title": "Witness for the Prosecution",
+    "year": "1957",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "rating": 8.4,
+    "votes": 163456,
+    "source": "imdb-movie-index",
+    "searchText": "tt0051201 witness for the prosecution 1957 crime drama mystery"
+  },
+  {
+    "imdbId": "tt8267604",
+    "title": "Capernaum",
+    "year": "2018",
+    "genres": [
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 125915,
+    "source": "imdb-movie-index",
+    "searchText": "tt8267604 capernaum 2018 drama"
+  },
+  {
+    "imdbId": "tt1424432",
+    "title": "Senna",
+    "year": "2010",
+    "genres": [
+      "Biography",
+      "Documentary",
       "Sport"
-    ]
+    ],
+    "rating": 8.4,
+    "votes": 84040,
+    "source": "imdb-movie-index",
+    "searchText": "tt1424432 senna 2010 biography documentary sport"
+  },
+  {
+    "imdbId": "tt32820897",
+    "title": "Demon Slayer: Kimetsu No Yaiba Infinity Castle",
+    "year": "2025",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Animation"
+    ],
+    "rating": 8.4,
+    "votes": 78959,
+    "source": "imdb-movie-index",
+    "searchText": "tt32820897 demon slayer kimetsu no yaiba infinity castle 2025 action adventure animation"
+  },
+  {
+    "imdbId": "tt0057565",
+    "title": "High and Low",
+    "year": "1963",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "rating": 8.4,
+    "votes": 72857,
+    "source": "imdb-movie-index",
+    "searchText": "tt0057565 high and low 1963 crime drama mystery"
+  },
+  {
+    "imdbId": "tt31514146",
+    "title": "I Swear",
+    "year": "2025",
+    "genres": [
+      "Biography",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 56070,
+    "source": "imdb-movie-index",
+    "searchText": "tt31514146 i swear 2025 biography drama"
+  },
+  {
+    "imdbId": "tt1313104",
+    "title": "The Cove",
+    "year": "2009",
+    "genres": [
+      "Biography",
+      "Crime",
+      "Documentary"
+    ],
+    "rating": 8.4,
+    "votes": 52760,
+    "source": "imdb-movie-index",
+    "searchText": "tt1313104 the cove 2009 biography crime documentary"
+  },
+  {
+    "imdbId": "tt9900782",
+    "title": "Kaithi",
+    "year": "2019",
+    "genres": [
+      "Action",
+      "Crime",
+      "Thriller"
+    ],
+    "rating": 8.4,
+    "votes": 52282,
+    "source": "imdb-movie-index",
+    "searchText": "tt9900782 kaithi 2019 action crime thriller"
+  },
+  {
+    "imdbId": "tt3417422",
+    "title": "Drishyam",
+    "year": "2013",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "rating": 8.4,
+    "votes": 49415,
+    "source": "imdb-movie-index",
+    "searchText": "tt3417422 drishyam 2013 crime drama mystery"
+  },
+  {
+    "imdbId": "tt12361178",
+    "title": "Drishyam 2",
+    "year": "2021",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "rating": 8.4,
+    "votes": 45634,
+    "source": "imdb-movie-index",
+    "searchText": "tt12361178 drishyam 2 2021 crime drama mystery"
+  },
+  {
+    "imdbId": "tt0770802",
+    "title": "Samsara",
+    "year": "2011",
+    "genres": [
+      "Documentary",
+      "Music"
+    ],
+    "rating": 8.4,
+    "votes": 40120,
+    "source": "imdb-movie-index",
+    "searchText": "tt0770802 samsara 2011 documentary music"
+  },
+  {
+    "imdbId": "tt9477520",
+    "title": "Asuran",
+    "year": "2019",
+    "genres": [
+      "Action",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 37570,
+    "source": "imdb-movie-index",
+    "searchText": "tt9477520 asuran 2019 action drama"
+  },
+  {
+    "imdbId": "tt16492678",
+    "title": "Demon Slayer: Kimetsu no Yaiba - Tsuzumi Mansion Arc",
+    "year": "2021",
+    "genres": [
+      "Action",
+      "Animation",
+      "Fantasy"
+    ],
+    "rating": 8.4,
+    "votes": 36624,
+    "source": "imdb-movie-index",
+    "searchText": "tt16492678 demon slayer kimetsu no yaiba tsuzumi mansion arc 2021 action animation fantasy"
+  },
+  {
+    "imdbId": "tt0252488",
+    "title": "The Chaos Class Failed the Class",
+    "year": "1975",
+    "genres": [
+      "Comedy"
+    ],
+    "rating": 8.4,
+    "votes": 31156,
+    "source": "imdb-movie-index",
+    "searchText": "tt0252488 the chaos class failed the class 1975 comedy"
+  },
+  {
+    "imdbId": "tt11580854",
+    "title": "Sarpatta Parambarai",
+    "year": "2021",
+    "genres": [
+      "Action",
+      "Drama",
+      "Sport"
+    ],
+    "rating": 8.4,
+    "votes": 28860,
+    "source": "imdb-movie-index",
+    "searchText": "tt11580854 sarpatta parambarai 2021 action drama sport"
+  },
+  {
+    "imdbId": "tt0346336",
+    "title": "The Best of Youth",
+    "year": "2003",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.4,
+    "votes": 28539,
+    "source": "imdb-movie-index",
+    "searchText": "tt0346336 the best of youth 2003 drama romance"
+  },
+  {
+    "imdbId": "tt0376127",
+    "title": "Anniyan",
+    "year": "2005",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 26717,
+    "source": "imdb-movie-index",
+    "searchText": "tt0376127 anniyan 2005 action crime drama"
+  },
+  {
+    "imdbId": "tt0400234",
+    "title": "Black Friday",
+    "year": "2004",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 26344,
+    "source": "imdb-movie-index",
+    "searchText": "tt0400234 black friday 2004 action crime drama"
+  },
+  {
+    "imdbId": "tt0058625",
+    "title": "Woman in the Dunes",
+    "year": "1964",
+    "genres": [
+      "Drama",
+      "Thriller"
+    ],
+    "rating": 8.4,
+    "votes": 25790,
+    "source": "imdb-movie-index",
+    "searchText": "tt0058625 woman in the dunes 1964 drama thriller"
+  },
+  {
+    "imdbId": "tt3674140",
+    "title": "The Salt of the Earth",
+    "year": "2014",
+    "genres": [
+      "Biography",
+      "Documentary",
+      "History"
+    ],
+    "rating": 8.4,
+    "votes": 25456,
+    "source": "imdb-movie-index",
+    "searchText": "tt3674140 the salt of the earth 2014 biography documentary history"
+  },
+  {
+    "imdbId": "tt5959980",
+    "title": "Vada Chennai",
+    "year": "2018",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 24669,
+    "source": "imdb-movie-index",
+    "searchText": "tt5959980 vada chennai 2018 action crime drama"
+  },
+  {
+    "imdbId": "tt0416960",
+    "title": "The Lizard",
+    "year": "2004",
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 24625,
+    "source": "imdb-movie-index",
+    "searchText": "tt0416960 the lizard 2004 comedy drama"
+  },
+  {
+    "imdbId": "tt4987556",
+    "title": "Thani Oruvan",
+    "year": "2015",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 24316,
+    "source": "imdb-movie-index",
+    "searchText": "tt4987556 thani oruvan 2015 action crime drama"
+  },
+  {
+    "imdbId": "tt0052572",
+    "title": "The World of Apu",
+    "year": "1959",
+    "genres": [
+      "Drama"
+    ],
+    "rating": 8.4,
+    "votes": 20475,
+    "source": "imdb-movie-index",
+    "searchText": "tt0052572 the world of apu 1959 drama"
+  },
+  {
+    "imdbId": "tt0263975",
+    "title": "The Girl with the Red Scarf",
+    "year": "1977",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "rating": 8.4,
+    "votes": 18324,
+    "source": "imdb-movie-index",
+    "searchText": "tt0263975 the girl with the red scarf 1977 drama romance"
   }
 ]

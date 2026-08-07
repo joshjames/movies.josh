@@ -4,6 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node src/bootstrap/launcher.js",
+    "imdb:update": "node scripts/update-imdb-data.js",
+    "imdb:build": "node scripts/build-imdb-catalogs.js",
     "build:catalogs:tmdb": "node scripts/build-tmdb-catalogs.js",
     "cf:dns:list-zones": "node scripts/cloudflare-dns.js list-zones",
     "cf:dns:list-records": "node scripts/cloudflare-dns.js list-records",
