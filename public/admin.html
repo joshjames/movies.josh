@@ -225,6 +225,38 @@
             align-self: center;
             white-space: nowrap;
         }
+        .admin-live-search-results {
+            margin-top: 16px;
+            background: #020617;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 12px;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+        .admin-live-search-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #0f172a;
+        }
+        .admin-live-search-item:last-child { border-bottom: none; }
+        .admin-live-search-item-main { display: grid; gap: 4px; }
+        .admin-live-search-item-title { font-weight: 700; color: #f8fafc; }
+        .admin-live-search-item-meta { font-size: 0.78rem; color: #94a3b8; }
+        .admin-live-search-item-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+        .admin-live-search-copy {
+            background: #0f766e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.82rem;
+        }
+        .admin-live-search-copy:hover { background: #115e59; }
         .tv-manual-result {
             font-size: 0.78rem;
             color: #cbd5e1;
@@ -910,7 +942,21 @@
             <button class="btn-trigger" style="background:#0f766e;" onclick="openAdminQueueManager()">Open Queue Manager</button>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
-
+ 
+        <div class="panel" style="margin-bottom:18px;">
+            <div class="row-header">Live Local Search</div>
+            <div class="catalog-filter-bar" style="grid-template-columns: 1fr minmax(160px, 200px) auto; align-items:center;">
+                <input type="search" id="admin-live-search-input" placeholder="Search movies or TV by title, IMDb ID, or folder..." oninput="searchAdminLiveResults()">
+                <select id="admin-live-search-type" onchange="searchAdminLiveResults()">
+                    <option value="both">Movies + TV</option>
+                    <option value="movies">Movies</option>
+                    <option value="series">TV Shows</option>
+                </select>
+                <button type="button" style="background:#334155;" onclick="clearAdminLiveSearch()">Clear</button>
+            </div>
+            <div id="admin-live-search-results" class="admin-live-search-results"></div>
+        </div>
+ 
         <div class="admin-layout-wrapper">
             <div class="panel">
                 <div class="tab-bar">
@@ -2562,6 +2608,119 @@
             hideTvLiveSearchResults();
         }
 
+        function setAdminLiveSearchResults(items = []) {
+            const box = document.getElementById('admin-live-search-results');
+            if (!box) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                box.innerHTML = '<div style="color:#94a3b8;padding:12px;text-align:center;">Type a title or IMDb ID to search local movies and TV.</div>';
+                return;
+            }
+
+            box.innerHTML = items.map(item => {
+                const yearValue = item.type === 'series'
+                    ? item.startYear || item.year || ''
+                    : item.year || '';
+                const title = item.title || item.originalTitle || item.id || 'Untitled';
+                const metaParts = [];
+                if (yearValue) metaParts.push(yearValue);
+                if (item.imdbId) metaParts.push(item.imdbId);
+                if (item.type) metaParts.push(item.type === 'series' ? 'TV' : 'Movie');
+                if (item.inLibrary) metaParts.push('In library');
+
+                return `
+                    <div class="admin-live-search-item">
+                        <div class="admin-live-search-item-main">
+                            <div class="admin-live-search-item-title">${escapeHtml(title)}</div>
+                            <div class="admin-live-search-item-meta">${escapeHtml(metaParts.join(' • '))}</div>
+                        </div>
+                        <div class="admin-live-search-item-actions">
+                            ${item.localHref ? `<a href="${escapeHtml(item.localHref)}" style="background:#1d4ed8;color:white;border-radius:6px;padding:8px 10px;text-decoration:none;font-size:0.82rem;">Open</a>` : ''}
+                            <button type="button" class="admin-live-search-copy" onclick="copyAdminLiveSearchImdbId('${escapeHtml(item.imdbId || '')}')">Copy IMDb</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function hideAdminLiveSearchResults() {
+            const box = document.getElementById('admin-live-search-results');
+            if (!box) return;
+            box.innerHTML = '<div style="color:#94a3b8;padding:12px;text-align:center;">Type a title or IMDb ID to search local movies and TV.</div>';
+        }
+
+        function copyAdminLiveSearchImdbId(imdbId) {
+            if (!imdbId) {
+                showToast('No IMDb ID available to copy.', 'error', 3600);
+                return;
+            }
+            navigator.clipboard.writeText(imdbId).then(() => {
+                showToast(`Copied ${imdbId} to clipboard.`, 'success', 2400);
+            }).catch(() => {
+                showToast('Unable to copy IMDb ID.', 'error', 3600);
+            });
+        }
+
+        function clearAdminLiveSearch() {
+            const input = document.getElementById('admin-live-search-input');
+            if (input) input.value = '';
+            hideAdminLiveSearchResults();
+        }
+
+        async function performAdminLiveSearch() {
+            const query = (document.getElementById('admin-live-search-input')?.value || '').trim();
+            const type = (document.getElementById('admin-live-search-type')?.value || 'both').trim().toLowerCase();
+            const results = [];
+
+            if (!query) {
+                hideAdminLiveSearchResults();
+                return;
+            }
+
+            try {
+                const moviePromise = (type === 'movies' || type === 'both')
+                    ? fetch(`/api/movies/search/unified?q=${encodeURIComponent(query)}&localLimit=12&remoteMode=never`, { credentials: 'include' })
+                    : Promise.resolve({ ok: true, json: async () => ({ success: true, localResults: [] }) });
+                const tvPromise = (type === 'series' || type === 'both')
+                    ? fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=12&localOnly=1`, { credentials: 'include' })
+                    : Promise.resolve({ ok: true, json: async () => ({ success: true, items: [] }) });
+
+                const [movieRes, tvRes] = await Promise.all([moviePromise, tvPromise]);
+                const [movieData, tvData] = await Promise.all([movieRes.ok ? movieRes.json() : { success: false }, tvRes.ok ? tvRes.json() : { success: false }]);
+
+                if (movieData.success && Array.isArray(movieData.localResults)) {
+                    results.push(...movieData.localResults.map((item) => ({
+                        title: item.title || item.id || 'Movie',
+                        imdbId: item.imdbId || item.imdbID || '',
+                        year: item.year || '',
+                        type: 'movie',
+                        inLibrary: true,
+                        localHref: item.href || null
+                    })));
+                }
+
+                if (tvData.success && Array.isArray(tvData.items)) {
+                    results.push(...tvData.items.map((item) => ({
+                        title: item.title || item.originalTitle || 'TV Show',
+                        imdbId: item.imdbId || '',
+                        year: item.startYear || item.year || '',
+                        type: 'series',
+                        inLibrary: Boolean(item.inLibrary),
+                        localHref: item.localHref || null
+                    })));
+                }
+
+                if (results.length === 0) {
+                    setAdminLiveSearchResults([]);
+                    return;
+                }
+
+                setAdminLiveSearchResults(results.slice(0, 16));
+            } catch (err) {
+                setAdminLiveSearchResults([]);
+                showToast(`Search failed: ${err.message || 'Unknown error'}`, 'error', 4200);
+            }
+        }
+
         function debounce(fn, delayMs = 220) {
             let timer = null;
             return (...args) => {
@@ -2569,6 +2728,8 @@
                 timer = setTimeout(() => fn(...args), delayMs);
             };
         }
+
+        const searchAdminLiveResults = debounce(performAdminLiveSearch, 260);
 
         const searchLocalTvIndex = debounce(async () => {
             const folderQuery = (document.getElementById('tv-folder-input')?.value || '').trim();
