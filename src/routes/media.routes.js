@@ -13,6 +13,7 @@ const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback, normalizeCard } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const MovieTitleIndexService = require('../services/MovieTitleIndexService');
 const SeriesSubscriptionService = require('../services/SeriesSubscriptionService');
 const metadataProvider = require('../services/MetadataProvider');
 const ProfileService = require('../services/ProfileService');
@@ -2143,14 +2144,25 @@ router.get('/movies/search/unified', async (req, res) => {
         const library = await getLibrary();
         const localRows = buildLocalMovieCatalogRows(library);
 
-        const localMatches = queryNorm
-            ? localRows
-                .map(item => ({ ...item, matchScore: scoreLocalMovieMatch(item, queryNorm) }))
-                .filter(item => item.matchScore > 0)
-                .sort((a, b) => b.matchScore - a.matchScore)
-                .slice(0, localLimit)
-                .map(({ matchScore, ...item }) => item)
+        const builtIndexMatches = queryNorm
+            ? MovieTitleIndexService.searchIndex(query, localLimit)
             : [];
+
+        const localMatchMap = new Map(localRows.map(item => [normalizeMovieImdbId(item.imdbId || ''), item]));
+
+        const localResultsFromBuiltIndex = builtIndexMatches.map((item) => {
+            const imdbId = normalizeMovieImdbId(item.imdbId || '');
+            const localRow = localMatchMap.get(imdbId) || null;
+            return {
+                ...item,
+                type: 'movie',
+                inLibrary: Boolean(localRow),
+                href: localRow?.href || null,
+                source: 'imdb-catalog'
+            };
+        });
+
+        const localMatches = localResultsFromBuiltIndex;
 
         const shouldFetchRemote = remoteMode === 'always'
             || (remoteMode === 'on_local_empty' && localMatches.length === 0)
