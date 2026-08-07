@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback, normalizeCard } = require('../services/HomeFeedService');
@@ -507,50 +507,216 @@ function streamLocalVideoFile(req, res, videoPath) {
     fs.createReadStream(videoPath).pipe(res);
 }
 
-function getAudioTrackCacheDir(videoPath) {
+// Video codecs MP4 can legally carry. Anything else gets muxed into Matroska so we
+// never have to re-encode video just to switch an audio track.
+const MP4_MUXABLE_VIDEO_CODECS = new Set(['h264', 'hevc', 'av1', 'vp9', 'mpeg4', 'mpeg2video', 'mjpeg', 'h263']);
+// Audio we can stream to a browser untouched. Everything else is downmixed to stereo AAC.
+const COPYABLE_AUDIO_CODECS = new Set(['aac', 'mp3']);
+
+const AUDIO_CACHE_MAX_BYTES = Math.max(1, Number(process.env.AUDIO_PLAYBACK_CACHE_MAX_GB) || 150) * 1024 * 1024 * 1024;
+const AUDIO_CACHE_MAX_CONCURRENT = Math.max(1, Number(process.env.AUDIO_PLAYBACK_CACHE_CONCURRENCY) || 2);
+// Never evict something a client could still be mid-stream on.
+const AUDIO_CACHE_EVICT_GRACE_MS = 30 * 60 * 1000;
+
+// cachePath -> in-flight Promise. Browsers fire many range requests at a fresh <video> src;
+// without this every one of them would spawn its own ffmpeg against the same output.
+const audioCacheInFlight = new Map();
+let audioCacheActiveJobs = 0;
+const audioCacheQueue = [];
+
+function getAudioTrackCacheDir() {
     const configured = String(process.env.AUDIO_PLAYBACK_CACHE_DIR || '').trim();
     if (configured) return configured;
     return path.join('/tmp', 'joshflix-audio-cache');
 }
 
-function getAudioTrackCachePath(videoPath, streamIndex) {
-    const stat = fs.statSync(videoPath);
-    const cacheKey = crypto.createHash('sha1')
-        .update(`${videoPath}|${streamIndex}|${stat.size}|${Math.floor(stat.mtimeMs)}`)
-        .digest('hex');
-    return path.join(getAudioTrackCacheDir(videoPath), `${cacheKey}.mp4`);
+function probeVideoStream(videoPath) {
+    const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=codec_name',
+        '-of', 'json',
+        videoPath
+    ], { encoding: 'utf8' });
+
+    if (probe.status !== 0) return null;
+    try {
+        const parsed = JSON.parse(probe.stdout || '{}');
+        return Array.isArray(parsed.streams) ? (parsed.streams[0] || null) : null;
+    } catch (_err) {
+        return null;
+    }
 }
 
-function ensureAudioSelectedPlaybackFile(videoPath, streamIndex) {
-    const cacheDir = getAudioTrackCacheDir(videoPath);
-    fs.mkdirSync(cacheDir, { recursive: true });
+// Decides container + codec strategy up front so the cache key matches what we actually write.
+function planAudioSelectedPlayback(videoPath, streamIndex) {
+    const videoStream = probeVideoStream(videoPath);
+    const videoCodec = String(videoStream?.codec_name || '').toLowerCase();
+    const container = MP4_MUXABLE_VIDEO_CODECS.has(videoCodec) ? 'mp4' : 'mkv';
 
-    const cachePath = getAudioTrackCachePath(videoPath, streamIndex);
-    if (fs.existsSync(cachePath)) {
-        return cachePath;
-    }
+    const audioStream = probeAudioStreams(videoPath).find(s => Number(s.index) === Number(streamIndex));
+    const audioCodec = String(audioStream?.codec_name || '').toLowerCase();
+    const channels = Number(audioStream?.channels) || 0;
+    const canCopyAudio = COPYABLE_AUDIO_CODECS.has(audioCodec) && channels > 0 && channels <= 2;
 
-    const tempPath = `${cachePath}.tmp-${process.pid}-${Date.now()}`;
-    const ffmpegArgs = [
+    const stat = fs.statSync(videoPath);
+    const cacheKey = crypto.createHash('sha1')
+        .update(`${videoPath}|${streamIndex}|${stat.size}|${Math.floor(stat.mtimeMs)}|${container}|${canCopyAudio ? 'copy' : 'aac2'}`)
+        .digest('hex');
+
+    return {
+        container,
+        canCopyAudio,
+        cachePath: path.join(getAudioTrackCacheDir(), `${cacheKey}.${container}`)
+    };
+}
+
+function buildAudioSelectedFfmpegArgs(videoPath, streamIndex, plan, tempPath) {
+    const args = [
         '-y',
+        '-v', 'error',
         '-i', videoPath,
         '-map', '0:v:0',
         '-map', `0:${streamIndex}`,
+        '-sn', '-dn',
+        '-map_chapters', '-1',
         '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-ac', '2',
-        '-movflags', '+faststart',
-        tempPath
+        '-max_muxing_queue_size', '1024'
     ];
 
-    const result = spawnSync('ffmpeg', ffmpegArgs, { encoding: 'utf8' });
-    if (result.status !== 0 || !fs.existsSync(tempPath)) {
-        const stderr = String(result.stderr || result.stdout || '').trim();
-        throw new Error(stderr || 'Failed to create audio-selected playback cache.');
+    if (plan.canCopyAudio) {
+        args.push('-c:a', 'copy');
+    } else {
+        args.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2');
     }
 
-    fs.renameSync(tempPath, cachePath);
-    return cachePath;
+    if (plan.container === 'mp4') {
+        args.push('-movflags', '+faststart');
+    } else {
+        args.push('-f', 'matroska');
+    }
+
+    args.push(tempPath);
+    return args;
+}
+
+function runFfmpegAsync(args) {
+    return new Promise((resolve, reject) => {
+        const child = spawn('ffmpeg', args);
+        // ffmpeg is chatty on long files; keep only the tail so we never buffer unboundedly.
+        let stderrTail = '';
+        child.stderr.on('data', (chunk) => {
+            stderrTail = (stderrTail + chunk.toString('utf8')).slice(-8000);
+        });
+        child.on('error', reject);
+        child.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(stderrTail.trim() || `ffmpeg exited with code ${code}`));
+        });
+    });
+}
+
+// Simple FIFO gate so a burst of track switches can't spawn one ffmpeg per request.
+function acquireAudioCacheSlot() {
+    if (audioCacheActiveJobs < AUDIO_CACHE_MAX_CONCURRENT) {
+        audioCacheActiveJobs += 1;
+        return Promise.resolve();
+    }
+    return new Promise(resolve => audioCacheQueue.push(resolve));
+}
+
+function releaseAudioCacheSlot() {
+    const next = audioCacheQueue.shift();
+    if (next) next();
+    else audioCacheActiveJobs = Math.max(0, audioCacheActiveJobs - 1);
+}
+
+// LRU trim. Cache entries are full-size video copies, so an unbounded dir eats the disk.
+function pruneAudioTrackCache(protectedPath) {
+    try {
+        const cacheDir = getAudioTrackCacheDir();
+        const entries = fs.readdirSync(cacheDir)
+            .filter(name => /\.(mp4|mkv)$/i.test(name))
+            .map((name) => {
+                const filePath = path.join(cacheDir, name);
+                try {
+                    const stat = fs.statSync(filePath);
+                    return { filePath, size: stat.size, atimeMs: stat.atimeMs, mtimeMs: stat.mtimeMs };
+                } catch (_err) {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+
+        let total = entries.reduce((sum, entry) => sum + entry.size, 0);
+        if (total <= AUDIO_CACHE_MAX_BYTES) return;
+
+        const now = Date.now();
+        const evictable = entries
+            .filter(entry => entry.filePath !== protectedPath)
+            .filter(entry => (now - Math.max(entry.atimeMs, entry.mtimeMs)) > AUDIO_CACHE_EVICT_GRACE_MS)
+            .sort((a, b) => Math.max(a.atimeMs, a.mtimeMs) - Math.max(b.atimeMs, b.mtimeMs));
+
+        for (const entry of evictable) {
+            if (total <= AUDIO_CACHE_MAX_BYTES) break;
+            try {
+                fs.unlinkSync(entry.filePath);
+                total -= entry.size;
+                console.log(`🧹 Evicted audio-track cache entry ${path.basename(entry.filePath)} (${(entry.size / 1e9).toFixed(2)} GB)`);
+            } catch (_err) {
+                /* another worker may have already reclaimed it */
+            }
+        }
+    } catch (_err) {
+        /* pruning is best-effort and must never fail a playback request */
+    }
+}
+
+async function ensureAudioSelectedPlaybackFile(videoPath, streamIndex) {
+    const cacheDir = getAudioTrackCacheDir();
+    await fsPromises.mkdir(cacheDir, { recursive: true });
+
+    const plan = planAudioSelectedPlayback(videoPath, streamIndex);
+    const { cachePath } = plan;
+
+    if (fs.existsSync(cachePath)) {
+        // Touch for LRU ordering; a hit shouldn't look stale to the pruner.
+        try { fs.utimesSync(cachePath, new Date(), fs.statSync(cachePath).mtime); } catch (_err) { /* non-fatal */ }
+        return cachePath;
+    }
+
+    const pending = audioCacheInFlight.get(cachePath);
+    if (pending) return pending;
+
+    const job = (async () => {
+        await acquireAudioCacheSlot();
+        // Extension must be the real container: ffmpeg picks its muxer from the suffix.
+        const tempPath = path.join(cacheDir, `.building-${process.pid}-${crypto.randomBytes(6).toString('hex')}.${plan.container}`);
+        try {
+            if (fs.existsSync(cachePath)) return cachePath;
+
+            const started = Date.now();
+            await runFfmpegAsync(buildAudioSelectedFfmpegArgs(videoPath, streamIndex, plan, tempPath));
+            if (!fs.existsSync(tempPath)) {
+                throw new Error('ffmpeg reported success but produced no output file.');
+            }
+
+            await fsPromises.rename(tempPath, cachePath);
+            console.log(`🎧 Built audio-track cache (stream ${streamIndex}, ${plan.container}, audio ${plan.canCopyAudio ? 'copy' : 'aac'}) in ${((Date.now() - started) / 1000).toFixed(1)}s for ${path.basename(videoPath)}`);
+            pruneAudioTrackCache(cachePath);
+            return cachePath;
+        } finally {
+            try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_err) { /* non-fatal */ }
+            releaseAudioCacheSlot();
+        }
+    })();
+
+    audioCacheInFlight.set(cachePath, job);
+    try {
+        return await job;
+    } finally {
+        audioCacheInFlight.delete(cachePath);
+    }
 }
 
 function findSidecarSubtitleForVideo(videoPath) {
@@ -3578,12 +3744,20 @@ router.get('/playback/:id', async (req, res) => {
         }
 
         try {
-            const cachedPlaybackPath = ensureAudioSelectedPlaybackFile(videoPath, selectedAudio.streamIndex);
+            const cachedPlaybackPath = await ensureAudioSelectedPlaybackFile(videoPath, selectedAudio.streamIndex);
+            res.setHeader('X-Audio-Track-Selected', String(selectedAudio.streamIndex));
             return streamLocalVideoFile(req, res, cachedPlaybackPath);
         } catch (cacheErr) {
+            // Deliberately not falling back to the original file: that silently serves the
+            // wrong audio and makes a broken track switch look like a no-op to the user.
             console.error('💣 Audio-selected cache creation failed:', cacheErr.message);
-            res.setHeader('X-Audio-Track-Selection-Warning', 'fallback-to-original-file');
-            return streamLocalVideoFile(req, res, videoPath);
+            if (res.headersSent) return res.end();
+            return res.status(503).json({
+                success: false,
+                error: 'Could not prepare the selected audio track for playback.',
+                detail: cacheErr.message,
+                audioTrack: selectedAudio.streamIndex
+            });
         }
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
@@ -3728,3 +3902,12 @@ router.get('/subtitles/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+// Exposed for integration tests around audio-track selection.
+module.exports.__audioTrackInternals = {
+    listAudioTracksForVideo,
+    planAudioSelectedPlayback,
+    ensureAudioSelectedPlaybackFile,
+    getAudioTrackCacheDir,
+    pruneAudioTrackCache
+};

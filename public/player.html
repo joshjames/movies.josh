@@ -473,6 +473,7 @@
             || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         const useCustomInlineSeek = isIOSDevice && isTouchDevice;
         let audioTracks = [];
+        let lastAppliedAudioTrack = 'auto';
         let subtitleTracks = [];
         let currentPlaybackFile = '';
         let currentRemoteStreamUrl = '';
@@ -777,6 +778,7 @@
 
         async function refreshAudioTracks() {
             audioTracks = [];
+            lastAppliedAudioTrack = 'auto';
             audioTrackSelect.innerHTML = '<option value="auto">Audio: Auto</option>';
             audioTrackSelect.disabled = true;
 
@@ -805,6 +807,7 @@
                 if (!stillExists) {
                     audioTrackSelect.value = 'auto';
                 }
+                lastAppliedAudioTrack = String(audioTrackSelect.value || 'auto');
 
                 audioTrackSelect.disabled = data.tracks.length <= 1;
             } catch (_err) {
@@ -862,10 +865,53 @@
             loadSubtitles();
         });
 
-        audioTrackSelect.addEventListener('change', () => {
+        audioTrackSelect.addEventListener('change', async () => {
             if (currentRemoteStreamUrl) return;
-            applyVideoSource(true);
-            loadSubtitles();
+
+            const requested = String(audioTrackSelect.value || 'auto');
+            if (requested === 'auto') {
+                lastAppliedAudioTrack = 'auto';
+                applyVideoSource(true);
+                loadSubtitles();
+                return;
+            }
+
+            // The server may need to remux a fresh copy for this track. Probe first so a
+            // failure reverts the dropdown instead of silently playing the original audio.
+            const previousBadge = qualityTag.innerText;
+            const previousBadgeBg = qualityTag.style.background;
+            audioTrackSelect.disabled = true;
+            qualityTag.innerText = 'PREPARING AUDIO TRACK...';
+
+            try {
+                const probe = await fetch(buildPlaybackUrl(), { headers: { Range: 'bytes=0-1' } });
+                if (!probe.ok) {
+                    let detail = `Server returned ${probe.status}`;
+                    try {
+                        const body = await probe.json();
+                        detail = body.detail || body.error || detail;
+                    } catch (_parseErr) { /* non-JSON error body */ }
+
+                    console.error('Audio track switch failed:', detail);
+                    audioTrackSelect.value = lastAppliedAudioTrack;
+                    qualityTag.innerText = 'AUDIO TRACK UNAVAILABLE';
+                    qualityTag.style.background = '#b91c1c';
+                    return;
+                }
+
+                lastAppliedAudioTrack = requested;
+                qualityTag.innerText = previousBadge;
+                qualityTag.style.background = previousBadgeBg;
+                applyVideoSource(true);
+                loadSubtitles();
+            } catch (err) {
+                console.error('Audio track switch failed:', err);
+                audioTrackSelect.value = lastAppliedAudioTrack;
+                qualityTag.innerText = 'AUDIO TRACK UNAVAILABLE';
+                qualityTag.style.background = '#b91c1c';
+            } finally {
+                audioTrackSelect.disabled = audioTracks.length <= 1;
+            }
         });
 
         // --- Playback Sync Loop Functions ---

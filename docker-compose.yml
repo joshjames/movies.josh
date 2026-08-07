@@ -20,6 +20,8 @@ x-app-common: &app-common
     - /home/epic/movie-streamer/metadata:/app/catalog-metadata:ro
     - /home/epic/tobedel:/app/archive
     - /home/epic/.config/subliminal:/root/.config/subliminal:ro
+    # Audio-track playback cache: full-size remuxes, so it must survive redeploys.
+    - /home/epic/movie-streamer-cache/audio:/app/cache/audio
   networks:
     - needmonero_needmonero
   depends_on:
@@ -41,6 +43,9 @@ services:
       WORKER_URL_CLOUDSYNC: "http://cloudsync-worker:5004/process"
       ARCHIVE_REMOTE_POLICY: "source_synced"
       ARCHIVE_SOURCE_PROFILE: "1080p"
+      AUDIO_PLAYBACK_CACHE_DIR: "/app/cache/audio"
+      AUDIO_PLAYBACK_CACHE_MAX_GB: "150"
+      AUDIO_PLAYBACK_CACHE_CONCURRENCY: "2"
       ENABLE_WEB_SERVER: "true"
       ENABLE_PIPELINE_WATCHER: "false"
       ENABLE_INGEST_WORKER: "false"

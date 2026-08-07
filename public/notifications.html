@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <title>Notifications</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 16px;
+            min-height: 100vh;
+            background: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .page-shell {
+            max-width: 980px;
+            margin: 0 auto;
+            display: grid;
+            gap: 16px;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .topbar h1 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+        .topbar-copy {
+            color: #94a3b8;
+            font-size: 0.92rem;
+            line-height: 1.4;
+            max-width: 470px;
+        }
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .button-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-radius: 999px;
+            border: 1px solid #334155;
+            background: #111827;
+            color: #f8fafc;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .button-link:hover {
+            background: #1f2937;
+            border-color: #475569;
+        }
+        .hero-card {
+            padding: 18px 20px;
+            background: linear-gradient(160deg, #111827 0%, #0b1220 100%);
+            border: 1px solid #334155;
+            border-radius: 18px;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.16);
+        }
+        .hero-card strong {
+            color: #f8fafc;
+        }
+        .notifications-list {
+            display: grid;
+            gap: 16px;
+        }
+        .notification-card {
+            display: grid;
+            gap: 12px;
+            padding: 18px;
+            border-radius: 18px;
+            border: 1px solid #334155;
+            background: #111827;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+        }
+        .notification-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .notification-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+        .notification-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: #94a3b8;
+            font-size: 0.8rem;
+        }
+        .notification-body {
+            margin: 0;
+            color: #cbd5e1;
+            line-height: 1.6;
+            font-size: 0.92rem;
+            white-space: pre-line;
+        }
+        .notification-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .notification-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: none;
+            background: #2563eb;
+            color: #fff;
+            font-weight: 700;
+            text-decoration: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .notification-action.secondary {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #93c5fd;
+        }
+        .notification-chip {
+            display: inline-flex;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #dbeafe;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .empty-state,
+        .error-state {
+            border: 1px dashed #334155;
+            border-radius: 18px;
+            background: #0b1220;
+            padding: 22px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+        .error-state {
+            border-color: #7f1d1d;
+            color: #fca5a5;
+        }
+        @media (max-width: 760px) {
+            body { padding: 12px; }
+            .topbar { flex-direction: column; align-items: stretch; }
+            .topbar h1 { font-size: 1.2rem; }
+            .toolbar { justify-content: stretch; }
+            .button-link { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-shell">
+        <div class="topbar">
+            <div>
+                <h1>Notifications</h1>
+                <p class="topbar-copy">This page shows your profile notifications in a mobile-friendly feed. Tap actions to open details like new media, watch buttons, or linked tasks.</p>
+            </div>
+            <div class="toolbar">
+                <a class="button-link" href="/index.html">← Home</a>
+                <a class="button-link" href="/browse.html">Browse</a>
+            </div>
+        </div>
+
+        <section class="hero-card">
+            <p><strong>Notifications are delivered by category.</strong> System, library, and user alerts appear in one scrollable feed. Select cards with links to open related content quickly.</p>
+        </section>
+
+        <div id="notifications-list" class="notifications-list">
+            <div class="empty-state">Loading notifications…</div>
+        </div>
+    </div>
+
+    <script>
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatRelativeTime(isoString) {
+            const timeMs = Date.parse(String(isoString || ''));
+            if (!Number.isFinite(timeMs)) return 'just now';
+            const deltaSec = Math.max(0, Math.floor((Date.now() - timeMs) / 1000));
+            if (deltaSec < 60) return 'just now';
+            const minutes = Math.floor(deltaSec / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+
+        function isSafeHref(value) {
+            const raw = String(value || '').trim();
+            return /^\/[\w\-./?&=%#]*$/.test(raw) || /^https?:\/\/[\w\-./?&=%#]*$/.test(raw);
+        }
+
+        function buildNotificationCard(item) {
+            const title = escapeHtml(item.title || 'Notification');
+            const body = escapeHtml(item.message || 'No additional details.');
+            const createdAt = formatRelativeTime(item.createdAt);
+            const category = escapeHtml(item.category || 'system');
+            const href = String(item.href || '').trim();
+            const safeHref = isSafeHref(href) ? href : '';
+            const hasLink = safeHref.length > 0;
+
+            return `
+                <article class="notification-card">
+                    <div class="notification-top">
+                        <h2 class="notification-title">${title}</h2>
+                        <div class="notification-meta">
+                            <span class="notification-chip">${category}</span>
+                            <span>${createdAt}</span>
+                        </div>
+                    </div>
+                    <p class="notification-body">${body}</p>
+                    <div class="notification-actions">
+                        ${hasLink ? `<a class="notification-action" href="${escapeHtml(safeHref)}">Open</a>` : '<span class="notification-action secondary">No action available</span>'}
+                    </div>
+                </article>
+            `;
+        }
+
+        async function loadNotifications() {
+            const list = document.getElementById('notifications-list');
+            if (!list) return;
+
+            try {
+                const response = await fetch('/api/profile/notifications?limit=100&limitPerCategory=100', { credentials: 'include' });
+                if (!response.ok) {
+                    throw new Error(`Request failed (${response.status})`);
+                }
+                const payload = await response.json();
+                if (!payload?.success) {
+                    throw new Error(payload?.error || 'Unable to load notifications.');
+                }
+
+                const items = Array.isArray(payload.items) ? payload.items : [];
+                if (!items.length) {
+                    list.innerHTML = '<div class="empty-state">Nothing in your notification feed yet.</div>';
+                    return;
+                }
+
+                const rendered = items.map(buildNotificationCard).join('');
+                list.innerHTML = rendered;
+            } catch (err) {
+                const message = String(err?.message || 'Unable to display notifications.');
+                list.innerHTML = `<div class="error-state">${escapeHtml(message)}</div>`;
+            }
+        }
+
+        loadNotifications();
+    </script>
+</body>
+</html>
