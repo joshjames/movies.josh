@@ -13,6 +13,13 @@
       "date": "2026-07-27",
       "tags": ["tv", "bug-fix", "queue", "pipeline"],
       "content": "hey guys theres been a lot of bugs with adding tv series, this has been a big piece of work and it will keep getting better over time... adding movies seems to be pretty much 90% perfect 0 unless you choose something super rare.. but I will have a long term solution for even the most rare of things soon.\nFor now, most tv shows seem to be adding clean, be patient though It can take anywhere up to 10 minutes or more sometimes to add tv shows the first time. this will improve... the long term plan here is that 90% of stuff will already be in the library over time so this service will just keep getting better. if theres ever something that doesnt add.. be patient they come through to my error queue after an hour or so and I will always fix them.. of course I keep updating the code so that they end up working faster and faster.\nI appreciate everyone being patient while we build the best streaming service in the world.\nThanks again\nJosh"
+    },
+    {
+      "id": "news-2026-08-07-updates",
+      "title": "Updates to my shows and auto get",
+      "date": "2026-07-27",
+      "tags": ["tv", "feature", "queue", "pipeline"],
+      "content": "hey guys so there has been a lot of updates more to list here but in short I have first fixed the google dns error with the false phishing claim which was absolutly incorrect - I want to reassure everyone that no data was stolen, nothing was leaked.. nothing bad and definitly no phishing.. it was just googles bots flagging my site for no good reason except well.. cause they suck. so trust me the site is safe and i got the flag removed finally.  next I have added a bunch of features you can add any tv show to My Shows now and it will automatically get any new episodes and alert you of them, using notifications the little bell next to your avatar. You can also click to add any missing episodes.. so enjoy this great feature.. enjoy your fav shows, sorry about the tv app there has been a delay, hoping to finish it this coming week.  \nThanks again\nJosh"
     }
   ]
 }

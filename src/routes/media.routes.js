@@ -25,6 +25,7 @@ const {
     getGroupsFromMedia
 } = require('../services/LibraryAccessService');
 const { versionCoverUrl, tvCoverUrl } = require('../services/CoverUrlService');
+const { toCdnUrl } = require('../services/CdnAssetService');
 const {
     getSeriesRoots,
     resolveMovieFolderPath,
@@ -379,7 +380,7 @@ function mapCatalogMovieToResult(item = {}, localMap = new Map()) {
             title: localRow.title,
             year: localRow.year,
             imdbId: localRow.imdbId,
-            cover: localRow.cover,
+            cover: versionCoverUrl(localRow.cover),
             href: localRow.href,
             contentType: localRow.contentType
         } : null
@@ -2289,10 +2290,14 @@ router.get('/movies', async (req, res) => {
         // Combine both internal asset segments into a flat layout matching index.html execution blocks
         const combinedCatalog = [...cachedMovies, ...normalizedShows].map(item => {
             const versionKey = encodeURIComponent(item.updatedAt || library.lastScan || Date.now());
-            const separator = (item.cover || '').includes('?') ? '&' : '?';
+            // Route local movie-assets covers through the CDN when the sync job has
+            // confirmed the object is synced; toCdnUrl returns '' otherwise, leaving
+            // the origin path untouched.
+            const coverBase = toCdnUrl(item.cover) || item.cover;
+            const separator = (coverBase || '').includes('?') ? '&' : '?';
             return {
                 ...item,
-                cover: item.cover ? `${item.cover}${separator}v=${versionKey}` : item.cover
+                cover: coverBase ? `${coverBase}${separator}v=${versionKey}` : coverBase
             };
         });
 
@@ -2880,7 +2885,7 @@ router.get('/movies/:id', async (req, res) => {
             title: streamPayload.title,
             year: metadataSource?.year || '',
             genre: metadataSource?.genre || metadataSource?.enrichment?.genre || '',
-            cover: metadataSource?.cover || '',
+            cover: versionCoverUrl(metadataSource?.cover || ''),
             href: `/player.html?id=${encodeURIComponent(movieId)}`,
             metadata: metadataSource
         });
@@ -3074,7 +3079,7 @@ router.get('/media/details', async (req, res) => {
                 title: metadata?.title || showRow?.title || showFolder,
                 year: metadata?.year || showRow?.year || '',
                 genre: metadata?.genre || metadata?.enrichment?.genre || showRow?.genre || '',
-                cover: showRow?.cover || `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
+                cover: versionCoverUrl(showRow?.cover || `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`),
                 href: `/series.html?id=${encodeURIComponent(`series/${showFolder}`)}`,
                 metadata
             });
@@ -3099,7 +3104,7 @@ router.get('/media/details', async (req, res) => {
             title: metadata?.title || movieRow?.title || movieId.replace(/\./g, ' '),
             year: metadata?.year || movieRow?.year || '',
             genre: metadata?.genre || metadata?.enrichment?.genre || movieRow?.genre || '',
-            cover: movieRow?.cover || '',
+            cover: versionCoverUrl(movieRow?.cover || ''),
             href: `/player.html?id=${encodeURIComponent(movieId)}`,
             metadata
         });
@@ -3152,7 +3157,7 @@ router.get('/series/:showFolder', async (req, res) => {
             genre: metaData.genre,
             imdbId: formatImdbId(metaData.imdbId || metaData.imdb_id || metaData.imdbID || metaData.metadata?.imdbId || metaData.metadata?.imdb_id || metaData.metadata?.imdbID || '') || '',
             imdb_id: formatImdbId(metaData.imdbId || metaData.imdb_id || metaData.imdbID || metaData.metadata?.imdbId || metaData.metadata?.imdb_id || metaData.metadata?.imdbID || '') || '',
-            poster: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
+            poster: versionCoverUrl(`/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`),
             seasons: seriesData.seasons,
             totalSeasons: seriesData.totalSeasons,
             canonicalFolder: showFolder,
@@ -3162,7 +3167,7 @@ router.get('/series/:showFolder', async (req, res) => {
                 title: metaData.title,
                 year: metaData.year,
                 genre: metaData.genre,
-                cover: `/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`,
+                cover: versionCoverUrl(`/movie-assets/series/${encodeURIComponent(showFolder)}/cover.jpg`),
                 href: `/series.html?id=${encodeURIComponent(`series/${showFolder}`)}`,
                 metadata: metaData
             })

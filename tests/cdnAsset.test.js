@@ -18,7 +18,12 @@ fs.writeFileSync(MANIFEST_PATH, JSON.stringify({
     schemaVersion: 1,
     bucket: 'imagesanymovie',
     baseUrl: 'https://images.any.movie',
-    keys: ['catalog-covers/tt0111161.jpg', 'tv-covers/tt0903747.jpg']
+    keys: [
+        'catalog-covers/tt0111161.jpg',
+        'tv-covers/tt0903747.jpg',
+        'movie-assets/The.Incredible.Hulk.2008/cover.jpg',
+        'movie-assets/series/Breaking.Bad/cover.jpg'
+    ]
 }));
 
 function withEnv(overrides, fn) {
@@ -73,9 +78,39 @@ test('keeps origin for an asset that is not in the manifest', () => {
 
 test('keeps origin for unmapped paths', () => {
     withEnv(ENABLED, () => {
-        assert.strictEqual(CdnAssetService.toCdnUrl('/movie-assets/Akira (1988)/cover.jpg'), '');
         assert.strictEqual(CdnAssetService.toCdnUrl('/images/avatars/josh.png'), '');
         assert.strictEqual(CdnAssetService.toCdnUrl(''), '');
+    });
+});
+
+test('rewrites a synced local movie cover to the CDN', () => {
+    withEnv(ENABLED, () => {
+        assert.strictEqual(
+            CdnAssetService.toCdnUrl('/movie-assets/The.Incredible.Hulk.2008/cover.jpg'),
+            'https://images.any.movie/movie-assets/The.Incredible.Hulk.2008/cover.jpg'
+        );
+    });
+});
+
+test('rewrites a synced local series cover to the CDN, not the movie prefix', () => {
+    withEnv(ENABLED, () => {
+        // '/movie-assets/series/' also starts with '/movie-assets/' -- must resolve to
+        // the series key, not be mis-mapped onto movie-assets/series/Breaking.Bad/cover.jpg
+        // being treated as folder "series/Breaking.Bad" under the movie prefix.
+        assert.strictEqual(
+            CdnAssetService.toObjectKey('/movie-assets/series/Breaking.Bad/cover.jpg'),
+            'movie-assets/series/Breaking.Bad/cover.jpg'
+        );
+        assert.strictEqual(
+            CdnAssetService.toCdnUrl('/movie-assets/series/Breaking.Bad/cover.jpg'),
+            'https://images.any.movie/movie-assets/series/Breaking.Bad/cover.jpg'
+        );
+    });
+});
+
+test('keeps origin for an unsynced local movie cover', () => {
+    withEnv(ENABLED, () => {
+        assert.strictEqual(CdnAssetService.toCdnUrl('/movie-assets/Akira (1988)/cover.jpg'), '');
     });
 });
 

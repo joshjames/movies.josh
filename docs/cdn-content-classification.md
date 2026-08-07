@@ -6,8 +6,9 @@ describes the target architecture for flat JSON + edge replication, this one cla
 what actually exists on disk today, records which classes have moved to the edge, and
 sequences the rest.
 
-**Live now:** catalog covers and TV covers serve from `images.any.movie` (Cloudflare R2).
-Everything else still serves from origin.
+**Live now:** catalog covers, TV covers, and local per-title movie/series covers
+(`/movie-assets/**/cover.jpg`) serve from `images.any.movie` (Cloudflare R2). Everything
+else still serves from origin.
 
 ---
 
@@ -43,10 +44,10 @@ Two rules that fall out of this and are worth stating explicitly:
 | Path | Class | Files | Size | Served at | CDN status |
 |------|-------|------:|-----:|-----------|------------|
 | `public/images/catalog-covers/` | Images | 985 | 31 MB | `/images/catalog-covers/` | ✅ **On CDN** |
-| `public/images/avatars/` | Images | 137 | 2.6 MB | `/images/avatars/` | Pending — phase 2 |
-| `public/images/welcome-covers/` | Images | 20 | 1.3 MB | `/images/welcome-covers/` | Pending — phase 2 |
-| `public/images/icons/` | Images | 4 | 216 KB | `/images/icons/` | Pending — phase 2 |
-| `public/images/*.{png,jpg}` | Images | 2 | 160 KB | `/images/` | Pending — phase 2 |
+| `public/images/avatars/` | Images | 137 | 2.6 MB | `/images/avatars/` | Pending — phase 2b |
+| `public/images/welcome-covers/` | Images | 20 | 1.3 MB | `/images/welcome-covers/` | Pending — phase 2b |
+| `public/images/icons/` | Images | 4 | 216 KB | `/images/icons/` | Pending — phase 2b |
+| `public/images/*.{png,jpg}` | Images | 2 | 160 KB | `/images/` | Pending — phase 2b |
 | `public/css/login-background.jpg` | Images | 1 | ~148 KB | `/css/` | Pending — misfiled, move to images |
 | `public/media/demo.mp4` | Media | 1 | 5.0 MB | `/media/` | Pending — phase 3 |
 | `public/*.html` | Code | 26 | ~800 KB | `/` | Blocked on build hashing |
@@ -61,8 +62,8 @@ Two rules that fall out of this and are worth stating explicitly:
 
 | Host path | Container path | Class mix | Size | CDN status |
 |-----------|----------------|-----------|-----:|------------|
-| `/home/epic/movies` | `/app/storage/movies` | Media 597 GB · Images 464 covers · Subtitles 1071 srt (107 MB) · Metadata 283 json | **598 GB** | Media on B2; covers phase 2; subs phase 5 |
-| `/data/blockchain/media/Series` | `/app/storage/series` | Media (957 mkv + 271 mp4) · Subtitles 1208 srt · Images 45 jpg · Metadata 90 json | **614 GB** | Same as above |
+| `/home/epic/movies` | `/app/storage/movies` | Media 597 GB · Images 269 covers · Subtitles 1071 srt (107 MB) · Metadata 283 json | **598 GB** | Media on B2; ✅ **covers on CDN**; subs phase 5 |
+| `/data/blockchain/media/Series` | `/app/storage/series` | Media (957 mkv + 271 mp4) · Subtitles 1208 srt · Images 43 cover.jpg (+2 season-level, not synced) · Metadata 90 json | **614 GB** | Media on B2; ✅ **covers on CDN**; subs phase 5 |
 | `/home/epic/movie-streamer-data` | `/app/metadata` | Images `tv-covers/` 325 files (9.9 MB) · Metadata feeds (~3 MB) | 13 MB | ✅ **tv-covers on CDN**; feeds phase 4 |
 | `/home/epic/movie-streamer/metadata` | `/app/catalog-metadata` (ro) | Metadata catalogs | 38 MB | Phase 4 |
 | `/home/epic/movie-streamer-cache/audio` | `/app/cache/audio` | Media (transient remuxes) | 7.5 GB | Never — derived cache |
@@ -82,8 +83,19 @@ Four distinct URL forms reach the browser. All of them now funnel through
 |-----------|---------------|---------|
 | `/images/catalog-covers/<imdbId>.jpg` | `public/images/catalog-covers/` | ✅ yes |
 | `/api/tv-shows/<imdbId>/cover` | `/app/metadata/tv-covers/` (fetch-on-miss from OMDb/TMDB) | ✅ yes, when synced |
-| `/movie-assets/<folder>/cover.jpg` | `/app/storage/movies/<folder>/cover.jpg` | ❌ phase 2 |
-| `/movie-assets/series/<folder>/cover.jpg` | `/app/storage/series/<folder>/cover.jpg` | ❌ phase 2 |
+| `/movie-assets/<folder>/cover.jpg` | `/app/storage/movies/<folder>/cover.jpg` | ✅ yes, when synced |
+| `/movie-assets/series/<folder>/cover.jpg` | `/app/storage/series/<folder>/cover.jpg` | ✅ yes, when synced |
+
+**Chokepoint gap found and fixed during rollout:** unlike catalog and TV covers, local
+movie/series covers were not built through `CoverUrlService` everywhere. Six separate
+call sites in `media.routes.js`, `LibraryScanner.js`, and `SeriesSubscriptionService.js`
+built `/movie-assets/...` strings directly — most visibly the `/api/movies` list route,
+which re-versioned `item.cover` with its own ad-hoc `Date.now()`-based token instead of
+calling `versionCoverUrl()`. Adding the bucket mapping alone did nothing for those call
+sites; each had to be routed through `versionCoverUrl()` individually. If a cover
+somewhere is still showing an origin path with a plain `?v=<epoch>` token instead of an
+`images.any.movie` URL, that is the pattern to search for: a raw template literal
+building `/movie-assets/...` instead of calling `versionCoverUrl(...)`.
 
 ---
 
@@ -100,7 +112,7 @@ required**, and there is no such thing as a "DNS bucket".
 
 | Hostname | Bucket | Class | Status |
 |----------|--------|-------|--------|
-| `images.any.movie` | `imagesanymovie` (APAC) | Images | ✅ **Live** — 1310 objects |
+| `images.any.movie` | `imagesanymovie` (APAC) | Images | ✅ **Live** — 1622 objects |
 | `content.any.movie` | `contentanymovie` (default) | Media | ⚠️ Domain live, **bucket empty** — media still on Backblaze |
 | `cache.any.movie` | *(not created)* | Metadata / flat JSON | Reserved for phase 4 |
 | `subs.any.movie` | *(not created)* | Subtitles | Reserved for phase 5 |
@@ -199,9 +211,18 @@ bucket objects whose local source is gone, which keeps the manifest honest.
 
 > **Known wrinkle:** rclone v1.60 (the version on this host) intermittently gets
 > `501 NotImplemented` from R2 on the first attempt for a batch. Its built-in retry
-> resolves it — the last run failed 325 objects on attempt 1 and succeeded on attempt 2,
-> and `rclone check` afterwards reported 0 differences across all 1310 objects. If this
-> becomes noisy, upgrade rclone rather than adding workarounds.
+> resolves it, and `rclone check` afterwards has reported 0 differences on every run so
+> far. If this becomes noisy, upgrade rclone rather than adding workarounds.
+>
+> **Second wrinkle (movie-assets only):** `--include "*/cover.jpg"` is not depth-limited
+> in rclone — it matches the filename regardless of how many directories precede it. For
+> the flat `catalog-covers`/`tv-covers` directories this doesn't matter, but the
+> movie/series trees have per-season `cover.jpg` files one level deeper. The script pairs
+> the filter with `--max-depth 2` to exclude them (see `FILTERS`/`sync_prefix()` in
+> [cdn-sync-images.sh](../scripts/cdn-sync-images.sh)). `--max-depth` limits *both* the
+> source and destination listing, so if a stray deep object is ever uploaded before this
+> is in place, a normal sync run will not see it to delete — it needs a one-off manual
+> `DeleteObjects` call.
 
 ### Verify
 
@@ -243,23 +264,50 @@ can be left in place.
 
 Ordered by value-to-risk. Each phase should land and be observed before the next starts.
 
-### Phase 2 — remaining images *(next)*
+### Phase 2 — local per-title covers ✅ done
 
-Scope: `avatars/` (137), `welcome-covers/` (20), `icons/` (4), the 2 loose files,
-`css/login-background.jpg`, and the 509 per-title `cover.jpg` files under
-`/app/storage/movies` and `/app/storage/series`.
+Scope: the 269 movie `cover.jpg` files under `/app/storage/movies` and the 43 series
+`cover.jpg` files under `/app/storage/series` (one level deep only — 2 season-level
+covers, e.g. `House.of.the.Dragon/Season.01/cover.jpg`, are deliberately excluded; nothing
+in the app requests them).
+
+Shipped:
+- `movie-assets/` and `movie-assets/series/` prefixes added to `SOURCES` in the sync
+  script, filtered to `*/cover.jpg` with `--max-depth 2` (an `--include` pattern alone is
+  not depth-limited in rclone — it matches the filename regardless of nesting, so the
+  first sync pass picked up the 2 season-level covers too; `--max-depth 2` fixed it, but
+  files a filtered-out sync had already uploaded before the fix needed a manual delete —
+  sync's own delete pass can't see past `--max-depth` either).
+- `PREFIX_MAP` in `CdnAssetService` extended with both prefixes, series checked before the
+  generic movie prefix (`/movie-assets/series/` is itself a prefix match of
+  `/movie-assets/`).
+- All six local-cover emission sites fixed to route through `versionCoverUrl()` (see the
+  chokepoint-gap callout in §2.3) — this was the larger part of the work, not the bucket
+  mapping.
+- Browser fallback (`cdn-fallback.js`) extended with the same two prefixes.
+- Ongoing replication is still a manual `npm run cdn:sync:images` / cron, not push-on-
+  ingest — a cover added or changed between syncs is on origin (or briefly stale on the
+  edge) until the next run. That gap is real but low-severity: covers change rarely
+  relative to library scans, and the `?v=<mtime>` token means a changed local file
+  produces a new URL on its next sync rather than serving a stale image indefinitely.
+
+Follow-up (not yet done): hook a push on ingest-pipeline completion so a newly added
+title's cover reaches the edge without waiting for the next scheduled sync.
+
+### Phase 2b — remaining static images *(next)*
+
+Scope: `avatars/` (137), `welcome-covers/` (20), `icons/` (4), the 2 loose files, and
+`css/login-background.jpg`.
 
 Work:
 - Add `avatars/`, `welcome/`, `icons/`, `ui/` prefixes to `SOURCES` in the sync script and
   to `PREFIX_MAP` in `CdnAssetService`. The manifest gating means this is additive and
-  safe.
-- `/movie-assets/**/cover.jpg` is the harder half: covers change when the library
-  rescans, so a nightly bulk sync is the wrong mechanism. Hook replication into the
-  ingest pipeline so a cover is pushed when its title is ingested, and let the nightly
-  sync act as reconciliation only.
+  safe. These are flat, static directories — no `--max-depth`/filter caveat like phase 2.
 - Relocate `css/login-background.jpg` into `public/images/` so class and directory agree.
 
-Risk: low. Same proven mechanism, more prefixes.
+Risk: low. Same proven mechanism, no new emission-site auditing expected (these are all
+already built through a single template in `scripts/build-welcome-assets.js` or served
+statically) — but audit for stray direct references before assuming that.
 
 ### Phase 3 — media
 

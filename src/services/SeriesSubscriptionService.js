@@ -1,6 +1,7 @@
 const ProfileService = require('./ProfileService');
 const { loadIndex, getSeriesByImdbId } = require('./TvSeriesIndexService');
 const { normalizeCard } = require('./HomeFeedService');
+const { versionCoverUrl } = require('./CoverUrlService');
 
 function normalizeImdbId(value = '') {
     const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
@@ -257,7 +258,7 @@ function buildMyShowsCollection(library = {}, userKey = '', options = {}) {
             genre: item.genres || '',
             contentType: 'series',
             imdbId,
-            cover: item.cover || `/movie-assets/series/${encodeURIComponent(item.folderName || item.title || imdbId)}/cover.jpg`,
+            cover: item.cover || versionCoverUrl(`/movie-assets/series/${encodeURIComponent(item.folderName || item.title || imdbId)}/cover.jpg`),
             addedAt: item.addedAt || item.updatedAt || new Date().toISOString()
         };
         if (seen.has(synthetic.id)) continue;

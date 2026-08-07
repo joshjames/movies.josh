@@ -1,7 +1,7 @@
 // ~/movie-streamer/server.js
 console.log("!!! SERVER IS CURRENTLY INITIALIZING !!!");
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const fs = require('fs');
 const path = require('path');

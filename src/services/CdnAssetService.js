@@ -10,9 +10,13 @@ const fs = require('fs');
 const path = require('path');
 
 // Origin URL prefix -> object key prefix inside the bucket.
+// Order matters: '/movie-assets/series/' must be checked before the plain
+// '/movie-assets/' entry, since the former is also a prefix match of the latter.
 const PREFIX_MAP = [
     ['/images/catalog-covers/', 'catalog-covers/'],
-    ['/images/tv-covers/', 'tv-covers/']
+    ['/images/tv-covers/', 'tv-covers/'],
+    ['/movie-assets/series/', 'movie-assets/series/'],
+    ['/movie-assets/', 'movie-assets/']
 ];
 
 // TV covers are emitted as an API path rather than a static path, but the route is a

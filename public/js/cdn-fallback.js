@@ -17,6 +17,8 @@
     var RETRY_FLAG = 'cdnOriginRetried';
 
     // Bucket key prefix -> function building the equivalent origin URL.
+    // Order matters: 'movie-assets/series/' must be checked before 'movie-assets/',
+    // since the former is also a prefix match of the latter.
     var ORIGIN_ROUTES = [
         {
             prefix: 'catalog-covers/',
@@ -30,6 +32,14 @@
                 var imdbId = rest.replace(/\.jpg$/i, '');
                 return '/api/tv-shows/' + encodeURIComponent(imdbId) + '/cover';
             }
+        },
+        {
+            prefix: 'movie-assets/series/',
+            toOrigin: function (rest) { return '/movie-assets/series/' + rest; }
+        },
+        {
+            prefix: 'movie-assets/',
+            toOrigin: function (rest) { return '/movie-assets/' + rest; }
         }
     ];
 

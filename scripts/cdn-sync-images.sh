@@ -11,6 +11,11 @@
 #
 # Credentials come from cftoken.env (account-scoped R2 keys). The bucket-scoped keys in
 # .env are limited to contentanymovie and will fail with AccessDenied here.
+#
+# movie-assets and movie-assets/series point at the 1.2TB movies/series volumes, which
+# are otherwise full of video/subtitle/metadata files. Only *cover.jpg one level below
+# the source root is included (see FILTERS below) — nothing else in those trees is ever
+# read for upload.
 
 set -euo pipefail
 
@@ -72,27 +77,55 @@ RCLONE_ARGS=(
     --stats 5s
 )
 
+MOVIES_HOST_DIR="${MOVIES_HOST_DIR:-/home/epic/movies}"
+SERIES_HOST_DIR="${SERIES_HOST_DIR:-/data/blockchain/media/Series}"
+
 # key = destination prefix in the bucket, value = local source directory
 declare -A SOURCES=(
     ["catalog-covers"]="$REPO_ROOT/public/images/catalog-covers"
     ["tv-covers"]="$MANIFEST_DIR/tv-covers"
+    ["movie-assets"]="$MOVIES_HOST_DIR"
+    ["movie-assets/series"]="$SERIES_HOST_DIR"
+)
+
+# Per-prefix rclone --include filter. Empty means "everything in the source dir",
+# which is correct for the flat cover-only directories but must never be used for
+# movie-assets/* — those sources hold the full media library.
+declare -A FILTERS=(
+    ["movie-assets"]="*/cover.jpg"
+    ["movie-assets/series"]="*/cover.jpg"
 )
 
 sync_prefix() {
     local prefix="$1"
     local src="${SOURCES[$prefix]}"
+    local filter="${FILTERS[$prefix]:-}"
 
     if [[ ! -d "$src" ]]; then
         echo "⚠️  Skipping $prefix — source directory missing: $src"
         return 0
     fi
 
+    local filter_args=()
     local count
-    count="$(find "$src" -type f | wc -l)"
-    echo "📤 $prefix  <-  $src  ($count files)"
+    if [[ -n "$filter" ]]; then
+        filter_args=(--include "$filter")
+        count="$(find "$src" -mindepth 2 -maxdepth 2 -name "$(basename "$filter")" -type f | wc -l)"
+    else
+        count="$(find "$src" -type f | wc -l)"
+    fi
+    echo "📤 $prefix  <-  $src  ($count files)${filter:+, filter: $filter}"
+
+    # --include alone is not depth-limited in rclone (it matches the basename pattern
+    # regardless of how many directories precede it), so a filtered sync also needs
+    # --max-depth to keep season-level covers (movies/Show/Season.01/cover.jpg) out.
+    if [[ -n "$filter" ]]; then
+        filter_args+=(--max-depth 2)
+    fi
 
     rclone sync "$src" ":s3:${BUCKET}/${prefix}" \
         "${RCLONE_ARGS[@]}" \
+        "${filter_args[@]}" \
         ${DRY_RUN:+$DRY_RUN} \
         --header-upload "Cache-Control: $IMMUTABLE_CACHE_CONTROL" \
         --exclude ".*" \
