@@ -2678,8 +2678,8 @@
 
             try {
                 const moviePromise = (type === 'movies' || type === 'both')
-                    ? fetch(`/api/movies/search/unified?q=${encodeURIComponent(query)}&localLimit=12&remoteMode=never`, { credentials: 'include' })
-                    : Promise.resolve({ ok: true, json: async () => ({ success: true, localResults: [] }) });
+                    ? fetch(`/api/movies/search/index?q=${encodeURIComponent(query)}&limit=12&localOnly=0`, { credentials: 'include' })
+                    : Promise.resolve({ ok: true, json: async () => ({ success: true, items: [] }) });
                 const tvPromise = (type === 'series' || type === 'both')
                     ? fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=12&localOnly=1`, { credentials: 'include' })
                     : Promise.resolve({ ok: true, json: async () => ({ success: true, items: [] }) });
@@ -2687,14 +2687,14 @@
                 const [movieRes, tvRes] = await Promise.all([moviePromise, tvPromise]);
                 const [movieData, tvData] = await Promise.all([movieRes.ok ? movieRes.json() : { success: false }, tvRes.ok ? tvRes.json() : { success: false }]);
 
-                if (movieData.success && Array.isArray(movieData.localResults)) {
-                    results.push(...movieData.localResults.map((item) => ({
+                if (movieData.success && Array.isArray(movieData.items)) {
+                    results.push(...movieData.items.map((item) => ({
                         title: item.title || item.id || 'Movie',
                         imdbId: item.imdbId || item.imdbID || '',
                         year: item.year || '',
                         type: 'movie',
-                        inLibrary: true,
-                        localHref: item.href || null
+                        inLibrary: Boolean(item.inLibrary),
+                        localHref: item.localItem?.href || null
                     })));
                 }
 

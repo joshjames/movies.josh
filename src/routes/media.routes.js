@@ -361,6 +361,31 @@ function buildLocalMovieCatalogRows(library) {
         });
 }
 
+function mapCatalogMovieToResult(item = {}, localMap = new Map()) {
+    const imdbId = MovieTitleIndexService.normalizeImdbId(item.imdbId || '');
+    const localRow = localMap.get(imdbId) || null;
+    return {
+        imdbId,
+        title: item.title || item.name || '',
+        year: item.year || '',
+        rating: item.rating || item.averageRating || 0,
+        votes: item.votes || item.numVotes || 0,
+        genres: Array.isArray(item.genres) ? item.genres : String(item.genres || '').split(',').map(v => v.trim()).filter(Boolean),
+        searchText: item.searchText || '',
+        source: item.source || 'imdb-catalog',
+        inLibrary: Boolean(localRow),
+        localItem: localRow ? {
+            id: localRow.id,
+            title: localRow.title,
+            year: localRow.year,
+            imdbId: localRow.imdbId,
+            cover: localRow.cover,
+            href: localRow.href,
+            contentType: localRow.contentType
+        } : null
+    };
+}
+
 function indexLocalMovieKeys(localRows = []) {
     const imdbSet = new Set();
     const titleYearSet = new Set();
@@ -2227,6 +2252,47 @@ router.get('/movies/search/unified', async (req, res) => {
             remotePage: page,
             remotePageLimit,
             remoteResults
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/movies/search/index', async (req, res) => {
+    try {
+        const query = String(req.query.q || req.query.query || '').trim();
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 30, 100));
+        const localOnly = ['1', 'true', 'yes', 'local'].includes(String(req.query.localOnly || '').toLowerCase());
+        const imdbId = MovieTitleIndexService.normalizeImdbId(req.query.imdbId || req.query.id || req.query.imdb || '');
+
+        const library = await getLibrary();
+        const localRows = buildLocalMovieCatalogRows(library);
+        const localMap = new Map(localRows.map(item => [normalizeMovieImdbId(item.imdbId || ''), item]));
+
+        let indexResults = [];
+        if (imdbId) {
+            const match = MovieTitleIndexService.getByImdbId(imdbId);
+            if (match) indexResults = [match];
+        } else if (query) {
+            indexResults = MovieTitleIndexService.searchIndex(query, limit);
+        }
+
+        if (localOnly) {
+            indexResults = indexResults.filter((item) => {
+                const normalizedImdb = MovieTitleIndexService.normalizeImdbId(item.imdbId || '');
+                return normalizedImdb && localMap.has(normalizedImdb);
+            });
+        }
+
+        const items = indexResults.map((item) => mapCatalogMovieToResult(item, localMap));
+
+        return res.json({
+            success: true,
+            source: 'imdb-catalog',
+            query,
+            count: items.length,
+            items,
+            localLibraryCount: localRows.length
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
