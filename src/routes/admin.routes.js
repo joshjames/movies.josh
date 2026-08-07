@@ -37,7 +37,9 @@ function runNodeScript(scriptName, args = []) {
 //const logger = require('../services/logger'); 
 const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Import Redis engine utilities
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
-const LibraryScanner = require('../services/LibraryScanner'); 
+const LibraryScanner = require('../services/LibraryScanner');
+const CdnSyncService = require('../services/CdnSyncService');
+const CdnAssetService = require('../services/CdnAssetService'); 
 const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed, loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { buildDefaultWorkerEndpoints, processToHealthUrl } = require('../services/WorkerEndpoints');
 
@@ -2125,9 +2127,19 @@ router.post('/rename-media', async (req, res) => {
             if (fs.existsSync(nextPath)) {
                 return res.status(409).json({ success: false, error: 'Destination folder already exists.' });
             }
+            const previousFolderName = currentFolderName;
             await fsPromises.rename(currentPath, nextPath);
             currentFolderName = nextFolderName;
             currentPath = nextPath;
+
+            // The old CDN key now points at a folder that no longer exists there, and the
+            // new folder name isn't in the manifest yet -- reconcile both immediately
+            // rather than waiting for the next bulk sync to notice the move. Best-effort,
+            // never blocks or fails the rename response.
+            CdnSyncService.deleteCoverForContentType(contentType, previousFolderName)
+                .catch(err => logger.warn(`⚠️ [CDN] Stale cover cleanup failed for ${previousFolderName}: ${err.message}`));
+            CdnSyncService.pushCoverForContentType(contentType, currentFolderName)
+                .catch(err => logger.warn(`⚠️ [CDN] Cover push failed for ${currentFolderName}: ${err.message}`));
         }
 
         if (newFileName && newFileName.trim()) {
@@ -2531,11 +2543,16 @@ router.post('/upload-poster', async (req, res) => {
 
         await fsPromises.writeFile(path.join(targetDir, 'cover.jpg'), buffer);
         logger.info(`🎨 [ASSET OVERRIDE] Fresh poster artwork written directly to disk for: ${folder}`);
-        
+
         // 🚨 FIX 4: Fire background db refresh instead of relying on broken global function hooks
         LibraryScanner.runLibraryScanSweep()
             .catch(err => logger.error(`Error running library sweep: ${err.message}`));
-        
+
+        // Push the new artwork to the CDN now rather than waiting for the next bulk
+        // sync — best-effort, never blocks or fails the upload response.
+        CdnSyncService.pushCoverForContentType(contentType, folder)
+            .catch(err => logger.warn(`⚠️ [CDN] Poster push failed for ${folder}: ${err.message}`));
+
         res.json({ success: true, message: 'Poster written to disk.' });
     } catch (err) {
         logger.error(`Asset upload exception: ${err.message}`);
