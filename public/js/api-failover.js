@@ -1,6 +1,16 @@
 (function () {
   'use strict';
 
+  // Disabled: this used to silently redirect the whole page to a different
+  // domain (window.location.replace) whenever any /api/* fetch threw a
+  // TypeError. That included transient network blips, CORS hiccups, and ad
+  // blockers - and it fired during login/register too, bouncing users to a
+  // different origin mid-submit with no session and no explanation. That
+  // was indistinguishable from "login just failed, no reason". Left as a
+  // no-op (rather than removing the <script> tags from every page) so any
+  // future failover work has a known place to live.
+  return;
+
   if (window.__API_FAILOVER_INSTALLED__) return;
   window.__API_FAILOVER_INSTALLED__ = true;
 

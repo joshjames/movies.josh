@@ -536,25 +536,32 @@
             }
         }
 
+        // Turnstile is a best-effort bot check, not a login gate: if the widget
+        // never loads, times out, or errors, we resolve with an empty token
+        // instead of throwing so the login/register request still reaches the
+        // server (which itself fails open on a missing token). Previously this
+        // threw, which blocked the request before it was ever sent - matching
+        // the "ambiguous failed login" reports when the widget had trouble.
         async function ensureTurnstileToken() {
             if (!turnstileState.enabled) return '';
             if (isTurnstileTokenFresh()) return turnstileState.token;
             if (!window.turnstile || turnstileState.widgetId === null) {
-                throw new Error('verification_unavailable');
+                console.warn('[turnstile] widget unavailable, proceeding without a token');
+                return '';
             }
 
-            return await new Promise((resolve, reject) => {
+            return await new Promise((resolve) => {
                 const timeout = setTimeout(() => {
-                    reject(new Error('verification_timeout'));
+                    console.warn('[turnstile] token request timed out, proceeding without a token');
+                    resolve('');
                 }, 12000);
 
                 turnstileState.pendingResolvers.push((token) => {
                     clearTimeout(timeout);
                     if (!token) {
-                        reject(new Error('verification_failed'));
-                        return;
+                        console.warn('[turnstile] widget reported an error, proceeding without a token');
                     }
-                    resolve(token);
+                    resolve(token || '');
                 });
 
                 clearTurnstileToken();
@@ -652,8 +659,9 @@
                     } else {
                         showAlert(data.error || 'Unable to reset password.', 'error');
                     }
-                } catch (_err) {
-                    showAlert('Security check failed or network error occurred. Please try again.', 'error');
+                } catch (err) {
+                    console.error('[password-reset/confirm] request failed:', err);
+                    showAlert('Network error - could not reach the server. Please check your connection and try again.', 'error');
                 }
                 return;
             }
@@ -686,12 +694,13 @@
                     } else {
                         showAlert(data.error || 'Unable to process password reset request.', 'error');
                     }
-                } catch (_err) {
-                    showAlert('Security check failed or network error occurred. Please try again.', 'error');
+                } catch (err) {
+                    console.error('[password-reset/request] request failed:', err);
+                    showAlert('Network error - could not reach the server. Please check your connection and try again.', 'error');
                 }
                 return;
             }
-            
+
             const payload = { email: username, username, password };
 
             if (!isLoginMode && !isValidEmail(username)) {
@@ -735,8 +744,9 @@
                 } else {
                     showAlert(data.error || 'Unable to complete authentication request.', 'error');
                 }
-            } catch (_err) {
-                showAlert('Security check failed or network error occurred. Please try again.', 'error');
+            } catch (err) {
+                console.error('[auth] request failed:', err);
+                showAlert('Network error - could not reach the server. Please check your connection and try again.', 'error');
             }
         }
 

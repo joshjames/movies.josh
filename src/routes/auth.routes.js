@@ -8,7 +8,12 @@ const router = express.Router();
 const ProfileService = require('../services/ProfileService');
 const MailerService = require('../services/MailerService');
 const TurnstileService = require('../services/TurnstileService');
+const logger = require('../services/logger');
 const { getSessionCookieOptions, getClearCookieOptions } = require('../utils/cookieOptions');
+
+function resolveRequestIp(req) {
+    return req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+}
 
 function resolveTurnstileToken(req) {
     const bodyToken = String(
@@ -141,8 +146,11 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ success: false, error: "Credentials cannot be blank." });
     }
 
+    const ipAddress = resolveRequestIp(req);
+
     const turnstile = await enforceTurnstile(req);
     if (!turnstile.success) {
+        logger.warn(`[LOGIN] Blocked for "${identifier}" from ${ipAddress}: turnstile ${turnstile.code || 'verification_failed'}`);
         return res.status(403).json({ success: false, error: turnstile.publicMessage || 'Security verification failed.' });
     }
 
@@ -151,25 +159,26 @@ router.post('/login', async (req, res) => {
         if (result.success) {
             const cleanName = result.userKey || await ProfileService.resolveUserKey(identifier);
             if (!cleanName) {
+                logger.warn(`[LOGIN] Failed for "${identifier}" from ${ipAddress}: could not resolve account after authentication.`);
                 return res.status(400).json({ success: false, error: 'Unable to resolve account.' });
             }
-            
+
             const userConfig = await ProfileService.readData(cleanName, 'config', null);
             if (userConfig && (userConfig.accountDisabled === true || userConfig.accountArchived === true)) {
+                logger.warn(`[LOGIN] Blocked for "${cleanName}" from ${ipAddress}: account disabled/archived.`);
                 return res.status(403).json({
                     success: false,
                     error: 'This account is disabled. Please contact support if you believe this is a mistake.'
                 });
             }
             if (userConfig && userConfig.isVerified === false) {
-                return res.status(403).json({ 
-                    success: false, 
-                    error: "Account verification pending. Please validate your registration via email link." 
+                logger.warn(`[LOGIN] Blocked for "${cleanName}" from ${ipAddress}: account not yet verified.`);
+                return res.status(403).json({
+                    success: false,
+                    error: "Account verification pending. Please validate your registration via email link."
                 });
             }
 
-            // Capture remote user IP safely for telemetry logs
-            const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
             await ProfileService.updateLoginHistory(cleanName, ipAddress);
 
             // Assign structural root-path access cookie
@@ -183,8 +192,10 @@ router.post('/login', async (req, res) => {
                 }
             });
         }
+        logger.warn(`[LOGIN] Failed for "${identifier}" from ${ipAddress}: ${result.error || 'invalid credentials'}`);
         res.status(400).json(result);
     } catch (err) {
+        logger.warn(`[LOGIN] Error for "${identifier}" from ${ipAddress}: ${err.message}`);
         res.status(500).json({ success: false, error: err.message });
     }
 });
