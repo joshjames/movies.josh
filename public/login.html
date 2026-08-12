@@ -508,6 +508,7 @@
                 action: 'turnstile-spin-v2',
                 appearance: 'interaction-only',
                 theme: 'dark',
+                execution: 'execute',
                 callback: onTurnstileSuccess,
                 'expired-callback': onTurnstileExpired,
                 'error-callback': onTurnstileError
@@ -578,6 +579,11 @@
                 });
 
                 clearTurnstileToken();
+                try {
+                    window.turnstile.reset(turnstileState.widgetId);
+                } catch (_err) {
+                    // no-op
+                }
                 window.turnstile.execute(turnstileState.widgetId);
             });
         }
