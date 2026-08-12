@@ -80,14 +80,15 @@ router.post('/register', async (req, res) => {
                 console.log(`ℹ️ MailerService loaded. Verification Token for ${cleanEmail}: ${verificationToken}`);
             }
 
-            return res.json({ 
-                success: true, 
-                message: "Registration successful! Check your inbox to verify your profile." 
+            return res.json({
+                success: true,
+                message: "Registration successful! Check your inbox to verify your profile."
             });
         }
         res.status(400).json(result);
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        logger.error(`[REGISTER ERROR] ${cleanEmail}: ${err.message}`);
+        res.status(500).json({ success: false, error: 'Registration failed on our end. Please try again in a moment.' });
     }
 });
 
@@ -216,7 +217,8 @@ router.get('/me', async (req, res) => {
             config
         });
     } catch (err) {
-        res.status(500).json({ loggedIn: false, error: err.message });
+        logger.error(`[ME ERROR] ${activeUser}: ${err.message}`);
+        res.status(500).json({ loggedIn: false, error: 'Could not load your session. Please try again.' });
     }
 });
 
@@ -246,7 +248,8 @@ router.post('/account', async (req, res) => {
 
         return res.json({ success: true, userKey: updated.userKey, config: updated.config });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        logger.error(`[ACCOUNT UPDATE ERROR] ${activeUser}: ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message.includes('already uses this email') ? err.message : 'Could not update your account. Please try again.' });
     }
 });
 
@@ -283,7 +286,8 @@ router.post('/change-password', async (req, res) => {
 
         return res.json({ success: true });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        logger.error(`[CHANGE PASSWORD ERROR] ${activeUser}: ${err.message}`);
+        return res.status(500).json({ success: false, error: 'Could not change your password. Please try again.' });
     }
 });
 
@@ -316,7 +320,8 @@ router.post('/password-reset/request', async (req, res) => {
             message: 'If that email is registered, a password reset link has been sent.'
         });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        logger.error(`[PASSWORD RESET REQUEST ERROR] ${err.message}`);
+        return res.status(500).json({ success: false, error: 'Could not process the reset request. Please try again.' });
     }
 });
 
@@ -347,7 +352,8 @@ router.post('/password-reset/confirm', async (req, res) => {
 
         return res.json({ success: true, message: 'Password reset successful. You can now log in.' });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        logger.error(`[PASSWORD RESET CONFIRM ERROR] ${err.message}`);
+        return res.status(500).json({ success: false, error: 'Could not reset your password. Please try again.' });
     }
 });
 

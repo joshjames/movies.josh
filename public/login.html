@@ -544,7 +544,16 @@
         // the "ambiguous failed login" reports when the widget had trouble.
         async function ensureTurnstileToken() {
             if (!turnstileState.enabled) return '';
-            if (isTurnstileTokenFresh()) return turnstileState.token;
+            if (isTurnstileTokenFresh()) {
+                // Turnstile tokens are single-use: Cloudflare rejects a token the
+                // moment it's been checked once, success or not. Hand it out and
+                // immediately drop it from the cache so a retry (e.g. after a typo
+                // password) executes a fresh challenge instead of resubmitting a
+                // token Cloudflare will now call a duplicate.
+                const cachedToken = turnstileState.token;
+                clearTurnstileToken();
+                return cachedToken;
+            }
             if (!window.turnstile || turnstileState.widgetId === null) {
                 console.warn('[turnstile] widget unavailable, proceeding without a token');
                 return '';
@@ -561,6 +570,10 @@
                     if (!token) {
                         console.warn('[turnstile] widget reported an error, proceeding without a token');
                     }
+                    // Consume immediately - onTurnstileSuccess just cached this token as
+                    // "fresh", but it's about to be spent on this request. Leaving it
+                    // cached would make the *next* retry resend an already-used token.
+                    clearTurnstileToken();
                     resolve(token || '');
                 });
 
