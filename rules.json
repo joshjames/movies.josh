@@ -1,0 +1,26 @@
+[
+  {
+    "corsRuleName": "multiOriginRule",
+    "allowedOrigins": [
+      "https://anymovie.online",
+      "https://any.movie",
+      "https://anymovie.club",
+      "http://anymovie.digital",
+      "http://anyseries.online"
+    ],
+    "allowedOperations": [
+      "b2_download_file_by_id",
+      "b2_download_file_by_name",
+      "s3_get",
+      "s3_head"
+    ],
+    "allowedHeaders": [
+      "*"
+    ],
+    "exposeHeaders": [
+      "x-bz-content-sha1",
+      "ETag"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
