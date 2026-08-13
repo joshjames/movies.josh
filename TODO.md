@@ -1,7 +1,18 @@
 
 WORKING LOG
 
+** latest update*
+tech debt.
 
+- priority
+
+fix the subscription trial expiry playback issue.  
+
+fix/finish the android APK
+
+fix/ finish the android TV apk
+
+both those need finishing before enforcing paywalls.
 
 
 🚀 The any.movie Pre-Launch Feature Blueprint

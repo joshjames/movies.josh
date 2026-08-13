@@ -176,6 +176,15 @@ function isTrialStatus(status) {
     return ['TRIAL', 'TRIALING'].includes(String(status || '').toUpperCase());
 }
 
+// A gifted/administrative premium grant. `freeAccessUntil` of null/undefined means an
+// unlimited grant (no expiry); otherwise it lapses once that timestamp passes.
+function isFreeAccessGrantActive(config) {
+    if (!config || config.freeAccessActive !== true) return false;
+    if (!config.freeAccessUntil) return true;
+    const untilMs = Date.parse(config.freeAccessUntil);
+    return !Number.isFinite(untilMs) || untilMs > Date.now();
+}
+
 function toSeriesFolderName(value = '') {
     const raw = String(value || '')
         .replace(/\.[a-z0-9]{2,4}$/i, '')
@@ -3484,11 +3493,12 @@ router.get('/users', (req, res) => {
             const trialEndsAt = toIsoDateOrNull(config.trialEndsAt);
             const trialEndsAtMs = trialEndsAt ? Date.parse(trialEndsAt) : NaN;
             const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+            const freeAccessGrantActive = isFreeAccessGrantActive(config);
             const hasPremium = isPaidStatus(subscriptionStatus)
                 || Boolean(config.squareSubscriptionId)
-                || Boolean(config.freeAccessActive)
+                || freeAccessGrantActive
                 || (isTrialStatus(subscriptionStatus) && trialActive);
-            
+
             return {
                 username: folder,
                 email: config.email || folder,
@@ -3509,6 +3519,9 @@ router.get('/users', (req, res) => {
                 trialDays: Number(config.trialDays || 0),
                 trialEndsAt,
                 freeAccessActive: Boolean(config.freeAccessActive),
+                freeAccessUntil: toIsoDateOrNull(config.freeAccessUntil),
+                freeAccessGrantActive,
+                freeAccessGrantedBy: config.freeAccessGrantedBy || null,
                 squareCustomerId: config.squareCustomerId || null,
                 squareSubscriptionId: config.squareSubscriptionId || null,
                 createdAt: config.createdAt || null,
@@ -3604,6 +3617,7 @@ router.post('/users/normalize-data', async (req, res) => {
                 const trialEndsAtMs = next.trialEndsAt ? Date.parse(next.trialEndsAt) : NaN;
                 const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > now;
                 const paid = isPaidStatus(normalizedStatus) || Boolean(next.squareSubscriptionId);
+                const giftActive = isFreeAccessGrantActive(config);
 
                 next.subscriptionStatus = paid
                     ? (normalizedStatus === 'GUEST' ? 'ACTIVE' : normalizedStatus)
@@ -3613,7 +3627,10 @@ router.post('/users/normalize-data', async (req, res) => {
                     next.billingTier = paid ? 'premium-monthly' : (trialActive ? 'trial' : 'guest');
                 }
 
-                next.freeAccessActive = paid ? false : trialActive;
+                // Preserve an active administrative/gifted premium grant instead of clobbering it -
+                // it isn't reflected in subscriptionStatus/trialEndsAt so the checks above don't see it.
+                next.freeAccessActive = paid ? false : (trialActive || giftActive);
+                next.freeAccessUntil = (giftActive && !paid) ? config.freeAccessUntil : null;
                 next.gracePeriodDays = parsePositiveInt(next.gracePeriodDays, parsePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3, 0, 3650), 0, 3650);
                 next.updatedAt = now;
 
@@ -3699,6 +3716,63 @@ router.post('/users/reset-trials', async (req, res) => {
     }
 });
 
+// POST: /api/admin/users/grant-premium
+// Gift administrative premium access for a fixed number of weeks (or unlimited), bypassing billing.
+// Pass { revoke: true } to take a grant back early.
+router.post('/users/grant-premium', async (req, res) => {
+    try {
+        const body = (req.body && typeof req.body === 'object') ? req.body : {};
+        const revoke = body.revoke === true;
+        const unlimited = !revoke && body.unlimited === true;
+        const weeks = (!revoke && !unlimited) ? parsePositiveInt(body.weeks, 4, 1, 520) : null;
+
+        const users = await resolveTargetUsers(body.userKeys);
+        if (!Array.isArray(users) || users.length === 0) {
+            return res.json({ success: true, updated: 0, users: [], weeks, unlimited, revoke });
+        }
+
+        const now = Date.now();
+        const freeAccessUntil = (!revoke && !unlimited)
+            ? new Date(now + weeks * 7 * 24 * 60 * 60 * 1000).toISOString()
+            : null;
+        const grantedBy = String(req.cookies?.user_profile || '').toLowerCase().trim() || 'admin';
+        const updatedUsers = [];
+        const errors = [];
+
+        for (const userKey of users) {
+            try {
+                const config = await ProfileService.readData(userKey, 'config', {});
+                const nextConfig = {
+                    ...config,
+                    freeAccessActive: !revoke,
+                    freeAccessUntil,
+                    freeAccessGrantedAt: revoke ? null : new Date(now).toISOString(),
+                    freeAccessGrantedBy: revoke ? null : grantedBy,
+                    updatedAt: now
+                };
+
+                await ProfileService.writeData(userKey, 'config', nextConfig);
+                updatedUsers.push(userKey);
+            } catch (err) {
+                errors.push({ userKey, error: err.message });
+            }
+        }
+
+        return res.json({
+            success: errors.length === 0,
+            updated: updatedUsers.length,
+            users: updatedUsers,
+            weeks,
+            unlimited,
+            revoke,
+            freeAccessUntil,
+            errors
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // POST: /api/admin/users/:userKey/clear-square-subscription
 // Clear stale Square links for one user (common sandbox -> production repair path).
 router.post('/users/:userKey/clear-square-subscription', async (req, res) => {
@@ -3711,6 +3785,7 @@ router.post('/users/:userKey/clear-square-subscription', async (req, res) => {
         const config = await ProfileService.readData(userKey, 'config', {});
         const trialEndsAtMs = config.trialEndsAt ? Date.parse(config.trialEndsAt) : NaN;
         const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+        const giftActive = isFreeAccessGrantActive(config);
 
         const nextConfig = {
             ...config,
@@ -3722,7 +3797,8 @@ router.post('/users/:userKey/clear-square-subscription', async (req, res) => {
             cancelAtPeriodEnd: false,
             subscriptionStatus: trialActive ? 'TRIAL' : 'GUEST',
             billingTier: trialActive ? 'trial' : 'guest',
-            freeAccessActive: trialActive,
+            freeAccessActive: trialActive || giftActive,
+            freeAccessUntil: giftActive ? config.freeAccessUntil : null,
             updatedAt: Date.now()
         };
 
@@ -3782,6 +3858,9 @@ router.post('/users/reset-subscriptions', async (req, res) => {
                     lastSquareWebhookAt: null,
                     hasDonated: false,
                     freeAccessActive: false,
+                    freeAccessUntil: null,
+                    freeAccessGrantedAt: null,
+                    freeAccessGrantedBy: null,
                     gracePeriodEndsAt: null,
                     updatedAt: Date.now()
                 };
@@ -3827,6 +3906,7 @@ router.post('/users/bulk-clear-square-subscription', async (req, res) => {
                 const config = await ProfileService.readData(userKey, 'config', {});
                 const trialEndsAtMs = config.trialEndsAt ? Date.parse(config.trialEndsAt) : NaN;
                 const trialActive = Number.isFinite(trialEndsAtMs) && trialEndsAtMs > Date.now();
+                const giftActive = isFreeAccessGrantActive(config);
 
                 const nextConfig = {
                     ...config,
@@ -3838,7 +3918,8 @@ router.post('/users/bulk-clear-square-subscription', async (req, res) => {
                     cancelAtPeriodEnd: false,
                     subscriptionStatus: trialActive ? 'TRIAL' : 'GUEST',
                     billingTier: trialActive ? 'trial' : 'guest',
-                    freeAccessActive: trialActive,
+                    freeAccessActive: trialActive || giftActive,
+                    freeAccessUntil: giftActive ? config.freeAccessUntil : null,
                     updatedAt: Date.now()
                 };
 

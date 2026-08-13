@@ -209,6 +209,10 @@
             <button class="btn-cyan" id="btn-normalize">Normalize Selected</button>
             <button class="btn-green" id="btn-reset-trials">Reset Trials (Selected)</button>
             <button class="btn-red" id="btn-reset-subs">Reset Subs (Selected)</button>
+            <button class="btn-green" id="btn-gift-2w">Gift 2 Weeks Premium</button>
+            <button class="btn-green" id="btn-gift-4w">Gift 4 Weeks Premium</button>
+            <button class="btn-green" id="btn-gift-custom">Gift Premium (Custom)...</button>
+            <button class="btn-muted" id="btn-gift-revoke">Revoke Gifted Premium</button>
             <button class="btn-muted" id="btn-clear-square">Clear Square (Selected)</button>
             <button class="btn-muted" id="btn-reconcile">Reconcile Square (Selected)</button>
             <button class="btn-muted" id="btn-set-password">Set Password (Selected)</button>
@@ -234,6 +238,7 @@
                             <th>Status</th>
                             <th>Tier</th>
                             <th>Trial Ends</th>
+                            <th>Premium Gift</th>
                             <th>Square Customer</th>
                             <th>Square Sub</th>
                             <th>Updated</th>
@@ -241,7 +246,7 @@
                         </tr>
                     </thead>
                     <tbody id="rows">
-                        <tr><td colspan="12" style="color:#8ea2bd;">Loading...</td></tr>
+                        <tr><td colspan="13" style="color:#8ea2bd;">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -294,6 +299,13 @@
             return '<span class="pill guest">' + esc(normalized || 'GUEST') + '</span>';
         }
 
+        function giftPill(user) {
+            if (!user.freeAccessActive) return '-';
+            if (!user.freeAccessGrantActive) return '<span class="pill guest">EXPIRED</span>';
+            if (!user.freeAccessUntil) return '<span class="pill active">UNLIMITED</span>';
+            return '<span class="pill active">Until ' + esc(fmtDate(user.freeAccessUntil)) + '</span>';
+        }
+
         function userFlags(user) {
             const flags = [];
             if (user.isVerified) flags.push('VERIFIED');
@@ -333,7 +345,7 @@
         function renderRows() {
             const body = document.getElementById('rows');
             if (!Array.isArray(state.users) || state.users.length === 0) {
-                body.innerHTML = '<tr><td colspan="12" style="color:#8ea2bd;">No users found for current filter.</td></tr>';
+                body.innerHTML = '<tr><td colspan="13" style="color:#8ea2bd;">No users found for current filter.</td></tr>';
                 return;
             }
 
@@ -351,6 +363,7 @@
                     + '<td>' + statusPill(user.subscriptionStatus) + '</td>'
                     + '<td>' + esc(user.billingTier || '-') + '</td>'
                     + '<td>' + esc(fmtDate(user.trialEndsAt)) + '</td>'
+                    + '<td>' + giftPill(user) + '</td>'
                     + '<td>' + esc(user.squareCustomerId || '-') + '</td>'
                     + '<td>' + esc(user.squareSubscriptionId || '-') + '</td>'
                     + '<td>' + esc(fmtDate(user.updatedAt || user.signupDate || user.createdAt)) + '</td>'
@@ -521,6 +534,39 @@
 
         document.getElementById('btn-reset-subs').addEventListener('click', () =>
             runSelectedAction('Subscription reset', '/api/admin/users/reset-subscriptions', { resetTrial: false }, 'Reset subscriptions for {count} selected users?')
+        );
+
+        document.getElementById('btn-gift-2w').addEventListener('click', () =>
+            runSelectedAction('Premium gift (2 weeks)', '/api/admin/users/grant-premium', { weeks: 2 }, 'Gift 2 weeks of premium to {count} selected users?')
+        );
+
+        document.getElementById('btn-gift-4w').addEventListener('click', () =>
+            runSelectedAction('Premium gift (4 weeks)', '/api/admin/users/grant-premium', { weeks: 4 }, 'Gift 4 weeks of premium to {count} selected users?')
+        );
+
+        document.getElementById('btn-gift-custom').addEventListener('click', async () => {
+            try {
+                const userKeys = requireSelected();
+                const raw = String(prompt('Weeks of premium to gift ' + userKeys.length + ' selected user(s). Enter a number, or "unlimited":') || '').trim();
+                if (!raw) return;
+
+                const unlimited = raw.toLowerCase() === 'unlimited';
+                const weeks = unlimited ? null : Number(raw);
+                if (!unlimited && (!Number.isFinite(weeks) || weeks <= 0)) {
+                    setStatus('Enter a positive number of weeks, or "unlimited".');
+                    return;
+                }
+
+                setStatus('Gifting premium...');
+                await postJson('/api/admin/users/grant-premium', { userKeys, weeks, unlimited }, 'Premium gift complete.');
+                await loadUsers();
+            } catch (err) {
+                setStatus('Premium gift failed: ' + err.message);
+            }
+        });
+
+        document.getElementById('btn-gift-revoke').addEventListener('click', () =>
+            runSelectedAction('Revoke gifted premium', '/api/admin/users/grant-premium', { revoke: true }, 'Revoke gifted premium for {count} selected users?')
         );
 
         document.getElementById('btn-clear-square').addEventListener('click', () =>

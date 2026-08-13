@@ -28,17 +28,27 @@ function getQuotaKey(userKey) {
     return clean ? `${KEY_PREFIX}${clean}` : null;
 }
 
+// A gifted/administrative premium grant. `freeAccessUntil` of null/undefined means an
+// unlimited grant (no expiry); otherwise it lapses once that timestamp passes.
+function isFreeAccessGrantActive(config) {
+    if (!config || config.freeAccessActive !== true) return false;
+    if (!config.freeAccessUntil) return true;
+    const untilMs = Date.parse(config.freeAccessUntil);
+    return !Number.isFinite(untilMs) || untilMs > Date.now();
+}
+
 function getUserQuotaTier(config = {}) {
     const status = String(config.subscriptionStatus || '').trim().toUpperCase();
     const billingTier = String(config.billingTier || '').trim().toLowerCase();
     const trialEndsMs = config.trialEndsAt ? Date.parse(config.trialEndsAt) : 0;
-    const trialActive = Boolean(config.freeAccessActive) || (Number.isFinite(trialEndsMs) && trialEndsMs > Date.now());
+    const trialActive = Number.isFinite(trialEndsMs) && trialEndsMs > Date.now();
+    const giftActive = isFreeAccessGrantActive(config);
 
     if (resolvePositiveInt(config.dailyMovieLimit, -1) >= 0) {
         return 'custom';
     }
 
-    if (status === 'ACTIVE' || billingTier.startsWith('premium') || billingTier.startsWith('pro')) {
+    if (status === 'ACTIVE' || billingTier.startsWith('premium') || billingTier.startsWith('pro') || giftActive) {
         return 'subscribed';
     }
 
