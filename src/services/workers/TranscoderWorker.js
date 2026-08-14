@@ -111,7 +111,7 @@ function pickAudioStreamCandidates(filePath) {
 function buildAudioMapArgs(filePath) {
     const tracks = pickAudioStreamCandidates(filePath);
     if (!tracks.length) {
-        return { mapArgs: ['-map', '0:v:0'], chosenTrack: null, audioTracks: [] };
+        return { mapArgs: ['-map', '0:v:0'], dispositionArgs: [], chosenTrack: null, audioTracks: [] };
     }
 
     const preferred = tracks.find(track => track.isDefault && track.isEnglish)
@@ -119,12 +119,23 @@ function buildAudioMapArgs(filePath) {
         || tracks.find(track => track.isDefault)
         || tracks[0];
 
+    // All tracks get mapped/preserved (e.g. anime with a Japanese original
+    // plus an English dub) - `chosenTrack` above was previously computed and
+    // then silently discarded by every caller, so nothing ever actually
+    // marked which track a player should default to. `-disposition:a:N` on
+    // the *output* stream position (0, 1, 2... in map order, not the
+    // original input stream index) is what fixes that: without it, players
+    // fall back to whichever track happens to be first in the source file,
+    // which for many anime/foreign releases is the original-language track,
+    // not English.
     const mapArgs = ['-map', '0:v:0'];
-    tracks.forEach(track => {
+    const dispositionArgs = [];
+    tracks.forEach((track, outputAudioIndex) => {
         mapArgs.push('-map', `0:${track.streamIndex}`);
+        dispositionArgs.push(`-disposition:a:${outputAudioIndex}`, track === preferred ? 'default' : '0');
     });
 
-    return { mapArgs, chosenTrack: preferred, audioTracks: tracks };
+    return { mapArgs, dispositionArgs, chosenTrack: preferred, audioTracks: tracks };
 }
 
 // =========================================================================
@@ -137,7 +148,7 @@ function buildAudioMapArgs(filePath) {
  */
 function remuxToWebContainer(inputPath, outputPath) {
     logger.debug(`⚡ Running Fast Container Remux Pass [Stream Copy] -> ${path.basename(outputPath)}`);
-    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
     // -c copy strips encoding load entirely; +faststart relocates moov atom for immediate web playback
     const ffmpegCmd = [
         'ffmpeg',
@@ -146,6 +157,7 @@ function remuxToWebContainer(inputPath, outputPath) {
         ...mapArgs,
         '-c:v', 'copy',
         '-c:a', 'copy',
+        ...dispositionArgs,
         '-movflags', '+faststart',
         '-y', `"${outputPath}"`
     ].join(' ');
@@ -157,7 +169,7 @@ function remuxToWebContainer(inputPath, outputPath) {
  */
 function generate1080pProfile(inputPath, outputPath) {
     logger.debug(`🎬 Running 1080p Core Optimization Line -> ${path.basename(outputPath)}`);
-    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
     const ffmpegCmd = [
         'ffmpeg',
         '-threads', '6',
@@ -169,6 +181,7 @@ function generate1080pProfile(inputPath, outputPath) {
         '-c:a', 'aac',
         '-b:a', '192k',
         '-ac', '2',
+        ...dispositionArgs,
         '-movflags', '+faststart',
         '-y', `"${outputPath}"`
     ].join(' ');
@@ -181,7 +194,7 @@ function generate1080pProfile(inputPath, outputPath) {
 function generate720pProfile(inputPath, outputPath) {
     logger.debug(`⏳ Running 720p Mid-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // Added a maxrate cap of 2.5M and a matching buffer size to prevent bloated encodes
-    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
     const ffmpegCmd = [
         'ffmpeg',
         '-threads', '4',
@@ -196,6 +209,7 @@ function generate720pProfile(inputPath, outputPath) {
         '-c:a', 'aac',
         '-b:a', '128k',
         '-ac', '2',
+        ...dispositionArgs,
         '-movflags', '+faststart',
         '-y', `"${outputPath}"`
     ].join(' ');
@@ -208,7 +222,7 @@ function generate720pProfile(inputPath, outputPath) {
 function generate480pProfile(inputPath, outputPath) {
     logger.debug(`📱 Running 480p Low-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // Added a maxrate cap of 1.2M
-    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
     const ffmpegCmd = [
         'ffmpeg',
         '-threads', '4',
@@ -223,6 +237,7 @@ function generate480pProfile(inputPath, outputPath) {
         '-c:a', 'aac',
         '-b:a', '96k',
         '-ac', '2',
+        ...dispositionArgs,
         '-movflags', '+faststart',
         '-y', `"${outputPath}"`
     ].join(' ');
@@ -273,7 +288,7 @@ function inspectMediaStreams(filePath) {
 // =========================================================================
 function remuxWithAudioFix(inputPath, outputPath) {
     logger.debug(`🔊 Running Audio-Only Fix Pass [Video Copy + AAC Downmix] -> ${path.basename(outputPath)}`);
-    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
     const ffmpegCmd = [
         'ffmpeg',
         '-threads', '4',
@@ -283,6 +298,7 @@ function remuxWithAudioFix(inputPath, outputPath) {
         '-c:a', 'aac',
         '-ac', '2',
         '-b:a', '160k',
+        ...dispositionArgs,
         '-movflags', '+faststart',
         '-y', `"${outputPath}"`
     ].join(' ');
