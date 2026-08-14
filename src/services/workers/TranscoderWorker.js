@@ -17,8 +17,15 @@ function isVideoCandidate(fileName) {
     const lower = String(fileName || '').toLowerCase();
     if (!EXTENSIONS.includes(path.extname(lower))) return false;
     if (lower.endsWith('.web.mp4')) return false;
-    if (lower.includes('.720p.')) return false;
-    if (lower.includes('.480p.')) return false;
+    // Must match the *generated profile* filename shape exactly
+    // (`<stem>.720p.mp4` / `<stem>.480p.mp4` from generate720pProfile/
+    // generate480pProfile below), not just contain "720p"/"480p" anywhere -
+    // scene-release source filenames very commonly have their own resolution
+    // tag (e.g. "Show.S01E01.720p.WEB-DL.x264.mkv"), and the previous
+    // `.includes()` check silently excluded every one of those from ever
+    // being picked up for transcoding at all.
+    if (lower.endsWith('.720p.mp4')) return false;
+    if (lower.endsWith('.480p.mp4')) return false;
     return true;
 }
 
@@ -231,25 +238,197 @@ function inspectMediaStreams(filePath) {
         const videoCodec = String(videoStream?.codec_name || '').toLowerCase();
         const audioCodec = audioCodecs[0] || '';
         const hasOnlyBrowserSafeAudio = audioCodecs.length > 0 && audioCodecs.every(codec => BROWSER_SAFE_AUDIO_CODECS.has(codec));
+        // Even an AAC/MP3 track can be a 5.1/7.1 surround mix a browser won't
+        // play correctly - that also needs the audio-fix pass, not just a copy.
+        const hasOnlyStereoOrLess = audioStreams.length > 0 && audioStreams.every(stream => (Number(stream.channels) || 0) <= 2);
+        const isVideoWebSafe = videoCodec === 'h264' || videoCodec === 'hevc';
+        const isAudioWebSafe = hasOnlyBrowserSafeAudio && hasOnlyStereoOrLess;
 
         return {
             videoCodec,
             audioCodec,
             audioTracks: audioStreams.length,
             hasMultipleAudioTracks: audioStreams.length > 1,
-            isWebNative: (videoCodec === 'h264' || videoCodec === 'hevc') && hasOnlyBrowserSafeAudio
+            isVideoWebSafe,
+            isAudioWebSafe,
+            isWebNative: isVideoWebSafe && isAudioWebSafe
         };
     } catch (err) {
         logger.error(`ffprobe inspection crash on ${path.basename(filePath)}: ${err.message}`);
-        return { videoCodec: 'unknown', audioCodec: 'unknown', audioTracks: 0, hasMultipleAudioTracks: false, isWebNative: false };
+        return {
+            videoCodec: 'unknown', audioCodec: 'unknown', audioTracks: 0, hasMultipleAudioTracks: false,
+            isVideoWebSafe: false, isAudioWebSafe: false, isWebNative: false
+        };
     }
+}
+
+// =========================================================================
+// 🔊 AUDIO-ONLY FAST PASS (video copy, audio re-encode)
+// For sources whose video is already browser-safe (h264/hevc) but whose
+// audio isn't (wrong codec - AC3/EAC3/DTS/Opus etc - or more than 2
+// channels): copies the video stream untouched (no CPU-heavy re-encode) and
+// only re-encodes audio to AAC stereo. Same idea as the Episode Manager's
+// existing "force audio fix" action, just running in the isolated
+// transcoder-worker container/process instead of blocking the web server.
+// =========================================================================
+function remuxWithAudioFix(inputPath, outputPath) {
+    logger.debug(`🔊 Running Audio-Only Fix Pass [Video Copy + AAC Downmix] -> ${path.basename(outputPath)}`);
+    const { mapArgs } = buildAudioMapArgs(inputPath);
+    const ffmpegCmd = [
+        'ffmpeg',
+        '-threads', '4',
+        '-i', `"${inputPath}"`,
+        ...mapArgs,
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-b:a', '160k',
+        '-movflags', '+faststart',
+        '-y', `"${outputPath}"`
+    ].join(' ');
+    execSync(ffmpegCmd, { stdio: 'pipe' });
+}
+
+// =========================================================================
+// 📝 EMBEDDED SUBTITLE EXTRACTION
+// Ported from the Episode Manager's equivalent (media.routes.js) so the
+// same "pull embedded subs out to sidecar files" behavior is available for
+// any file this worker transcodes, not just TV episodes triggered manually
+// through that admin panel.
+// =========================================================================
+function probeSubtitleStreams(filePath) {
+    try {
+        const command = `ffprobe -v error -show_entries stream=index,codec_type,codec_name:stream_tags=language,title:stream_disposition=default,forced,hearing_impaired -of json "${filePath}"`;
+        const output = JSON.parse(execSync(command).toString());
+        return Array.isArray(output.streams) ? output.streams.filter(s => s.codec_type === 'subtitle') : [];
+    } catch (err) {
+        logger.error(`ffprobe subtitle scan crash on ${path.basename(filePath)}: ${err.message}`);
+        return [];
+    }
+}
+
+function inferSubtitleLanguage(stream = {}) {
+    const lang = String(stream?.tags?.language || '').trim().toLowerCase();
+    if (lang) return lang;
+    const title = String(stream?.tags?.title || '').toLowerCase();
+    if (title.includes('english')) return 'eng';
+    return 'und';
+}
+
+function normalizeSubtitleLangToken(value = '') {
+    const token = String(value || '').trim().toLowerCase();
+    if (token === 'en' || token === 'eng' || token === 'english') return 'eng';
+    if (!token) return 'und';
+    return token.slice(0, 3);
+}
+
+function exportSubtitleStreamToPath(videoPath, streamIndex, outPathBase) {
+    const outSrt = `${outPathBase}.srt`;
+    try {
+        execSync(`ffmpeg -y -i "${videoPath}" -map 0:${streamIndex} -c:s srt "${outSrt}"`, { stdio: 'pipe' });
+        if (fs.existsSync(outSrt)) return { path: outSrt, format: 'srt' };
+    } catch (_err) {
+        // fall through to a webvtt attempt below
+    }
+
+    const outVtt = `${outPathBase}.vtt`;
+    try {
+        execSync(`ffmpeg -y -i "${videoPath}" -map 0:${streamIndex} -c:s webvtt "${outVtt}"`, { stdio: 'pipe' });
+        if (fs.existsSync(outVtt)) return { path: outVtt, format: 'vtt' };
+    } catch (_err) {
+        // this subtitle stream just isn't extractable (e.g. bitmap-based PGS)
+    }
+
+    return null;
+}
+
+function hasExistingSubtitles(folderPath) {
+    try {
+        return fs.readdirSync(folderPath).some(f => /\.(srt|vtt)$/i.test(f));
+    } catch (_err) {
+        return false;
+    }
+}
+
+// Extracts embedded subtitle tracks from a source video into standalone
+// .srt/.vtt sidecar files, before the source potentially gets deleted by the
+// transcode step below. Best-effort and non-fatal - a source with no
+// subtitle streams, or one where extraction fails, just yields no output.
+// The default track lands as "English.srt" next to the video (matching the
+// existing sidecar-subtitle convention SubtitleWorker.js already looks for);
+// any others go into a "subs" subfolder.
+function extractEmbeddedSubtitles(videoPath) {
+    const source = path.resolve(String(videoPath || ''));
+    if (!fs.existsSync(source)) return { exported: [] };
+
+    const subtitleStreams = probeSubtitleStreams(source);
+    if (!subtitleStreams.length) return { exported: [] };
+
+    const dir = path.dirname(source);
+    const parsed = path.parse(source);
+    const baseName = String(parsed.name || '').replace(/\.web$/i, '');
+    const subsDir = path.join(dir, 'subs');
+
+    const streams = subtitleStreams
+        .map(stream => ({
+            streamIndex: Number(stream?.index),
+            lang: normalizeSubtitleLangToken(inferSubtitleLanguage(stream)),
+            isDefault: Number(stream?.disposition?.default) === 1,
+            isEnglish: ['eng', 'en'].includes(normalizeSubtitleLangToken(inferSubtitleLanguage(stream)))
+        }))
+        .filter(row => Number.isFinite(row.streamIndex));
+
+    if (!streams.length) return { exported: [] };
+
+    const defaultCandidate = streams.find(row => row.isDefault && row.isEnglish)
+        || streams.find(row => row.isEnglish)
+        || streams.find(row => row.isDefault)
+        || streams[0];
+
+    const exported = [];
+    for (const row of streams) {
+        const isDefaultSubtitle = row.streamIndex === defaultCandidate.streamIndex;
+        const outBase = isDefaultSubtitle
+            ? path.join(dir, 'English')
+            : path.join((fs.mkdirSync(subsDir, { recursive: true }), subsDir), `${baseName}.sub.${row.streamIndex}.${row.lang}`);
+
+        const extracted = exportSubtitleStreamToPath(source, row.streamIndex, outBase);
+        if (!extracted) continue;
+
+        exported.push({ streamIndex: row.streamIndex, lang: row.lang, isDefault: isDefaultSubtitle, path: extracted.path });
+    }
+
+    return { exported };
 }
 
 function processSingleVideoFile(inputPath, options = {}) {
     const forceReprocess = Boolean(options.forceReprocess);
+    // Explicit override to force the audio-only pass regardless of automatic
+    // detection - e.g. an admin retrying a title where the auto-detected mode
+    // didn't produce a satisfactory result. Automatic per-file detection
+    // (video-safe? audio-safe?) already picks the cheapest sufficient mode by
+    // default, so this flag is an escape hatch, not something you need to set
+    // for the common case.
+    const forceAudioFixOnly = Boolean(options.audioFixOnly);
     const inputIsWebProfile = /\.web\.mp4$/i.test(String(inputPath || ''));
 
     if (forceReprocess && inputIsWebProfile) {
+        if (forceAudioFixOnly) {
+            const tempOutputPath = inputPath.replace(/\.web\.mp4$/i, '.web.audiofix.tmp.mp4');
+            logger.debug(`🔊 [Force Audio Fix] Rebuilding existing web profile audio only: ${path.basename(inputPath)}`);
+            remuxWithAudioFix(inputPath, tempOutputPath);
+            fs.renameSync(tempOutputPath, inputPath);
+            return {
+                success: true,
+                skipped: false,
+                output1080Path: inputPath,
+                inputPath,
+                media: inspectMediaStreams(inputPath),
+                forceReprocessed: true,
+                mode: 'audio-fix'
+            };
+        }
+
         const tempOutputPath = inputPath.replace(/\.web\.mp4$/i, '.web.rebuild.tmp.mp4');
         logger.debug(`♻️ [Force Reprocess] Rebuilding existing web profile: ${path.basename(inputPath)}`);
         generate1080pProfile(inputPath, tempOutputPath);
@@ -260,7 +439,8 @@ function processSingleVideoFile(inputPath, options = {}) {
             output1080Path: inputPath,
             inputPath,
             media: inspectMediaStreams(inputPath),
-            forceReprocessed: true
+            forceReprocessed: true,
+            mode: 'full-reencode'
         };
     }
 
@@ -281,29 +461,50 @@ function processSingleVideoFile(inputPath, options = {}) {
         fs.unlinkSync(output1080Path);
     }
 
-    const media = inspectMediaStreams(inputPath);
-
-    if (media.isWebNative) {
-        logger.debug(`🚀 [Fast Pass Match] Streams match requirements. Wrapping container for ${path.basename(inputPath)}`);
-
+    // Best-effort embedded-subtitle extraction before the source potentially
+    // gets deleted below. Skipped if the folder already has any .srt/.vtt -
+    // never overwrite a subtitle that might have come from a better external
+    // source (YIFY/Subliminal via the SUBTITLES worker stage).
+    let subtitleExtraction = null;
+    if (!hasExistingSubtitles(parsedPath.dir)) {
         try {
+            subtitleExtraction = extractEmbeddedSubtitles(inputPath);
+        } catch (subErr) {
+            logger.error(`⚠️ Subtitle extraction failed for ${path.basename(inputPath)}: ${subErr.message}`);
+        }
+    }
+
+    const media = inspectMediaStreams(inputPath);
+    let mode;
+    if (media.isWebNative) {
+        mode = 'remux';
+    } else if (media.isVideoWebSafe && (forceAudioFixOnly || !media.isAudioWebSafe)) {
+        mode = 'audio-fix';
+    } else {
+        mode = 'full-reencode';
+    }
+
+    try {
+        if (mode === 'remux') {
+            logger.debug(`🚀 [Fast Pass Match] Streams match requirements. Wrapping container for ${path.basename(inputPath)}`);
             if (inputPath !== output1080Path) {
                 remuxToWebContainer(inputPath, output1080Path);
-                if (fs.existsSync(output1080Path)) {
-                    fs.unlinkSync(inputPath);
-                }
             }
-        } catch (remuxErr) {
-            logger.error(`⚠️ Remux failed, falling back to full hardware decode loop: ${remuxErr.message}`);
+        } else if (mode === 'audio-fix') {
+            logger.debug(`🔊 [Audio Fix Pass] Video already web-safe, re-encoding audio only for ${path.basename(inputPath)}`);
+            remuxWithAudioFix(inputPath, output1080Path);
+        } else {
             generate1080pProfile(inputPath, output1080Path);
-            if (fs.existsSync(output1080Path)) fs.unlinkSync(inputPath);
         }
-    } else {
+    } catch (transcodeErr) {
+        if (mode === 'full-reencode') throw transcodeErr;
+        logger.error(`⚠️ ${mode} pass failed, falling back to full hardware decode loop: ${transcodeErr.message}`);
         generate1080pProfile(inputPath, output1080Path);
+        mode = 'full-reencode';
+    }
 
-        if (fs.existsSync(inputPath) && inputPath !== output1080Path) {
-            fs.unlinkSync(inputPath);
-        }
+    if (fs.existsSync(output1080Path) && inputPath !== output1080Path) {
+        fs.unlinkSync(inputPath);
     }
 
     return {
@@ -311,7 +512,9 @@ function processSingleVideoFile(inputPath, options = {}) {
         skipped: false,
         output1080Path,
         inputPath,
-        media
+        media,
+        mode,
+        subtitleExtraction
     };
 }
 
@@ -322,6 +525,9 @@ app.post('/process', async (req, res) => {
     const { folderPath, folderName, contentType } = req.body;
     const isSeries = contentType === 'series';
     const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
+    // Force the video-copy/audio-reencode-only pass regardless of what
+    // automatic detection would pick - see processSingleVideoFile's comment.
+    const audioFixOnly = req.body?.audioFixOnly === true || String(req.body?.audioFixOnly || '').toLowerCase() === 'true';
 
     if (!folderPath) {
         return res.status(400).json({ success: false, error: "Missing required folderPath context." });
@@ -347,7 +553,7 @@ app.post('/process', async (req, res) => {
         const results = [];
         for (const inputPath of sourceVideos) {
             try {
-                results.push(processSingleVideoFile(inputPath, { forceReprocess }));
+                results.push(processSingleVideoFile(inputPath, { forceReprocess, audioFixOnly }));
             } catch (videoErr) {
                 logger.error(`❌ Transcoder Worker failed for ${path.basename(inputPath)}: ${videoErr.message}`);
                 results.push({ success: false, inputPath, error: videoErr.message });
