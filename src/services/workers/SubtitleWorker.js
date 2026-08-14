@@ -509,8 +509,10 @@ app.post('/process', async (req, res) => {
                             defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
                             source: defaultSubtitle.source,
                             updatedAt: new Date().toISOString()
-                        } : null,
-                        pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() }
+                        } : null
+                        // No pipelineState override here anymore - series now falls through to
+                        // the same SUBTITLES -> TRANSCODE -> CLOUDSYNC/COMPLETE progression
+                        // movies use, instead of being force-completed right after subtitles.
                     }
                 });
             }
@@ -532,8 +534,7 @@ app.post('/process', async (req, res) => {
                         defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
                         source: defaultSubtitle.source,
                         updatedAt: new Date().toISOString()
-                    } : null,
-                    ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                    } : null
                 }
             });
         }
@@ -555,8 +556,7 @@ app.post('/process', async (req, res) => {
                         defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
                         source: defaultSubtitle.source,
                         updatedAt: new Date().toISOString()
-                    } : null,
-                    ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                    } : null
                 }
             });
         }
@@ -568,8 +568,7 @@ app.post('/process', async (req, res) => {
                 success: true,
                 message: 'Subtitle lookup skipped because no IMDb ID could be resolved.',
                 patchData: {
-                    subtitles: [],
-                    ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                    subtitles: []
                 }
             });
         }
@@ -597,8 +596,7 @@ app.post('/process', async (req, res) => {
                     defaultLabel: defaultSubtitle.label || defaultSubtitle.fileName || defaultSubtitle.relativePath,
                     source: defaultSubtitle.source,
                     updatedAt: new Date().toISOString()
-                } : null,
-                ...(contentType === 'series' ? { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } } : {})
+                } : null
             }
         });
 

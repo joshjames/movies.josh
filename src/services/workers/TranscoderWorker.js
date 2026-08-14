@@ -319,7 +319,8 @@ function processSingleVideoFile(inputPath, options = {}) {
 // 📥 PRIMARY INGESTION WORKER ROUTE
 // =========================================================================
 app.post('/process', async (req, res) => {
-    const { folderPath, folderName } = req.body;
+    const { folderPath, folderName, contentType } = req.body;
+    const isSeries = contentType === 'series';
     const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
 
     if (!folderPath) {
@@ -365,7 +366,12 @@ app.post('/process', async (req, res) => {
             skippedCount: results.filter(item => item.skipped).length,
             forceReprocess,
             results,
-            patchData: {
+            // A series folder can contain many episodes across many seasons, each
+            // with its own upload state - there's no single "1080p status" for
+            // the whole thing the way there is for a movie folder. Per-episode
+            // storage tracking lives in series.json and is written by
+            // CloudSyncWorker, not here.
+            patchData: isSeries ? {} : {
                 storage: {
                     location: "local",
                     files: {

@@ -7,32 +7,230 @@ const { Upload } = require('@aws-sdk/lib-storage');
 const path = require('path');
 const fs = require('fs');
 const logger = require('../logger');
+const MetadataRegistry = require('../MetadataRegistry');
 require('dotenv').config({ path: path.join(__dirname, '../../../.env'), quiet: true });
 const app = express();
 app.use(express.json());
 
 const BUCKET_NAME = process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
+const RESOLUTION_PROFILES = ['1080p', '720p', '480p'];
 
 const s3Client = new S3Client({
     endpoint: process.env.CLOUD_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com',
     credentials: {
         accessKeyId: process.env.BBkeyID,
         secretAccessKey: process.env.BBapplicationKey
-    },          
+    },
     region: process.env.CLOUD_REGION || 'us-west-004'
 });
+
+// =========================================================================
+// 📺 SERIES/EPISODE OBJECT STORAGE - same bucket, a "series/" prefix instead
+// of "movies/", keyed by episode instead of by folder.
+// =========================================================================
+
+// Same suffix convention used everywhere else in the pipeline for a
+// browser-ready profile: ".web.mp4" for 1080p, ".720p.mp4"/".480p.mp4" for
+// the rest (see TranscoderWorker.js / the movie logic below).
+function profileSuffix(profile) {
+    return profile === '1080p' ? '.web.mp4' : `.${profile}.mp4`;
+}
+
+// Same episode-matching regex MetadataWorker.js uses to build series.json,
+// reused here so file discovery can never disagree with what series.json
+// already thinks exists.
+function parseEpisodeFromFilename(fileName) {
+    const match = String(fileName || '').match(/s\s*(\d+)\s*e\s*(\d+)/i);
+    if (!match) return null;
+    return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
+}
+
+// Walk a series root's season subfolders and, for each episode found on
+// disk, record the local file path for whichever resolution profiles
+// already exist. One level deep only (season folders directly under the
+// series root), matching how MetadataWorker.js scans for episode files.
+function walkSeriesEpisodeFiles(seriesRootPath) {
+    const episodes = new Map(); // key: "season-episode" -> { season, episode, files: { profile: absolutePath } }
+
+    let entries;
+    try {
+        entries = fs.readdirSync(seriesRootPath, { withFileTypes: true });
+    } catch (_err) {
+        return episodes;
+    }
+
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const seasonDir = path.join(seriesRootPath, entry.name);
+
+        let files;
+        try {
+            files = fs.readdirSync(seasonDir);
+        } catch (_err) {
+            continue;
+        }
+
+        for (const file of files) {
+            const parsed = parseEpisodeFromFilename(file);
+            if (!parsed) continue;
+
+            const key = `${parsed.season}-${parsed.episode}`;
+            if (!episodes.has(key)) {
+                episodes.set(key, { season: parsed.season, episode: parsed.episode, files: {} });
+            }
+            const record = episodes.get(key);
+
+            for (const profile of RESOLUTION_PROFILES) {
+                if (record.files[profile]) continue; // already matched one for this profile
+                if (file.toLowerCase().endsWith(profileSuffix(profile))) {
+                    record.files[profile] = path.join(seasonDir, file);
+                }
+            }
+        }
+    }
+
+    return episodes;
+}
+
+function buildSeriesRemoteKey(directoryId, season, episode, profile) {
+    const seasonPadded = String(season).padStart(2, '0');
+    const episodePadded = String(episode).padStart(2, '0');
+    return `series/${directoryId}/season.${seasonPadded}/s${seasonPadded}e${episodePadded}/${profile}.mp4`
+        .replace(/\/+/g, '/');
+}
+
+async function processSeriesFolder({ folderPath, folderName, imdbId, executeCloudUpload }) {
+    const seriesJsonPath = path.join(folderPath, 'series.json');
+    if (!fs.existsSync(seriesJsonPath)) {
+        return { success: false, error: 'Aborting series sync: series.json tracking manifest missing.' };
+    }
+
+    const directoryId = (imdbId && imdbId !== 'N/A') ? imdbId : folderName;
+    const episodeFiles = walkSeriesEpisodeFiles(folderPath);
+
+    let currentStructure;
+    try {
+        currentStructure = JSON.parse(fs.readFileSync(seriesJsonPath, 'utf-8'));
+    } catch (err) {
+        return { success: false, error: `series.json is unreadable: ${err.message}` };
+    }
+
+    // What's already synced, per the tracking manifest - not the disk walk
+    // alone - so a re-run never re-uploads something that already has a
+    // remoteKey.
+    const existingStorageByKey = {};
+    for (const season of Object.values(currentStructure.seasons || {})) {
+        for (const ep of (season.episodes || [])) {
+            existingStorageByKey[`${season.seasonNumber}-${ep.episodeNumber}`] = ep.storage || null;
+        }
+    }
+
+    const uploads = [];
+    for (const { season, episode, files } of episodeFiles.values()) {
+        const existingStorage = existingStorageByKey[`${season}-${episode}`];
+
+        for (const profile of RESOLUTION_PROFILES) {
+            const localPath = files[profile];
+            if (!localPath) continue; // nothing local for this profile yet (needs transcode first)
+            if (existingStorage?.files?.[profile]?.remoteKey) continue; // already synced
+
+            uploads.push({ season, episode, profile, localPath });
+        }
+    }
+
+    const completePatch = { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } };
+
+    if (!executeCloudUpload) {
+        return {
+            success: true,
+            message: `Safe-mode scan found ${uploads.length} episode profile(s) ready to sync.`,
+            pending: uploads.map(({ season, episode, profile }) => ({ season, episode, profile })),
+            patchData: completePatch
+        };
+    }
+
+    if (uploads.length === 0) {
+        return {
+            success: true,
+            message: 'No new episode profiles to sync - already up to date.',
+            patchData: completePatch
+        };
+    }
+
+    const errors = [];
+    let uploadedCount = 0;
+
+    for (const { season, episode, profile, localPath } of uploads) {
+        const remoteKey = buildSeriesRemoteKey(directoryId, season, episode, profile);
+        try {
+            logger.info(`🚀 [Series Cloud Sync] Uploading S${season}E${episode} [${profile}] -> ${remoteKey}`);
+            await uploadLargeFileStream(localPath, remoteKey, profile);
+
+            await MetadataRegistry.mergeAndCommit(seriesJsonPath, folderName, async (structure) => {
+                const next = { ...structure, seasons: { ...structure.seasons } };
+                const seasonEntry = next.seasons[season];
+                if (!seasonEntry) return next; // season vanished from series.json since we scanned - skip safely
+
+                const episodes = [...(seasonEntry.episodes || [])];
+                const idx = episodes.findIndex((e) => Number(e.episodeNumber) === episode);
+                if (idx === -1) return next;
+
+                const currentEp = episodes[idx];
+                const existingFiles = currentEp.storage?.files || {};
+                episodes[idx] = {
+                    ...currentEp,
+                    storage: {
+                        location: 'remote',
+                        files: {
+                            ...existingFiles,
+                            [profile]: { status: 'synced', localPath: path.basename(localPath), remoteKey }
+                        }
+                    }
+                };
+
+                next.seasons[season] = { ...seasonEntry, episodes };
+                return next;
+            });
+
+            uploadedCount += 1;
+        } catch (err) {
+            const msg = `S${season}E${episode} [${profile}]: ${err.message}`;
+            logger.error(`❌ [Series Cloud Sync] Upload failed for ${msg}`);
+            errors.push(msg);
+        }
+    }
+
+    return {
+        success: errors.length === 0,
+        message: `Synced ${uploadedCount}/${uploads.length} episode profile(s) to cloud storage.`,
+        uploadedCount,
+        totalQueued: uploads.length,
+        errors,
+        patchData: completePatch
+    };
+}
 
 // =========================================================================
 // 📥 PRIMARY INGESTION WORKER ROUTE
 // =========================================================================
 app.post('/process', async (req, res) => {
-    const { folderPath, folderName, forceActualUpload } = req.body;
+    const { folderPath, folderName, forceActualUpload, contentType, imdbId } = req.body;
 
     // Check both request body and optional URL query string flags for manual overrides
     const executeCloudUpload = forceActualUpload === true || req.query.forceActualUpload === 'true';
 
     if (!folderPath || !folderName) {
         return res.status(400).json({ success: false, error: "Missing required folderPath or folderName contexts." });
+    }
+
+    if (contentType === 'series') {
+        try {
+            const result = await processSeriesFolder({ folderPath, folderName, imdbId, executeCloudUpload });
+            return res.json(result);
+        } catch (err) {
+            logger.error(`❌ Series Cloud Sync Worker failure on target ${folderName}: ${err.message}`);
+            return res.json({ success: false, error: err.message });
+        }
     }
 
     try {

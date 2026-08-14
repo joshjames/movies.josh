@@ -1450,6 +1450,45 @@ function isRemoteAllocatedMovie(mediaId) {
     return String(metadata?.storage?.location || '').toLowerCase() === 'remote';
 }
 
+// Series equivalent of isRemoteAllocatedMovie(): looks up the one episode's
+// own `storage` block (per-episode, unlike a movie's single folder-level
+// storage field) via the same rebuildSeriesManifest() merge every other
+// series lookup uses, so it can never disagree with what series.json holds.
+function findEpisodeStorage(showFolder, seasonNumber, episodeNumber) {
+    const showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
+    if (!showPath || !fs.existsSync(showPath)) return null;
+
+    let seriesData;
+    try {
+        seriesData = rebuildSeriesManifest(showPath, { showFolderName: showFolder, write: false });
+    } catch (_err) {
+        return null;
+    }
+
+    const seasonEntry = (seriesData.seasons || {})[String(seasonNumber)] || null;
+    const episodes = Array.isArray(seasonEntry?.episodes) ? seasonEntry.episodes : [];
+    const target = episodes.find(ep => Number(ep.episodeNumber) === Number(episodeNumber));
+    return target?.storage || null;
+}
+
+function isRemoteAllocatedEpisode(showFolder, seasonNumber, episodeNumber) {
+    const storage = findEpisodeStorage(showFolder, seasonNumber, episodeNumber);
+    return String(storage?.location || '').toLowerCase() === 'remote';
+}
+
+// Episode equivalent of MediaService.getPlaybackUrl() for movies - tries each
+// profile best-first since a fresh episode may only have 1080p synced yet.
+async function resolveEpisodeCloudPlaybackUrl(showFolder, seasonNumber, episodeNumber) {
+    const storage = findEpisodeStorage(showFolder, seasonNumber, episodeNumber);
+    if (!storage || storage.location !== 'remote') return null;
+
+    for (const profile of ['1080p', '720p', '480p']) {
+        const url = await MediaService.getPlaybackUrl({ storage }, profile, null);
+        if (url) return url;
+    }
+    return null;
+}
+
 function isAllowedRemoteStreamUrl(inputUrl) {
     try {
         const parsed = new URL(String(inputUrl || ''));
@@ -3732,6 +3771,21 @@ router.get('/playback/:id', async (req, res) => {
         const episode = parseInt(req.query.episode, 10);
         const requestedFile = String(req.query.file || '');
         const requestedAudioTrack = parseInt(req.query.audioTrack, 10);
+
+        // Episode equivalent of the movie cloud-allocation check above - unlike
+        // movies (a separate JSON endpoint + frontend fetch), this redirects
+        // straight to the signed URL so the <video> src never has to change.
+        if (mediaId.startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode) && !allowLocalFallback) {
+            const showFolder = mediaId.replace(/^series\//, '');
+            if (isRemoteAllocatedEpisode(showFolder, season, episode)) {
+                const signedUrl = await resolveEpisodeCloudPlaybackUrl(showFolder, season, episode);
+                if (signedUrl) {
+                    return res.redirect(302, signedUrl);
+                }
+                // Signed URL generation failed (credentials issue, B2 outage, etc.) -
+                // fall through to local serving below rather than hard-erroring.
+            }
+        }
 
         const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
         if (!videoPath || !fs.existsSync(videoPath)) {

@@ -182,6 +182,26 @@ app.post('/process', async (req, res) => {
                 }
             });
 
+            // This rebuild runs on every metadata pass (re-scans, new-episode
+            // lookups, etc.) - read whatever series.json already has so a
+            // rebuild never wipes out per-episode cloud-sync state (`storage`)
+            // that CloudSyncWorker wrote on a previous pass.
+            const existingSeriesJsonPath = path.join(folderPath, 'series.json');
+            let existingEpisodeByKey = {};
+            if (fs.existsSync(existingSeriesJsonPath)) {
+                try {
+                    const existingStructure = JSON.parse(fs.readFileSync(existingSeriesJsonPath, 'utf-8'));
+                    for (const season of Object.values(existingStructure?.seasons || {})) {
+                        for (const ep of (season?.episodes || [])) {
+                            const key = `${season.seasonNumber}-${ep.episodeNumber}`;
+                            existingEpisodeByKey[key] = ep;
+                        }
+                    }
+                } catch (_err) {
+                    existingEpisodeByKey = {};
+                }
+            }
+
             let fullSeriesStructure = { totalSeasons: totalSeasons.toString(), seasons: {} };
 
             for (let s = 1; s <= totalSeasons; s++) {
@@ -198,7 +218,8 @@ app.post('/process', async (req, res) => {
                         for (const ep of episodes) {
                             const epNum = parseInt(ep.Episode, 10);
                             const isAvailable = !!physicalFileMap[`${s}-${epNum}`];
-                            
+                            const existingEp = existingEpisodeByKey[`${s}-${epNum}`] || null;
+
                             fullSeriesStructure.seasons[s].episodes.push({
                                 episodeNumber: epNum,
                                 title: ep.Title || `Episode ${epNum}`,
@@ -207,7 +228,8 @@ app.post('/process', async (req, res) => {
                                 imdbRating: ep.imdbRating || 'N/A',
                                 available: isAvailable,
                                 localRelativePath: isAvailable ? physicalFileMap[`${s}-${epNum}`] : null,
-                                remoteRelativePath: null // Structural placeholder ready for cloud migration workflows
+                                remoteRelativePath: existingEp?.remoteRelativePath || null, // legacy placeholder, superseded by `storage` below
+                                storage: existingEp?.storage || undefined // preserved verbatim - CloudSyncWorker is the only writer
                             });
                         }
                     }

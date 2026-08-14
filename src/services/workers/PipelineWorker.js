@@ -884,7 +884,12 @@ async function processNextJob(job) {
                 folderPath: job.payload?.cleanPath || job.payload?.rawPath || null,
                 folderName: job.payload?.cleanPath ? job.payload.cleanPath.split('/').pop() : (job.payload?.torrentName || job.id),
                 imdbId: resolvedJobImdbId,
-                contentType: job.contentType || 'movie'
+                contentType: job.contentType || 'movie',
+                // Without this, CloudSyncWorker runs in "safe mode" - it only
+                // flags profiles pending without ever actually uploading them,
+                // so REQUIRE_CLOUDSYNC_BEFORE_COMPLETE would advance jobs to
+                // COMPLETE having never synced anything to object storage.
+                forceActualUpload: true
             }
         }
     };

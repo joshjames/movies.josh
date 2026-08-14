@@ -117,7 +117,8 @@ function rebuildSeriesManifest(showPath, options = {}) {
                 imdbRating: ep.imdbRating || 'N/A',
                 available: Boolean(ep.available),
                 localRelativePath: ep.localRelativePath || null,
-                remoteRelativePath: ep.remoteRelativePath || null
+                remoteRelativePath: ep.remoteRelativePath || null,
+                storage: ep.storage || undefined // preserved verbatim - CloudSyncWorker is the only writer
             });
         });
 
@@ -136,7 +137,8 @@ function rebuildSeriesManifest(showPath, options = {}) {
             released: 'Unknown',
             plot: '',
             imdbRating: 'N/A',
-            remoteRelativePath: null
+            remoteRelativePath: null,
+            storage: undefined
         };
 
         seasonMap.set(found.episode, {
@@ -177,7 +179,8 @@ function rebuildSeriesManifest(showPath, options = {}) {
                 imdbRating: ep.imdbRating,
                 available: Boolean(ep.available),
                 localRelativePath: ep.localRelativePath || null,
-                remoteRelativePath: ep.remoteRelativePath || null
+                remoteRelativePath: ep.remoteRelativePath || null,
+                storage: ep.storage || undefined
             }));
 
         output.seasons[String(seasonNum)] = {
