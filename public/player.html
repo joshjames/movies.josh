@@ -1138,6 +1138,12 @@
             episodeParam = String(episode.episodeNumber);
             currentPlaybackFile = deriveFileNameFromPath(episode.localRelativePath || '');
             currentRemoteStreamUrl = '';
+            // allowLocalFallbackMode is page-level state shared with movie
+            // playback - reset it here or a stale `true` left over from an
+            // earlier title (e.g. a cloud movie that errored and fell back)
+            // silently forces every subsequent episode request to skip the
+            // cloud redirect and go straight to local, with no visible error.
+            allowLocalFallbackMode = false;
             audioTrackSelect.value = 'auto';
 
             // Generate deterministic string for unique TV episode tracking arrays
