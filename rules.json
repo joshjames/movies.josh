@@ -5,8 +5,10 @@
       "https://anymovie.online",
       "https://any.movie",
       "https://anymovie.club",
-      "http://anymovie.digital",
-      "http://anyseries.online"
+      "https://anymovie.digital",
+      "https://anyseries.online",
+      "https://anymovie.today",
+      "https://anymovie.app"
     ],
     "allowedOperations": [
       "b2_download_file_by_id",

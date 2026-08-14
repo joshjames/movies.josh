@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 const fsPromises = fs.promises;
-const { connectDb, redisClient } = require('./db');
+const { connectDb, connectWriteDb, redisClient, redisWriteClient } = require('./db');
 const { withDistributedLock } = require('./DistributedLockService');
 
 const META_REDIS_PREFIX = process.env.METADATA_REDIS_PREFIX || 'anymovie:metadata:';
@@ -60,11 +60,11 @@ async function readFromRedis(metaFilePath, folderName) {
 }
 
 async function writeToRedis(metaFilePath, folderName, payload) {
-    await connectDb();
-    if (!redisClient.isOpen) return;
+    await connectWriteDb();
+    if (!redisWriteClient.isOpen) return;
 
     try {
-        await redisClient.set(getRedisKey(metaFilePath, folderName), JSON.stringify(payload));
+        await redisWriteClient.set(getRedisKey(metaFilePath, folderName), JSON.stringify(payload));
     } catch (err) {
         logger.warn(`⚠️ [MetadataRegistry] Redis write failed for ${metaFilePath}: ${err.message}`);
     }

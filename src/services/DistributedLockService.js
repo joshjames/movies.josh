@@ -1,6 +1,12 @@
 const crypto = require('crypto');
 const logger = require('./logger');
-const { connectDb, redisClient } = require('./db');
+const { connectWriteDb, redisWriteClient } = require('./db');
+
+// Locks are acquire/release writes (SET NX / DEL) - these must always go
+// through the write client. On a region running a local read replica, the
+// replica rejects writes outright, so using the read client here would make
+// every lock attempt fail or spin until timeout instead of just working
+// against the single primary the way it does today.
 
 const LOCK_PREFIX = process.env.DISTRIBUTED_LOCK_PREFIX || 'anymovie:lock:';
 const DEFAULT_TTL_MS = parseInt(process.env.DISTRIBUTED_LOCK_TTL_MS || '10000', 10);
@@ -16,10 +22,10 @@ async function sleep(ms) {
 }
 
 async function releaseLock(lockKey, token) {
-    if (!redisClient.isOpen) return;
+    if (!redisWriteClient.isOpen) return;
 
     try {
-        await redisClient.sendCommand([
+        await redisWriteClient.sendCommand([
             'EVAL',
             "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
             '1',
@@ -38,16 +44,16 @@ async function withDistributedLock(resourceKey, handler, options = {}) {
     const lockKey = buildLockKey(resourceKey);
     const token = crypto.randomUUID();
 
-    await connectDb();
+    await connectWriteDb();
 
-    if (!redisClient.isOpen) {
+    if (!redisWriteClient.isOpen) {
         logger.warn(`⚠️ [Lock] Redis unavailable. Executing without distributed lock for ${lockKey}.`);
         return handler();
     }
 
     const deadline = Date.now() + waitMs;
     while (true) {
-        const acquired = await redisClient.set(lockKey, token, { PX: ttlMs, NX: true });
+        const acquired = await redisWriteClient.set(lockKey, token, { PX: ttlMs, NX: true });
         if (acquired === 'OK') {
             try {
                 return await handler();

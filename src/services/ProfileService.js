@@ -6,7 +6,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
-const { connectDb, redisClient } = require('./db');
+const { connectDb, connectWriteDb, redisClient, redisWriteClient } = require('./db');
 const { withDistributedLock } = require('./DistributedLockService');
 
 function resolveUserBaseDir() {
@@ -133,9 +133,12 @@ async function readRoster() {
         const data = await fs.readFile(ROSTER_FILE, 'utf-8');
         const parsed = JSON.parse(data);
 
-        if (redisClient.isOpen) {
+        // Hydrating a cache miss is still a write - route it through the
+        // primary the same as any other write, not the local read replica.
+        await connectWriteDb();
+        if (redisWriteClient.isOpen) {
             try {
-                await redisClient.set(ROSTER_REDIS_KEY, JSON.stringify(parsed));
+                await redisWriteClient.set(ROSTER_REDIS_KEY, JSON.stringify(parsed));
             } catch (err) {
                 logger.warn(`[PROFILE WARN] Failed hydrating roster cache: ${err.message}`);
             }
@@ -143,15 +146,15 @@ async function readRoster() {
 
         return parsed;
     } catch (e) {
-        return {}; 
+        return {};
     }
 }
 
 async function writeRoster(roster) {
-    await connectDb();
-    if (redisClient.isOpen) {
+    await connectWriteDb();
+    if (redisWriteClient.isOpen) {
         try {
-            await redisClient.set(ROSTER_REDIS_KEY, JSON.stringify(roster));
+            await redisWriteClient.set(ROSTER_REDIS_KEY, JSON.stringify(roster));
         } catch (err) {
             logger.warn(`[PROFILE WARN] Failed writing roster cache: ${err.message}`);
         }
@@ -187,11 +190,11 @@ async function readUserStateFromRedis(username, fileType) {
 async function writeUserStateToRedis(username, fileType, data) {
     if (!isRedisMirroredFileType(fileType)) return;
 
-    await connectDb();
-    if (!redisClient.isOpen) return;
+    await connectWriteDb();
+    if (!redisWriteClient.isOpen) return;
 
     try {
-        await redisClient.set(userStateRedisKey(username, fileType), JSON.stringify(data));
+        await redisWriteClient.set(userStateRedisKey(username, fileType), JSON.stringify(data));
     } catch (err) {
         logger.warn(`[PROFILE WARN] Failed writing ${fileType} cache for ${username}: ${err.message}`);
     }
@@ -283,17 +286,47 @@ const ProfileService = {
     },
 
     // --- GENERIC WRITE OPERATIONS ---
+    // Lock-protected the same way MetadataRegistry.writeAndCommit is: this
+    // serializes the write itself (Redis + disk together) so two nodes can't
+    // interleave a partial write to the same user's state. It does NOT make a
+    // caller's own read-modify-write atomic - a caller that reads, mutates,
+    // then calls writeData can still race another writer's stale read the
+    // same way callers of MetadataRegistry.writeAndCommit can. Use
+    // mergeAndCommit below for call sites that need true atomicity.
     async writeData(username, fileType, data) {
-        try {
-            await writeUserStateToRedis(username, fileType, data);
-            const userDir = await ensureUserDir(username);
+        const cleanUser = normalizeIdentity(username);
+        const lockKey = `profile:user:${cleanUser}:${fileType}`;
+
+        return withDistributedLock(lockKey, async () => {
+            try {
+                await writeUserStateToRedis(username, fileType, data);
+                const userDir = await ensureUserDir(username);
+                const filePath = path.join(userDir, `${fileType}.json`);
+                await fs.writeFile(filePath, JSON.stringify(data, null, 4), 'utf-8');
+                return true;
+            } catch (err) {
+                logger.error(`[PROFILE ERROR] Failed writing ${fileType} for ${username}: ${err.message}`);
+                throw err;
+            }
+        }, { ttlMs: 8000, waitMs: 5000 });
+    },
+
+    // True atomic read-modify-write, matching MetadataRegistry.mergeAndCommit.
+    // Prefer this over separate readData()+writeData() calls for any new
+    // call site that mutates existing state rather than replacing it wholesale.
+    async mergeAndCommit(username, fileType, mergeFn) {
+        const cleanUser = normalizeIdentity(username);
+        const lockKey = `profile:user:${cleanUser}:${fileType}`;
+
+        return withDistributedLock(lockKey, async () => {
+            const current = await this.readData(cleanUser, fileType, {});
+            const next = await mergeFn(current || {});
+            await writeUserStateToRedis(cleanUser, fileType, next);
+            const userDir = await ensureUserDir(cleanUser);
             const filePath = path.join(userDir, `${fileType}.json`);
-            await fs.writeFile(filePath, JSON.stringify(data, null, 4), 'utf-8');
-            return true;
-        } catch (err) {
-            logger.error(`[PROFILE ERROR] Failed writing ${fileType} for ${username}: ${err.message}`);
-            throw err;
-        }
+            await fs.writeFile(filePath, JSON.stringify(next, null, 4), 'utf-8');
+            return next;
+        }, { ttlMs: 8000, waitMs: 5000 });
     },
 
     // --- PLAYBACK PROGRESS COORDINATE TRACKS ---
@@ -311,10 +344,10 @@ const ProfileService = {
             updatedAt: Date.now()
         };
 
-        await connectDb();
-        if (redisClient.isOpen) {
+        await connectWriteDb();
+        if (redisWriteClient.isOpen) {
             try {
-                await redisClient.hSet(playbackRedisKey(cleanUser), cleanMediaId, JSON.stringify(entry));
+                await redisWriteClient.hSet(playbackRedisKey(cleanUser), cleanMediaId, JSON.stringify(entry));
                 await mirrorPlaybackSnapshotToDisk(cleanUser);
                 return true;
             } catch (err) {
@@ -322,11 +355,16 @@ const ProfileService = {
             }
         }
 
-        return await withDistributedLock(`profile:user:${cleanUser}:playback`, async () => {
-            const playback = await this.readData(cleanUser, 'playback', {});
-            playback[cleanMediaId] = entry;
-            return await this.writeData(cleanUser, 'playback', playback);
-        }, { ttlMs: 5000, waitMs: 4000 });
+        // mergeAndCommit, not writeData - it takes the profile:user:*:playback
+        // lock itself internally, so calling writeData here (same lock key)
+        // would be a nested acquisition against the same key and stall until
+        // the outer withDistributedLock timeout.
+        await this.mergeAndCommit(cleanUser, 'playback', async (playback) => {
+            const next = { ...playback };
+            next[cleanMediaId] = entry;
+            return next;
+        });
+        return true;
     },
 
     async getWatchHistory(username, options = {}) {
@@ -421,19 +459,23 @@ const ProfileService = {
     },
 
     // --- TELEMETRY SECURITY HISTORY TRACKS ---
+    // mergeAndCommit, not a manual lock+writeData - writeData takes the same
+    // profile:user:*:history lock internally, so wrapping it in another lock
+    // of the same key here would be a nested acquisition against itself.
     async updateLoginHistory(username, ipAddress) {
         const cleanUser = normalizeIdentity(username);
-        return await withDistributedLock(`profile:user:${cleanUser}:history`, async () => {
-            const history = await this.readData(cleanUser, 'history', { logins: [], lastLogin: null });
+        await this.mergeAndCommit(cleanUser, 'history', async (history) => {
+            const next = { logins: [], lastLogin: null, ...history };
+            next.logins = Array.isArray(next.logins) ? [...next.logins] : [];
             const currentTimestamp = Date.now();
-            
-            history.lastLogin = currentTimestamp;
-            history.logins.unshift({ ip: ipAddress, timestamp: currentTimestamp });
-            
-            if (history.logins.length > 50) history.logins.pop();
-            
-            return await this.writeData(cleanUser, 'history', history);
-        }, { ttlMs: 5000, waitMs: 4000 });
+
+            next.lastLogin = currentTimestamp;
+            next.logins.unshift({ ip: ipAddress, timestamp: currentTimestamp });
+            if (next.logins.length > 50) next.logins.pop();
+
+            return next;
+        });
+        return true;
     },
 
     // --- SECURE PROVISIONING & LEADER MATRIX ---
@@ -533,32 +575,35 @@ const ProfileService = {
         }, { ttlMs: 10000, waitMs: 8000 });
     },
 
+    // mergeAndCommit here too, same reason as updateLoginHistory above -
+    // writeData already locks profile:user:*:config internally.
     async issuePasswordResetToken(identifier, ttlMs = 60 * 60 * 1000) {
         const resolvedKey = await this.resolveUserKey(identifier);
         if (!resolvedKey) {
             return { success: false, error: 'Account not found.' };
         }
 
-        return await withDistributedLock(`profile:user:${resolvedKey}:config`, async () => {
-            const config = await this.readData(resolvedKey, 'config', {});
-            const token = require('crypto').randomBytes(32).toString('hex');
-            const expires = Date.now() + Math.max(5 * 60 * 1000, Number(ttlMs) || 0);
+        const token = require('crypto').randomBytes(32).toString('hex');
+        const expires = Date.now() + Math.max(5 * 60 * 1000, Number(ttlMs) || 0);
+        let finalConfig = null;
 
-            config.passwordResetToken = token;
-            config.passwordResetExpires = expires;
-            config.updatedAt = Date.now();
+        await this.mergeAndCommit(resolvedKey, 'config', async (config) => {
+            const next = { ...config };
+            next.passwordResetToken = token;
+            next.passwordResetExpires = expires;
+            next.updatedAt = Date.now();
+            finalConfig = next;
+            return next;
+        });
 
-            await this.writeData(resolvedKey, 'config', config);
-
-            return {
-                success: true,
-                userKey: resolvedKey,
-                token,
-                expires,
-                email: config.email || resolvedKey,
-                displayName: config.displayName || config.name || config.username || resolvedKey
-            };
-        }, { ttlMs: 5000, waitMs: 4000 });
+        return {
+            success: true,
+            userKey: resolvedKey,
+            token,
+            expires,
+            email: finalConfig.email || resolvedKey,
+            displayName: finalConfig.displayName || finalConfig.name || finalConfig.username || resolvedKey
+        };
     },
 
     async resetPasswordWithToken(identifier, token, nextPassword) {
@@ -567,32 +612,33 @@ const ProfileService = {
             return { success: false, error: 'Invalid reset request.' };
         }
 
-        return await withDistributedLock(`profile:user:${resolvedKey}:config`, async () => {
-            const config = await this.readData(resolvedKey, 'config', {});
-            if (!config.passwordResetToken || !config.passwordResetExpires) {
-                return { success: false, error: 'Reset token is invalid or already used.' };
-            }
+        const config = await this.readData(resolvedKey, 'config', {});
+        if (!config.passwordResetToken || !config.passwordResetExpires) {
+            return { success: false, error: 'Reset token is invalid or already used.' };
+        }
 
-            if (config.passwordResetToken !== String(token)) {
-                return { success: false, error: 'Reset token is invalid or already used.' };
-            }
+        if (config.passwordResetToken !== String(token)) {
+            return { success: false, error: 'Reset token is invalid or already used.' };
+        }
 
-            if (Date.now() > Number(config.passwordResetExpires)) {
-                return { success: false, error: 'Reset token has expired. Request a new reset email.' };
-            }
+        if (Date.now() > Number(config.passwordResetExpires)) {
+            return { success: false, error: 'Reset token has expired. Request a new reset email.' };
+        }
 
-            const updateResult = await this.setPassword(resolvedKey, nextPassword);
-            if (!updateResult.success) {
-                return updateResult;
-            }
+        const updateResult = await this.setPassword(resolvedKey, nextPassword);
+        if (!updateResult.success) {
+            return updateResult;
+        }
 
-            delete config.passwordResetToken;
-            delete config.passwordResetExpires;
-            config.updatedAt = Date.now();
-            await this.writeData(resolvedKey, 'config', config);
+        await this.mergeAndCommit(resolvedKey, 'config', async (current) => {
+            const next = { ...current };
+            delete next.passwordResetToken;
+            delete next.passwordResetExpires;
+            next.updatedAt = Date.now();
+            return next;
+        });
 
-            return { success: true, userKey: resolvedKey };
-        }, { ttlMs: 10000, waitMs: 8000 });
+        return { success: true, userKey: resolvedKey };
     },
 
     async updateAccountProfile(userKey, payload = {}) {
