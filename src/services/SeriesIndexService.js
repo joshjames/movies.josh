@@ -1,6 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
+// An episode with no local file is still watchable if CloudSyncWorker has
+// already uploaded at least one resolution profile for it.
+function isEpisodeCloudAvailable(storage) {
+    if (!storage || storage.location !== 'remote') return false;
+    return Object.values(storage.files || {}).some(f => f?.status === 'synced' && f?.remoteKey);
+}
+
 function parseSeasonEpisode(fileName = '', fallbackSeason = null) {
     const sxeMatches = Array.from(String(fileName).matchAll(/[Ss](\d{1,2})[Ee](\d{1,3})/g));
     const sxe = sxeMatches.length ? sxeMatches[sxeMatches.length - 1] : null;
@@ -148,14 +155,17 @@ function rebuildSeriesManifest(showPath, options = {}) {
         });
     });
 
-    // Correct availability for episodes not currently found on disk.
+    // Correct availability for episodes not currently found on disk - but an
+    // episode already synced to cloud storage is still available to watch
+    // even with no local file (that's the whole point of cloud playback),
+    // so only actually-unavailable episodes should lose their `available` flag.
     mergedBySeason.forEach((seasonMap, seasonNum) => {
         seasonMap.forEach((ep, epNum) => {
             const exists = foundEpisodes.some(found => found.season === seasonNum && found.episode === epNum);
             if (!exists) {
                 seasonMap.set(epNum, {
                     ...ep,
-                    available: false,
+                    available: isEpisodeCloudAvailable(ep.storage),
                     localRelativePath: null
                 });
             }
@@ -197,5 +207,6 @@ function rebuildSeriesManifest(showPath, options = {}) {
 }
 
 module.exports = {
-    rebuildSeriesManifest
+    rebuildSeriesManifest,
+    isEpisodeCloudAvailable
 };

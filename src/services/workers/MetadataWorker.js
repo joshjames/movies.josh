@@ -8,6 +8,7 @@ const path = require('path');
 const logger = require('../logger');
 const metadataService = require('../MetadataService');
 const metadataProvider = require('../MetadataProvider');
+const { isEpisodeCloudAvailable } = require('../SeriesIndexService');
 
 const app = express();
 app.use(express.json());
@@ -217,8 +218,11 @@ app.post('/process', async (req, res) => {
                     if (Array.isArray(episodes) && episodes.length > 0) {
                         for (const ep of episodes) {
                             const epNum = parseInt(ep.Episode, 10);
-                            const isAvailable = !!physicalFileMap[`${s}-${epNum}`];
                             const existingEp = existingEpisodeByKey[`${s}-${epNum}`] || null;
+                            const isLocallyAvailable = !!physicalFileMap[`${s}-${epNum}`];
+                            // A local re-scan finding no file here doesn't mean the episode
+                            // isn't watchable - it may already be synced to cloud storage.
+                            const isAvailable = isLocallyAvailable || isEpisodeCloudAvailable(existingEp?.storage);
 
                             fullSeriesStructure.seasons[s].episodes.push({
                                 episodeNumber: epNum,
@@ -227,7 +231,7 @@ app.post('/process', async (req, res) => {
                                 plot: 'Official serialized episode tracking interface asset.',
                                 imdbRating: ep.imdbRating || 'N/A',
                                 available: isAvailable,
-                                localRelativePath: isAvailable ? physicalFileMap[`${s}-${epNum}`] : null,
+                                localRelativePath: isLocallyAvailable ? physicalFileMap[`${s}-${epNum}`] : null,
                                 remoteRelativePath: existingEp?.remoteRelativePath || null, // legacy placeholder, superseded by `storage` below
                                 storage: existingEp?.storage || undefined // preserved verbatim - CloudSyncWorker is the only writer
                             });
