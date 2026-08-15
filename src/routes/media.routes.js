@@ -2393,6 +2393,7 @@ router.get('/movies/search/unified', async (req, res) => {
                 type: 'movie',
                 inLibrary: Boolean(localRow),
                 href: localRow?.href || null,
+                cover: localRow?.cover || null,
                 source: 'imdb-catalog'
             };
         });
