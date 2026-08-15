@@ -103,9 +103,20 @@ router.get('/status', requireAuth, async (req, res) => {
     const inTrial = trialEndsMs > now;
     const inGrace = graceEndsMs > now;
     const quota = await AcquisitionQuotaService.getQuotaSnapshot(userKey, config);
-    
-    // Default guest metadata contract
+
+    // An administrative free-access grant (gifted premium) overrides trial/grace/guest
+    // state regardless of whether the trial has separately expired - otherwise a gift
+    // has no visible effect on an account whose trial already lapsed.
     if (!config || config.subscriptionStatus !== 'ACTIVE') {
+      if (ProfileService.isFreeAccessGrantActive(config)) {
+        return res.status(200).json({
+          success: true,
+          subscriptionStatus: 'FREE_ACCESS',
+          freeAccessUntil: config.freeAccessUntil || null,
+          quota
+        });
+      }
+
       if (inTrial) {
         return res.status(200).json({
           success: true,

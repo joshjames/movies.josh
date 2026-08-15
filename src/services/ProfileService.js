@@ -73,15 +73,24 @@ function humanizeMediaTitle(mediaId) {
     return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// A gifted/administrative premium grant. `freeAccessUntil` of null/undefined means an
+// unlimited grant (no expiry); otherwise it lapses once that timestamp passes.
+function isFreeAccessGrantActive(config) {
+    if (!config || config.freeAccessActive !== true) return false;
+    if (!config.freeAccessUntil) return true;
+    const untilMs = Date.parse(config.freeAccessUntil);
+    return !Number.isFinite(untilMs) || untilMs > Date.now();
+}
+
 // --- SUBSCRIPTION ENTITLEMENT VALUATION ---
 async function getSubscriptionStatus(username) {
     const cleanKey = await this.resolveUserKey(username);
     if (!cleanKey) return { active: false, reason: 'user_not_found' };
 
     const config = await this.readData(cleanKey, 'config', {});
-    
+
     // If you manually flag accounts with lifetime/unlocked access
-    if (config.freeAccessActive === true) {
+    if (isFreeAccessGrantActive(config)) {
         return { active: true, reason: 'administrative_bypass' };
     }
 
@@ -245,6 +254,7 @@ async function mirrorPlaybackSnapshotToDisk(username) {
 // ====== CORE SERVICE CORE ======
 const ProfileService = {
     normalizeIdentity,
+    isFreeAccessGrantActive,
 
     async listUsers() {
         const roster = await readRoster();

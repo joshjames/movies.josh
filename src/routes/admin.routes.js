@@ -176,14 +176,7 @@ function isTrialStatus(status) {
     return ['TRIAL', 'TRIALING'].includes(String(status || '').toUpperCase());
 }
 
-// A gifted/administrative premium grant. `freeAccessUntil` of null/undefined means an
-// unlimited grant (no expiry); otherwise it lapses once that timestamp passes.
-function isFreeAccessGrantActive(config) {
-    if (!config || config.freeAccessActive !== true) return false;
-    if (!config.freeAccessUntil) return true;
-    const untilMs = Date.parse(config.freeAccessUntil);
-    return !Number.isFinite(untilMs) || untilMs > Date.now();
-}
+const { isFreeAccessGrantActive } = ProfileService;
 
 function toSeriesFolderName(value = '') {
     const raw = String(value || '')

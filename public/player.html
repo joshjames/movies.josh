@@ -964,7 +964,7 @@
 
         function resolveSubscribeReasonFromStatus(statusPayload) {
             const status = String(statusPayload?.subscriptionStatus || '').toUpperCase();
-            if (status === 'TRIAL' || status === 'ACTIVE' || status === 'GRACE') {
+            if (status === 'TRIAL' || status === 'ACTIVE' || status === 'GRACE' || status === 'FREE_ACCESS') {
                 return null;
             }
 

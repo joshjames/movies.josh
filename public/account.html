@@ -832,6 +832,14 @@
                     document.getElementById('subscribeBtn').addEventListener('click', () => {
                         window.location.href = '/subscribe.html?reason=trial_expired';
                     });
+                } else if (data.success && data.subscriptionStatus === 'FREE_ACCESS') {
+                    container.innerHTML = `
+                        <div class="billing-details" style="border-color: #10b981;">
+                            <strong>Status:</strong> Complimentary Access<br>
+                            <strong>Access Until:</strong> ${data.freeAccessUntil ? new Date(data.freeAccessUntil).toLocaleDateString('en-US', { dateStyle: 'long' }) : 'No expiration'}
+                        </div>
+                        <p class="muted" style="margin-bottom:0;">Your access was granted by an administrator.</p>
+                    `;
                 } else {
                     // Fallback baseline layout mapping for guest levels (Attach redirect route helper)
                     document.getElementById('subscribeBtn').addEventListener('click', () => {
