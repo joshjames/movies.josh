@@ -563,6 +563,18 @@ app.post('/process', async (req, res) => {
         }
 
         if (!sourceVideos.length) {
+            // Distinguish "genuinely nothing to work with" from "already fully
+            // transcoded, and the raw originals were since cleaned up" - the latter
+            // is the normal steady state for an old/complete series, not a failure.
+            const existingProfileCount = walkWebProfiles(folderPath).length;
+            if (existingProfileCount > 0) {
+                return res.json({
+                    success: true,
+                    message: "No raw source files remain; all profiles already transcoded.",
+                    processedCount: 0,
+                    skippedCount: existingProfileCount
+                });
+            }
             return res.json({ success: false, error: "No viable processing source video found." });
         }
 
