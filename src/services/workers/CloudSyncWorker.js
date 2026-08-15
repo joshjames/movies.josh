@@ -4,6 +4,7 @@
 const express = require('express');
 const { S3Client } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const path = require('path');
 const fs = require('fs');
 const logger = require('../logger');
@@ -21,7 +22,15 @@ const s3Client = new S3Client({
         accessKeyId: process.env.BBkeyID,
         secretAccessKey: process.env.BBapplicationKey
     },
-    region: process.env.CLOUD_REGION || 'us-west-004'
+    region: process.env.CLOUD_REGION || 'us-west-004',
+    maxAttempts: 3,
+    // No timeout was configured before - a stalled TCP connection (e.g. a
+    // transient network blip mid-upload) would hang forever with zero CPU
+    // usage instead of failing and letting the caller/retry logic take over.
+    requestHandler: new NodeHttpHandler({
+        connectionTimeout: 10_000,
+        requestTimeout: 5 * 60 * 1000
+    })
 });
 
 // =========================================================================
