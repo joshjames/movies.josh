@@ -29,6 +29,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 const TRANSCODE_URL = process.env.WORKER_URL_TRANSCODE || process.env.BACKFILL_TRANSCODE_URL || 'http://transcoder-worker:5003/process';
 // 127.0.0.1, not the 'cloudsync-worker' service DNS name: this script always
@@ -91,14 +92,16 @@ function readImdbId(metaPath) {
     }
 }
 
+// axios, not fetch(): Node's built-in fetch (undici) enforces its own
+// default 5-minute headersTimeout/bodyTimeout underneath any AbortSignal we
+// pass in, so a season pack that legitimately takes longer than 5 minutes
+// to transcode/upload gets killed with a generic "fetch failed" even though
+// the worker keeps working and finishes server-side. axios has no such
+// hidden floor - only the timeout we explicitly set applies. This matches
+// how PipelineWorker.js already calls these same endpoints.
 async function callWorker(url, payload) {
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    });
-    return res.json();
+    const res = await axios.post(url, payload, { timeout: REQUEST_TIMEOUT_MS });
+    return res.data;
 }
 
 async function main() {

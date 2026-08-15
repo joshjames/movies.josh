@@ -37,6 +37,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const axios = require('axios');
 const MetadataRegistry = require('../src/services/MetadataRegistry');
 
 const METADATA_URL = process.env.WORKER_URL_METADATA || process.env.BACKFILL_METADATA_URL || 'http://metadata-worker:5001/process';
@@ -115,14 +116,16 @@ function scanMovies() {
     return categories;
 }
 
+// axios, not fetch(): Node's built-in fetch (undici) enforces its own
+// default 5-minute headersTimeout/bodyTimeout *underneath* any AbortSignal
+// we pass in, so a full re-encode or large upload that legitimately takes
+// longer than 5 minutes gets killed with a generic "fetch failed" even
+// though the worker keeps working and finishes the job server-side. axios
+// has no such hidden floor - only the timeout we explicitly set applies.
+// This matches how PipelineWorker.js already calls these same endpoints.
 async function callWorker(url, payload) {
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    });
-    return res.json();
+    const res = await axios.post(url, payload, { timeout: REQUEST_TIMEOUT_MS });
+    return res.data;
 }
 
 async function fetchMetadataAndCover(item, { fullRegister }) {

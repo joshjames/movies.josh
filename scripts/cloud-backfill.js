@@ -31,6 +31,7 @@ require('dotenv').config();
 
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 const MetadataRegistry = require('../src/services/MetadataRegistry');
 
 const RESOLUTION_PROFILES = ['1080p', '720p', '480p'];
@@ -218,15 +219,20 @@ async function main() {
                 return next;
             });
 
-            const res = await fetch(CLOUDSYNC_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderPath, folderName, forceActualUpload: true }),
-                signal: AbortSignal.timeout(CLOUDSYNC_REQUEST_TIMEOUT_MS)
-            });
-            const body = await res.json().catch(() => ({}));
+            // axios, not fetch(): Node's built-in fetch (undici) enforces its own
+            // default 5-minute headersTimeout/bodyTimeout underneath any AbortSignal
+            // we pass in, so a large upload that legitimately takes longer than 5
+            // minutes gets killed with a generic "fetch failed" even though the
+            // worker keeps working and finishes the upload server-side. axios has
+            // no such hidden floor - only the timeout we explicitly set applies.
+            const res = await axios.post(
+                CLOUDSYNC_URL,
+                { folderPath, folderName, forceActualUpload: true },
+                { timeout: CLOUDSYNC_REQUEST_TIMEOUT_MS, validateStatus: () => true }
+            );
+            const body = res.data || {};
 
-            if (!res.ok || !body.success) {
+            if (res.status >= 400 || !body.success) {
                 failedCount += 1;
                 console.warn(`[cloud-backfill] FAILED ${folderName}: ${body.error || res.statusText}`);
                 return;
