@@ -260,7 +260,12 @@ async function main() {
     console.log(`[cloud-backfill] Done. Completed=${completedCount} Failed=${failedCount} Total=${selected.length}`);
 }
 
-main().catch((err) => {
-    console.error('[cloud-backfill] Fatal error:', err.message || err);
-    process.exit(1);
-});
+main()
+    .then(() => process.exit(0)) // required: the redis client's open socket
+                                  // otherwise keeps the process alive forever
+                                  // after main() resolves, hanging the parent
+                                  // execFileSync/backfill call indefinitely.
+    .catch((err) => {
+        console.error('[cloud-backfill] Fatal error:', err.message || err);
+        process.exit(1);
+    });
