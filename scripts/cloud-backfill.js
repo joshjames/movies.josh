@@ -35,6 +35,11 @@ const MetadataRegistry = require('../src/services/MetadataRegistry');
 
 const RESOLUTION_PROFILES = ['1080p', '720p', '480p'];
 const CLOUDSYNC_URL = process.env.CLOUDSYNC_BACKFILL_URL || 'http://localhost:5104/process';
+// Observed uploads run at tens of MB/s (a multi-GB profile finishes in
+// minutes), so this is generous headroom - but without it a stalled
+// connection on the worker side hangs this fetch (and the whole sequential
+// backfill behind it) forever, as happened for 13+ hours in production.
+const CLOUDSYNC_REQUEST_TIMEOUT_MS = 45 * 60 * 1000;
 
 // StoragePathResolver's MOVIES_DIR comes from .env, which holds the
 // in-container path (/app/storage/movies) - correct for the app's own
@@ -216,7 +221,8 @@ async function main() {
             const res = await fetch(CLOUDSYNC_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderPath, folderName, forceActualUpload: true })
+                body: JSON.stringify({ folderPath, folderName, forceActualUpload: true }),
+                signal: AbortSignal.timeout(CLOUDSYNC_REQUEST_TIMEOUT_MS)
             });
             const body = await res.json().catch(() => ({}));
 
