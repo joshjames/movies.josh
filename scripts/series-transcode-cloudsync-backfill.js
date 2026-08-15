@@ -15,9 +15,10 @@
 // Must run inside a container (e.g. `docker exec movie-streamer-cloudsync-worker
 // node scripts/series-transcode-cloudsync-backfill.js`), not on the bare
 // host: the worker containers only see their own mounted path
-// (/app/storage/series, not /data/blockchain/media/Series). Defaults below
-// match the same env vars the real app containers already use (SERIES_DIR,
-// WORKER_URL_TRANSCODE, WORKER_URL_CLOUDSYNC).
+// (/app/storage/series, not /data/blockchain/media/Series). SERIES_DIR and
+// WORKER_URL_TRANSCODE default to the same env vars the real app containers
+// already use. CLOUDSYNC deliberately does NOT reuse WORKER_URL_CLOUDSYNC -
+// see the constant below for why.
 //
 // Usage (from inside a container):
 //   node scripts/series-transcode-cloudsync-backfill.js --dry-run
@@ -30,7 +31,12 @@ const fs = require('fs');
 const path = require('path');
 
 const TRANSCODE_URL = process.env.WORKER_URL_TRANSCODE || process.env.BACKFILL_TRANSCODE_URL || 'http://transcoder-worker:5003/process';
-const CLOUDSYNC_URL = process.env.WORKER_URL_CLOUDSYNC || process.env.BACKFILL_CLOUDSYNC_URL || 'http://cloudsync-worker:5004/process';
+// 127.0.0.1, not the 'cloudsync-worker' service DNS name: this script always
+// runs via `docker exec` inside the cloudsync-worker container itself (see
+// header), and calling a container's own published port through its service
+// name hairpins back out through the docker bridge/NAT - which silently
+// black-holed the HTTP response after large (multi-GB) uploads in production.
+const CLOUDSYNC_URL = process.env.BACKFILL_CLOUDSYNC_URL || 'http://127.0.0.1:5004/process';
 const SERIES_ROOT = process.env.SERIES_DIR || process.env.BACKFILL_SERIES_DIR || '/app/storage/series';
 const REQUEST_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6h ceiling - a season pack can have many episodes to re-encode
 

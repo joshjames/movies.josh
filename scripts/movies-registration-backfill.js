@@ -178,7 +178,9 @@ function cloudSyncViaExistingBackfillScript(folderName) {
         env: {
             ...process.env,
             BACKFILL_MOVIES_DIR: MOVIES_ROOT,
-            CLOUDSYNC_BACKFILL_URL: process.env.WORKER_URL_CLOUDSYNC || process.env.CLOUDSYNC_BACKFILL_URL || 'http://cloudsync-worker:5004/process'
+            // 127.0.0.1, not the service DNS name - see series-transcode-cloudsync-backfill.js
+            // for why (hairpin NAT silently black-holed responses after large uploads).
+            CLOUDSYNC_BACKFILL_URL: process.env.CLOUDSYNC_BACKFILL_URL || 'http://127.0.0.1:5004/process'
         }
     });
     console.log(output.trim().split('\n').map((line) => `    ${line}`).join('\n'));
