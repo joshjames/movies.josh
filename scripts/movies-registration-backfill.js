@@ -11,8 +11,10 @@
 //      cloud-backfill.js's upload step.
 //   B. Has metadata.json but no cover.jpg -> re-run METADATA just to backfill
 //      the poster (title/plot/etc get refreshed too, which is fine/desired).
-//   C. Has metadata.json but no .web.mp4 (never transcoded) -> TRANSCODE ->
-//      cloud-backfill.js's upload step.
+//   C. Has metadata.json, no .web.mp4, AND no already-synced cloud copy
+//      (genuinely never transcoded - as opposed to a movie that WAS synced
+//      and had its local copy deleted afterward, which is expected/by
+//      design) -> TRANSCODE -> cloud-backfill.js's upload step.
 //
 // Each worker call uses that worker's own real logic (OMDB lookup, ffmpeg
 // remux/audio-fix/full-reencode decision, S3 upload) - this script is purely
@@ -84,6 +86,19 @@ function hasWebMp4(folderPath) {
     }
 }
 
+// A movie with no local .web.mp4 isn't necessarily untranscoded - the whole
+// point of cloud sync is that the local copy can be deleted once uploaded.
+// Only flag it as needing work if it ALSO has no valid 1080p remoteKey.
+function isAlreadyCloudSynced(metaPath) {
+    try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const profile1080p = meta?.storage?.files?.['1080p'];
+        return profile1080p?.status === 'synced' && Boolean(profile1080p?.remoteKey);
+    } catch (_err) {
+        return false;
+    }
+}
+
 function scanMovies() {
     const categories = { unregistered: [], missingCover: [], needsTranscode: [] };
     let entries;
@@ -108,7 +123,7 @@ function scanMovies() {
         if (!fs.existsSync(path.join(folderPath, 'cover.jpg'))) {
             categories.missingCover.push(item);
         }
-        if (!hasWebMp4(folderPath)) {
+        if (!hasWebMp4(folderPath) && !isAlreadyCloudSynced(metaPath)) {
             categories.needsTranscode.push(item);
         }
     }
