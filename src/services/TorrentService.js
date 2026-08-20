@@ -4,7 +4,7 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const logger = require('./logger');
-const { connectDb, redisClient } = require('./db');
+const { connectDb, redisClient, connectWriteDb, redisWriteClient } = require('./db');
 
 function normalizeQbitApiBase(rawValue, fallbackValue) {
     let raw = String(rawValue || '').trim();
@@ -185,11 +185,11 @@ async function writeRedisMapping(prefix, hash, value, ttlSeconds = 604800) {
     const key = buildRedisKey(prefix, hash);
     if (!key || !value) return;
 
-    await connectDb();
-    if (!redisClient.isOpen) return;
+    await connectWriteDb();
+    if (!redisWriteClient.isOpen) return;
 
     try {
-        await redisClient.set(key, String(value), { EX: ttlSeconds });
+        await redisWriteClient.set(key, String(value), { EX: ttlSeconds });
     } catch (err) {
         logger.warn(`⚠️ [Torrent Service] Failed writing mapping ${key}: ${err.message}`);
     }

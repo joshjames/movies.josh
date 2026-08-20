@@ -43,13 +43,29 @@ echo "==> Image tag: ${IMAGE_NAME}"
 echo "==> Container: ${APP_CONTAINER_NAME}"
 echo "==> Compose project: ${COMPOSE_PROJECT_NAME}"
 
-# Build and roll forward web + pipeline/worker services with immutable image tags.
+# All 7 services below share one identical build context/Dockerfile/image
+# name (see x-app-common in docker-compose.yml). Passing all 7 to a single
+# `up --build` makes Compose build each one as its own buildx bake target
+# regardless of the shared image name, so all 7 race to write the exact same
+# final tag concurrently - two lose with "already exists" (nondeterministic:
+# sometimes wins, sometimes doesn't - neither COMPOSE_BAKE=false nor
+# BUILDX_NO_DEFAULT_ATTESTATIONS reliably prevented it, see chat log
+# 2026-08-17). The actual fix: build the image exactly once (as a single
+# target, so there's nothing to race), then bring every service up without
+# rebuilding - they all resolve to the tag that single build already
+# produced. Verified clean and deterministic across repeated runs.
+COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
+APP_IMAGE_NAME="$IMAGE_NAME" \
+APP_BUILD_VERSION="$VERSION_TAG" \
+APP_DEPLOYED_AT="$APP_DEPLOYED_AT" \
+"${COMPOSE_BIN[@]}" build movie-streamer
+
 COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
 APP_IMAGE_NAME="$IMAGE_NAME" \
 APP_CONTAINER_NAME="$APP_CONTAINER_NAME" \
 APP_BUILD_VERSION="$VERSION_TAG" \
 APP_DEPLOYED_AT="$APP_DEPLOYED_AT" \
-"${COMPOSE_BIN[@]}" up -d --build --no-deps \
+"${COMPOSE_BIN[@]}" up -d --no-deps \
     movie-streamer \
     pipeline-runner \
     ingest-worker \

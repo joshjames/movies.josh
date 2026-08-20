@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { connectDb, redisClient } = require('./db');
+const { connectWriteDb, redisWriteClient } = require('./db');
 const logger = require('./logger');
 
 const WINDOW_MS = Math.max(1, Number(process.env.ACQUISITION_QUOTA_WINDOW_MS || 24 * 60 * 60 * 1000));
@@ -110,8 +110,8 @@ function buildSnapshot(entries, now = Date.now()) {
 }
 
 async function getRedisClientIfAvailable() {
-    await connectDb();
-    return redisClient.isOpen ? redisClient : null;
+    await connectWriteDb();
+    return redisWriteClient.isOpen ? redisWriteClient : null;
 }
 
 async function getQuotaSnapshot(userKey, config = {}) {
