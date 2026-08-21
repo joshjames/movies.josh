@@ -7,7 +7,8 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
-const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, HeadObjectCommand, CopyObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const { execFile } = require('child_process');
 const logger = require('../utils/logger');
 const ROOT = path.join(__dirname, '..', '..');
@@ -106,7 +107,9 @@ function getArchiveS3Client() {
         credentials: {
             accessKeyId: process.env.BBkeyID,
             secretAccessKey: process.env.BBapplicationKey
-        }
+        },
+        maxAttempts: 3,
+        requestHandler: new NodeHttpHandler({ connectionTimeout: 10_000, requestTimeout: 5 * 60 * 1000 })
     });
     return archiveS3Client;
 }
@@ -786,8 +789,37 @@ function detectLocalProfilePath(folderPath, profileName = '', existingLocalPath 
     return '';
 }
 
+// A movie/series first synced to cloud before it had a valid imdbId gets keyed
+// by its folder name instead (see CloudSyncWorker.js's directoryId fallback).
+// If an admin fills in the imdbId afterward, nothing previously migrated that
+// object to the canonical imdb-based key - it just sat there under the old,
+// folder-name-based path forever. This computes what the canonical key should
+// be now and, if it differs, moves the object there (B2 server-side copy, no
+// re-upload) and removes the stale one.
+async function migrateRemoteKeyToImdbIfNeeded(s3Client, bucket, { remoteKey, canonicalKey, folder, profile }) {
+    if (!canonicalKey || canonicalKey === remoteKey) return remoteKey;
+    try {
+        await s3Client.send(new CopyObjectCommand({
+            Bucket: bucket,
+            Key: canonicalKey,
+            CopySource: `/${bucket}/${remoteKey.split('/').map(encodeURIComponent).join('/')}`
+        }));
+        // Verify the copy actually landed before touching the original - a
+        // false-positive "it worked" here would delete the only copy of the file.
+        await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: canonicalKey }));
+        await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: remoteKey }));
+        logger.info(`☁️ [Cloud Rekey] ${folder} [${profile}]: ${remoteKey} -> ${canonicalKey}`);
+        return canonicalKey;
+    } catch (err) {
+        logger.warn(`⚠️ [Cloud Rekey] Failed to migrate ${folder} [${profile}] to imdb-based key: ${err.message}`);
+        return remoteKey;
+    }
+}
+
 async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', contentType = 'movie', folder = '') {
     const normalizedType = String(contentType || '').toLowerCase() === 'series' ? 'series' : 'movie';
+    const imdbId = String(metadata.imdbId || metadata.imdb_id || '').trim();
+    const hasValidImdbId = Boolean(imdbId) && imdbId.toLowerCase() !== 'n/a';
     const baseRepair = repairStorageProfiles(
         metadata.storage || {},
         normalizedType,
@@ -801,11 +833,12 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
     const s3Client = getArchiveS3Client();
     let changed = Boolean(baseRepair.changed);
     const verification = [];
+    const base = normalizedType === 'series' ? 'series' : 'movies';
 
     for (const profile of Object.keys(files)) {
         const block = files[profile] || {};
         const localPath = detectLocalProfilePath(folderPath, profile, block.localPath || '');
-        const remoteKey = cleanRemoteKey(block.remoteKey || '');
+        let remoteKey = cleanRemoteKey(block.remoteKey || '');
 
         let cloudExists = false;
         if (remoteKey) {
@@ -814,6 +847,21 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
                 cloudExists = true;
             } catch (_err) {
                 cloudExists = false;
+            }
+        }
+
+        // Movies only for now - series keys are per-episode
+        // (series/<imdbId>/season.NN/sNNeNN/profile.mp4) and need their own
+        // migration path rather than this flat movies/<id>/profile.mp4 shape.
+        if (cloudExists && hasValidImdbId && normalizedType === 'movie'
+            && (profile === '1080p' || profile === '720p' || profile === '480p')) {
+            const canonicalKey = `${base}/${imdbId}/${profile}.mp4`;
+            const migratedKey = await migrateRemoteKeyToImdbIfNeeded(s3Client, bucket, {
+                remoteKey, canonicalKey, folder, profile
+            });
+            if (migratedKey !== remoteKey) {
+                remoteKey = migratedKey;
+                changed = true;
             }
         }
 
