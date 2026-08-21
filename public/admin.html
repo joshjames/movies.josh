@@ -2544,6 +2544,10 @@
                                     <input type="checkbox" id="force-reprocess-${item.folder}" disabled>
                                     Force Reprocess (.web.mp4)
                                 </label>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; color:#cbd5e1; user-select:none; white-space:nowrap;" title="Video stream copy only (H.264/H.265 both accepted as-is) - just fixes audio to a browser-compatible track, extracts subtitles, and sets fast-start. No full re-encode, so it's fast even on large files.">
+                                    <input type="checkbox" id="audio-only-${item.folder}" disabled>
+                                    Audio Only (fast)
+                                </label>
                                 <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${folderJs}', '${currentTabMode}')">Run Worker</button>
                                 ${currentTabMode === 'series' ? `<button type="button" style="background:#0ea5e9;" onclick="openEpisodeManagerForItem('${folderJs}', '${currentTabMode}')">Episode Manager</button>` : ''}
                                 ${currentTabMode === 'series' ? `<button type="button" style="background:#0891b2;" onclick="openEpisodeSubscriberForItem('${folderJs}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${escapeJsAttr(item.title || '')}')">Episode Subscriber</button>` : ''}
@@ -3107,12 +3111,15 @@
                 const forceReprocess = worker === 'TRANSCODE'
                     ? Boolean(document.getElementById(`force-reprocess-${folder}`)?.checked)
                     : false;
+                const audioFixOnly = worker === 'TRANSCODE'
+                    ? Boolean(document.getElementById(`audio-only-${folder}`)?.checked)
+                    : false;
                 showToast(`Running ${worker} for ${folder}...`, 'info', 3000);
 
                 const res = await fetch('/api/admin/manual-worker-run', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder, contentType: type, worker, forceReprocess })
+                    body: JSON.stringify({ folder, contentType: type, worker, forceReprocess, audioFixOnly })
                 });
                 const data = await res.json();
                 if (!data.success) {
@@ -3129,11 +3136,18 @@
         function toggleForceReprocess(folder) {
             const workerSelect = document.getElementById(`worker-${folder}`);
             const forceToggle = document.getElementById(`force-reprocess-${folder}`);
-            if (!workerSelect || !forceToggle) return;
+            const audioOnlyToggle = document.getElementById(`audio-only-${folder}`);
+            if (!workerSelect) return;
 
             const enabled = workerSelect.value === 'TRANSCODE';
-            forceToggle.disabled = !enabled;
-            if (!enabled) forceToggle.checked = false;
+            if (forceToggle) {
+                forceToggle.disabled = !enabled;
+                if (!enabled) forceToggle.checked = false;
+            }
+            if (audioOnlyToggle) {
+                audioOnlyToggle.disabled = !enabled;
+                if (!enabled) audioOnlyToggle.checked = false;
+            }
         }
 
         document.addEventListener('change', (event) => {

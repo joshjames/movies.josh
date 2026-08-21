@@ -1937,6 +1937,7 @@ router.post('/manual-worker-run', async (req, res) => {
     try {
         const { folder, contentType, worker } = req.body || {};
         const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
+        const audioFixOnly = req.body?.audioFixOnly === true || String(req.body?.audioFixOnly || '').toLowerCase() === 'true';
         if (!folder || !worker) {
             return res.status(400).json({ success: false, error: 'Missing folder or worker.' });
         }
@@ -1977,7 +1978,8 @@ router.post('/manual-worker-run', async (req, res) => {
             imdbId: metadata.imdbId || metadata.imdb_id || metadata.imdbID || null,
             manualImdbId: metadata.imdbId || metadata.imdb_id || metadata.imdbID || null,
             forceActualUpload: cleanWorker === 'CLOUDSYNC',
-            forceReprocess: cleanWorker === 'TRANSCODE' ? forceReprocess : undefined
+            forceReprocess: cleanWorker === 'TRANSCODE' ? forceReprocess : undefined,
+            audioFixOnly: cleanWorker === 'TRANSCODE' ? audioFixOnly : undefined
         };
 
         let preflight = null;
