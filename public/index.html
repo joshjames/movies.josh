@@ -1950,11 +1950,16 @@
             if (!raw) return '';
 
             if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('/') || raw.startsWith('data:image/')) {
-                if (raw.startsWith('/movie-assets/') || raw.startsWith('/images/')) {
-                    return encodeURI(decodeURI(raw).replace(/"/g, '%22'));
-                }
-
-                return encodeURI(raw.replace(/"/g, '%22'));
+                // These URLs are already correctly percent-encoded by the server
+                // (LibraryScanner.js's encodeURIComponent(folder)) - re-running them
+                // through encodeURI(decodeURI(...)) corrupts anything containing a
+                // reserved character the server had to encode, like a colon in a
+                // title ("Made in Abyss I: Journey's Dawn"): decodeURI() leaves an
+                // already-encoded %3A untouched (it only decodes unreserved chars),
+                // so the follow-up encodeURI() then encodes that literal '%' into
+                // '%25', turning %3A into %253A - a URL that 404s. Just escape the
+                // one character (") that would break the HTML attribute.
+                return raw.replace(/"/g, '%22');
             }
 
             return '';
