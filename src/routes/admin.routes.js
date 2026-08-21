@@ -3087,6 +3087,7 @@ router.post('/repair-storage-profiles-bulk', async (req, res) => {
         let scanned = 0;
         let updated = 0;
         const changedFolders = [];
+        const failedFolders = [];
 
         for (const row of rows) {
             const folder = normalizedType === 'series'
@@ -3094,27 +3095,34 @@ router.post('/repair-storage-profiles-bulk', async (req, res) => {
                 : decodeURIComponent(String(row.id || ''));
             if (!folder) continue;
 
-            const folderPath = normalizedType === 'series'
-                ? resolveSeriesFolderPath(folder)
-                : resolveMovieFolderPath(folder);
-            const metaPath = path.join(folderPath, 'metadata.json');
-            if (!fs.existsSync(metaPath)) continue;
+            // A single folder mid-rename (e.g. IngestSanitizerWorker normalizing
+            // it concurrently) must not abort the whole sweep - skip and move on.
+            try {
+                const folderPath = normalizedType === 'series'
+                    ? resolveSeriesFolderPath(folder)
+                    : resolveMovieFolderPath(folder);
+                const metaPath = path.join(folderPath, 'metadata.json');
+                if (!fs.existsSync(metaPath)) continue;
 
-            const metadata = readMetadataIfExists(metaPath);
-            if (!metadata) continue;
-            scanned += 1;
+                const metadata = readMetadataIfExists(metaPath);
+                if (!metadata) continue;
+                scanned += 1;
 
-            const location = String(metadata?.storage?.location || '').toLowerCase();
-            if (onlyRemoteMode && location !== 'remote') continue;
+                const location = String(metadata?.storage?.location || '').toLowerCase();
+                if (onlyRemoteMode && location !== 'remote') continue;
 
-            const repaired = await verifyAndRepairStorageProfiles(metadata, folderPath, normalizedType, folder);
+                const repaired = await verifyAndRepairStorageProfiles(metadata, folderPath, normalizedType, folder);
 
-            if (!repaired.changed) continue;
+                if (!repaired.changed) continue;
 
-            metadata.storage = repaired.storage;
-            await persistMetadataFile(metaPath, metadata);
-            updated += 1;
-            changedFolders.push(folder);
+                metadata.storage = repaired.storage;
+                await persistMetadataFile(metaPath, metadata);
+                updated += 1;
+                changedFolders.push(folder);
+            } catch (err) {
+                logger.warn(`⚠️ [Repair Cloud State Bulk] Skipped ${folder}: ${err.message}`);
+                failedFolders.push({ folder, error: err.message });
+            }
         }
 
         if (updated > 0) {
@@ -3127,7 +3135,9 @@ router.post('/repair-storage-profiles-bulk', async (req, res) => {
             contentType: normalizedType,
             scanned,
             updated,
-            changedFolders: changedFolders.slice(0, 100)
+            changedFolders: changedFolders.slice(0, 100),
+            failedCount: failedFolders.length,
+            failedFolders: failedFolders.slice(0, 100)
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
