@@ -1255,6 +1255,18 @@
                 .replace(/'/g, '&#39;');
         }
 
+        // Safe to embed as: onclick="someFn('VALUE')" - unlike escapeHtml alone,
+        // this survives the browser decoding HTML entities before compiling the
+        // inline handler (escapeHtml's '->&#39; round-trips back to a literal '
+        // at that point, which still breaks the JS string). Backslash-escaping
+        // the quote first produces \' in the decoded source, which the JS
+        // parser reads as an escaped apostrophe rather than a string terminator.
+        // A folder/title containing an apostrophe (e.g. "Journey's Dawn") was
+        // silently breaking every button on its row without this.
+        function escapeJsAttr(value) {
+            return escapeHtml(String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+        }
+
         function openAdminQueueManager() {
             const drawer = document.getElementById('admin-queue-drawer');
             const backdrop = document.getElementById('admin-queue-backdrop');
@@ -2349,6 +2361,11 @@
 
             container.innerHTML = `${seriesTools}${collection.map(item => {
                 const urlPath = currentTabMode === 'series' ? `series/${item.folder}` : item.folder;
+                // JS-string-literal-safe folder name for embedding into onclick="fn('...')"
+                // attributes below - see escapeJsAttr's comment for why plain escapeHtml
+                // isn't sufficient (folders/titles with an apostrophe, e.g. "Journey's Dawn",
+                // otherwise break every button on this row).
+                const folderJs = escapeJsAttr(item.folder);
                 const posterSrc = buildCoverUrl(urlPath);
                 const syncState = item.syncState || {};
                 const isInSync = syncState.inSync === true;
@@ -2390,10 +2407,10 @@
                         <label>Cover Artwork</label>
                         <div class="admin-drop-zone" 
                              id="dropzone-${item.folder}" 
-                             ondragover="handleDragOver(event, '${item.folder}')" 
-                             ondragleave="handleDragLeave(event, '${item.folder}')" 
-                             ondrop="handleDrop(event, '${item.folder}', '${currentTabMode}')">
-                            <img src="${posterSrc}" id="img-${item.folder}" onerror="handleImgError('${item.folder}')" />
+                             ondragover="handleDragOver(event, '${folderJs}')" 
+                             ondragleave="handleDragLeave(event, '${folderJs}')" 
+                             ondrop="handleDrop(event, '${folderJs}', '${currentTabMode}')">
+                            <img src="${posterSrc}" id="img-${folderJs}" onerror="handleImgError('${folderJs}')" />
                             <div class="drop-zone-text" id="text-${item.folder}" style="display:none;">
                                 📥<br>Drag & Drop image file
                             </div>
@@ -2482,34 +2499,34 @@
                             </div>
 
                             <div class="ops-toolbar">
-                                <button class="btn-save" onclick="saveOverride('${item.folder}', '${currentTabMode}')">Save Changes</button>
+                                <button class="btn-save" onclick="saveOverride('${folderJs}', '${currentTabMode}')">Save Changes</button>
                                 ${storageLoc === 'local' ? `
-                                    <button type="button" class="btn-cloud" onclick="manualPushToCloud('${item.folder}', '${currentTabMode}')">Push to Cloud</button>
+                                    <button type="button" class="btn-cloud" onclick="manualPushToCloud('${folderJs}', '${currentTabMode}')">Push to Cloud</button>
                                 ` : ''}
                                 <div class="action-menu-wrap" id="action-wrap-${item.folder}">
-                                    <button type="button" class="btn-actions" onclick="toggleActionMenu('${item.folder}')">Actions ▾</button>
+                                    <button type="button" class="btn-actions" onclick="toggleActionMenu('${folderJs}')">Actions ▾</button>
                                     <div class="action-menu" id="action-menu-${item.folder}">
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'refetch')">Refresh Metadata from OMDb</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'sync')">Sync Item to Redis Snapshot</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'repaircloud')">Repair Cloud State</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
-                                        <button class="action-item" onclick="openSubtitleManager('${item.folder}', '${currentTabMode}')">Manage Subtitles</button>
-                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeManagerForItem('${item.folder}', '${currentTabMode}')">Open Episode Manager</button>` : ''}
-                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeSubscriberForItem('${item.folder}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${(item.title || '').replace(/'/g, '&#39;')}')">Open Episode Subscriber</button>` : ''}
-                                        <button class="action-item" onclick="openGroupManagerForItem('${item.folder}', '${currentTabMode}')">Open Group Manager</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'addglobal')">Add To Global Group</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'removeglobal')">Remove From Global Group</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'adduser')">Add User Group</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'setuseronly')">Set User-Only Group</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'removeuser')">Remove User Group</button>
-                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="normalizeSeriesFolderNow('${item.folder}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
-                                        <button class="action-item" onclick="deleteEmptyFolderNow('${item.folder}', '${currentTabMode}')">Delete Empty Folder</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>
-                                        <button class="action-item" onclick="menuAction('${item.folder}', '${currentTabMode}', 'purge')" ${hasQuarantinedArchive ? '' : 'disabled'}>Permanently Purge Archive</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'refetch')">Refresh Metadata from OMDb</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'sync')">Sync Item to Redis Snapshot</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'repair')">Repair Metadata + Sync</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'repaircloud')">Repair Cloud State</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'profiles')">Generate 720p/480p Profiles</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'worker')">Run Selected Worker</button>
+                                        <button class="action-item" onclick="openSubtitleManager('${folderJs}', '${currentTabMode}')">Manage Subtitles</button>
+                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeManagerForItem('${folderJs}', '${currentTabMode}')">Open Episode Manager</button>` : ''}
+                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="openEpisodeSubscriberForItem('${folderJs}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${escapeJsAttr(item.title || '')}')">Open Episode Subscriber</button>` : ''}
+                                        <button class="action-item" onclick="openGroupManagerForItem('${folderJs}', '${currentTabMode}')">Open Group Manager</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'rename')">Apply Rename Inputs</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'addglobal')">Add To Global Group</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'removeglobal')">Remove From Global Group</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'adduser')">Add User Group</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'setuseronly')">Set User-Only Group</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'removeuser')">Remove User Group</button>
+                                        ${currentTabMode === 'series' ? `<button class="action-item" onclick="normalizeSeriesFolderNow('${folderJs}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
+                                        <button class="action-item" onclick="deleteEmptyFolderNow('${folderJs}', '${currentTabMode}')">Delete Empty Folder</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'archive')" ${canArchive ? '' : 'disabled'}>Archive Local Media (Safe)</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'restore')" ${hasQuarantinedArchive ? '' : 'disabled'}>Restore Archived Media</button>
+                                        <button class="action-item" onclick="menuAction('${folderJs}', '${currentTabMode}', 'purge')" ${hasQuarantinedArchive ? '' : 'disabled'}>Permanently Purge Archive</button>
                                     </div>
                                 </div>
                             </div>
@@ -2527,14 +2544,14 @@
                                     <input type="checkbox" id="force-reprocess-${item.folder}" disabled>
                                     Force Reprocess (.web.mp4)
                                 </label>
-                                <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${item.folder}', '${currentTabMode}')">Run Worker</button>
-                                ${currentTabMode === 'series' ? `<button type="button" style="background:#0ea5e9;" onclick="openEpisodeManagerForItem('${item.folder}', '${currentTabMode}')">Episode Manager</button>` : ''}
-                                ${currentTabMode === 'series' ? `<button type="button" style="background:#0891b2;" onclick="openEpisodeSubscriberForItem('${item.folder}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${(item.title || '').replace(/'/g, '&#39;')}')">Episode Subscriber</button>` : ''}
+                                <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${folderJs}', '${currentTabMode}')">Run Worker</button>
+                                ${currentTabMode === 'series' ? `<button type="button" style="background:#0ea5e9;" onclick="openEpisodeManagerForItem('${folderJs}', '${currentTabMode}')">Episode Manager</button>` : ''}
+                                ${currentTabMode === 'series' ? `<button type="button" style="background:#0891b2;" onclick="openEpisodeSubscriberForItem('${folderJs}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${escapeJsAttr(item.title || '')}')">Episode Subscriber</button>` : ''}
                                 <input type="text" id="rename-folder-${item.folder}" placeholder="New folder name (optional)" style="min-width:240px; flex:1;">
                                 <input type="text" id="rename-file-${item.folder}" placeholder="New video filename (optional)" style="min-width:240px; flex:1;">
-                                <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${item.folder}', '${currentTabMode}')">Apply Rename</button>
-                                ${currentTabMode === 'series' ? `<button type="button" style="background:#8b5cf6;" onclick="normalizeSeriesFolderNow('${item.folder}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
-                                <button type="button" style="background:#0ea5e9;" onclick="repairMetadataNow('${item.folder}', '${currentTabMode}')">Repair Metadata</button>
+                                <button type="button" style="background:#7c3aed;" onclick="renameMediaNow('${folderJs}', '${currentTabMode}')">Apply Rename</button>
+                                ${currentTabMode === 'series' ? `<button type="button" style="background:#8b5cf6;" onclick="normalizeSeriesFolderNow('${folderJs}', '${currentTabMode}')">Normalize Series Folder</button>` : ''}
+                                <button type="button" style="background:#0ea5e9;" onclick="repairMetadataNow('${folderJs}', '${currentTabMode}')">Repair Metadata</button>
                             </div>
                         </div>
                     </div>
@@ -3486,7 +3503,13 @@
         function buildCoverUrl(urlPath) {
             const cleanPath = String(urlPath || '').replace(/^\/+/, '').replace(/\/+$/g, '');
             if (!cleanPath) return '';
-            return `/movie-assets/${cleanPath}/cover.jpg?v=${Date.now()}`;
+            // Encode each path segment (not the whole string, which would also
+            // encode the '/' separators) - a folder name with a colon or other
+            // URL-significant character (e.g. "Made in Abyss I: Journey's Dawn")
+            // otherwise produces a URL that 404s, unlike every server-side cover
+            // URL builder in this codebase, which all use encodeURIComponent.
+            const encodedPath = cleanPath.split('/').map(encodeURIComponent).join('/');
+            return `/movie-assets/${encodedPath}/cover.jpg?v=${Date.now()}`;
         }
 
         function handleDragOver(e, folder) { e.preventDefault(); document.getElementById(`dropzone-${folder}`).classList.add('dragover'); }
