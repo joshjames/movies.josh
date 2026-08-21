@@ -49,12 +49,25 @@ function normalizeCollection(collection = {}) {
     };
 }
 
+// Genres excluded from "Recently Added": a large same-day bulk catalog
+// import (e.g. 200 anime movies at once) would otherwise occupy this row's
+// entire top-18 for days, crowding out anything else added around the same
+// time. These titles still appear normally in "All Titles" and get their own
+// dedicated genre row - they're just not surfaced as the site-wide "new".
+const RECENT_ROW_EXCLUDED_GENRES = new Set(['anime']);
+
+function isExcludedFromRecent(media) {
+    return normalizeGenres(media).some((g) => RECENT_ROW_EXCLUDED_GENRES.has(g.toLowerCase()));
+}
+
 function buildRecentCollection(mediaList = []) {
-    const recent = [...mediaList].sort((a, b) => {
-        const aTime = new Date(a.addedAt || a.updatedAt || 0).getTime();
-        const bTime = new Date(b.addedAt || b.updatedAt || 0).getTime();
-        return bTime - aTime;
-    });
+    const recent = [...mediaList]
+        .filter((media) => !isExcludedFromRecent(media))
+        .sort((a, b) => {
+            const aTime = new Date(a.addedAt || a.updatedAt || 0).getTime();
+            const bTime = new Date(b.addedAt || b.updatedAt || 0).getTime();
+            return bTime - aTime;
+        });
 
     return {
         id: 'recently-added-row',
@@ -183,7 +196,8 @@ function loadRecentFeed() {
 function upsertRecentCard(card) {
     const current = loadRecentFeed() || { generatedAt: new Date().toISOString(), totalItems: 0, collection: { id: 'recently-added-row', title: 'Recently Added', subtitle: 'newest items first', cards: [] } };
     const incomingId = String(card.id || '');
-    const cards = [card, ...(current.collection?.cards || []).filter(existing => String(existing.id || '') !== incomingId)]
+    const existingCards = (current.collection?.cards || []).filter(existing => String(existing.id || '') !== incomingId);
+    const cards = (isExcludedFromRecent(card) ? existingCards : [card, ...existingCards])
         .sort((a, b) => new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime())
         .slice(0, 18);
 
