@@ -54,6 +54,18 @@ echo "==> Compose project: ${COMPOSE_PROJECT_NAME}"
 # target, so there's nothing to race), then bring every service up without
 # rebuilding - they all resolve to the tag that single build already
 # produced. Verified clean and deterministic across repeated runs.
+# DEPLOY_WORKERS=false restricts the rollout to just the web container - for
+# a satellite node (e.g. Sydney) that isn't meant to run the pipeline/worker
+# services itself right now and shouldn't have them woken back up as a side
+# effect of picking up a code update. Defaults to true (the historical/full
+# behavior every other deploy - e.g. LA - still relies on).
+DEPLOY_WORKERS=${DEPLOY_WORKERS:-true}
+DEPLOY_SERVICES=(movie-streamer)
+if [[ "$DEPLOY_WORKERS" == "true" ]]; then
+    DEPLOY_SERVICES+=(pipeline-runner ingest-worker metadata-worker subtitle-worker transcoder-worker cloudsync-worker)
+fi
+echo "==> Deploy workers: ${DEPLOY_WORKERS} (services: ${DEPLOY_SERVICES[*]})"
+
 COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
 APP_IMAGE_NAME="$IMAGE_NAME" \
 APP_BUILD_VERSION="$VERSION_TAG" \
@@ -65,14 +77,7 @@ APP_IMAGE_NAME="$IMAGE_NAME" \
 APP_CONTAINER_NAME="$APP_CONTAINER_NAME" \
 APP_BUILD_VERSION="$VERSION_TAG" \
 APP_DEPLOYED_AT="$APP_DEPLOYED_AT" \
-"${COMPOSE_BIN[@]}" up -d --no-deps \
-    movie-streamer \
-    pipeline-runner \
-    ingest-worker \
-    metadata-worker \
-    subtitle-worker \
-    transcoder-worker \
-    cloudsync-worker
+"${COMPOSE_BIN[@]}" up -d --no-deps "${DEPLOY_SERVICES[@]}"
 
 echo "==> Waiting for runtime health endpoint..."
 for i in {1..30}; do
