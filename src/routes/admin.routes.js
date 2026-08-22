@@ -7,7 +7,10 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const axios = require('axios');
-const { S3Client, HeadObjectCommand, CopyObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const {
+    S3Client, HeadObjectCommand, CopyObjectCommand, DeleteObjectCommand,
+    CreateMultipartUploadCommand, UploadPartCopyCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand
+} = require('@aws-sdk/client-s3');
 const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const { execFile } = require('child_process');
 const logger = require('../utils/logger');
@@ -796,17 +799,57 @@ function detectLocalProfilePath(folderPath, profileName = '', existingLocalPath 
 // folder-name-based path forever. This computes what the canonical key should
 // be now and, if it differs, moves the object there (B2 server-side copy, no
 // re-upload) and removes the stale one.
-async function migrateRemoteKeyToImdbIfNeeded(s3Client, bucket, { remoteKey, canonicalKey, folder, profile }) {
-    if (!canonicalKey || canonicalKey === remoteKey) return remoteKey;
+// S3's single-shot CopyObject has a hard 5GB source-size limit (confirmed in
+// production: a real 6.96GB movie failed with "Copy source too big" and
+// silently kept its old key, logged as a warning - not obvious unless you go
+// looking). Anything at or above that must go through a multipart copy
+// instead (UploadPartCopy per byte-range chunk).
+const SINGLE_COPY_MAX_BYTES = 4.5 * 1024 * 1024 * 1024; // stay safely under the real 5GB cap
+const COPY_PART_SIZE_BYTES = 500 * 1024 * 1024;
+
+async function multipartCopyObject(s3Client, bucket, { copySource, key, totalSize }) {
+    const { UploadId } = await s3Client.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key }));
     try {
-        await s3Client.send(new CopyObjectCommand({
-            Bucket: bucket,
-            Key: canonicalKey,
-            CopySource: `/${bucket}/${remoteKey.split('/').map(encodeURIComponent).join('/')}`
+        const parts = [];
+        let partNumber = 1;
+        for (let start = 0; start < totalSize; start += COPY_PART_SIZE_BYTES) {
+            const end = Math.min(start + COPY_PART_SIZE_BYTES, totalSize) - 1;
+            const partResult = await s3Client.send(new UploadPartCopyCommand({
+                Bucket: bucket,
+                Key: key,
+                UploadId,
+                PartNumber: partNumber,
+                CopySource: copySource,
+                CopySourceRange: `bytes=${start}-${end}`
+            }));
+            parts.push({ ETag: partResult.CopyPartResult.ETag, PartNumber: partNumber });
+            partNumber += 1;
+        }
+        await s3Client.send(new CompleteMultipartUploadCommand({
+            Bucket: bucket, Key: key, UploadId, MultipartUpload: { Parts: parts }
         }));
-        // Verify the copy actually landed before touching the original - a
-        // false-positive "it worked" here would delete the only copy of the file.
-        await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: canonicalKey }));
+    } catch (err) {
+        await s3Client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId })).catch(() => {});
+        throw err;
+    }
+}
+
+async function migrateRemoteKeyToImdbIfNeeded(s3Client, bucket, { remoteKey, canonicalKey, folder, profile, sourceSize }) {
+    if (!canonicalKey || canonicalKey === remoteKey) return remoteKey;
+    const copySource = `/${bucket}/${remoteKey.split('/').map(encodeURIComponent).join('/')}`;
+    try {
+        if (Number(sourceSize) > SINGLE_COPY_MAX_BYTES) {
+            await multipartCopyObject(s3Client, bucket, { copySource, key: canonicalKey, totalSize: Number(sourceSize) });
+        } else {
+            await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: canonicalKey, CopySource: copySource }));
+        }
+        // Verify the copy actually landed (and matches the source size) before
+        // touching the original - a false-positive "it worked" here would
+        // delete the only copy of the file.
+        const verifyHead = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: canonicalKey }));
+        if (Number(sourceSize) && Number(verifyHead.ContentLength) !== Number(sourceSize)) {
+            throw new Error(`Copy size mismatch: expected ${sourceSize}, got ${verifyHead.ContentLength}`);
+        }
         await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: remoteKey }));
         logger.info(`☁️ [Cloud Rekey] ${folder} [${profile}]: ${remoteKey} -> ${canonicalKey}`);
         return canonicalKey;
@@ -841,10 +884,12 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
         let remoteKey = cleanRemoteKey(block.remoteKey || '');
 
         let cloudExists = false;
+        let cloudSize = null;
         if (remoteKey) {
             try {
-                await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: remoteKey }));
+                const headResult = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: remoteKey }));
                 cloudExists = true;
+                cloudSize = headResult.ContentLength;
             } catch (_err) {
                 cloudExists = false;
             }
@@ -857,7 +902,7 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
             && (profile === '1080p' || profile === '720p' || profile === '480p')) {
             const canonicalKey = `${base}/${imdbId}/${profile}.mp4`;
             const migratedKey = await migrateRemoteKeyToImdbIfNeeded(s3Client, bucket, {
-                remoteKey, canonicalKey, folder, profile
+                remoteKey, canonicalKey, folder, profile, sourceSize: cloudSize
             });
             if (migratedKey !== remoteKey) {
                 remoteKey = migratedKey;
@@ -3423,6 +3468,23 @@ router.post('/refetch-metadata', async (req, res) => {
         }
 
         await fsPromises.writeFile(metaFilePath, JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
+
+        // If this refetch corrected a wrong/missing imdbId, the movie's cloud
+        // object may still be sitting under the OLD id's key (or a folder-name
+        // fallback key) - refetch alone never touched storage/remoteKey.
+        // Verified in production: a movie originally mis-identified as
+        // American History X (tt0120586) kept pointing at that key after its
+        // imdbId was corrected, until this ran. Closing that gap here means
+        // one action fixes both metadata and cloud key instead of two.
+        try {
+            const repaired = await verifyAndRepairStorageProfiles(normalizedMetadata, targetDir, contentType, folder);
+            if (repaired.changed) {
+                normalizedMetadata.storage = repaired.storage;
+                await fsPromises.writeFile(metaFilePath, JSON.stringify(normalizedMetadata, null, 4), 'utf-8');
+            }
+        } catch (repairErr) {
+            logger.warn(`⚠️ [METADATA REFETCH] Cloud key repair skipped for ${folder}: ${repairErr.message}`);
+        }
 
         if (data.Poster && data.Poster !== "N/A") {
             try {
