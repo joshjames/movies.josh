@@ -12,7 +12,7 @@ const {
     CreateMultipartUploadCommand, UploadPartCopyCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand
 } = require('@aws-sdk/client-s3');
 const { NodeHttpHandler } = require('@smithy/node-http-handler');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const logger = require('../utils/logger');
 const ROOT = path.join(__dirname, '..', '..');
 const IMDB_DATA_FILES = [
@@ -2827,6 +2827,132 @@ router.post('/operations/refresh-imdb', async (req, res) => {
             errorOutput: err.stderr?.trim?.()
         });
     }
+});
+
+// =========================================================================
+// 🖥️ AD-HOC SCRIPT RUNNER (Operations Center "run a script" panel)
+// =========================================================================
+// Lets an admin run any script under /scripts from the Operations panel -
+// e.g. from a phone, with no terminal access. Detached + log-file-based
+// (not the synchronous runNodeScript() above) because several of these
+// scripts run for hours (movies-registration-backfill.js etc.) and a
+// synchronous HTTP request can't sensibly wait that long.
+//
+// Security: scriptName and the run id are always validated against an
+// actual directory listing (never trusted as a raw path), and the script
+// is invoked as `node <fixed path> <args...>` via spawn() without a shell,
+// so nothing in the args field can break out into shell syntax - this only
+// ever runs one of the already-reviewed scripts already committed to this
+// repo. Still admin-gated the same as everything else in this file.
+const SCRIPT_RUN_LOG_DIR = path.join(ROOT, 'logs', 'script-runs');
+const activeScriptRuns = new Map(); // runId -> { scriptName, args, pid, startedAt, exited, exitCode }
+
+function listAvailableScripts() {
+    const scriptsDir = path.join(ROOT, 'scripts');
+    return fs.readdirSync(scriptsDir).filter((f) => f.endsWith('.js')).sort();
+}
+
+router.get('/operations/scripts', (req, res) => {
+    try {
+        res.json({ success: true, scripts: listAvailableScripts() });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/operations/scripts/run', (req, res) => {
+    try {
+        const scriptName = String(req.body?.scriptName || '').trim();
+        const rawArgs = String(req.body?.args || '').trim();
+
+        const available = listAvailableScripts();
+        if (!available.includes(scriptName)) {
+            return res.status(400).json({ success: false, error: 'Unknown script - must be one of the files listed in /scripts.' });
+        }
+
+        // Simple whitespace split - covers every existing script's --flag / --flag value
+        // convention. Doesn't support quoted args containing spaces; none currently need it.
+        const argList = rawArgs ? rawArgs.split(/\s+/) : [];
+
+        fs.mkdirSync(SCRIPT_RUN_LOG_DIR, { recursive: true });
+        const runId = `${scriptName.replace(/\.js$/, '')}-${Date.now()}`;
+        const logFilePath = path.join(SCRIPT_RUN_LOG_DIR, `${runId}.log`);
+        const logFd = fs.openSync(logFilePath, 'a');
+
+        const child = spawn(process.execPath, [path.join(ROOT, 'scripts', scriptName), ...argList], {
+            cwd: ROOT,
+            detached: true,
+            stdio: ['ignore', logFd, logFd]
+        });
+        fs.closeSync(logFd); // child holds its own duplicated handle; safe to close ours now
+        child.unref();
+
+        const entry = { scriptName, args: argList, pid: child.pid, startedAt: Date.now(), exited: false, exitCode: null };
+        activeScriptRuns.set(runId, entry);
+        child.on('exit', (code) => {
+            entry.exited = true;
+            entry.exitCode = code;
+        });
+
+        logger.info(`🖥️ [Script Runner] Started ${scriptName} ${argList.join(' ')} (pid ${child.pid}, run ${runId})`);
+        res.json({ success: true, runId, pid: child.pid });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/operations/scripts/status', (req, res) => {
+    const runId = String(req.query.run || '').trim();
+    const entry = activeScriptRuns.get(runId);
+    if (!entry) return res.status(404).json({ success: false, error: 'Unknown run id.' });
+    res.json({ success: true, ...entry });
+});
+
+router.get('/operations/scripts/stream', (req, res) => {
+    const runId = String(req.query.run || '').trim().replace(/[^a-zA-Z0-9._-]/g, '');
+    const logFilePath = path.join(SCRIPT_RUN_LOG_DIR, `${runId}.log`);
+
+    // Must be an actual, already-created run log - never accept an arbitrary path.
+    if (!runId || !fs.existsSync(logFilePath)) {
+        return res.status(404).json({ success: false, error: 'Unknown run id.' });
+    }
+
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    let fileSize = 0;
+    const sendNewContent = () => {
+        const stats = fs.statSync(logFilePath);
+        if (stats.size <= fileSize) return;
+        const stream = fs.createReadStream(logFilePath, { start: fileSize, end: stats.size, encoding: 'utf8' });
+        stream.on('data', (chunk) => {
+            res.write(`data: ${chunk.replace(/\n/g, '\ndata: ')}\n\n`);
+        });
+        fileSize = stats.size;
+    };
+    sendNewContent();
+
+    const watcher = fs.watch(logFilePath, (eventType) => {
+        if (eventType === 'change') sendNewContent();
+    });
+
+    const entry = activeScriptRuns.get(runId);
+    const exitPoller = setInterval(() => {
+        if (entry?.exited) {
+            res.write(`event: exit\ndata: ${entry.exitCode}\n\n`);
+            clearInterval(exitPoller);
+            watcher.close();
+            res.end();
+        }
+    }, 1000);
+
+    req.on('close', () => {
+        watcher.close();
+        clearInterval(exitPoller);
+    });
 });
 
 // =========================================================================

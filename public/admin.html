@@ -922,11 +922,38 @@
                 <button class="btn-trigger" style="background:#9333ea;" onclick="runImdbDataUpdate()">Download / Update IMDb Dataset</button>
                 <button class="btn-trigger" style="background:#0f766e;" onclick="runImdbBuildCatalogs()">Build IMDb TV & Movie Catalogs</button>
                 <button class="btn-trigger" style="background:#2dd4bf;" onclick="runImdbRefreshAll()">Refresh IMDb Data and Rebuild Catalogs</button>
-                <div id="operations-status" style="padding:14px; border:1px solid #334155; border-radius:10px; background:#020617; color:#e2e8f0; font-size:0.9rem; min-height:96px; white-space:pre-wrap; overflow:auto;"></div>
+                <button class="btn-trigger" style="background:#dc2626;" onclick="openScriptRunnerDrawer()">Run Script...</button>
+                <div id="operations-status" style="padding:14px; border:1px solid #334155; border-radius:10px; background:#020617; color:#e2e8f0; font-size:0.9rem; min-height:96px; max-height:360px; white-space:pre-wrap; overflow:auto;"></div>
                 <div style="display:flex; gap: 10px; flex-wrap:wrap;">
                     <a href="/admin-users.html" style="background:#0e7490; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Open User Manager</a>
                     <a href="/feed-diagnostics.html" style="background:#334155; color:white; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:bold; font-size:0.9rem;">Feed Diagnostics</a>
                 </div>
+            </div>
+        </div>
+    </aside>
+    <div id="script-runner-backdrop" class="subtitle-drawer-backdrop" onclick="closeScriptRunnerDrawer()"></div>
+    <aside id="script-runner-drawer" class="subtitle-drawer" aria-hidden="true">
+        <div class="subtitle-drawer-header">
+            <div>
+                <div class="subtitle-drawer-title">Run Script</div>
+                <div class="subtitle-drawer-subtitle">Runs a script from /scripts directly on the server. Output streams into the Operations log below once started.</div>
+            </div>
+            <button type="button" style="background:#1e293b;" onclick="closeScriptRunnerDrawer()">Close</button>
+        </div>
+        <div class="subtitle-drawer-body">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+                <div>
+                    <label style="display:block; margin-bottom:6px; color:#cbd5e1; font-size:0.85rem;">Script</label>
+                    <select id="script-runner-select" style="width:100%; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:10px;">
+                        <option value="">Loading scripts...</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:6px; color:#cbd5e1; font-size:0.85rem;">Arguments (optional)</label>
+                    <input type="text" id="script-runner-args" placeholder="e.g. --dry-run or --list /tmp/x.txt --tag Anime" style="width:100%; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:10px; box-sizing:border-box;">
+                </div>
+                <div style="color:#94a3b8; font-size:0.8rem;">Runs on the server in the background - safe for long jobs. You'll get a confirmation prompt before it starts.</div>
+                <button class="btn-trigger" style="background:#dc2626;" onclick="runSelectedScript()">Run</button>
             </div>
         </div>
     </aside>
@@ -1300,6 +1327,97 @@
             if (drawer) drawer.classList.remove('show');
             if (backdrop) backdrop.classList.remove('show');
             if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        let scriptRunnerEventSource = null;
+
+        async function openScriptRunnerDrawer() {
+            const drawer = document.getElementById('script-runner-drawer');
+            const backdrop = document.getElementById('script-runner-backdrop');
+            if (!drawer || !backdrop) return;
+            drawer.classList.add('show');
+            backdrop.classList.add('show');
+            drawer.setAttribute('aria-hidden', 'false');
+
+            const select = document.getElementById('script-runner-select');
+            select.innerHTML = '<option value="">Loading scripts...</option>';
+            try {
+                const res = await fetch('/api/admin/operations/scripts');
+                const data = await res.json();
+                if (data.success && Array.isArray(data.scripts)) {
+                    select.innerHTML = data.scripts.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+                } else {
+                    select.innerHTML = '<option value="">Failed to load scripts</option>';
+                }
+            } catch (_err) {
+                select.innerHTML = '<option value="">Failed to load scripts</option>';
+            }
+        }
+
+        function closeScriptRunnerDrawer() {
+            const drawer = document.getElementById('script-runner-drawer');
+            const backdrop = document.getElementById('script-runner-backdrop');
+            if (drawer) drawer.classList.remove('show');
+            if (backdrop) backdrop.classList.remove('show');
+            if (drawer) drawer.setAttribute('aria-hidden', 'true');
+        }
+
+        async function runSelectedScript() {
+            const scriptName = document.getElementById('script-runner-select')?.value || '';
+            const args = document.getElementById('script-runner-args')?.value || '';
+            if (!scriptName) {
+                showToast('Select a script first.', 'error', 2600);
+                return;
+            }
+            if (!confirm(`Run ${scriptName}${args ? ' ' + args : ''} on the server now?`)) return;
+
+            closeScriptRunnerDrawer();
+            const statusEl = document.getElementById('operations-status');
+            if (statusEl) statusEl.textContent = `Starting ${scriptName}...\n`;
+
+            try {
+                const res = await fetch('/api/admin/operations/scripts/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scriptName, args })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    if (statusEl) statusEl.textContent = `Failed to start: ${data.error || 'Unknown error'}`;
+                    showToast('Script failed to start.', 'error', 4000);
+                    return;
+                }
+
+                showToast(`${scriptName} started (pid ${data.pid}).`, 'success', 3200);
+                if (scriptRunnerEventSource) scriptRunnerEventSource.close();
+
+                scriptRunnerEventSource = new EventSource(`/api/admin/operations/scripts/stream?run=${encodeURIComponent(data.runId)}`);
+                scriptRunnerEventSource.onmessage = (event) => {
+                    if (statusEl) {
+                        statusEl.textContent += event.data + '\n';
+                        statusEl.scrollTop = statusEl.scrollHeight;
+                    }
+                };
+                scriptRunnerEventSource.addEventListener('exit', (event) => {
+                    if (statusEl) {
+                        statusEl.textContent += `\n[${scriptName} finished, exit code ${event.data}]\n`;
+                        statusEl.scrollTop = statusEl.scrollHeight;
+                    }
+                    showToast(`${scriptName} finished (exit ${event.data}).`, event.data === '0' ? 'success' : 'error', 4200);
+                    scriptRunnerEventSource.close();
+                    scriptRunnerEventSource = null;
+                });
+                scriptRunnerEventSource.onerror = () => {
+                    // Connection dropped (e.g. server restarted mid-run) - stop retrying silently forever.
+                    if (scriptRunnerEventSource) {
+                        scriptRunnerEventSource.close();
+                        scriptRunnerEventSource = null;
+                    }
+                };
+            } catch (err) {
+                if (statusEl) statusEl.textContent = `Request failed: ${err.message}`;
+                showToast('Script run request failed.', 'error', 4000);
+            }
         }
 
         async function runImdbOperation(endpoint, body, successLabel) {
