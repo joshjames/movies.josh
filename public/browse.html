@@ -963,8 +963,12 @@
 
         function renderLocalMovieCards(localRows) {
             if (!Array.isArray(localRows) || localRows.length === 0) return '';
+            // Defensive: only ever render rows that actually resolve to a real
+            // playable item - never trust the caller alone to have filtered this.
+            const ownedRows = localRows.filter(movie => movie.href);
+            if (!ownedRows.length) return '';
 
-            return localRows.map(movie => `
+            return ownedRows.map(movie => `
                 <div class="card local-card">
                     <div class="cover-frame">
                         <button class="info-pill-btn" type="button" data-media-id="${encodeURIComponent(movie.imdbId || movie.localId || movie.id || '')}" data-content-type="movie" aria-label="Open info">i</button>

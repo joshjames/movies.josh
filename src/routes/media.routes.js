@@ -2398,7 +2398,10 @@ router.get('/movies/search/unified', async (req, res) => {
             };
         });
 
-        const localMatches = localResultsFromBuiltIndex;
+        // builtIndexMatches comes from the generic IMDb/TMDB discovery catalog, not
+        // the library - most matches aren't actually owned. Only ones with a real
+        // localRow (inLibrary true) belong in "already in your library" results.
+        const localMatches = localResultsFromBuiltIndex.filter((item) => item.inLibrary);
 
         const shouldFetchRemote = remoteMode === 'always'
             || (remoteMode === 'on_local_empty' && localMatches.length === 0)
