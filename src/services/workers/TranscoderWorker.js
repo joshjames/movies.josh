@@ -721,7 +721,10 @@ app.post('/process-low-res', async (req, res) => {
 
         metadata.storage.files['1080p'] = {
             ...(metadata.storage.files['1080p'] || {}),
-            status: metadata.storage.files['1080p']?.status || 'synced',
+            // 'synced' means "actually uploaded to cloud" - a brand-new profile
+            // that's never been touched hasn't been, so it must default to
+            // 'pending' (ready for CloudSyncWorker to pick up), not 'synced'.
+            status: metadata.storage.files['1080p']?.status || 'pending',
             localPath: generated[0]?.profile1080 || metadata.storage.files['1080p']?.localPath || null,
             remoteKey: metadata.storage.files['1080p']?.remoteKey || null
         };
