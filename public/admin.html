@@ -944,7 +944,7 @@
             <div style="display:flex; flex-direction:column; gap:14px;">
                 <div>
                     <label style="display:block; margin-bottom:6px; color:#cbd5e1; font-size:0.85rem;">Script</label>
-                    <select id="script-runner-select" style="width:100%; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:10px;">
+                    <select id="script-runner-select" onchange="loadScriptDoc()" style="width:100%; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:10px;">
                         <option value="">Loading scripts...</option>
                     </select>
                 </div>
@@ -954,6 +954,7 @@
                 </div>
                 <div style="color:#94a3b8; font-size:0.8rem;">Runs on the server in the background - safe for long jobs. You'll get a confirmation prompt before it starts.</div>
                 <button class="btn-trigger" style="background:#dc2626;" onclick="runSelectedScript()">Run</button>
+                <div id="script-runner-doc" style="display:none; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px; color:#cbd5e1; font-size:0.82rem; white-space:pre-wrap; max-height:280px; overflow-y:auto; font-family:inherit;"></div>
             </div>
         </div>
     </aside>
@@ -1351,6 +1352,33 @@
                 }
             } catch (_err) {
                 select.innerHTML = '<option value="">Failed to load scripts</option>';
+            }
+            loadScriptDoc();
+        }
+
+        async function loadScriptDoc() {
+            const docEl = document.getElementById('script-runner-doc');
+            const scriptName = document.getElementById('script-runner-select')?.value || '';
+            if (!docEl) return;
+            if (!scriptName) {
+                docEl.style.display = 'none';
+                docEl.textContent = '';
+                return;
+            }
+            docEl.style.display = 'block';
+            docEl.textContent = 'Loading description...';
+            try {
+                const res = await fetch(`/api/admin/operations/scripts/doc?scriptName=${encodeURIComponent(scriptName)}`);
+                const data = await res.json();
+                if (data.success && data.doc) {
+                    docEl.textContent = data.doc;
+                } else {
+                    docEl.style.display = 'none';
+                    docEl.textContent = '';
+                }
+            } catch (_err) {
+                docEl.style.display = 'none';
+                docEl.textContent = '';
             }
         }
 

@@ -2860,6 +2860,26 @@ router.get('/operations/scripts', (req, res) => {
     }
 });
 
+// Each script may have a matching scripts/<name>.md file documenting what it
+// does and how to use it. Purely informational - shown in the runner UI when
+// a script is selected. Missing doc is not an error, just nothing to show.
+router.get('/operations/scripts/doc', (req, res) => {
+    try {
+        const scriptName = String(req.query.scriptName || '').trim();
+        const available = listAvailableScripts();
+        if (!available.includes(scriptName)) {
+            return res.status(400).json({ success: false, error: 'Unknown script.' });
+        }
+        const docPath = path.join(ROOT, 'scripts', scriptName.replace(/\.js$/, '.md'));
+        if (!fs.existsSync(docPath)) {
+            return res.json({ success: true, doc: null });
+        }
+        res.json({ success: true, doc: fs.readFileSync(docPath, 'utf-8') });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.post('/operations/scripts/run', (req, res) => {
     try {
         const scriptName = String(req.body?.scriptName || '').trim();
