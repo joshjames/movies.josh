@@ -391,7 +391,24 @@ const ProfileService = {
         if (redisWriteClient.isOpen) {
             try {
                 await redisWriteClient.hDel(playbackRedisKey(cleanUser), cleanMediaId);
-                await mirrorPlaybackSnapshotToDisk(cleanUser);
+                // Not mirrorPlaybackSnapshotToDisk() - it round-trips through
+                // readPlaybackFromRedis(), which treats a now-empty hash (this
+                // was the user's last in-progress title) as "no Redis data,
+                // fall back to disk" and skips the write entirely, leaving the
+                // stale pre-delete entry on disk. Read the raw hash directly
+                // instead so an empty result still gets written.
+                const rawHash = await redisClient.hGetAll(playbackRedisKey(cleanUser));
+                const userDir = await ensureUserDir(cleanUser);
+                const filePath = path.join(userDir, 'playback.json');
+                const snapshot = {};
+                for (const [id, value] of Object.entries(rawHash || {})) {
+                    try {
+                        snapshot[id] = JSON.parse(value);
+                    } catch (_err) {
+                        snapshot[id] = { position: parseFloat(value) || 0, updatedAt: 0 };
+                    }
+                }
+                await fs.writeFile(filePath, JSON.stringify(snapshot, null, 4), 'utf-8');
                 return true;
             } catch (err) {
                 logger.warn(`[PROFILE WARN] Failed clearing playback cache for ${cleanUser}: ${err.message}`);
