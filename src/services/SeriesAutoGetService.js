@@ -296,9 +296,9 @@ async function resolveShowAvailability(imdbId = '', showFolder = '') {
     };
 }
 
-function getPendingEpisodeKeys(imdbId = '') {
+async function getPendingEpisodeKeys(imdbId = '') {
     const cleanImdbId = normalizeImdbId(imdbId);
-    const jobs = getAllJobs();
+    const jobs = await getAllJobs();
     const pending = new Set();
 
     jobs.forEach((job) => {
@@ -473,7 +473,7 @@ async function queueCandidate(rule, candidate, options = {}) {
     }
 
     const mediaTitle = `${rule.title || candidate.title || effectiveImdbId} S${String(candidate.season).padStart(2, '0')}E${String(candidate.episode).padStart(2, '0')}`;
-    const queuedJob = createJob({
+    const queuedJob = await createJob({
         status: 'WAITING_DOWNLOAD',
         currentStep: 'INGEST',
         imdbId: effectiveImdbId,
@@ -503,7 +503,7 @@ async function processRule(ruleInput, options = {}) {
     const subscriberKeys = subscribers.filter((item) => item.autoGet !== false).map((item) => item.userKey);
 
     const availability = await resolveShowAvailability(rule.imdbId, rule.showFolder);
-    const pendingKeys = getPendingEpisodeKeys(rule.imdbId);
+    const pendingKeys = await getPendingEpisodeKeys(rule.imdbId);
     const fetched = await fetchEztvCandidates(rule.imdbId, 5);
     const filtered = filterCandidates(fetched.items, rule);
     const ranked = pickBestByEpisode(filtered);

@@ -508,7 +508,7 @@ async function removeCompletedTorrentFromClient(job) {
 }
 
 async function retryCompletedTorrentCleanup() {
-    const completedJobs = getAllJobs().filter((job) => {
+    const completedJobs = (await getAllJobs()).filter((job) => {
         const status = String(job?.status || '').toUpperCase();
         const step = String(job?.currentStep || '').toUpperCase();
         return status === 'COMPLETE' || step === 'COMPLETE';
@@ -517,14 +517,14 @@ async function retryCompletedTorrentCleanup() {
     for (const job of completedJobs) {
         const cleaned = await removeCompletedTorrentFromClient(job);
         if (cleaned) {
-            removeJob(job.id);
+            await removeJob(job.id);
             logger.debug(`✅ [Queue] Completed cleanup retry succeeded for job ${job.id}; removing queue record.`);
         }
     }
 }
 
-function findPendingDownloadJob(torrent) {
-    const allJobs = getAllJobs();
+async function findPendingDownloadJob(torrent) {
+    const allJobs = await getAllJobs();
     const torrentHash = String(torrent.hash || '').toLowerCase();
     const torrentName = String(torrent.name || '').trim();
 
@@ -574,9 +574,9 @@ async function enqueueCompletedTorrent(torrent) {
         imdbId || null
     );
 
-    const pendingJob = findPendingDownloadJob(torrent);
+    const pendingJob = await findPendingDownloadJob(torrent);
     if (pendingJob) {
-        const resumed = updateJob(pendingJob, {
+        const resumed = await updateJob(pendingJob, {
             status: 'QUEUED',
             imdbId: pendingJob.imdbId || imdbId || null,
             payload: {
@@ -602,7 +602,7 @@ async function enqueueCompletedTorrent(torrent) {
         return resumed;
     }
 
-    const existingJob = getAllJobs().find(job => {
+    const existingJob = (await getAllJobs()).find(job => {
         const jobHash = String(job.payload?.torrentHash || '').toLowerCase();
         const jobName = String(job.payload?.torrentName || '').trim();
         const torrentHash = String(torrent.hash || '').toLowerCase();
@@ -612,7 +612,7 @@ async function enqueueCompletedTorrent(torrent) {
 
     if (existingJob && ['QUEUED', 'PROCESSING', 'WAITING_DOWNLOAD'].includes(existingJob.status)) {
         logger.info(`↩️ [Queue] Reusing existing job ${existingJob.id} for completed torrent ${torrent.name}`);
-        return updateJob(existingJob, {
+        return await updateJob(existingJob, {
             status: 'QUEUED',
             payload: {
                 ...existingJob.payload,
@@ -633,7 +633,7 @@ async function enqueueCompletedTorrent(torrent) {
         });
     }
 
-    const job = createJob({
+    const job = await createJob({
         status: 'QUEUED',
         currentStep: 'INGEST',
         imdbId: imdbId || null,
@@ -718,7 +718,7 @@ async function promoteWaitingJobFromFilesystem(job) {
         }
     };
 
-    const promotedJob = updateJob(job, {
+    const promotedJob = await updateJob(job, {
         status: 'QUEUED',
         currentStep: 'INGEST',
         payload: nextPayload,
@@ -736,7 +736,7 @@ async function processSeriesSearchJob(job) {
 
     if (!searchOutcome?.success || !searchOutcome.magnetUrl) {
         logger.warn(`❌ [Queue][SEARCH] Job ${job?.id || 'unknown'} failed | query="${searchOutcome?.query || 'n/a'}" error="${searchOutcome?.error || 'No confident search result found for automatic queueing.'}"`);
-        return updateJob(job, {
+        return await updateJob(job, {
             status: 'FAILED',
             currentStep: 'FAILED',
             error: searchOutcome?.error || 'No confident search result found for automatic queueing.',
@@ -761,7 +761,7 @@ async function processSeriesSearchJob(job) {
 
     const { torrentName, infoHash } = extractMagnetRuntimeInfo(searchOutcome.magnetUrl);
     logger.info(`✅ [Queue][SEARCH] Job ${job?.id || 'unknown'} selected | query="${searchOutcome.query || 'n/a'}" title="${searchOutcome?.selected?.title || torrentName || 'n/a'}" source=${searchOutcome.source || 'search'} hash=${infoHash || 'n/a'}`);
-    return updateJob(job, {
+    return await updateJob(job, {
         status: 'WAITING_DOWNLOAD',
         currentStep: 'INGEST',
         imdbId: effectiveImdbId || job.imdbId || null,
@@ -802,7 +802,7 @@ async function processNextJob(job) {
     // Prevent accidental global ingest sweep when a pre-download placeholder job leaks into runnable state.
     if (job.currentStep === 'INGEST' && !(job.payload?.rawPath || job.payload?.cleanPath)) {
         logger.warn(`⏭️ [Queue] Deferring job ${job.id}: missing folder path for INGEST.`);
-        return updateJob(job, {
+        return await updateJob(job, {
             status: 'WAITING_DOWNLOAD',
             error: 'Waiting for completed download path before INGEST dispatch.'
         });
@@ -833,7 +833,7 @@ async function processNextJob(job) {
             return updatedSearchJob;
         } catch (err) {
             logger.error(`❌ [Queue] Search job ${job.id} failed: ${err.message}`);
-            return updateJob(job, {
+            return await updateJob(job, {
                 status: 'FAILED',
                 currentStep: 'FAILED',
                 error: err.message,
@@ -896,7 +896,7 @@ async function processNextJob(job) {
 
     const stepConfig = stepMap[job.currentStep];
     if (!stepConfig) {
-        return updateJob(job, {
+        return await updateJob(job, {
             status: 'COMPLETE',
             currentStep: 'COMPLETE',
             history: [...(job.history || []), { step: job.currentStep, timestamp: new Date().toISOString() }]
@@ -946,7 +946,7 @@ async function processNextJob(job) {
             `📦 [Queue] ${job.id} ${job.currentStep} response: success=${response.data?.success !== false} | nextStep=${nextStep} | patchKeys=${Object.keys(patchData).join(',') || 'none'} | resolvedImdbId=${resolvedImdbId || 'unknown'}`
         );
 
-        const updated = updateJob(job, {
+        const updated = await updateJob(job, {
             status: response.data?.success === false ? 'FAILED' : (nextStep === 'COMPLETE' ? 'COMPLETE' : 'QUEUED'),
             currentStep: response.data?.success === false ? 'FAILED' : nextStep,
             imdbId: resolvedImdbId,
@@ -1002,14 +1002,14 @@ async function processNextJob(job) {
             const removedFromClient = await removeCompletedTorrentFromClient(updated);
             if (!removedFromClient) {
                 logger.warn(`⚠️ [Queue] Job ${updated.id} completed but torrent delete failed; retaining COMPLETE job for cleanup retry.`);
-                return updateJob(updated, {
+                return await updateJob(updated, {
                     status: 'COMPLETE',
                     currentStep: 'COMPLETE',
                     error: 'Completed pipeline, pending qBittorrent cleanup retry.'
                 });
             }
 
-            removeJob(updated.id);
+            await removeJob(updated.id);
             logger.debug(`✅ [Queue] Job ${updated.id} finalized and removed from active queue map.`);
             return updated;
         }
@@ -1023,7 +1023,7 @@ async function processNextJob(job) {
     } catch (err) {
         const responseError = err.response?.data?.error || err.response?.data?.message || null;
         logger.error(`❌ [Queue] Job ${job.id} failed during ${job.currentStep}: ${err.message}${responseError ? ` | workerError=${responseError}` : ''}`);
-        return updateJob(job, {
+        return await updateJob(job, {
             status: 'FAILED',
             currentStep: 'FAILED',
             error: responseError || err.message,
@@ -1038,11 +1038,11 @@ async function checkPipelineCompletions() {
     try {
         await retryCompletedTorrentCleanup();
 
-        const queuedJob = getNextRunnableJob();
+        const queuedJob = await getNextRunnableJob();
         if (queuedJob) {
             isProcessingPipeline = true;
             await withDistributedLock(`pipeline:job:${queuedJob.id}`, async () => {
-                const freshQueuedJob = getJob(queuedJob.id);
+                const freshQueuedJob = await getJob(queuedJob.id);
                 if (!freshQueuedJob || freshQueuedJob.status !== 'QUEUED') return;
                 logger.debug(`🚦 [Queue] Processing queued job ${freshQueuedJob.id} from scheduler tick.`);
                 await processNextJob(freshQueuedJob);
@@ -1067,13 +1067,13 @@ async function checkPipelineCompletions() {
         });
 
         if (!completedTorrent) {
-            const waitingJobs = getAllJobs().filter((job) => String(job?.status || '').toUpperCase() === 'WAITING_DOWNLOAD');
+            const waitingJobs = (await getAllJobs()).filter((job) => String(job?.status || '').toUpperCase() === 'WAITING_DOWNLOAD');
             for (const waitingJob of waitingJobs) {
                 const promotedJob = await promoteWaitingJobFromFilesystem(waitingJob);
                 if (promotedJob) {
                     isProcessingPipeline = true;
                     await withDistributedLock(`pipeline:job:${promotedJob.id}`, async () => {
-                        const freshJob = getJob(promotedJob.id);
+                        const freshJob = await getJob(promotedJob.id);
                         if (!freshJob || freshJob.status !== 'QUEUED') return;
                         await processNextJob(freshJob);
                     }, { ttlMs: 15000, waitMs: 2000 });
@@ -1144,14 +1144,14 @@ async function kickQueueJob(jobId = null) {
     if (!targetId) return { triggered: false, reason: 'missing_job_id' };
     if (isProcessingPipeline) return { triggered: false, reason: 'pipeline_busy' };
 
-    const candidate = getJob(targetId);
+    const candidate = await getJob(targetId);
     if (!candidate) return { triggered: false, reason: 'job_not_found' };
     if (candidate.status !== 'QUEUED') return { triggered: false, reason: 'job_not_queued', status: candidate.status };
 
     isProcessingPipeline = true;
     try {
         await withDistributedLock(`pipeline:job:${candidate.id}`, async () => {
-            const fresh = getJob(candidate.id);
+            const fresh = await getJob(candidate.id);
             if (!fresh || fresh.status !== 'QUEUED') return;
             logger.debug(`🚦 [Queue] Manual kick processing ${fresh.id} at step ${fresh.currentStep}`);
             await processNextJob(fresh);
@@ -1205,7 +1205,7 @@ async function reconcileQueueStartupState() {
         );
 
         let removedStaleJobs = 0;
-        const jobs = getAllJobs();
+        const jobs = await getAllJobs();
         for (const job of jobs) {
             const jobHash = String(job?.payload?.torrentHash || '').trim().toLowerCase();
             const jobName = String(job?.payload?.torrentName || '').trim();
@@ -1222,7 +1222,7 @@ async function reconcileQueueStartupState() {
 
             if (waitingLike || failedWithoutPath || queuedWithoutPath) {
                 logger.warn(`🧹 [Queue] Removing stale startup job ${job.id} | status=${job.status} | name=${jobName || 'unknown'} | hash=${jobHash || 'none'}`);
-                removeJob(job.id);
+                await removeJob(job.id);
                 removedStaleJobs += 1;
             }
         }

@@ -72,6 +72,46 @@ async function hydrateJobsFromRedis() {
   }
 }
 
+// Rebuild the local `jobs` Map from a fresh Redis scan. This is the source of
+// truth refresh used by every read function below, so that a job created,
+// updated, or removed by ANOTHER process (a different container) is reflected
+// here too - not just whatever this process happened to load at boot or
+// write itself. It's a full clear-and-rebuild (not a merge) so that jobs
+// deleted elsewhere actually disappear from the local view as well.
+async function refreshJobsFromRedis() {
+  if (!isRedisFeatureEnabled() || !redisConnected || !redisClient) return;
+
+  try {
+    const freshJobs = new Map();
+    for await (const scanEntry of redisClient.scanIterator({ MATCH: `${JOB_PREFIX}*`, COUNT: 200 })) {
+      const keys = Array.isArray(scanEntry) ? scanEntry : [scanEntry];
+      for (const key of keys) {
+        if (typeof key !== 'string') {
+          logger.warn(`⚠️ Failed refreshing queue entry (non-string key): ${JSON.stringify(key)}`);
+          continue;
+        }
+
+        try {
+          const raw = await redisClient.get(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (!parsed || !parsed.id) continue;
+          freshJobs.set(parsed.id, parsed);
+        } catch (entryErr) {
+          logger.warn(`⚠️ Failed refreshing queue entry ${key}: ${entryErr.message}`);
+        }
+      }
+    }
+
+    jobs.clear();
+    for (const [id, job] of freshJobs) {
+      jobs.set(id, job);
+    }
+  } catch (err) {
+    logger.warn(`⚠️ Queue refresh from Redis skipped: ${err.message}`);
+  }
+}
+
 // Initialize Redis connection (non-blocking, optional)
 async function initRedis() {
   if (!isRedisFeatureEnabled()) {
@@ -127,7 +167,7 @@ async function removeJobFromRedis(id) {
     }
 }
 
-function createJob(input = {}) {
+async function createJob(input = {}) {
   const id = input.id || `job_${crypto.randomBytes(6).toString('hex')}`;
   const job = {
     id,
@@ -144,16 +184,18 @@ function createJob(input = {}) {
 
   jobs.set(id, job);
   if (redisConnected && redisClient) {
-    syncJobToRedis(job).catch(err => logger.error(`Error syncing new job to Redis: ${err.message}`));
+    await syncJobToRedis(job);
   }
   return job;
 }
 
-function getJob(id) {
+async function getJob(id) {
+  await refreshJobsFromRedis();
   return jobs.get(id) || null;
 }
 
-function getAllJobs() {
+async function getAllJobs() {
+  await refreshJobsFromRedis();
   return Array.from(jobs.values());
 }
 
@@ -172,7 +214,8 @@ function getJobSnapshot(job) {
   };
 }
 
-function updateJob(job, patch = {}) {
+async function updateJob(job, patch = {}) {
+  await refreshJobsFromRedis();
   const existing = jobs.get(job.id);
   if (!existing) return null;
 
@@ -186,37 +229,42 @@ function updateJob(job, patch = {}) {
 
   jobs.set(job.id, next);
   if (redisConnected && redisClient) {
-    syncJobToRedis(next).catch(err => logger.error(`Error syncing updated job to Redis: ${err.message}`));
+    await syncJobToRedis(next);
   }
   return next;
 }
 
-function getNextRunnableJob(jobList = getAllJobs()) {
-  return jobList
+async function getNextRunnableJob(jobList) {
+  const list = jobList || await getAllJobs();
+  return list
     .filter(job => job.status === 'QUEUED')
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0] || null;
 }
 
-function removeJob(id) {
+async function removeJob(id) {
   jobs.delete(id);
   if (redisConnected && redisClient) {
-    removeJobFromRedis(id).catch(err => logger.warn(`Failed deleting job from Redis: ${err.message}`));
+    await removeJobFromRedis(id);
   }
 }
 
-function getFailedJobs() {
+async function getFailedJobs() {
+  await refreshJobsFromRedis();
   return Array.from(jobs.values()).filter(job => job.status === 'FAILED');
 }
 
-function getCompletedJobs() {
+async function getCompletedJobs() {
+  await refreshJobsFromRedis();
   return Array.from(jobs.values()).filter(job => job.status === 'COMPLETE');
 }
 
-function getActiveJobs() {
+async function getActiveJobs() {
+  await refreshJobsFromRedis();
   return Array.from(jobs.values()).filter(job => ['QUEUED', 'PROCESSING', 'WAITING'].includes(job.status));
 }
 
-function getJobsByStatus(status) {
+async function getJobsByStatus(status) {
+  await refreshJobsFromRedis();
   return Array.from(jobs.values()).filter(job => job.status === status);
 }
 

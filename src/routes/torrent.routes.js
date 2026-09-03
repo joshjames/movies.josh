@@ -601,7 +601,7 @@ async function queueAutoSeriesMagnet({
         }
     });
 
-    const queuedJob = createJob({
+    const queuedJob = await createJob({
         status: 'WAITING_DOWNLOAD',
         currentStep: 'INGEST',
         imdbId: effectiveImdbId || null,
@@ -1538,7 +1538,7 @@ router.post('/downloader/add', async (req, res) => {
             }
         });
 
-        createJob({
+        await createJob({
             status: 'WAITING_DOWNLOAD',
             currentStep: 'INGEST',
             imdbId: effectiveImdbId || null,
@@ -1556,7 +1556,7 @@ router.post('/downloader/add', async (req, res) => {
                 queueContext: effectiveQueueContext
             }
         });
-        
+
         return res.status(200).json({ success: true, message: "Queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -1647,7 +1647,7 @@ router.post('/downloader/add-auto', async (req, res) => {
             payload: { queueContext }
         });
 
-        const queuedJob = createJob({
+        const queuedJob = await createJob({
             status: 'QUEUED',
             currentStep: 'SEARCH',
             imdbId: cleanImdbId,
@@ -1754,7 +1754,7 @@ router.post('/yts/add', async (req, res) => {
             }
         });
 
-        createJob({
+        await createJob({
             status: 'WAITING_DOWNLOAD',
             currentStep: 'INGEST',
             imdbId: effectiveImdbId || null,
@@ -1772,7 +1772,7 @@ router.post('/yts/add', async (req, res) => {
                 queueContext: effectiveQueueContext
             }
         });
-        
+
         return res.status(200).json({ success: true, message: "Successfully queued layout allocation pipeline records." });
     } catch (err) {
         return res.status(500).json({ error: err.message });
@@ -1795,7 +1795,7 @@ router.get('/pipeline/status', async (req, res) => {
         let pipeline = [];
         let failedJobs = [];
 
-        const allJobs = getAllJobs();
+        const allJobs = await getAllJobs();
 
         // Build a full pipeline hash index from qBittorrent so stale placeholders can be reconciled.
         let knownPipelineHashes = new Set();
@@ -1863,13 +1863,13 @@ router.get('/pipeline/status', async (req, res) => {
 
                 // If qBittorrent is reachable and this hash is absent from the full snapshot,
                 // prune the stale placeholder to avoid ghost rows in queue UI.
-                removeJob(waitingJob.id);
+                await removeJob(waitingJob.id);
                 waitingByHash.delete(hash);
                 logger.info(`[Queue API] Pruned stale waiting job ${waitingJob.id} (hash ${hash.slice(0, 8)} not found in qBittorrent).`);
             }
         }
 
-        const displayJobs = reconciliationReady ? getAllJobs() : allJobs;
+        const displayJobs = reconciliationReady ? await getAllJobs() : allJobs;
 
         // 1. Get active downloads from qBittorrent
         const torrents = await TorrentService.getActivePipelineTorrents(
@@ -2069,7 +2069,7 @@ router.patch('/job/:jobId/options', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Authentication required.' });
         }
 
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             return res.status(404).json({ success: false, error: 'Job not found.' });
         }
@@ -2087,7 +2087,7 @@ router.patch('/job/:jobId/options', async (req, res) => {
             addToWatchLaterOnComplete: parseBoolean(payload.addToWatchLaterOnComplete, current.addToWatchLaterOnComplete)
         };
 
-        const updated = updateJob(job, {
+        const updated = await updateJob(job, {
             payload: {
                 ...job.payload,
                 queueOptions: nextOptions
@@ -2109,7 +2109,7 @@ router.post('/job/:jobId/pause', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Authentication required.' });
         }
 
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             return res.status(404).json({ success: false, error: 'Job not found.' });
         }
@@ -2131,12 +2131,12 @@ router.post('/job/:jobId/pause', async (req, res) => {
                 return res.status(502).json({ success: false, error: paused.error || 'Failed to pause torrent.' });
             }
 
-            const updated = updateJob(job, { status: 'PAUSED_DOWNLOAD' });
+            const updated = await updateJob(job, { status: 'PAUSED_DOWNLOAD' });
             return res.json({ success: true, jobId: updated.id, status: updated.status });
         }
 
         if (job.status === 'QUEUED') {
-            const updated = updateJob(job, { status: 'PAUSED' });
+            const updated = await updateJob(job, { status: 'PAUSED' });
             return res.json({ success: true, jobId: updated.id, status: updated.status });
         }
 
@@ -2155,7 +2155,7 @@ router.post('/job/:jobId/resume', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Authentication required.' });
         }
 
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             return res.status(404).json({ success: false, error: 'Job not found.' });
         }
@@ -2177,12 +2177,12 @@ router.post('/job/:jobId/resume', async (req, res) => {
                 return res.status(502).json({ success: false, error: resumed.error || 'Failed to resume torrent.' });
             }
 
-            const updated = updateJob(job, { status: 'WAITING_DOWNLOAD' });
+            const updated = await updateJob(job, { status: 'WAITING_DOWNLOAD' });
             return res.json({ success: true, jobId: updated.id, status: updated.status });
         }
 
         if (job.status === 'PAUSED') {
-            const updated = updateJob(job, { status: 'QUEUED' });
+            const updated = await updateJob(job, { status: 'QUEUED' });
             return res.json({ success: true, jobId: updated.id, status: updated.status });
         }
 
@@ -2201,7 +2201,7 @@ router.post('/job/:jobId/cancel', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Authentication required.' });
         }
 
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             return res.status(404).json({ success: false, error: 'Job not found.' });
         }
@@ -2224,7 +2224,7 @@ router.post('/job/:jobId/cancel', async (req, res) => {
             }
         }
 
-        removeJob(job.id);
+        await removeJob(job.id);
         return res.json({ success: true, jobId: job.id, status: 'CANCELLED' });
     } catch (err) {
         logger.error('[Queue API] Cancel job error: ' + err.message);
@@ -2240,7 +2240,7 @@ router.patch('/admin/queue/job/:jobId', async (req, res) => {
             return res.status(403).json({ success: false, error: 'Admin queue tools require privileged access.' });
         }
 
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             return res.status(404).json({ success: false, error: 'Job not found.' });
         }
@@ -2298,7 +2298,7 @@ router.patch('/admin/queue/job/:jobId', async (req, res) => {
         }
 
         nextPayload.queueContext = nextQueueContext;
-        const updated = updateJob(job, {
+        const updated = await updateJob(job, {
             status: nextStatus,
             currentStep: nextStep,
             error: body.error !== undefined ? String(body.error || '').trim() || null : job.error,
@@ -2319,7 +2319,7 @@ router.patch('/admin/queue/job/:jobId', async (req, res) => {
 
 async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = false } = {}) {
     const viewerUser = normalizeUserKey(getActiveUser(req));
-    const job = getJob(req.params.jobId);
+    const job = await getJob(req.params.jobId);
 
     if (!job) {
         return res.status(404).json({ success: false, error: 'Job not found.' });
@@ -2367,7 +2367,7 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
         addedByUser: owner || null
     };
 
-    const replacementJob = createJob({
+    const replacementJob = await createJob({
         status: 'WAITING_DOWNLOAD',
         currentStep: 'INGEST',
         imdbId: replacementImdbId || null,
@@ -2420,9 +2420,9 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
                 logger.warn(`[Queue API] Could not remove old torrent during alternate source swap for ${job.id}: ${removed.error}`);
             }
         }
-        removeJob(job.id);
+        await removeJob(job.id);
     } else {
-        updateJob(job, {
+        await updateJob(job, {
             history: [
                 ...(job.history || []),
                 { step: 'ALT_SOURCE_ADDED', timestamp: new Date().toISOString() }
@@ -2462,7 +2462,7 @@ router.post('/job/:jobId/alternate-source', async (req, res) => {
 // GET: /api/job/:jobId - Get detailed job information
 router.get('/job/:jobId', async (req, res) => {
     try {
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             return res.status(404).json({ error: 'Job not found' });
         }
@@ -2476,7 +2476,7 @@ router.get('/job/:jobId', async (req, res) => {
 // GET: /api/jobs/failed - Get all failed jobs
 router.get('/jobs/failed', async (req, res) => {
     try {
-        const failed = getFailedJobs();
+        const failed = await getFailedJobs();
         logger.debug(`[Queue API] Failed jobs requested. Count=${failed.length}`);
         return res.json({ 
             success: true, 
@@ -2501,12 +2501,12 @@ router.get('/jobs/failed', async (req, res) => {
 router.post('/job/:jobId/retry', async (req, res) => {
     try {
         logger.debug(`[Queue API] Retry request received for jobId=${req.params.jobId}`);
-        const job = getJob(req.params.jobId);
+        const job = await getJob(req.params.jobId);
         if (!job) {
             logger.warn(`[Queue API] Retry failed. Job not found: ${req.params.jobId}`);
             return res.status(404).json({ error: 'Job not found' });
         }
-        
+
         if (job.status !== 'FAILED') {
             logger.warn(`[Queue API] Retry rejected. Job ${job.id} status is ${job.status}, not FAILED.`);
             return res.status(400).json({ error: 'Only failed jobs can be retried' });
@@ -2520,7 +2520,7 @@ router.post('/job/:jobId/retry', async (req, res) => {
         ) || null;
 
         // Reset job to QUEUED state at the last actionable step.
-        const retried = updateJob(job, {
+        const retried = await updateJob(job, {
             status: 'QUEUED',
             currentStep: retryStep,
             imdbId: fallbackImdbId,
