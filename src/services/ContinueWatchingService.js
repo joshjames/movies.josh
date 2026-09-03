@@ -33,7 +33,11 @@ function pickImdbScore(media = {}) {
 }
 
 function resolveMovieCard(mediaId, movies) {
-    const item = movies.find((m) => String(m.id) === mediaId);
+    // Case-insensitive: a folder's casing can drift after a watch (e.g. an
+    // IngestSanitizerWorker rename) while the mediaId captured at watch-time
+    // keeps the old casing - an exact match would silently drop it.
+    const mediaIdLower = mediaId.toLowerCase();
+    const item = movies.find((m) => String(m.id).toLowerCase() === mediaIdLower);
     if (!item) return null;
     return {
         id: item.id,
@@ -53,7 +57,8 @@ function resolveEpisodeCard(mediaId, shows) {
     const match = mediaId.match(EPISODE_MEDIA_ID_PATTERN);
     if (!match) return null;
     const [, folder, season, episode] = match;
-    const show = shows.find((s) => String(s.id) === `series/${folder}`);
+    const targetId = `series/${folder}`.toLowerCase();
+    const show = shows.find((s) => String(s.id).toLowerCase() === targetId);
     if (!show) return null;
     return {
         id: show.id,
