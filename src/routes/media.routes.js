@@ -15,6 +15,7 @@ const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
 const MovieTitleIndexService = require('../services/MovieTitleIndexService');
 const SeriesSubscriptionService = require('../services/SeriesSubscriptionService');
+const { buildContinueWatchingCollection } = require('../services/ContinueWatchingService');
 const metadataProvider = require('../services/MetadataProvider');
 const ProfileService = require('../services/ProfileService');
 const { requireAuth, getActiveUser } = require('../middleware/auth');
@@ -2086,6 +2087,14 @@ router.get('/home-feed', (req, res) => {
             const myLibraryCollection = buildMyLibraryCollection(library, activeUser, { limit: 18 });
             myLibraryCollection.cards = (myLibraryCollection.cards || []).map((item) => normalizeCard(item));
 
+            // Already fully card-shaped (cover/href computed, including the
+            // season/episode deep link for series) - unlike myLibraryCollection
+            // above, do NOT run these through normalizeCard(), which would
+            // recompute href from raw media.id and drop the season/episode.
+            const continueWatchingCollection = activeUser
+                ? await buildContinueWatchingCollection(activeUser, library, { limit: 18 })
+                : null;
+
             let myShowsCollection = null;
             if (activeUser) {
                 const subscriptions = await SeriesSubscriptionService.readSubscriptions(activeUser);
@@ -2102,6 +2111,7 @@ router.get('/home-feed', (req, res) => {
             const withoutExistingMyShelf = existing
                 .filter((collection) => collection.id !== 'my-library-row')
                 .filter((collection) => collection.id !== 'my-shows-row')
+                .filter((collection) => collection.id !== 'continue-watching-row')
                 .map((collection) => {
                     const cards = Array.isArray(collection.cards) ? collection.cards : [];
 
@@ -2127,6 +2137,9 @@ router.get('/home-feed', (req, res) => {
             const tail = withoutExistingMyShelf.slice(1);
 
             const collectionsWithPersonalShelves = [];
+            if (continueWatchingCollection && Array.isArray(continueWatchingCollection.cards) && continueWatchingCollection.cards.length > 0) {
+                collectionsWithPersonalShelves.push(continueWatchingCollection);
+            }
             if (first) {
                 collectionsWithPersonalShelves.push(first);
             }

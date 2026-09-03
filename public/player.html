@@ -1189,8 +1189,19 @@
             }
         });
 
-        // Autoplay continuous sequence tracking logic 
+        // Autoplay continuous sequence tracking logic
         videoEl.addEventListener('ended', () => {
+            // Capture before playEpisodeIndex reassigns currentMediaId to the next episode.
+            const finishedMediaId = currentMediaId;
+            fetch('/api/profile/playback/complete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-profile': activeUserProfile
+                },
+                body: JSON.stringify({ mediaId: finishedMediaId })
+            }).catch(err => console.error("Playback completion clear failed:", err));
+
             const nextIdx = getNextAvailableIndex();
             if (nextIdx !== -1) {
                 playEpisodeIndex(nextIdx);

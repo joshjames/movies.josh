@@ -48,6 +48,30 @@ router.post('/playback/sync', async (req, res) => {
     }
 });
 
+// POST: /api/profile/playback/complete
+// Called when playback reaches the end (the video's 'ended' event) - clears
+// the title's position record entirely rather than leaving a stale
+// near-the-end position sitting in watch history / Continue Watching.
+router.post('/playback/complete', async (req, res) => {
+    const username = (req.body.username || req.cookies?.user_profile || '').toLowerCase().trim();
+    const { mediaId } = req.body;
+
+    if (!username) {
+        return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+    }
+
+    if (!mediaId) {
+        return res.status(400).json({ success: false, error: 'Missing sync states' });
+    }
+
+    try {
+        await ProfileService.clearPlaybackPosition(username, sanitizeMediaId(mediaId));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/profile/playback/state
 router.get('/playback/state', async (req, res) => {
     try {

@@ -377,6 +377,35 @@ const ProfileService = {
         return true;
     },
 
+    // Drops a title's playback record entirely (rather than just zeroing its
+    // position) so a finished title falls out of "Continue Watching" instead
+    // of lingering with a stale near-the-end position - there's no separate
+    // "watched" flag, so removal from this map is what "not in progress"
+    // means to any reader of it (getWatchHistory, Continue Watching, etc).
+    async clearPlaybackPosition(username, mediaId) {
+        const cleanUser = normalizeIdentity(username);
+        const cleanMediaId = String(mediaId || '').trim();
+        if (!cleanMediaId) return false;
+
+        await connectWriteDb();
+        if (redisWriteClient.isOpen) {
+            try {
+                await redisWriteClient.hDel(playbackRedisKey(cleanUser), cleanMediaId);
+                await mirrorPlaybackSnapshotToDisk(cleanUser);
+                return true;
+            } catch (err) {
+                logger.warn(`[PROFILE WARN] Failed clearing playback cache for ${cleanUser}: ${err.message}`);
+            }
+        }
+
+        await this.mergeAndCommit(cleanUser, 'playback', async (playback) => {
+            const next = { ...playback };
+            delete next[cleanMediaId];
+            return next;
+        });
+        return true;
+    },
+
     async getWatchHistory(username, options = {}) {
         const limit = Math.max(1, Math.min(parseInt(options.limit, 10) || 200, 1000));
         const playback = await this.getPlaybackState(username);
