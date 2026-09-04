@@ -1,8 +1,11 @@
 // src/routes/profile.routes.js
 const express = require('express');
 const router = express.Router();
-const ProfileService = require('../services/ProfileService'); 
+const ProfileService = require('../services/ProfileService');
 const NotificationService = require('../services/NotificationService');
+const { getLibrary } = require('../services/db');
+const { resolveMediaId } = require('../services/MediaResolver');
+const logger = require('../services/logger');
 
 // Helper function to force uniform media keys matching your storage tree structure
 function sanitizeMediaId(id) {
@@ -19,7 +22,7 @@ function sanitizeMediaId(id) {
 router.post('/playback/sync', async (req, res) => {
     // 🎯 FIX: Safely fallback to the cookie identity if the payload body lacks a username
     const username = (req.body.username || req.cookies?.user_profile || '').toLowerCase().trim();
-    const { mediaId, position } = req.body; 
+    const { mediaId, position, duration } = req.body;
 
     if (!username) {
         return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
@@ -41,7 +44,7 @@ router.post('/playback/sync', async (req, res) => {
             }
         }
 
-        await ProfileService.savePlaybackPosition(username, cleanMediaId, numericPosition);
+        await ProfileService.savePlaybackPosition(username, cleanMediaId, numericPosition, duration);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -49,9 +52,13 @@ router.post('/playback/sync', async (req, res) => {
 });
 
 // POST: /api/profile/playback/complete
-// Called when playback reaches the end (the video's 'ended' event) - clears
-// the title's position record entirely rather than leaving a stale
-// near-the-end position sitting in watch history / Continue Watching.
+// Called once a title is considered "finished" - either playback reached the
+// video's native 'ended' event, or the player crossed the finished-percent
+// threshold (most viewing sessions never reach literal end-of-file: closed
+// tab, long credits, etc). Clears the title's in-progress position record
+// (so it drops out of Continue Watching) and, when the mediaId resolves to a
+// real library item, writes a durable "watched" record for it - separate,
+// permanent history intended as the seed data for future recommendations.
 router.post('/playback/complete', async (req, res) => {
     const username = (req.body.username || req.cookies?.user_profile || '').toLowerCase().trim();
     const { mediaId } = req.body;
@@ -65,7 +72,21 @@ router.post('/playback/complete', async (req, res) => {
     }
 
     try {
-        await ProfileService.clearPlaybackPosition(username, sanitizeMediaId(mediaId));
+        const cleanMediaId = sanitizeMediaId(mediaId);
+        await ProfileService.clearPlaybackPosition(username, cleanMediaId);
+
+        try {
+            const library = await getLibrary();
+            const resolved = resolveMediaId(cleanMediaId, library);
+            if (resolved) {
+                await ProfileService.recordWatched(username, resolved);
+            }
+        } catch (recordErr) {
+            // Don't fail the request over this - clearing the in-progress
+            // record (already done above) is the part that must succeed.
+            logger.error(`[playback/complete] Failed recording watched history: ${recordErr.message}`);
+        }
+
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

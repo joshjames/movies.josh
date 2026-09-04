@@ -712,7 +712,26 @@
         // RESUME ENGINE CORE STATES
         let currentMediaId = movieId; // Fallback to raw ID for movies
         let lastSavedTime = 0;
-        const SYNC_INTERVAL_MS = 5000; 
+        const SYNC_INTERVAL_MS = 5000;
+        // Most viewing sessions never reach the video's literal 'ended' event
+        // (closed tab, long credits, network drop) - so a title is also
+        // considered finished once watched past this fraction, not just on
+        // native end-of-file.
+        const FINISHED_PERCENT = 0.9;
+        let hasMarkedCurrentTitleFinished = false;
+
+        function markCurrentTitleFinished(mediaId) {
+            if (hasMarkedCurrentTitleFinished) return;
+            hasMarkedCurrentTitleFinished = true;
+            fetch('/api/profile/playback/complete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-profile': activeUserProfile
+                },
+                body: JSON.stringify({ mediaId })
+            }).catch(err => console.error("Playback completion clear failed:", err));
+        }
         const activeUserProfile = document.cookie
             .split('; ')
             .find(row => row.startsWith('user_profile='))
@@ -940,20 +959,26 @@
         // Send a continuous heartbeat tick down to the file server pipeline
         videoEl.addEventListener('timeupdate', () => {
             const currentTime = videoEl.currentTime;
+            const duration = videoEl.duration;
             const now = Date.now();
+
+            if (duration > 0 && (currentTime / duration) >= FINISHED_PERCENT) {
+                markCurrentTitleFinished(currentMediaId);
+            }
 
             if (now - lastSavedTime > SYNC_INTERVAL_MS) {
                 lastSavedTime = now;
-                
+
                 fetch('/api/profile/playback/sync', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'x-user-profile': activeUserProfile
                     },
                     body: JSON.stringify({
                         mediaId: currentMediaId,
-                        position: currentTime
+                        position: currentTime,
+                        duration: Number.isFinite(duration) ? duration : undefined
                     })
                 }).catch(err => console.error("Heartbeat frame update fail:", err));
             }
@@ -1032,6 +1057,7 @@
             // Standard Movie Fallback Pass
             nextBtn.style.display = 'none';
             currentMediaId = movieId; // Base context movie fallback tag setup
+            hasMarkedCurrentTitleFinished = false;
             setupMoviePlayback();
         }
 
@@ -1149,6 +1175,7 @@
             // Generate deterministic string for unique TV episode tracking arrays
             const cleanFolder = movieId.replace('series/', '');
             currentMediaId = `${cleanFolder}-S${seasonParam}E${episode.episodeNumber}`;
+            hasMarkedCurrentTitleFinished = false;
 
             applyVideoSource(false);
             qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
@@ -1191,16 +1218,10 @@
 
         // Autoplay continuous sequence tracking logic
         videoEl.addEventListener('ended', () => {
-            // Capture before playEpisodeIndex reassigns currentMediaId to the next episode.
-            const finishedMediaId = currentMediaId;
-            fetch('/api/profile/playback/complete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-user-profile': activeUserProfile
-                },
-                body: JSON.stringify({ mediaId: finishedMediaId })
-            }).catch(err => console.error("Playback completion clear failed:", err));
+            // No-op if the FINISHED_PERCENT threshold in the timeupdate
+            // handler already fired for this title (the common case) -
+            // markCurrentTitleFinished guards against double-firing.
+            markCurrentTitleFinished(currentMediaId);
 
             const nextIdx = getNextAvailableIndex();
             if (nextIdx !== -1) {

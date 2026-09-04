@@ -346,18 +346,33 @@ const ProfileService = {
         return await this.readData(username, 'playback', {});
     },
 
-    async savePlaybackPosition(username, mediaId, position) {
+    async savePlaybackPosition(username, mediaId, position, duration) {
         const cleanUser = normalizeIdentity(username);
         const cleanMediaId = String(mediaId || '').trim();
-        const entry = {
+        const cleanDuration = parseFloat(duration);
+        const hasNewDuration = Number.isFinite(cleanDuration) && cleanDuration > 0;
+        const buildEntry = (previousDuration = null) => ({
             position: parseFloat(position),
+            // Optional - older clients / not-yet-loaded metadata may omit it.
+            // Falls back to whatever was already stored (duration is constant
+            // for a given title, so an omitted value on one tick shouldn't
+            // erase a real one from an earlier tick) rather than baking in a
+            // 0/null, which downstream percent calculations would misread.
+            duration: hasNewDuration ? cleanDuration : previousDuration,
             updatedAt: Date.now()
-        };
+        });
 
         await connectWriteDb();
         if (redisWriteClient.isOpen) {
             try {
-                await redisWriteClient.hSet(playbackRedisKey(cleanUser), cleanMediaId, JSON.stringify(entry));
+                let previousDuration = null;
+                if (!hasNewDuration) {
+                    const existingRaw = await redisWriteClient.hGet(playbackRedisKey(cleanUser), cleanMediaId);
+                    if (existingRaw) {
+                        try { previousDuration = JSON.parse(existingRaw)?.duration ?? null; } catch (_err) { /* ignore */ }
+                    }
+                }
+                await redisWriteClient.hSet(playbackRedisKey(cleanUser), cleanMediaId, JSON.stringify(buildEntry(previousDuration)));
                 await mirrorPlaybackSnapshotToDisk(cleanUser);
                 return true;
             } catch (err) {
@@ -371,7 +386,7 @@ const ProfileService = {
         // the outer withDistributedLock timeout.
         await this.mergeAndCommit(cleanUser, 'playback', async (playback) => {
             const next = { ...playback };
-            next[cleanMediaId] = entry;
+            next[cleanMediaId] = buildEntry(playback?.[cleanMediaId]?.duration ?? null);
             return next;
         });
         return true;
@@ -423,6 +438,45 @@ const ProfileService = {
         return true;
     },
 
+    // Durable record of finished titles, separate from playback.json (which
+    // is "in progress" state that gets cleared on finish). Keyed by the
+    // library item's real id (not mediaId, so a show's episodes all
+    // accumulate onto the same record) - intended as the seed data for a
+    // future "Because you watched X" recommendation feature, so it tracks
+    // watchCount/genre/imdbId rather than just a timestamp.
+    async recordWatched(username, item = {}) {
+        const cleanUser = normalizeIdentity(username);
+        const id = String(item.id || '').trim();
+        if (!id) return false;
+
+        const nowIso = new Date().toISOString();
+        await this.mergeAndCommit(cleanUser, 'watched', async (watched) => {
+            const next = { ...watched };
+            const existing = next[id] || {};
+            next[id] = {
+                id,
+                title: item.title || existing.title || id,
+                imdbId: item.imdbId || existing.imdbId || '',
+                genre: item.genre || existing.genre || '',
+                contentType: item.contentType || existing.contentType || 'movie',
+                watchCount: (parseInt(existing.watchCount, 10) || 0) + 1,
+                firstWatchedAt: existing.firstWatchedAt || nowIso,
+                lastWatchedAt: nowIso
+            };
+            return next;
+        });
+        return true;
+    },
+
+    async getWatchedHistory(username, options = {}) {
+        const limit = Math.max(1, Math.min(parseInt(options.limit, 10) || 200, 1000));
+        const watched = await this.readData(username, 'watched', {});
+        return Object.values(watched || {})
+            .filter((row) => row && row.id)
+            .sort((a, b) => new Date(b.lastWatchedAt || 0) - new Date(a.lastWatchedAt || 0))
+            .slice(0, limit);
+    },
+
     async getWatchHistory(username, options = {}) {
         const limit = Math.max(1, Math.min(parseInt(options.limit, 10) || 200, 1000));
         const playback = await this.getPlaybackState(username);
@@ -431,10 +485,12 @@ const ProfileService = {
             .map(([mediaId, entry]) => {
                 const updatedAt = Number(entry?.updatedAt || 0);
                 const position = Number(entry?.position || 0);
+                const duration = Number(entry?.duration || 0);
                 return {
                     mediaId,
                     title: humanizeMediaTitle(mediaId),
                     position: Number.isFinite(position) ? position : 0,
+                    duration: Number.isFinite(duration) && duration > 0 ? duration : null,
                     updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
                     updatedAtIso: Number.isFinite(updatedAt) && updatedAt > 0
                         ? new Date(updatedAt).toISOString()
