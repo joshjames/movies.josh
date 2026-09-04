@@ -18,9 +18,21 @@ const MIN_POSITION_SECONDS = 30;
 // /api/profile/playback/complete, fired at this same percentage by the
 // player) well before reaching this - this is just a defensive backstop for
 // sessions where that call never landed (closed tab, network drop right at
-// the end, older client). Only applies when a duration was actually recorded
-// - legacy/pre-duration entries fall back to the position-only filter above.
+// the end, older client).
 const FINISHED_PERCENT = 0.9;
+
+// Some shows/regions run credits well before the real end of the file, then
+// pad out the rest of the runtime with unrelated bonus content (musical
+// numbers, dance routines, etc) that most viewers never watch - so someone
+// who watched the actual episode and stopped right as that padding starts
+// never crosses FINISHED_PERCENT, and 'ended' never fires either, leaving it
+// stuck in Continue Watching indefinitely. If a title has been sitting
+// completely untouched for a few days AND they got through a solid majority
+// of it, treat that as finished (or at least deliberately abandoned past the
+// point it matters) rather than waiting on a percentage that some content
+// will simply never reach.
+const STALE_FINISHED_PERCENT = 0.7;
+const STALE_ABANDON_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 function buildCard(resolved) {
     const isSeries = resolved.contentType === 'series';
@@ -38,6 +50,17 @@ function buildCard(resolved) {
             : `player.html?id=${resolved.id}`,
         badge: isSeries ? `S${resolved.season}E${resolved.episode}` : 'Continue Watching'
     };
+}
+
+// Fire-and-forget: excluding it from this response is what matters for the
+// request in hand, the write can finish on its own time. Errors are swallowed
+// (logged by the underlying service calls) rather than surfaced here since
+// this is a background cleanup side-effect of a read, not the point of it.
+function markFinishedInBackground(username, mediaId, resolved) {
+    ProfileService.clearPlaybackPosition(username, mediaId).catch(() => {});
+    if (resolved) {
+        ProfileService.recordWatched(username, resolved).catch(() => {});
+    }
 }
 
 async function buildContinueWatchingCollection(username = '', library = {}, options = {}) {
@@ -59,9 +82,21 @@ async function buildContinueWatchingCollection(username = '', library = {}, opti
     for (const entry of history) {
         if (cards.length >= maxCards) break;
         if (!(entry.position >= MIN_POSITION_SECONDS)) continue;
-        if (entry.duration > 0 && (entry.position / entry.duration) >= FINISHED_PERCENT) continue;
+
+        const percentWatched = entry.duration > 0 ? entry.position / entry.duration : null;
+        const isStale = (Date.now() - entry.updatedAt) > STALE_ABANDON_MS;
+        const looksFinished = percentWatched !== null && (
+            percentWatched >= FINISHED_PERCENT
+            || (isStale && percentWatched >= STALE_FINISHED_PERCENT)
+        );
 
         const resolved = resolveMediaId(entry.mediaId, library);
+
+        if (looksFinished) {
+            markFinishedInBackground(cleanUser, entry.mediaId, resolved);
+            continue;
+        }
+
         if (!resolved) continue;
 
         // One card per title/show - history is already newest-first, so the
