@@ -593,6 +593,12 @@ app.post('/process', async (req, res) => {
             return res.json({ success: false, error: 'No video files could be processed.', results });
         }
 
+        // The real transcoded output path, not a hardcoded guess - a movie
+        // folder normally has exactly one source video, but pick the first
+        // successful result defensively either way.
+        const successfulResult = results.find((item) => item.success !== false && item.output1080Path);
+        const output1080Path = successfulResult?.output1080Path || null;
+
         return res.json({
             success: true,
             message: `Processed ${results.filter(item => item.success !== false).length} video file(s).`,
@@ -605,11 +611,21 @@ app.post('/process', async (req, res) => {
             // the whole thing the way there is for a movie folder. Per-episode
             // storage tracking lives in series.json and is written by
             // CloudSyncWorker, not here.
+            //
+            // status must be 'pending' (not 'synced') here - CloudSyncWorker
+            // only uploads profiles marked 'pending', so marking this synced
+            // before it's ever actually been uploaded makes CloudSyncWorker
+            // skip it forever, permanently stuck local-only with a null
+            // remoteKey despite claiming to be synced.
             patchData: isSeries ? {} : {
                 storage: {
                     location: "local",
                     files: {
-                        "1080p": { status: "synced", localPath: null, remoteKey: null },
+                        "1080p": {
+                            status: output1080Path ? "pending" : "waiting",
+                            localPath: output1080Path ? path.basename(output1080Path) : null,
+                            remoteKey: null
+                        },
                         "720p":  { status: "waiting", localPath: null, remoteKey: null },
                         "480p":  { status: "waiting", localPath: null, remoteKey: null }
                     }
