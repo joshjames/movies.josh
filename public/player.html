@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Joshflix Player</title>
+    <link rel="stylesheet" href="/vendor/video.js/video-js.min.css">
     <style>
         * { box-sizing: border-box; }
         body, html {
@@ -27,11 +28,13 @@
             justify-content: center;
         }
 
-        video {
+        .video-js {
             width: 100%;
             height: 100%;
+        }
+
+        .video-js video {
             object-fit: contain; /* Preserves original movie aspect ratios perfectly */
-            outline: none;
         }
 
         /* Premium Floating Overlay Back Button */
@@ -39,7 +42,7 @@
             position: absolute;
             top: 24px;
             left: 24px;
-            z-index: 10;
+            z-index: 20;
             background: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(8px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -62,12 +65,15 @@
             transform: translateX(-2px);
         }
 
-        /* Quality Indicator Tag */
+        /* Quality Indicator Tag - top-anchored so it never collides with
+           the Video.js control bar that now permanently occupies the
+           bottom of the player. */
         .quality-badge {
             position: absolute;
-            bottom: 24px;
-            right: 24px;
-            z-index: 10;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
             background: rgba(229, 9, 20, 0.8); /* Joshflix Red */
             padding: 4px 8px;
             border-radius: 4px;
@@ -81,14 +87,13 @@
         /* Fade utilities for overlay elements when mouse is still */
         .hide-controls {
             opacity: 0 !important;
-            cursor: none;
         }
         /* Premium Floating Overlay Next Button */
         .next-overlay-btn {
             position: absolute;
             top: 24px;
             right: 24px;
-            z-index: 10;
+            z-index: 20;
             background: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(8px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -115,7 +120,7 @@
             position: absolute;
             top: 24px;
             right: 170px;
-            z-index: 10;
+            z-index: 20;
             background: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(8px);
             border: 1px solid rgba(255, 255, 255, 0.16);
@@ -143,7 +148,7 @@
             right: 0;
             height: 100%;
             width: min(460px, 92vw);
-            z-index: 16;
+            z-index: 30;
             transform: translateX(102%);
             transition: transform 0.25s ease;
             background: linear-gradient(180deg, rgba(2, 6, 23, 0.95), rgba(15, 23, 42, 0.92));
@@ -276,74 +281,9 @@
             background: #dc2626;
         }
 
-        .subtitle-track-select {
-            position: absolute;
-            bottom: 24px;
-            left: 24px;
-            z-index: 10;
-            background: rgba(15, 23, 42, 0.75);
-            color: #e2e8f0;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            padding: 8px 10px;
-            font-size: 0.8rem;
-            max-width: 44vw;
-        }
-
-        .audio-track-select {
-            position: absolute;
-            bottom: 72px;
-            left: 24px;
-            z-index: 10;
-            background: rgba(15, 23, 42, 0.75);
-            color: #e2e8f0;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            padding: 8px 10px;
-            font-size: 0.8rem;
-            max-width: 44vw;
-        }
-
-        .ios-seek-overlay {
-            position: absolute;
-            left: 16px;
-            right: 16px;
-            bottom: 12px;
-            z-index: 14;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 10px;
-            border-radius: 10px;
-            background: rgba(2, 6, 23, 0.78);
-            border: 1px solid rgba(148, 163, 184, 0.35);
-            backdrop-filter: blur(6px);
-        }
-
-        .ios-seek-overlay.show {
-            display: flex;
-        }
-
-        .ios-seek-time {
-            min-width: 44px;
-            font-size: 0.74rem;
-            color: #e2e8f0;
-            font-variant-numeric: tabular-nums;
-            text-align: center;
-            user-select: none;
-        }
-
-        .ios-seek-range {
-            flex: 1;
-            accent-color: #ef4444;
-            min-height: 26px;
-        }
-
         @supports (padding: env(safe-area-inset-bottom)) {
             .back-overlay-btn,
             .next-overlay-btn,
-            .subtitle-track-select,
-            .audio-track-select,
             .quality-badge {
                 margin-bottom: env(safe-area-inset-bottom);
             }
@@ -362,33 +302,64 @@
                 opacity: 0.82;
             }
 
-            .subtitle-track-select {
-                top: 68px;
-                bottom: auto;
-                left: 16px;
-                max-width: calc(100vw - 32px);
-                font-size: 0.76rem;
-            }
-
-            .audio-track-select {
-                top: 112px;
-                bottom: auto;
-                left: 16px;
-                max-width: calc(100vw - 32px);
-                font-size: 0.76rem;
-            }
-
             .quality-badge {
                 top: 16px;
-                bottom: auto;
-                right: 16px;
             }
+        }
 
-            .ios-seek-overlay {
-                left: 12px;
-                right: 12px;
-                bottom: 10px;
-            }
+        /* ==================== Video.js re-skin ====================
+           Match the app's existing dark-cinema look (deep navy/black,
+           Joshflix red accent, glassmorphism buttons) instead of the
+           default Video.js skin. */
+        .video-js .vjs-big-play-button {
+            background-color: rgba(15, 23, 42, 0.6);
+            border-color: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            border-radius: 50%;
+            width: 2.2em;
+            height: 2.2em;
+            line-height: 2.2em;
+        }
+
+        .video-js:hover .vjs-big-play-button,
+        .video-js .vjs-big-play-button:focus {
+            background-color: rgba(229, 9, 20, 0.85);
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        .video-js .vjs-control-bar {
+            background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.75) 45%, rgba(2, 6, 23, 0.92) 100%);
+            font-size: 14px;
+        }
+
+        .video-js .vjs-play-progress,
+        .video-js .vjs-volume-level {
+            background-color: #e50914;
+        }
+
+        .video-js .vjs-slider {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .video-js .vjs-load-progress {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .video-js .vjs-menu-button-popup .vjs-menu .vjs-menu-content {
+            background-color: rgba(15, 23, 42, 0.94);
+            backdrop-filter: blur(8px);
+        }
+
+        .video-js .vjs-menu li.vjs-menu-item.vjs-selected,
+        .video-js .vjs-menu li.vjs-menu-item.vjs-selected:focus,
+        .video-js .vjs-menu li.vjs-menu-item.vjs-selected:hover {
+            background-color: rgba(229, 9, 20, 0.35);
+            color: #fff;
+        }
+
+        .video-js .vjs-menu li.vjs-menu-item:focus,
+        .video-js .vjs-menu li.vjs-menu-item:hover {
+            background-color: rgba(148, 163, 184, 0.2);
         }
     </style>
 </head>
@@ -398,22 +369,9 @@
         <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
         <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
         <button class="info-overlay-btn hide-controls" id="infoBtn" type="button">ℹ Info</button>
-        <select class="audio-track-select" id="audioTrackSelect" title="Audio track selector">
-            <option value="auto">Audio: Auto</option>
-        </select>
-        <select class="subtitle-track-select" id="subtitleTrackSelect" title="Subtitle track selector">
-            <option value="auto">Subtitles: Auto</option>
-            <option value="off">Subtitles: Off</option>
-        </select>
 
-        <div class="ios-seek-overlay" id="iosSeekOverlay" aria-hidden="true">
-            <span class="ios-seek-time" id="iosSeekCurrent">0:00</span>
-            <input class="ios-seek-range" id="iosSeekRange" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek position">
-            <span class="ios-seek-time" id="iosSeekDuration">0:00</span>
-        </div>
-        
         <div class="quality-badge" id="qualityTag">DETECTING...</div>
-        <video id="cinemaVideo" controls autoplay playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
+        <video id="cinemaVideo" class="video-js vjs-big-play-centered" autoplay playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
 
         <aside class="player-info-drawer" id="playerInfoDrawer" aria-hidden="true">
             <header class="player-info-head">
@@ -444,6 +402,7 @@
         </aside>
     </div>
 
+    <script src="/vendor/video.js/video.min.js"></script>
     <script>
         // 1. Declare URL Params FIRST so they are available to everything below
         const params = new URLSearchParams(window.location.search);
@@ -454,24 +413,14 @@
         // 2. Initialize UI Element References and State Trackers
         let currentTvPlaylist = [];
         let currentTrackIndex = -1;
-        const videoEl = document.getElementById('cinemaVideo');
         const qualityTag = document.getElementById('qualityTag');
         const backBtn = document.getElementById('backBtn');
         const nextBtn = document.getElementById('nextBtn');
         const infoBtn = document.getElementById('infoBtn');
         const playerInfoDrawer = document.getElementById('playerInfoDrawer');
         const playerInfoClose = document.getElementById('playerInfoClose');
-        const audioTrackSelect = document.getElementById('audioTrackSelect');
-        const subtitleTrackSelect = document.getElementById('subtitleTrackSelect');
-        const iosSeekOverlay = document.getElementById('iosSeekOverlay');
-        const iosSeekRange = document.getElementById('iosSeekRange');
-        const iosSeekCurrent = document.getElementById('iosSeekCurrent');
-        const iosSeekDuration = document.getElementById('iosSeekDuration');
         const stage = document.getElementById('stage');
         const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-        const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
-            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        const useCustomInlineSeek = isIOSDevice && isTouchDevice;
         let audioTracks = [];
         let lastAppliedAudioTrack = 'auto';
         let subtitleTracks = [];
@@ -480,7 +429,6 @@
         let allowLocalFallbackMode = false;
         let cloudFallbackFile = '';
         let remoteFallbackTriggered = false;
-        let isSeekingWithOverlay = false;
 
         function joinPeopleList(items = []) {
             return Array.isArray(items) && items.length > 0
@@ -611,12 +559,91 @@
             }
         }
 
-        videoEl.controls = true;
-        videoEl.playsInline = true;
-        videoEl.preload = 'metadata';
-        videoEl.setAttribute('playsinline', '');
-        videoEl.setAttribute('webkit-playsinline', '');
-        videoEl.setAttribute('x-webkit-airplay', 'allow');
+        const activeUserProfile = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('user_profile='))
+            ?.split('=')[1] || 'guest';
+
+        // ==================== Custom Video.js Audio Track menu ====================
+        // Video.js's native AudioTrackButton only reflects the browser's native
+        // multi-audio-track API (used for HLS alternate-audio renditions) - it
+        // doesn't actually switch anything. This app's audio-track switching is
+        // server-side remuxing on demand, so it needs its own component that
+        // calls back into switchAudioTrack() below. Modeled directly on Video.js's
+        // own PlaybackRateMenuButton/PlaybackRateMenuItem pattern.
+        const MenuButton = videojs.getComponent('MenuButton');
+        const MenuItem = videojs.getComponent('MenuItem');
+
+        class AudioTrackMenuItemCustom extends MenuItem {
+            constructor(player, options) {
+                super(player, {
+                    ...options,
+                    selectable: true,
+                    multiSelectable: false
+                });
+                this.trackValue = options.trackValue;
+            }
+            handleClick(event) {
+                super.handleClick(event);
+                switchAudioTrack(this.trackValue);
+            }
+        }
+        videojs.registerComponent('AudioTrackMenuItemCustom', AudioTrackMenuItemCustom);
+
+        class AudioTrackMenuButtonCustom extends MenuButton {
+            constructor(player, options) {
+                super(player, options);
+                this.hideThreshold_ = 1;
+                this.controlText('Audio Track');
+            }
+            buildCSSClass() {
+                return `vjs-audio-button ${super.buildCSSClass()}`;
+            }
+            createItems() {
+                const items = [new AudioTrackMenuItemCustom(this.player(), {
+                    label: 'Auto',
+                    trackValue: 'auto',
+                    selected: lastAppliedAudioTrack === 'auto'
+                })];
+                audioTracks.forEach((track) => {
+                    const value = String(track.streamIndex);
+                    items.push(new AudioTrackMenuItemCustom(this.player(), {
+                        label: track.label || `Audio ${track.streamIndex}`,
+                        trackValue: value,
+                        selected: lastAppliedAudioTrack === value
+                    }));
+                });
+                return items;
+            }
+        }
+        videojs.registerComponent('AudioTrackMenuButtonCustom', AudioTrackMenuButtonCustom);
+
+        // ==================== Player init ====================
+        const player = videojs('cinemaVideo', {
+            controls: true,
+            autoplay: true,
+            preload: 'metadata',
+            playsinline: true,
+            fluid: false,
+            controlBar: {
+                children: [
+                    'playToggle',
+                    'skipBackward',
+                    'skipForward',
+                    'volumePanel',
+                    'currentTimeDisplay',
+                    'timeDivider',
+                    'durationDisplay',
+                    'progressControl',
+                    'customControlSpacer',
+                    'subsCapsButton',
+                    'audioTrackMenuButtonCustom',
+                    'pictureInPictureToggle',
+                    'fullscreenToggle'
+                ]
+            }
+        });
+        player.el().setAttribute('data-vjs-player', 'true');
 
         function formatPlaybackClock(totalSeconds = 0) {
             const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -627,86 +654,6 @@
                 return `${hours}:${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
             }
             return `${mins}:${String(rem).padStart(2, '0')}`;
-        }
-
-        function isVideoInFullscreen() {
-            return Boolean(document.fullscreenElement)
-                || Boolean(document.webkitFullscreenElement)
-                || Boolean(videoEl.webkitDisplayingFullscreen);
-        }
-
-        function syncCustomSeekUi() {
-            if (!useCustomInlineSeek) return;
-
-            const duration = Number(videoEl.duration) || 0;
-            const current = Number(videoEl.currentTime) || 0;
-
-            iosSeekDuration.textContent = formatPlaybackClock(duration);
-
-            if (!isSeekingWithOverlay) {
-                iosSeekCurrent.textContent = formatPlaybackClock(current);
-                if (duration > 0) {
-                    iosSeekRange.value = String(Math.round((current / duration) * 1000));
-                } else {
-                    iosSeekRange.value = '0';
-                }
-            }
-        }
-
-        function updateCustomSeekVisibility() {
-            if (!useCustomInlineSeek) {
-                iosSeekOverlay.classList.remove('show');
-                iosSeekOverlay.setAttribute('aria-hidden', 'true');
-                return;
-            }
-
-            const shouldShow = !isVideoInFullscreen();
-            iosSeekOverlay.classList.toggle('show', shouldShow);
-            iosSeekOverlay.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
-        }
-
-        if (useCustomInlineSeek) {
-            videoEl.controls = true;
-            iosSeekRange.addEventListener('input', () => {
-                isSeekingWithOverlay = true;
-                const duration = Number(videoEl.duration) || 0;
-                if (duration <= 0) return;
-
-                const ratio = Math.max(0, Math.min(1000, Number(iosSeekRange.value) || 0)) / 1000;
-                const nextTime = ratio * duration;
-                iosSeekCurrent.textContent = formatPlaybackClock(nextTime);
-            });
-
-            const commitOverlaySeek = () => {
-                const duration = Number(videoEl.duration) || 0;
-                if (duration > 0) {
-                    const ratio = Math.max(0, Math.min(1000, Number(iosSeekRange.value) || 0)) / 1000;
-                    videoEl.currentTime = ratio * duration;
-                }
-                isSeekingWithOverlay = false;
-                syncCustomSeekUi();
-            };
-
-            iosSeekRange.addEventListener('change', commitOverlaySeek);
-            iosSeekRange.addEventListener('pointerup', commitOverlaySeek);
-            iosSeekRange.addEventListener('touchend', commitOverlaySeek, { passive: true });
-
-            videoEl.addEventListener('timeupdate', syncCustomSeekUi);
-            videoEl.addEventListener('loadedmetadata', syncCustomSeekUi);
-            videoEl.addEventListener('durationchange', syncCustomSeekUi);
-            videoEl.addEventListener('play', syncCustomSeekUi);
-
-            document.addEventListener('fullscreenchange', updateCustomSeekVisibility);
-            document.addEventListener('webkitfullscreenchange', updateCustomSeekVisibility);
-            videoEl.addEventListener('webkitbeginfullscreen', updateCustomSeekVisibility);
-            videoEl.addEventListener('webkitendfullscreen', updateCustomSeekVisibility);
-            window.addEventListener('orientationchange', () => {
-                updateCustomSeekVisibility();
-                syncCustomSeekUi();
-            });
-
-            updateCustomSeekVisibility();
-            syncCustomSeekUi();
         }
 
         // RESUME ENGINE CORE STATES
@@ -732,10 +679,7 @@
                 body: JSON.stringify({ mediaId })
             }).catch(err => console.error("Playback completion clear failed:", err));
         }
-        const activeUserProfile = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('user_profile='))
-            ?.split('=')[1] || 'guest';
+
         // Update the Back Button dynamically if viewing a TV show to return to the Show details page
         if (movieId && seasonParam) {
             backBtn.href = `series.html?id=${encodeURIComponent(movieId)}`;
@@ -763,8 +707,8 @@
 
         function buildPlaybackUrl() {
             const query = buildContextQuery();
-            if (audioTrackSelect.value !== 'auto') {
-                query.set('audioTrack', audioTrackSelect.value);
+            if (lastAppliedAudioTrack !== 'auto') {
+                query.set('audioTrack', lastAppliedAudioTrack);
             }
             return `/api/playback/${encodeURIComponent(movieId)}${query.toString() ? `?${query.toString()}` : ''}`;
         }
@@ -778,66 +722,51 @@
         }
 
         function applyVideoSource(preservePosition = false) {
-            const wasPaused = videoEl.paused;
-            const previousTime = preservePosition ? videoEl.currentTime : 0;
+            const wasPaused = player.paused();
+            const previousTime = preservePosition ? player.currentTime() : 0;
 
-            videoEl.src = currentRemoteStreamUrl || buildPlaybackUrl();
+            player.src({ src: currentRemoteStreamUrl || buildPlaybackUrl(), type: 'video/mp4' });
 
             if (preservePosition) {
-                videoEl.addEventListener('loadedmetadata', () => {
+                player.one('loadedmetadata', () => {
                     if (Number.isFinite(previousTime) && previousTime > 0) {
-                        videoEl.currentTime = previousTime;
+                        player.currentTime(previousTime);
                     }
                     if (!wasPaused) {
-                        videoEl.play().catch(() => {});
+                        player.play().catch(() => {});
                     }
-                }, { once: true });
+                });
             }
         }
+
+        let audioTrackMenuButtonInstance = null;
 
         async function refreshAudioTracks() {
             audioTracks = [];
             lastAppliedAudioTrack = 'auto';
-            audioTrackSelect.innerHTML = '<option value="auto">Audio: Auto</option>';
-            audioTrackSelect.disabled = true;
 
-            if (currentRemoteStreamUrl) {
-                return;
+            if (!currentRemoteStreamUrl) {
+                try {
+                    const baseQuery = buildContextQuery().toString();
+                    const res = await fetch(`/api/audio-tracks/${encodeURIComponent(movieId)}${baseQuery ? `?${baseQuery}` : ''}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.success && Array.isArray(data.tracks)) {
+                            audioTracks = data.tracks;
+                        }
+                    }
+                } catch (_err) {
+                    // Keep playback resilient if audio track discovery fails.
+                }
             }
 
-            try {
-                const baseQuery = buildContextQuery().toString();
-                const res = await fetch(`/api/audio-tracks/${encodeURIComponent(movieId)}${baseQuery ? `?${baseQuery}` : ''}`);
-                if (!res.ok) return;
-
-                const data = await res.json();
-                if (!data.success || !Array.isArray(data.tracks)) return;
-
-                audioTracks = data.tracks;
-                data.tracks.forEach(track => {
-                    const option = document.createElement('option');
-                    option.value = String(track.streamIndex);
-                    option.textContent = track.label || `Audio ${track.streamIndex}`;
-                    audioTrackSelect.appendChild(option);
-                });
-
-                const selected = String(audioTrackSelect.value || 'auto');
-                const stillExists = selected === 'auto' || data.tracks.some(t => String(t.streamIndex) === selected);
-                if (!stillExists) {
-                    audioTrackSelect.value = 'auto';
-                }
-                lastAppliedAudioTrack = String(audioTrackSelect.value || 'auto');
-
-                audioTrackSelect.disabled = data.tracks.length <= 1;
-            } catch (_err) {
-                // Keep playback resilient if audio track discovery fails.
+            if (audioTrackMenuButtonInstance) {
+                audioTrackMenuButtonInstance.update();
             }
         }
 
         async function refreshSubtitleTracks() {
             subtitleTracks = [];
-            subtitleTrackSelect.innerHTML = '<option value="auto">Subtitles: Auto</option><option value="off">Subtitles: Off</option>';
-
             try {
                 const baseQuery = subtitleQueryBase();
                 const res = await fetch(`/api/subtitles/${encodeURIComponent(movieId)}/tracks${baseQuery ? `?${baseQuery}` : ''}`);
@@ -847,62 +776,55 @@
                 if (!data.success || !Array.isArray(data.tracks)) return;
 
                 subtitleTracks = data.tracks;
-                data.tracks.forEach(track => {
-                    const option = document.createElement('option');
-                    option.value = String(track.id);
-                    option.textContent = track.label || `Track ${track.id}`;
-                    subtitleTrackSelect.appendChild(option);
-                });
             } catch (_err) {
                 // Keep player resilient if subtitle manifest fetch fails.
             }
         }
 
-        // --- Subtitle Ingestion Function ---
+        // Adds one remote text track per available subtitle option, letting
+        // Video.js's native captions/subtitles menu (subsCapsButton) handle
+        // selection - replaces the old single-dynamic-track-swapped-on-select
+        // approach entirely. manualCleanup=false (the default) means Video.js
+        // clears these automatically whenever the source changes (new episode,
+        // audio track switch, etc), so no manual teardown is needed here.
         function loadSubtitles() {
-            const existingTracks = videoEl.querySelectorAll('track');
-            existingTracks.forEach(track => track.remove());
-
-            if (subtitleTrackSelect.value === 'off') return;
-
-            const track = document.createElement('track');
-            track.kind = 'subtitles';
-            track.label = 'English';
-            track.srclang = 'en';
-            const params = new URLSearchParams(subtitleQueryBase());
-            if (subtitleTrackSelect.value !== 'auto') {
-                params.set('track', subtitleTrackSelect.value);
-            }
-            const subtitleQuery = params.toString();
-            track.src = `/api/subtitles/${encodeURIComponent(movieId)}${subtitleQuery ? `?${subtitleQuery}` : ''}`;
-            track.default = true; 
-            
-            videoEl.appendChild(track);
+            const baseParams = new URLSearchParams(subtitleQueryBase());
+            subtitleTracks.forEach((track, index) => {
+                const trackParams = new URLSearchParams(baseParams);
+                trackParams.set('track', String(track.id));
+                player.addRemoteTextTrack({
+                    kind: 'subtitles',
+                    src: `/api/subtitles/${encodeURIComponent(movieId)}?${trackParams.toString()}`,
+                    srclang: track.language || 'en',
+                    label: track.label || `Track ${track.id}`,
+                    default: Boolean(track.isDefaultCandidate) && index === 0
+                }, false);
+            });
         }
 
-        subtitleTrackSelect.addEventListener('change', () => {
-            loadSubtitles();
-        });
-
-        audioTrackSelect.addEventListener('change', async () => {
+        async function switchAudioTrack(requestedTrackValue) {
             if (currentRemoteStreamUrl) return;
 
-            const requested = String(audioTrackSelect.value || 'auto');
+            const requested = String(requestedTrackValue || 'auto');
+            if (requested === lastAppliedAudioTrack) return;
+
             if (requested === 'auto') {
                 lastAppliedAudioTrack = 'auto';
                 applyVideoSource(true);
                 loadSubtitles();
+                if (audioTrackMenuButtonInstance) audioTrackMenuButtonInstance.update();
                 return;
             }
 
             // The server may need to remux a fresh copy for this track. Probe first so a
-            // failure reverts the dropdown instead of silently playing the original audio.
+            // failure reverts the selection instead of silently playing the original audio.
             const previousBadge = qualityTag.innerText;
             const previousBadgeBg = qualityTag.style.background;
-            audioTrackSelect.disabled = true;
             qualityTag.innerText = 'PREPARING AUDIO TRACK...';
 
+            const previousTrack = lastAppliedAudioTrack;
             try {
+                lastAppliedAudioTrack = requested;
                 const probe = await fetch(buildPlaybackUrl(), { headers: { Range: 'bytes=0-1' } });
                 if (!probe.ok) {
                     let detail = `Server returned ${probe.status}`;
@@ -912,26 +834,25 @@
                     } catch (_parseErr) { /* non-JSON error body */ }
 
                     console.error('Audio track switch failed:', detail);
-                    audioTrackSelect.value = lastAppliedAudioTrack;
+                    lastAppliedAudioTrack = previousTrack;
                     qualityTag.innerText = 'AUDIO TRACK UNAVAILABLE';
                     qualityTag.style.background = '#b91c1c';
                     return;
                 }
 
-                lastAppliedAudioTrack = requested;
                 qualityTag.innerText = previousBadge;
                 qualityTag.style.background = previousBadgeBg;
                 applyVideoSource(true);
                 loadSubtitles();
             } catch (err) {
                 console.error('Audio track switch failed:', err);
-                audioTrackSelect.value = lastAppliedAudioTrack;
+                lastAppliedAudioTrack = previousTrack;
                 qualityTag.innerText = 'AUDIO TRACK UNAVAILABLE';
                 qualityTag.style.background = '#b91c1c';
             } finally {
-                audioTrackSelect.disabled = audioTracks.length <= 1;
+                if (audioTrackMenuButtonInstance) audioTrackMenuButtonInstance.update();
             }
-        });
+        }
 
         // --- Playback Sync Loop Functions ---
         async function applyResumeMarker() {
@@ -940,15 +861,16 @@
                     headers: { 'x-user-profile': activeUserProfile }
                 });
                 const data = await res.json();
-                
+
                 if (data.success && data.position > 5) {
+                    const duration = player.duration();
                     // Only apply if user didn't complete the track down to the final 30 seconds
-                    if (videoEl.duration && data.position < videoEl.duration - 30) {
-                        videoEl.currentTime = data.position;
+                    if (duration && data.position < duration - 30) {
+                        player.currentTime(data.position);
                         console.log(`▶️ Playback restored to location timestamp: ${data.position}s`);
-                    } else if (!videoEl.duration) {
+                    } else if (!duration) {
                         // Fallback constraint case check if metadata speed lagged behind slightly
-                        videoEl.currentTime = data.position;
+                        player.currentTime(data.position);
                     }
                 }
             } catch (e) {
@@ -957,9 +879,9 @@
         }
 
         // Send a continuous heartbeat tick down to the file server pipeline
-        videoEl.addEventListener('timeupdate', () => {
-            const currentTime = videoEl.currentTime;
-            const duration = videoEl.duration;
+        player.on('timeupdate', () => {
+            const currentTime = player.currentTime();
+            const duration = player.duration();
             const now = Date.now();
 
             if (duration > 0 && (currentTime / duration) >= FINISHED_PERCENT) {
@@ -985,7 +907,7 @@
         });
 
         // Trigger timestamp restorations right as the stream asset tracks align completely
-        videoEl.addEventListener('loadedmetadata', applyResumeMarker);
+        player.on('loadedmetadata', applyResumeMarker);
 
         function resolveSubscribeReasonFromStatus(statusPayload) {
             const status = String(statusPayload?.subscriptionStatus || '').toUpperCase();
@@ -1038,7 +960,7 @@
                     const cleanFolder = movieId.replace('series/', '');
                     const response = await fetch(`/api/series/${encodeURIComponent(cleanFolder)}`);
                     const showData = await response.json();
-                    
+
                     const targetSeason = showData.seasons ? showData.seasons[seasonParam] : null;
                     currentTvPlaylist = targetSeason ? targetSeason.episodes : [];
                     currentTrackIndex = currentTvPlaylist.findIndex(ep => ep.episodeNumber == parseInt(episodeParam, 10));
@@ -1070,7 +992,7 @@
                     const movie = await response.json();
                     let targetStreamUrl = '';
                     let localFallbackUrl = '';
-                    
+
                     // Helper function to safely map local assets without touching cloud signatures
                     const resolveStreamSource = (fileUrl) => {
                         if (!fileUrl) return '';
@@ -1103,8 +1025,6 @@
                         allowLocalFallbackMode = false;
                         remoteFallbackTriggered = false;
                         cloudFallbackFile = deriveFileNameFromPath(localFallbackUrl || '');
-                        audioTrackSelect.value = 'auto';
-                        audioTrackSelect.disabled = true;
                     } else {
                         currentRemoteStreamUrl = '';
                         allowLocalFallbackMode = movie.fallbackReason === 'remote_unavailable';
@@ -1117,13 +1037,13 @@
                     await refreshAudioTracks();
                     await refreshSubtitleTracks();
                     loadSubtitles();
-                    videoEl.play().catch(() => {});
+                    player.play().catch(() => {});
                 } catch (err) {
                     qualityTag.innerText = "STREAM CORRUPTED";
                 }
-}
+        }
 
-        videoEl.addEventListener('error', async () => {
+        player.on('error', async () => {
             if (!currentRemoteStreamUrl || remoteFallbackTriggered || !cloudFallbackFile) {
                 return;
             }
@@ -1139,7 +1059,7 @@
             await refreshAudioTracks();
             await refreshSubtitleTracks();
             loadSubtitles();
-            videoEl.play().catch(() => {});
+            player.play().catch(() => {});
         });
 
         /**
@@ -1158,7 +1078,7 @@
          */
         function playEpisodeIndex(index) {
             if (index < 0 || index >= currentTvPlaylist.length) return;
-            
+
             const episode = currentTvPlaylist[index];
             currentTrackIndex = index;
             episodeParam = String(episode.episodeNumber);
@@ -1170,7 +1090,7 @@
             // silently forces every subsequent episode request to skip the
             // cloud redirect and go straight to local, with no visible error.
             allowLocalFallbackMode = false;
-            audioTrackSelect.value = 'auto';
+            lastAppliedAudioTrack = 'auto';
 
             // Generate deterministic string for unique TV episode tracking arrays
             const cleanFolder = movieId.replace('series/', '');
@@ -1179,7 +1099,7 @@
 
             applyVideoSource(false);
             qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
-            qualityTag.style.background = "#6366f1"; 
+            qualityTag.style.background = "#6366f1";
 
             const newUrl = `player.html?id=${encodeURIComponent(movieId)}&season=${seasonParam}&episode=${episode.episodeNumber}`;
             window.history.replaceState({ path: newUrl }, '', newUrl);
@@ -1196,7 +1116,7 @@
             // Reload subtitle track for the selected episode
             refreshSubtitleTracks().then(() => loadSubtitles());
 
-            videoEl.play().catch(() => {});
+            player.play().catch(() => {});
         }
 
         function updateNextButtonVisibility() {
@@ -1217,7 +1137,7 @@
         });
 
         // Autoplay continuous sequence tracking logic
-        videoEl.addEventListener('ended', () => {
+        player.on('ended', () => {
             // No-op if the FINISHED_PERCENT threshold in the timeupdate
             // handler already fired for this title (the common case) -
             // markCurrentTitleFinished guards against double-firing.
@@ -1232,46 +1152,29 @@
             }
         });
 
-        // Custom UI Polish: Include nextBtn in the visibility fade wrapper array structures
-        let mouseMoveTimeout;
-        function resetControlVisibility() {
-            if (isTouchDevice) {
-                backBtn.classList.remove('hide-controls');
-                nextBtn.classList.remove('hide-controls');
-                if (infoBtn) infoBtn.classList.remove('hide-controls');
-                qualityTag.classList.remove('hide-controls');
-                stage.style.cursor = 'default';
-                return;
-            }
-
+        // Fade the custom overlay buttons (back/next/info/quality-badge) in sync
+        // with Video.js's own control bar visibility, instead of running a
+        // separate hand-rolled inactivity timer.
+        player.on('useractive', () => {
             backBtn.classList.remove('hide-controls');
             nextBtn.classList.remove('hide-controls');
             if (infoBtn) infoBtn.classList.remove('hide-controls');
             qualityTag.classList.remove('hide-controls');
-            stage.style.cursor = 'default';
-            
-            clearTimeout(mouseMoveTimeout);
-            if (!videoEl.paused) {
-                mouseMoveTimeout = setTimeout(() => {
-                    backBtn.classList.add('hide-controls');
-                    nextBtn.classList.add('hide-controls');
-                    if (infoBtn) infoBtn.classList.add('hide-controls');
-                    qualityTag.classList.add('hide-controls');
-                    stage.style.cursor = 'none';
-                }, 3000); 
-            }
-        }
-
-        document.addEventListener('mousemove', resetControlVisibility);
-        document.addEventListener('touchstart', resetControlVisibility, { passive: true });
-        videoEl.addEventListener('play', resetControlVisibility);
-        videoEl.addEventListener('pause', resetControlVisibility);
+        });
+        player.on('userinactive', () => {
+            if (isTouchDevice) return; // keep them visible on touch devices, matching prior behavior
+            if (player.paused()) return;
+            backBtn.classList.add('hide-controls');
+            nextBtn.classList.add('hide-controls');
+            if (infoBtn) infoBtn.classList.add('hide-controls');
+            qualityTag.classList.add('hide-controls');
+        });
 
         // Keyboard Intercept Controls
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
-                e.preventDefault(); 
-                if (videoEl.paused) videoEl.play(); else videoEl.pause();
+                e.preventDefault();
+                if (player.paused()) player.play(); else player.pause();
             }
             // Added quick keyboard hotkey alternative: 'N' steps to next track profile
             if (e.key.toLowerCase() === 'n') {
@@ -1288,9 +1191,12 @@
             }
         });
 
-        initPlayerInfoDrawer();
-        loadPlayerDetails();
-        initializePremiumStream();
+        player.ready(() => {
+            audioTrackMenuButtonInstance = player.getChild('controlBar').getChild('AudioTrackMenuButtonCustom');
+            initPlayerInfoDrawer();
+            loadPlayerDetails();
+            initializePremiumStream();
+        });
     </script>
     <script src="/js/api-failover.js"></script>
 </body>
