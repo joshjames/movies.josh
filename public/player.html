@@ -595,6 +595,12 @@
                 super(player, options);
                 this.hideThreshold_ = 1;
                 this.controlText('Audio Track');
+                // Capture the instance directly rather than looking it up later via
+                // getChild() by name - Video.js indexes children under a couple of
+                // case-converted variants of their name and it's easy to reference
+                // the wrong one; this sidesteps that entirely.
+                audioTrackMenuButtonInstance = this;
+                this.update();
             }
             buildCSSClass() {
                 return `vjs-audio-button ${super.buildCSSClass()}`;
@@ -1192,7 +1198,6 @@
         });
 
         player.ready(() => {
-            audioTrackMenuButtonInstance = player.getChild('controlBar').getChild('AudioTrackMenuButtonCustom');
             initPlayerInfoDrawer();
             loadPlayerDetails();
             initializePremiumStream();
