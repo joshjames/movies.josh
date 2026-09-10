@@ -573,6 +573,13 @@
         // own PlaybackRateMenuButton/PlaybackRateMenuItem pattern.
         const MenuButton = videojs.getComponent('MenuButton');
         const MenuItem = videojs.getComponent('MenuItem');
+        // Declared before the component classes below (rather than near its
+        // other usages further down) because the button's own constructor
+        // assigns to it, and that constructor runs synchronously during the
+        // videojs() init call further down this same script - a `let` declared
+        // after that point would still be in its temporal dead zone when the
+        // constructor runs, throwing "Cannot access before initialization".
+        let audioTrackMenuButtonInstance = null;
 
         class AudioTrackMenuItemCustom extends MenuItem {
             constructor(player, options) {
@@ -744,8 +751,6 @@
                 });
             }
         }
-
-        let audioTrackMenuButtonInstance = null;
 
         async function refreshAudioTracks() {
             audioTracks = [];
