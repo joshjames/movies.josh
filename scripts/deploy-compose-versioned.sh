@@ -117,10 +117,22 @@ echo ""
 echo "Next step: in NPM, update proxy destination to http://${APP_CONTAINER_NAME}:3000 when ready."
 
 # ---------------------------------------------------------------------------
-# Propagate to the Sydney satellite: SSH in and `git pull`, which triggers
-# Sydney's own copy of this same script there (with DEPLOY_WORKERS=false, per
-# the comment above). Only for the real production branch, not experimental
+# Propagate to the Sydney satellite: SSH in and pull, which triggers Sydney's
+# own copy of this same script there (with DEPLOY_WORKERS=false, per the
+# comment above). Only for the real production branch, not experimental
 # branches (e.g. edgeplayer) that shouldn't get pushed to Sydney automatically.
+# Guarded by DEPLOY_WORKERS=false so Sydney's own deploy run (triggered below)
+# doesn't try to recursively "sync to Sydney" against itself.
+#
+# Pulls from a dedicated `la` remote (LA's repo directly over the WireGuard
+# tunnel, ssh://epic@10.100.0.1/home/epic/movie-streamer - a one-time `git
+# remote add` on Sydney), NOT `origin`/GitHub. A plain `git pull` here would
+# pull from GitHub, but this script runs from LA's *pre-push* hook - the ref
+# transfer to GitHub only happens after this script exits successfully, so
+# Sydney would always be pulling whatever was on GitHub from the *previous*
+# push, permanently one push behind. Fetching straight from LA's local repo
+# (already has this commit, mid-script, well before `git push` runs) avoids
+# depending on that timing entirely.
 #
 # This whole block is best-effort and must never fail the script - `set -e`
 # is active above, and this script runs from LA's pre-push hook, so an
@@ -128,13 +140,13 @@ echo "Next step: in NPM, update proxy destination to http://${APP_CONTAINER_NAME
 # one deploy. Every command that could fail is explicitly guarded with
 # `|| ...` so nothing here ever propagates a nonzero exit.
 # ---------------------------------------------------------------------------
-if [[ "$CURRENT_BRANCH" == "v2" ]]; then
+if [[ "$CURRENT_BRANCH" == "v2" && "$DEPLOY_WORKERS" == "true" ]]; then
     SYDNEY_SSH_HOST="${SYDNEY_SSH_HOST:-epic@sydney.myapo.cloud}"
     SYDNEY_REPO_PATH="${SYDNEY_REPO_PATH:-~/movie-streamer}"
     echo ""
     echo "==> Syncing code to Sydney satellite (${SYDNEY_SSH_HOST}:${SYDNEY_REPO_PATH})"
     if ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$SYDNEY_SSH_HOST" \
-        "cd ${SYDNEY_REPO_PATH} && git pull" 2>&1; then
+        "cd ${SYDNEY_REPO_PATH} && git fetch la ${CURRENT_BRANCH} && git merge la/${CURRENT_BRANCH} --no-edit" 2>&1; then
         echo "==> Sydney sync triggered successfully."
     else
         echo "⚠️  WARNING: Sydney sync failed or unreachable - it will keep running its current code until the next successful sync. This did NOT fail the LA deployment above." >&2
