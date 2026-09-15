@@ -358,21 +358,44 @@ function exportSubtitleStreamToPath(videoPath, streamIndex, outPathBase) {
     return null;
 }
 
-function hasExistingSubtitles(folderPath) {
+// Folder-wide check is only correct for movies (one video per folder). A TV
+// season folder holds many episodes' videos, so this must check whether a
+// subtitle exists for *this specific* episode - otherwise, once the first
+// episode processed in a season leaves any .srt/.vtt sitting there, every
+// later episode in that same folder sees "already has subtitles" and skips
+// extraction entirely, never getting its own. Reuses the same bidirectional
+// base-name relation as media.routes.js's subtitle matching (subtitle name
+// can be a prefix of the video's, or vice versa, since release-tag suffixes
+// commonly differ between the two).
+function hasExistingSubtitlesForVideo(folderPath, baseName) {
+    const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const baseToken = normalize(baseName);
+    let files;
     try {
-        return fs.readdirSync(folderPath).some(f => /\.(srt|vtt)$/i.test(f));
+        files = fs.readdirSync(folderPath);
     } catch (_err) {
         return false;
     }
+    return files.some((f) => {
+        if (!/\.(srt|vtt)$/i.test(f)) return false;
+        const fileBase = path.parse(f).name;
+        const fileToken = normalize(f);
+        return f.startsWith(`${baseName}.`)
+            || baseName.startsWith(`${fileBase}.`)
+            || fileToken.includes(baseToken)
+            || baseToken.includes(fileToken);
+    });
 }
 
 // Extracts embedded subtitle tracks from a source video into standalone
 // .srt/.vtt sidecar files, before the source potentially gets deleted by the
 // transcode step below. Best-effort and non-fatal - a source with no
 // subtitle streams, or one where extraction fails, just yields no output.
-// The default track lands as "English.srt" next to the video (matching the
-// existing sidecar-subtitle convention SubtitleWorker.js already looks for);
-// any others go into a "subs" subfolder.
+// The default track lands as "<video base name>.srt" next to the video (not
+// a bare "English.srt" - a TV season folder holds many episodes sharing that
+// folder, so an unscoped name would mean every episode's extraction
+// overwrites the last one's, which is exactly the bug this comment used to
+// describe as intentional); any others go into a "subs" subfolder.
 function extractEmbeddedSubtitles(videoPath) {
     const source = path.resolve(String(videoPath || ''));
     if (!fs.existsSync(source)) return { exported: [] };
@@ -405,7 +428,7 @@ function extractEmbeddedSubtitles(videoPath) {
     for (const row of streams) {
         const isDefaultSubtitle = row.streamIndex === defaultCandidate.streamIndex;
         const outBase = isDefaultSubtitle
-            ? path.join(dir, 'English')
+            ? path.join(dir, baseName)
             : path.join((fs.mkdirSync(subsDir, { recursive: true }), subsDir), `${baseName}.sub.${row.streamIndex}.${row.lang}`);
 
         const extracted = exportSubtitleStreamToPath(source, row.streamIndex, outBase);
@@ -478,11 +501,15 @@ function processSingleVideoFile(inputPath, options = {}) {
     }
 
     // Best-effort embedded-subtitle extraction before the source potentially
-    // gets deleted below. Skipped if the folder already has any .srt/.vtt -
-    // never overwrite a subtitle that might have come from a better external
-    // source (YIFY/Subliminal via the SUBTITLES worker stage).
+    // gets deleted below. Skipped if this specific video already has a
+    // matching .srt/.vtt - never overwrite a subtitle that might have come
+    // from a better external source (YIFY/Subliminal via the SUBTITLES
+    // worker stage). Checked per-video, not folder-wide - see
+    // hasExistingSubtitlesForVideo's comment for why that distinction matters
+    // for TV season folders.
     let subtitleExtraction = null;
-    if (!hasExistingSubtitles(parsedPath.dir)) {
+    const inputBaseName = String(parsedPath.name || '').replace(/\.web$/i, '');
+    if (!hasExistingSubtitlesForVideo(parsedPath.dir, inputBaseName)) {
         try {
             subtitleExtraction = extractEmbeddedSubtitles(inputPath);
         } catch (subErr) {

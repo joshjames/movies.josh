@@ -351,15 +351,19 @@ function walkVideoFiles(rootPath) {
 function hasSidecarSubtitle(videoPath) {
     const dir = path.dirname(videoPath);
     const base = path.parse(videoPath).name;
+    // Deliberately no bare 'English.srt'/'English.vtt' entries - this is
+    // checked per-episode in a TV season folder shared by many episodes'
+    // videos, and a bare unscoped name found there could belong to a
+    // different episode entirely, wrongly marking THIS episode as "already
+    // has a subtitle" and skipping its own extraction (same class of bug
+    // TranscoderWorker.js's extractEmbeddedSubtitles used to have).
     const candidates = [
         `${base}.English.srt`,
         `${base}.en.srt`,
         `${base}.srt`,
         `${base}.English.vtt`,
         `${base}.en.vtt`,
-        `${base}.vtt`,
-        'English.srt',
-        'English.vtt'
+        `${base}.vtt`
     ];
 
     return candidates.some(name => fs.existsSync(path.join(dir, name)));
