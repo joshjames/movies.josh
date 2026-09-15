@@ -439,23 +439,32 @@ const ProfileService = {
     },
 
     // Durable record of finished titles, separate from playback.json (which
-    // is "in progress" state that gets cleared on finish). Keyed by the
-    // library item's real id (not mediaId, so a show's episodes all
-    // accumulate onto the same record) - intended as the seed data for a
-    // future "Because you watched X" recommendation feature, so it tracks
-    // watchCount/genre/imdbId rather than just a timestamp.
+    // is "in progress" state that gets cleared on finish) - intended as seed
+    // data for a future "Because you watched X" recommendation feature, so it
+    // tracks watchCount/genre/imdbId rather than just a timestamp. For
+    // series, keyed per-episode (`${showId}::S{season}E{episode}`) rather
+    // than just the show's id, so "watched" can be reported per-episode in
+    // the series viewer UI - movies keep the simple show/movie-id key since
+    // there's no sub-granularity to track.
     async recordWatched(username, item = {}) {
         const cleanUser = normalizeIdentity(username);
-        const id = String(item.id || '').trim();
-        if (!id) return false;
+        const showId = String(item.id || '').trim();
+        if (!showId) return false;
+
+        const isEpisode = item.contentType === 'series'
+            && Number.isFinite(item.season)
+            && Number.isFinite(item.episode);
+        const key = isEpisode ? `${showId}::S${item.season}E${item.episode}` : showId;
 
         const nowIso = new Date().toISOString();
         await this.mergeAndCommit(cleanUser, 'watched', async (watched) => {
             const next = { ...watched };
-            const existing = next[id] || {};
-            next[id] = {
-                id,
-                title: item.title || existing.title || id,
+            const existing = next[key] || {};
+            next[key] = {
+                id: showId,
+                season: isEpisode ? item.season : null,
+                episode: isEpisode ? item.episode : null,
+                title: item.title || existing.title || showId,
                 imdbId: item.imdbId || existing.imdbId || '',
                 genre: item.genre || existing.genre || '',
                 contentType: item.contentType || existing.contentType || 'movie',
@@ -475,6 +484,23 @@ const ProfileService = {
             .filter((row) => row && row.id)
             .sort((a, b) => new Date(b.lastWatchedAt || 0) - new Date(a.lastWatchedAt || 0))
             .slice(0, limit);
+    },
+
+    // Returns which episodes of one show have been watched, as a plain
+    // { "S1E1": true, "S1E3": true, ... } map for O(1) lookup while rendering
+    // the series viewer's episode list.
+    async getWatchedEpisodesForShow(username, showId) {
+        const cleanShowId = String(showId || '').trim();
+        if (!cleanShowId) return {};
+
+        const watched = await this.readData(username, 'watched', {});
+        const episodes = {};
+        for (const record of Object.values(watched || {})) {
+            if (!record || record.id !== cleanShowId) continue;
+            if (!Number.isFinite(record.season) || !Number.isFinite(record.episode)) continue;
+            episodes[`S${record.season}E${record.episode}`] = true;
+        }
+        return episodes;
     },
 
     async getWatchHistory(username, options = {}) {

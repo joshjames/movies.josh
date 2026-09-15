@@ -142,6 +142,28 @@ router.get('/watch-history', async (req, res) => {
     }
 });
 
+// GET: /api/profile/watched-episodes?showId=series/<folder>
+// Which episodes of one show the current user has finished, for the series
+// viewer to mark as "Watched".
+router.get('/watched-episodes', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        const showId = String(req.query.showId || '').trim();
+
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+        if (!showId) {
+            return res.status(400).json({ success: false, error: 'Missing showId.' });
+        }
+
+        const episodes = await ProfileService.getWatchedEpisodesForShow(username, showId);
+        return res.json({ success: true, episodes });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/profile/watch-later
 router.get('/watch-later', async (req, res) => {
     try {
