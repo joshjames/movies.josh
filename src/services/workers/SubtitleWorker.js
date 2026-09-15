@@ -8,6 +8,7 @@ const path = require('path');
 const { exec, spawnSync } = require('child_process');
 const AdmZip = require('adm-zip');
 const logger = require('../logger');
+const { isSubtitleRelatedToVideo } = require('../SubtitleFileMatching');
 
 const app = express();
 app.use(express.json());
@@ -351,22 +352,23 @@ function walkVideoFiles(rootPath) {
 function hasSidecarSubtitle(videoPath) {
     const dir = path.dirname(videoPath);
     const base = path.parse(videoPath).name;
-    // Deliberately no bare 'English.srt'/'English.vtt' entries - this is
+    let files;
+    try {
+        files = fs.readdirSync(dir);
+    } catch (_err) {
+        return false;
+    }
+    // Scans and uses the shared relation check (same one media.routes.js and
+    // TranscoderWorker.js use) rather than a fixed list of expected exact
+    // names - a fixed list like `${base}.English.srt` still assumes the
+    // subtitle repeats the video's own ".web" token, which real subtitles
+    // (from Subliminal, YIFY, or just however they were sourced) often don't.
+    // Deliberately no bare 'English.srt'/'English.vtt' allowance - this is
     // checked per-episode in a TV season folder shared by many episodes'
     // videos, and a bare unscoped name found there could belong to a
     // different episode entirely, wrongly marking THIS episode as "already
-    // has a subtitle" and skipping its own extraction (same class of bug
-    // TranscoderWorker.js's extractEmbeddedSubtitles used to have).
-    const candidates = [
-        `${base}.English.srt`,
-        `${base}.en.srt`,
-        `${base}.srt`,
-        `${base}.English.vtt`,
-        `${base}.en.vtt`,
-        `${base}.vtt`
-    ];
-
-    return candidates.some(name => fs.existsSync(path.join(dir, name)));
+    // has a subtitle" and skipping its own extraction.
+    return files.some((f) => /\.(srt|vtt)$/i.test(f) && isSubtitleRelatedToVideo(f, base));
 }
 
 function extractEmbeddedSubtitleForVideo(videoPath) {

@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const logger = require('../logger');
+const { isSubtitleRelatedToVideo } = require('../SubtitleFileMatching');
 
 const app = express();
 app.use(express.json());
@@ -368,23 +369,13 @@ function exportSubtitleStreamToPath(videoPath, streamIndex, outPathBase) {
 // can be a prefix of the video's, or vice versa, since release-tag suffixes
 // commonly differ between the two).
 function hasExistingSubtitlesForVideo(folderPath, baseName) {
-    const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    const baseToken = normalize(baseName);
     let files;
     try {
         files = fs.readdirSync(folderPath);
     } catch (_err) {
         return false;
     }
-    return files.some((f) => {
-        if (!/\.(srt|vtt)$/i.test(f)) return false;
-        const fileBase = path.parse(f).name;
-        const fileToken = normalize(f);
-        return f.startsWith(`${baseName}.`)
-            || baseName.startsWith(`${fileBase}.`)
-            || fileToken.includes(baseToken)
-            || baseToken.includes(fileToken);
-    });
+    return files.some((f) => /\.(srt|vtt)$/i.test(f) && isSubtitleRelatedToVideo(f, baseName));
 }
 
 // Extracts embedded subtitle tracks from a source video into standalone

@@ -36,6 +36,7 @@ const {
 } = require('../services/StoragePathResolver');
 
 const MediaService = require('../services/MediaService');
+const { normalizeSubtitleToken, isSubtitleRelatedToVideo } = require('../services/SubtitleFileMatching');
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
@@ -822,10 +823,6 @@ function preferredSubtitleLanguages() {
     return raw.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
 }
 
-function normalizeSubtitleToken(value = '') {
-    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
 function parseEmbeddedSubtitleFileMeta(fileName) {
     const parsed = String(fileName || '').match(/\.sub\.(\d+)\.([a-z]{2,3})\.(srt|vtt)$/i);
     if (!parsed) return null;
@@ -965,7 +962,6 @@ function extractEmbeddedSubtitleSet(videoPath, maxTracks = 8) {
 function listSubtitleCandidatesForVideo(videoPath, options = {}) {
     const dir = path.dirname(videoPath);
     const base = path.parse(videoPath).name;
-    const baseToken = normalizeSubtitleToken(base);
     const includeEmbedded = options.includeEmbedded !== false;
     // A season folder is shared by every episode's video file, so a bare
     // "English.srt"/"English.vtt" sitting in it can't be safely attributed to
@@ -986,19 +982,7 @@ function listSubtitleCandidatesForVideo(videoPath, options = {}) {
     for (const file of files) {
         const filePath = path.join(dir, file);
         const fileToken = normalizeSubtitleToken(file);
-        const fileBase = path.parse(file).name;
-        // Bidirectional: a subtitle is often named just "Title.Year" while the
-        // video carries extra release-tag suffixes ("Title.Year.1080p.
-        // BluRay.x264.YIFY.web") - the subtitle's name is a prefix of the
-        // video's, not the other way around, so the match must check both
-        // directions (both as raw filename prefixes and as normalized-token
-        // containment, since punctuation/casing can differ between the two).
-        const looksRelatedToVideo = file.startsWith(`${base}.`)
-            || base.startsWith(`${fileBase}.`)
-            || (allowGenericEnglishFallback && (file === 'English.srt' || file === 'English.vtt'))
-            || fileToken.includes(baseToken)
-            || baseToken.includes(fileToken);
-        if (!looksRelatedToVideo) continue;
+        if (!isSubtitleRelatedToVideo(file, base, { allowGenericEnglishFallback })) continue;
 
         const embeddedMeta = parseEmbeddedSubtitleFileMeta(file);
         const langHint = embeddedMeta?.lang || (() => {
@@ -1042,18 +1026,8 @@ function listSubtitleCandidatesForDirectory(dirPath, options = {}) {
         const filePath = path.join(dirPath, file);
         const fileToken = normalizeSubtitleToken(file);
 
-        if (normalizedBaseHint) {
-            const fileBase = path.parse(file).name;
-            // Bidirectional for the same reason as listSubtitleCandidatesForVideo:
-            // a subtitle is often named shorter than the hint (just "Title.Year"
-            // vs a release-tag-suffixed video name).
-            const looksRelatedToHint = file.startsWith(`${baseHint}.`)
-                || baseHint.startsWith(`${fileBase}.`)
-                || file === 'English.srt'
-                || file === 'English.vtt'
-                || fileToken.includes(normalizedBaseHint)
-                || normalizedBaseHint.includes(fileToken);
-            if (!looksRelatedToHint) continue;
+        if (normalizedBaseHint && !isSubtitleRelatedToVideo(file, baseHint, { allowGenericEnglishFallback: true })) {
+            continue;
         }
 
         const langHint = (() => {
