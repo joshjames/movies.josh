@@ -965,7 +965,14 @@ function extractEmbeddedSubtitleSet(videoPath, maxTracks = 8) {
 function listSubtitleCandidatesForVideo(videoPath, options = {}) {
     const dir = path.dirname(videoPath);
     const base = path.parse(videoPath).name;
+    const baseToken = normalizeSubtitleToken(base);
     const includeEmbedded = options.includeEmbedded !== false;
+    // A season folder is shared by every episode's video file, so a bare
+    // "English.srt"/"English.vtt" sitting in it can't be safely attributed to
+    // one specific episode - matching it unconditionally was why the same
+    // subtitle played for every episode in a season. Movies are one-video-
+    // per-folder, so the same filename there is unambiguous.
+    const allowGenericEnglishFallback = options.isSeriesEpisode !== true;
 
     if (includeEmbedded) {
         extractEmbeddedSubtitleSet(videoPath, parseInt(process.env.SUBTITLE_MAX_TRACKS || '8', 10) || 8);
@@ -979,7 +986,18 @@ function listSubtitleCandidatesForVideo(videoPath, options = {}) {
     for (const file of files) {
         const filePath = path.join(dir, file);
         const fileToken = normalizeSubtitleToken(file);
-        const looksRelatedToVideo = file.startsWith(`${base}.`) || file === 'English.srt' || file === 'English.vtt' || fileToken.includes(normalizeSubtitleToken(base));
+        const fileBase = path.parse(file).name;
+        // Bidirectional: a subtitle is often named just "Title.Year" while the
+        // video carries extra release-tag suffixes ("Title.Year.1080p.
+        // BluRay.x264.YIFY.web") - the subtitle's name is a prefix of the
+        // video's, not the other way around, so the match must check both
+        // directions (both as raw filename prefixes and as normalized-token
+        // containment, since punctuation/casing can differ between the two).
+        const looksRelatedToVideo = file.startsWith(`${base}.`)
+            || base.startsWith(`${fileBase}.`)
+            || (allowGenericEnglishFallback && (file === 'English.srt' || file === 'English.vtt'))
+            || fileToken.includes(baseToken)
+            || baseToken.includes(fileToken);
         if (!looksRelatedToVideo) continue;
 
         const embeddedMeta = parseEmbeddedSubtitleFileMeta(file);
@@ -1025,10 +1043,16 @@ function listSubtitleCandidatesForDirectory(dirPath, options = {}) {
         const fileToken = normalizeSubtitleToken(file);
 
         if (normalizedBaseHint) {
+            const fileBase = path.parse(file).name;
+            // Bidirectional for the same reason as listSubtitleCandidatesForVideo:
+            // a subtitle is often named shorter than the hint (just "Title.Year"
+            // vs a release-tag-suffixed video name).
             const looksRelatedToHint = file.startsWith(`${baseHint}.`)
+                || baseHint.startsWith(`${fileBase}.`)
                 || file === 'English.srt'
                 || file === 'English.vtt'
-                || fileToken.includes(normalizedBaseHint);
+                || fileToken.includes(normalizedBaseHint)
+                || normalizedBaseHint.includes(fileToken);
             if (!looksRelatedToHint) continue;
         }
 
@@ -1251,7 +1275,8 @@ function resolveSubtitleContextForRequest(mediaId, season, episode, requestedFil
             videoPath,
             folderPath: path.dirname(videoPath),
             metadata,
-            baseHint: path.basename(videoPath)
+            baseHint: path.basename(videoPath),
+            isSeriesEpisode: normalizeMediaIdInput(mediaId).startsWith('series/') && Number.isFinite(season) && Number.isFinite(episode)
         };
     }
 
@@ -1927,7 +1952,7 @@ function buildEpisodeManagerItems(showFolder, showPath, seriesData) {
                 const subtitleRelativePath = sanitizeSeriesRelativePath(ep.subtitleRelativePath || '');
                 const videoPath = localRelativePath ? resolveRelativePathInSeriesRoots(localRelativePath) : '';
                 const subtitleCandidates = (videoPath && fs.existsSync(videoPath))
-                    ? listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: false }).map((candidate) => ({
+                    ? listSubtitleCandidatesForVideo(videoPath, { includeEmbedded: false, isSeriesEpisode: true }).map((candidate) => ({
                         file: candidate.file,
                         relativePath: sanitizeSeriesRelativePath(candidate.relativePath || ''),
                         lang: candidate.langHint || ''
@@ -3915,7 +3940,7 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
         const { metadata } = subtitleContext;
 
         const candidates = subtitleContext.mode === 'video'
-            ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true })
+            ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true, isSeriesEpisode: subtitleContext.isSeriesEpisode })
             : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint });
         const selectedDefault = String(metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || '').trim();
         return res.json({
@@ -3951,7 +3976,7 @@ router.get('/subtitles/:id', async (req, res) => {
         const { metadata } = subtitleContext;
 
         const candidates = subtitleContext.mode === 'video'
-            ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true })
+            ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true, isSeriesEpisode: subtitleContext.isSeriesEpisode })
             : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint });
         const selected = pickSubtitleCandidate(candidates, {
             ...req.query,
