@@ -5,9 +5,17 @@
 'use strict';
 
 // player.html builds a series episode's mediaId as `${folder}-S${season}E${episode}`
-// (no zero-padding - see playEpisodeIndex in public/player.html). Movies use
-// the raw library id directly (see currentMediaId assignment in player.html).
-const EPISODE_MEDIA_ID_PATTERN = /^(.+)-S(\d+)E(\d+)$/;
+// (no zero-padding - see playEpisodeIndex in public/player.html) - but every
+// real write path (profile.routes.js's /playback/sync and /playback/complete)
+// runs it through sanitizeMediaId() first, which collapses dashes/underscores/
+// whitespace to dots, so what's actually ever stored is
+// "<folder-with-dots>.S<season>E<episode>" (e.g. "Lanterns.2026.S1E2"), never
+// the literal dash form. Confirmed live: this pattern requiring a dash never
+// matched a single real stored mediaId, silently breaking series resolution
+// for Continue Watching and watched-episode tracking since both were built.
+// Matches either separator so it also still catches a literal dash if
+// anything is ever passed in unsanitized.
+const EPISODE_MEDIA_ID_PATTERN = /^(.+)[-.]S(\d+)E(\d+)$/i;
 
 function pickImdbId(media = {}) {
     return media.imdbId || media.imdbID || media.imdb_id || media.enrichment?.imdbId || '';
