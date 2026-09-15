@@ -24,6 +24,8 @@ NPM_URL=$(grep -E '^NPM_URL=' .env | head -n1 | cut -d '=' -f2- || true)
 NPM_ADMIN_USER=$(grep -E '^(NPM_ADMIN_USER|PM_ADMIN_USER)=' .env | head -n1 | cut -d '=' -f2- || true)
 NPM_ADMIN_PASSWORD=$(grep -E '^NPM_ADMIN_PASSWORD=' .env | head -n1 | cut -d '=' -f2- || true)
 NPM_PROXY_DOMAINS=$(grep -E '^NPM_PROXY_DOMAINS=' .env | head -n1 | cut -d '=' -f2- || true)
+SYDNEY_SSH_HOST=$(grep -E '^SYDNEY_SSH_HOST=' .env | head -n1 | cut -d '=' -f2- || true)
+SYDNEY_REPO_PATH=$(grep -E '^SYDNEY_REPO_PATH=' .env | head -n1 | cut -d '=' -f2- || true)
 
 STAMP=$(date -u +%Y%m%d%H%M%S)
 SHORT_SHA=$(git rev-parse --short HEAD)
@@ -113,3 +115,28 @@ echo "Version endpoint (inside container): /api/runtime/version"
 echo "Metrics endpoint: /api/runtime/metrics"
 echo ""
 echo "Next step: in NPM, update proxy destination to http://${APP_CONTAINER_NAME}:3000 when ready."
+
+# ---------------------------------------------------------------------------
+# Propagate to the Sydney satellite: SSH in and `git pull`, which triggers
+# Sydney's own copy of this same script there (with DEPLOY_WORKERS=false, per
+# the comment above). Only for the real production branch, not experimental
+# branches (e.g. edgeplayer) that shouldn't get pushed to Sydney automatically.
+#
+# This whole block is best-effort and must never fail the script - `set -e`
+# is active above, and this script runs from LA's pre-push hook, so an
+# uncaught failure here would block every future `git push`, not just this
+# one deploy. Every command that could fail is explicitly guarded with
+# `|| ...` so nothing here ever propagates a nonzero exit.
+# ---------------------------------------------------------------------------
+if [[ "$CURRENT_BRANCH" == "v2" ]]; then
+    SYDNEY_SSH_HOST="${SYDNEY_SSH_HOST:-epic@sydney.myapo.cloud}"
+    SYDNEY_REPO_PATH="${SYDNEY_REPO_PATH:-~/movie-streamer}"
+    echo ""
+    echo "==> Syncing code to Sydney satellite (${SYDNEY_SSH_HOST}:${SYDNEY_REPO_PATH})"
+    if ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$SYDNEY_SSH_HOST" \
+        "cd ${SYDNEY_REPO_PATH} && git pull" 2>&1; then
+        echo "==> Sydney sync triggered successfully."
+    else
+        echo "⚠️  WARNING: Sydney sync failed or unreachable - it will keep running its current code until the next successful sync. This did NOT fail the LA deployment above." >&2
+    fi
+fi
