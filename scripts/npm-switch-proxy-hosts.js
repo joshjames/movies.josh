@@ -23,6 +23,8 @@ function withDefaultDomains(configured = []) {
   const defaults = [
     'any.movie',
     'www.any.movie',
+    'au.any.movie',
+    'aus.any.movie',
     'anyseries.online',
     'anymovie.app',
     'anymovie.digital',
