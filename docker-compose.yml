@@ -55,6 +55,14 @@ services:
       ENABLE_CLOUDSYNC_WORKER: "false"
     expose:
       - "3000"
+    ports:
+      # WireGuard-only (bound to a specific host IP, not 0.0.0.0) - lets a
+      # satellite region's own web container reach this one directly for
+      # cross-region control calls (e.g. forwarding an add-torrent request to
+      # LA), without touching the public interface at all. Same pattern the
+      # worker services below already use for reachability across the tunnel,
+      # just deliberately IP-bound here instead of open on every interface.
+      - "${WIREGUARD_HOST_IP:-10.100.0.1}:${APP_CONTROL_HOST_PORT:-6000}:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
