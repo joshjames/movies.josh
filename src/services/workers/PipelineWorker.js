@@ -564,7 +564,23 @@ async function enqueueCompletedTorrent(torrent) {
         null;
 
     const rawPath = resolveTorrentDownloadPath(torrent);
-    const resolvedFolderName = rawPath ? path.basename(rawPath) : (torrent.name || null);
+    // path.basename(rawPath) silently produces the wrong thing whenever
+    // qBittorrent's reported content_path points straight at a single video
+    // file inside the release folder rather than the folder itself - it
+    // took the *filename* as the "folder name", so every downstream folder
+    // lookup searched for a file named like a video file and never found it
+    // (confirmed via a real failure). When that happens, the file's own
+    // parent directory name is the real folder name - and it's also more
+    // reliable than torrent.name here, which can itself be a truncated
+    // display name inherited from the magnet's `dn` parameter (also
+    // confirmed via the same failure: torrent.name cut off mid-word while
+    // the actual on-disk folder name, recoverable from content_path's
+    // parent, was the real, full, untruncated one).
+    const rawPathLooksLikeFile = rawPath ? /\.(mkv|mp4|avi|mov|wmv|m4v|ts|webm)$/i.test(rawPath) : false;
+    const resolvedFolderName =
+        (rawPathLooksLikeFile ? path.basename(path.dirname(rawPath)) : null) ||
+        torrent.name ||
+        (rawPath ? path.basename(rawPath) : null);
     const torrentQueueContext = normalizeQueueContext(
         {
             ...(recoveredMappings?.queueContext || {}),
