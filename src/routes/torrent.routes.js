@@ -3,6 +3,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { forwardToPrimaryIfSatellite } = require('../middleware/controlForward');
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
@@ -1229,6 +1230,34 @@ function searchErrorResponse(err) {
         }
     };
 }
+
+// Everything below touches qBittorrent - directly, or via a job whose
+// torrent lives on whichever region's qBittorrent it was added to. On a
+// satellite region, forward all of it to the primary instead of running any
+// of it locally (no-op on the primary itself). Scoped to this router's own
+// paths explicitly rather than a blanket router.use(), because this router
+// is also mounted bare at /api in server.js - an unconditional first
+// middleware here would intercept unrelated /api/* requests (e.g.
+// /api/profile/*) that fall through to it before reaching their real router.
+router.use([
+    '/search/plugins',
+    '/search/start',
+    '/search/status',
+    '/search/results',
+    '/search/delete',
+    '/downloader/add',
+    '/downloader/add-auto',
+    '/yts/add',
+    '/pipeline/status',
+    '/job/:jobId/pause',
+    '/job/:jobId/resume',
+    '/job/:jobId/cancel',
+    '/admin/queue/job/:jobId/alternate-source',
+    '/job/:jobId/alternate-source',
+    '/job/:jobId',
+    '/jobs/failed',
+    '/job/:jobId/retry'
+], forwardToPrimaryIfSatellite);
 
 // GET: /api/torrent/search/plugins
 router.get('/search/plugins', async (_req, res) => {

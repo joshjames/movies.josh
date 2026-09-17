@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 
 const router = express.Router();
+const { forwardToPrimaryIfSatellite } = require('../middleware/controlForward');
 const logger = require('../services/logger');
 const TorrentSearchService = require('../services/TorrentSearchService');
 const { searchIndex: searchTvIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
@@ -353,6 +354,13 @@ function searchErrorResponse(err) {
         }
     };
 }
+
+// These five talk to this host's own qBittorrent search API - only the
+// primary region runs that against real search plugins now, so a satellite
+// forwards them there instead (see torrent.routes.js for the same pattern).
+// /health and /internal/resolve don't touch qBittorrent (local title index +
+// external OMDB lookups) so they stay local on every region.
+router.use(['/plugins', '/start', '/status', '/results', '/delete'], forwardToPrimaryIfSatellite);
 
 router.get('/health', async (_req, res) => {
     return res.json({
