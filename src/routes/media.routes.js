@@ -37,6 +37,7 @@ const {
 
 const MediaService = require('../services/MediaService');
 const { normalizeSubtitleToken, isSubtitleRelatedToVideo } = require('../services/SubtitleFileMatching');
+const { getAllJobs } = require('../services/PipelineQueueService');
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
@@ -1292,6 +1293,61 @@ function resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile
 
     const sourceVideo = findSourceVideoInFolder(folderPath);
     return sourceVideo ? path.join(folderPath, sourceVideo) : null;
+}
+
+const TERMINAL_JOB_STATUSES = new Set(['COMPLETE', 'COMPLETED', 'FAILED', 'CANCELLED']);
+
+function normalizeImdbIdForJobMatch(value) {
+    const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
+    if (!/^\d{5,10}$/.test(cleaned)) return null;
+    return `tt${cleaned}`;
+}
+
+// A satellite region has no local video file for anything still mid-pipeline
+// on the primary (its folder-metadata mirrors down every few minutes via a
+// host-level rsync cron, but the video payload itself is deliberately
+// excluded from that sync until cloudsync finishes and the file becomes
+// streamable from cloud storage instead). Without this check, that in-between
+// window looked identical to a genuinely missing/bad mediaId - a confusing
+// hard error rather than "come back in a few minutes". The job queue is a
+// reliable signal for this because it's Redis-backed and every region's
+// Redis is a live replica of the primary's, so this is accurate everywhere,
+// not just on the primary.
+async function isMediaStillProcessing(mediaId, season, episode) {
+    try {
+        const library = await getLibrary();
+        const cleanId = String(mediaId || '').trim().toLowerCase();
+        let imdbId = null;
+
+        if (cleanId.startsWith('series/')) {
+            const show = (library.shows || []).find((s) => String(s.id).toLowerCase() === cleanId);
+            imdbId = show?.imdbId || show?.imdb_id || null;
+        } else {
+            const movie = (library.movies || []).find((m) => String(m.id).toLowerCase() === cleanId);
+            imdbId = movie?.imdbId || movie?.imdb_id || null;
+        }
+
+        const targetImdbId = normalizeImdbIdForJobMatch(imdbId);
+        if (!targetImdbId) return false;
+
+        const jobs = await getAllJobs();
+        return jobs.some((job) => {
+            if (TERMINAL_JOB_STATUSES.has(job.status)) return false;
+            if (normalizeImdbIdForJobMatch(job.imdbId) !== targetImdbId) return false;
+
+            if (Number.isFinite(season)) {
+                const queueContext = job.payload?.queueContext || {};
+                const jobSeason = parseInt(queueContext.season, 10);
+                const jobEpisode = parseInt(queueContext.episode, 10);
+                if (Number.isFinite(jobSeason) && jobSeason !== season) return false;
+                if (Number.isFinite(episode) && Number.isFinite(jobEpisode) && jobEpisode !== episode) return false;
+            }
+
+            return true;
+        });
+    } catch (_err) {
+        return false;
+    }
 }
 
 function readMovieMetadataIfPresent(mediaId) {
@@ -3805,6 +3861,13 @@ router.get('/playback/:id', async (req, res) => {
 
         const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
         if (!videoPath || !fs.existsSync(videoPath)) {
+            if (await isMediaStillProcessing(mediaId, season, episode)) {
+                return res.status(425).json({
+                    success: false,
+                    error: "This title is still being prepared and isn't ready to stream yet. Please check back shortly.",
+                    code: 'MEDIA_STILL_PROCESSING'
+                });
+            }
             return res.status(404).send('No playable video target found.');
         }
 

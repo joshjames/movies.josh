@@ -752,6 +752,43 @@
             }
         }
 
+        // Only used for a fresh load (initial movie load, or switching to a new
+        // episode) - never for an in-session source swap like an audio track
+        // change, which already has its own probe (switchAudioTrack above) and
+        // is by definition playing something that already loaded fine once.
+        // A satellite region can have a title's metadata (and so its listing)
+        // synced down before the video file itself is - the server tells us
+        // that with a 425, which the <video> element's own error event can't
+        // read a status code or body from, hence probing here first instead of
+        // just setting player.src() and reacting to a generic error afterward.
+        async function tryApplyInitialVideoSource() {
+            const targetUrl = currentRemoteStreamUrl || buildPlaybackUrl();
+
+            if (!currentRemoteStreamUrl) {
+                try {
+                    const probe = await fetch(targetUrl, { headers: { Range: 'bytes=0-1' } });
+                    if (probe.status === 425) {
+                        let message = "This title is still being prepared and isn't ready to stream yet. Please check back shortly.";
+                        try {
+                            const body = await probe.json();
+                            if (body?.error) message = body.error;
+                        } catch (_parseErr) { /* non-JSON error body */ }
+
+                        qualityTag.innerText = 'PREPARING - CHECK BACK SOON';
+                        qualityTag.style.background = '#b45309';
+                        player.error({ code: 0, message });
+                        return false;
+                    }
+                } catch (_err) {
+                    // Don't block playback on a probe failure - fall through and
+                    // let normal player error handling take over if it's really broken.
+                }
+            }
+
+            applyVideoSource(false);
+            return true;
+        }
+
         async function refreshAudioTracks() {
             audioTracks = [];
             lastAppliedAudioTrack = 'auto';
@@ -1044,7 +1081,8 @@
                         currentPlaybackFile = deriveFileNameFromPath(targetStreamUrl);
                     }
 
-                    applyVideoSource(false);
+                    const applied = await tryApplyInitialVideoSource();
+                    if (!applied) return;
                     await refreshAudioTracks();
                     await refreshSubtitleTracks();
                     loadSubtitles();
@@ -1087,7 +1125,7 @@
         /**
          * TV Playback Worker Logic Engine
          */
-        function playEpisodeIndex(index) {
+        async function playEpisodeIndex(index) {
             if (index < 0 || index >= currentTvPlaylist.length) return;
 
             const episode = currentTvPlaylist[index];
@@ -1108,7 +1146,9 @@
             currentMediaId = `${cleanFolder}-S${seasonParam}E${episode.episodeNumber}`;
             hasMarkedCurrentTitleFinished = false;
 
-            applyVideoSource(false);
+            const applied = await tryApplyInitialVideoSource();
+            if (!applied) return;
+
             qualityTag.innerText = `TV: S${seasonParam}E${episode.episodeNumber}`;
             qualityTag.style.background = "#6366f1";
 
