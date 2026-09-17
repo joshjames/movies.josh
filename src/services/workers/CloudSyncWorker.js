@@ -147,7 +147,11 @@ async function processSeriesFolder({ folderPath, folderName, imdbId, executeClou
         }
     }
 
-    const completePatch = { pipelineState: { currentStep: 'COMPLETE', lastUpdated: new Date().toISOString() } };
+    // 'COMPLETED' (not 'COMPLETE') to match the movie path below and every
+    // other pipelineState.currentStep writer (TranscoderWorker.js,
+    // admin.routes.js) - PipelineWorker.js translates either spelling to the
+    // job queue's own 'COMPLETE' convention at the one place they meet.
+    const completePatch = { pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() } };
 
     if (!executeCloudUpload) {
         return {

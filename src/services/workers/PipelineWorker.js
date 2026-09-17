@@ -915,6 +915,16 @@ async function processNextJob(job) {
             CLOUDSYNC: 'COMPLETE'
         }[job.currentStep] || 'COMPLETE';
 
+        // metadata.json's own pipelineState.currentStep spells a finished
+        // pipeline 'COMPLETED' (CloudSyncWorker.js, TranscoderWorker.js,
+        // admin.routes.js); the job queue's status/currentStep spell it
+        // 'COMPLETE'. nextStep above is read straight from the worker
+        // response for persistPipelinePatchToDisk()'s metadata.json write
+        // below, so it keeps whichever spelling the worker used - queueStep
+        // is the one translated value the job queue itself should ever see.
+        const isPipelineDone = nextStep === 'COMPLETE' || nextStep === 'COMPLETED';
+        const queueStep = isPipelineDone ? 'COMPLETE' : nextStep;
+
         const resolvedImdbId = normalizeImdbId(
             patchData.imdbId ||
             resolvedJobImdbId ||
@@ -947,8 +957,8 @@ async function processNextJob(job) {
         );
 
         const updated = await updateJob(job, {
-            status: response.data?.success === false ? 'FAILED' : (nextStep === 'COMPLETE' ? 'COMPLETE' : 'QUEUED'),
-            currentStep: response.data?.success === false ? 'FAILED' : nextStep,
+            status: response.data?.success === false ? 'FAILED' : (isPipelineDone ? 'COMPLETE' : 'QUEUED'),
+            currentStep: response.data?.success === false ? 'FAILED' : queueStep,
             imdbId: resolvedImdbId,
             payload: mergedPayload,
             history: [
