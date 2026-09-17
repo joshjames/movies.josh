@@ -122,6 +122,29 @@ services:
     ports:
       - "${APP_CLOUDSYNC_HOST_PORT:-5004}:5004"
 
+  # Primary-region-only (see scripts/deploy-compose-versioned.sh's
+  # DEPLOY_SERVICES - never started on a satellite). Runs BullMQ's
+  # metadata-mirror job: replaces the old host-level rsync cron with an
+  # in-app scheduled job, still using rsync itself for the actual transfer -
+  # see src/services/workers/SchedulerWorker.js for why. Needs its own
+  # volumes block (not just `<<: *app-common`) to add the dedicated,
+  # restricted-by-source-IP SSH key alongside the usual storage mounts.
+  scheduler-worker:
+    <<: *app-common
+    container_name: movie-streamer-scheduler-worker
+    cpus: "0.5"
+    command: ["node", "src/services/workers/SchedulerWorker.js"]
+    environment:
+      SATELLITE_SYNC_TARGETS: "${SATELLITE_SYNC_TARGETS:-sydney=epic@10.100.0.2}"
+    volumes:
+      - /home/epic/movies:/app/storage/movies
+      - /data/blockchain/media/Series:/app/storage/series
+      - /home/epic/movie-streamer-data:/app/metadata
+      - /home/epic/movie-streamer/metadata:/app/catalog-metadata:ro
+      - /home/epic/tobedel:/app/archive
+      - /home/epic/.config/subliminal:/root/.config/subliminal:ro
+      - /home/epic/.ssh/id_ed25519_scheduler_sync:/app/.ssh/id_ed25519_scheduler_sync:ro
+
   # --- 🧠 HIGH-PERFORMANCE MEMORY DATA ENGINE ---
   redis:
     image: redis:7-alpine

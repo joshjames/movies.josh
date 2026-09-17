@@ -1,0 +1,126 @@
+// src/services/workers/SchedulerWorker.js
+// Dedicated always-on process (its own container, see docker-compose.yml's
+// scheduler-worker service) driving this app's BullMQ jobs. Starts with the
+// metadata-mirror job: mirrors metadata.json/subtitles/covers/etc from this
+// (primary) region down to every registered satellite, replacing the
+// host-level rsync cron that did this before - same rsync-based transfer,
+// now owned by the app and triggered by BullMQ's repeatable-job scheduling
+// instead of an external crontab entry.
+'use strict';
+
+const { execFile } = require('child_process');
+const { Worker } = require('bullmq');
+const { getSchedulerRedisConnection } = require('../BullMQConnection');
+const { METADATA_MIRROR_QUEUE_NAME, ensureMetadataMirrorSchedule } = require('../SchedulerService');
+const logger = require('../logger');
+
+const SSH_KEY_PATH = process.env.SCHEDULER_SYNC_SSH_KEY || '/app/.ssh/id_ed25519_scheduler_sync';
+
+// "name=sshTarget" pairs, comma-separated, e.g.
+// "sydney=epic@10.100.0.2,tokyo=epic@10.100.0.3" - add one entry per future
+// satellite, nothing else here needs to change.
+function parseSatelliteTargets() {
+    const raw = String(process.env.SATELLITE_SYNC_TARGETS || 'sydney=epic@10.100.0.2').trim();
+    return raw
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+            const [name, sshTarget] = entry.split('=').map((s) => s.trim());
+            return { name, sshTarget };
+        })
+        .filter((t) => t.name && t.sshTarget);
+}
+
+// Deliberately excludes actual video payloads (large, and served instead by
+// cloudsync/cloud-fallback playback) by extension - same as the host cron
+// script this replaces.
+const VIDEO_EXCLUDE_ARGS = ['.mp4', '.MP4', '.mkv', '.MKV', '.mpg', '.MPG', '.mpeg', '.MPEG', '.avi', '.AVI', '.m4v', '.M4V', '.ts', '.TS', '.webm', '.WEBM']
+    .flatMap((ext) => ['--exclude', `*${ext}`]);
+
+// [container source path] -> [satellite's own host path]. The destination
+// is the satellite's real filesystem, written by the remote rsync server
+// process spawned over SSH - not through any container mount on that side.
+// Every source path here is already mounted into this container via the
+// same x-app-common volumes every other service shares (see
+// docker-compose.yml), so no new mounts were needed beyond the SSH key.
+const SYNC_LEGS = [
+    { label: 'movies', src: '/app/storage/movies', dest: '/home/epic/movies', excludeVideo: true },
+    { label: 'series', src: '/app/storage/series', dest: '/data/blockchain/media/Series', excludeVideo: true },
+    { label: 'catalog-metadata', src: '/app/catalog-metadata', dest: '/home/epic/movie-streamer/metadata', excludeVideo: false },
+    { label: 'user-profiles', src: '/app/metadata', dest: '/home/epic/movie-streamer-data', excludeVideo: false },
+    { label: 'archive', src: '/app/archive', dest: '/home/epic/tobedel', excludeVideo: false },
+    { label: 'subliminal-config', src: '/root/.config/subliminal', dest: '/home/epic/.config/subliminal', excludeVideo: false }
+];
+
+function runRsyncLeg(target, leg) {
+    return new Promise((resolve) => {
+        const args = [
+            '-az', '--no-owner', '--no-group',
+            '-e', `ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new`,
+            ...(leg.excludeVideo ? VIDEO_EXCLUDE_ARGS : []),
+            `${leg.src}/`,
+            `${target.sshTarget}:${leg.dest}/`
+        ];
+
+        execFile('rsync', args, { timeout: 120000 }, (err, _stdout, stderr) => {
+            if (err) {
+                resolve({ target: target.name, leg: leg.label, success: false, error: (stderr || '').trim() || err.message });
+            } else {
+                resolve({ target: target.name, leg: leg.label, success: true });
+            }
+        });
+    });
+}
+
+async function processMetadataMirrorJob() {
+    const targets = parseSatelliteTargets();
+    const results = [];
+
+    for (const target of targets) {
+        // Sequential per target/leg - keeps concurrent rsync/ssh processes
+        // bounded, and matches the original cron script's own behavior of
+        // logging one leg's failure without aborting the rest.
+        for (const leg of SYNC_LEGS) {
+            const result = await runRsyncLeg(target, leg);
+            results.push(result);
+            if (!result.success) {
+                logger.warn(`[Scheduler] metadata-mirror leg '${leg.label}' -> ${target.name} failed: ${result.error}`);
+            }
+        }
+    }
+
+    const failed = results.filter((r) => !r.success);
+    if (failed.length > 0) {
+        throw new Error(`${failed.length}/${results.length} sync leg(s) failed: ${failed.map((f) => `${f.target}/${f.leg}`).join(', ')}`);
+    }
+
+    return { syncedLegs: results.length, targets: targets.map((t) => t.name) };
+}
+
+async function main() {
+    await ensureMetadataMirrorSchedule();
+
+    const worker = new Worker(
+        METADATA_MIRROR_QUEUE_NAME,
+        async (job) => {
+            logger.debug(`[Scheduler] Running metadata-mirror job ${job.id}`);
+            return processMetadataMirrorJob();
+        },
+        { connection: getSchedulerRedisConnection(), concurrency: 1 }
+    );
+
+    worker.on('completed', (job) => {
+        logger.debug(`[Scheduler] metadata-mirror job ${job.id} completed.`);
+    });
+    worker.on('failed', (job, err) => {
+        logger.error(`[Scheduler] metadata-mirror job ${job?.id} failed: ${err.message}`);
+    });
+
+    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror queue active.');
+}
+
+main().catch((err) => {
+    logger.error(`[Scheduler] SchedulerWorker fatal startup error: ${err.message}`);
+    process.exit(1);
+});

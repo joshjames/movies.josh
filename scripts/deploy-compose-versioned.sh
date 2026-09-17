@@ -64,7 +64,7 @@ echo "==> Compose project: ${COMPOSE_PROJECT_NAME}"
 DEPLOY_WORKERS=${DEPLOY_WORKERS:-true}
 DEPLOY_SERVICES=(movie-streamer)
 if [[ "$DEPLOY_WORKERS" == "true" ]]; then
-    DEPLOY_SERVICES+=(pipeline-runner ingest-worker metadata-worker subtitle-worker transcoder-worker cloudsync-worker)
+    DEPLOY_SERVICES+=(pipeline-runner ingest-worker metadata-worker subtitle-worker transcoder-worker cloudsync-worker scheduler-worker)
 fi
 echo "==> Deploy workers: ${DEPLOY_WORKERS} (services: ${DEPLOY_SERVICES[*]})"
 
