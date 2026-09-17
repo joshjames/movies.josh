@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const readline = require('readline');
+const { writeIndex: writeTvSeriesIndex } = require('../src/services/TvSeriesIndexService');
 
 const ROOT = path.join(__dirname, '..');
 const DATA_DIR = path.join(ROOT, '.data');
@@ -319,6 +320,16 @@ async function buildTvIndex() {
   };
 
   writeJson('tv-show-index.json', payload);
+
+  // TvSeriesIndexService.loadIndex() only reads this legacy file as a
+  // one-time migration fallback when tv-series-index.json (its real,
+  // "primary" file) is still empty - once primary has ever been non-empty,
+  // every subsequent refresh here was silently ignored by search/lookup
+  // forever, since nothing else ever wrote to the primary file again. Write
+  // through the service so both files - and the live app - actually stay
+  // in sync on every refresh.
+  writeTvSeriesIndex(payload);
+
   writeJson('tv-show-index.csv', [
     ['imdbId', 'title', 'originalTitle', 'startYear', 'endYear', 'genres', 'averageRating', 'numVotes', 'episodeCount', 'searchText'].join(','),
     ...items.map((item) => [

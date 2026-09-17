@@ -330,6 +330,14 @@ async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season
     const seasonNum = Number(season);
     if (!Number.isFinite(seasonNum) || seasonNum <= 0) return [];
 
+    // OMDb's own TV episode coverage lags noticeably for brand-new/still-
+    // airing shows - it can return Response:"True" with a technically-valid
+    // but useless placeholder (e.g. one episode, no release date at all,
+    // while IMDb's own dataset already lists ten). Kept as a last-resort
+    // fallback below in case TMDb turns out to have nothing either, rather
+    // than accepted outright the moment OMDb merely responds successfully.
+    let omdbFallbackEpisodes = null;
+
     const apiKey = getOmdbApiKey();
     if (apiKey && canUseOmdb() && (imdbId || title)) {
         let url = `http://www.omdbapi.com/?apikey=${encodeURIComponent(apiKey)}`;
@@ -347,7 +355,12 @@ async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season
             if (isOmdbAuthOrLimitError(data, response.status)) {
                 markOmdbCooldown(data.Error || `status ${response.status}`);
             } else if (data.Response === 'True' && Array.isArray(data.Episodes)) {
-                return normalizeSeasonEpisodes(data.Episodes);
+                const normalized = normalizeSeasonEpisodes(data.Episodes);
+                const looksUseless = normalized.length > 0 && normalized.every((ep) => !ep.Released || ep.Released === 'N/A');
+                if (!looksUseless) {
+                    return normalized;
+                }
+                omdbFallbackEpisodes = normalized;
             }
         } catch (err) {
             const status = err?.response?.status;
@@ -361,18 +374,19 @@ async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season
         }
     }
 
-    if (!hasTmdbCredentials()) return [];
+    if (!hasTmdbCredentials()) return omdbFallbackEpisodes || [];
 
     const tvId = await resolveTmdbTvId({ imdbId, title, tmdbId });
-    if (!tvId) return [];
+    if (!tvId) return omdbFallbackEpisodes || [];
 
     try {
         const seasonData = await tmdbGet(`/tv/${tvId}/season/${seasonNum}`, { language: 'en-US' });
         const episodes = Array.isArray(seasonData?.episodes) ? seasonData.episodes : [];
-        return normalizeSeasonEpisodes(episodes);
+        const normalizedTmdb = normalizeSeasonEpisodes(episodes);
+        return normalizedTmdb.length > 0 ? normalizedTmdb : (omdbFallbackEpisodes || []);
     } catch (err) {
         logger.warn(`⚠️ [MetadataProvider] TMDb season fetch failed: ${err.message}`);
-        return [];
+        return omdbFallbackEpisodes || [];
     }
 }
 
