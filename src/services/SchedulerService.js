@@ -18,20 +18,28 @@ function getMetadataMirrorQueue() {
     return new Queue(METADATA_MIRROR_QUEUE_NAME, { connection: getSchedulerRedisConnection() });
 }
 
-// Idempotent: BullMQ dedupes repeatable jobs sharing the same jobId + repeat
-// config, so calling this on every SchedulerWorker startup just confirms the
-// schedule instead of creating duplicates.
+// Idempotent: upsertJobScheduler updates the existing scheduler in place when
+// one already exists under this ID, so calling this on every SchedulerWorker
+// startup just confirms the schedule instead of creating duplicates.
+//
+// NOTE: BullMQ v5+ removed `repeat` as a `Queue.add()` option entirely - it's
+// silently ignored there now (the job just runs once, no error), so
+// `upsertJobScheduler` is the only thing that actually registers a recurring
+// job. Worth remembering since the old add-with-repeat pattern still shows up
+// in plenty of BullMQ examples/tutorials online.
 async function ensureMetadataMirrorSchedule() {
     const queue = getMetadataMirrorQueue();
     try {
-        await queue.add(
-            'sync',
-            {},
+        await queue.upsertJobScheduler(
+            METADATA_MIRROR_JOB_ID,
+            { every: METADATA_MIRROR_INTERVAL_MS },
             {
-                jobId: METADATA_MIRROR_JOB_ID,
-                repeat: { every: METADATA_MIRROR_INTERVAL_MS },
-                removeOnComplete: { count: 20 },
-                removeOnFail: { count: 20 }
+                name: 'sync',
+                data: {},
+                opts: {
+                    removeOnComplete: { count: 20 },
+                    removeOnFail: { count: 20 }
+                }
             }
         );
         logger.info(`[Scheduler] metadata-mirror repeatable job ensured (every ${METADATA_MIRROR_INTERVAL_MS}ms).`);
