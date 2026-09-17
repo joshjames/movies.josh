@@ -278,7 +278,16 @@ async function fetchMetadataWithFallback({ imdbId = '', title = '', year = '', c
 }
 
 async function resolveTmdbTvId({ imdbId = '', title = '', year = '', tmdbId = null } = {}) {
-    if (Number.isFinite(Number(tmdbId))) return Number(tmdbId);
+    // Number(null) is 0, not NaN - Number.isFinite(Number(tmdbId)) alone
+    // treats every caller passing tmdbId: null (the common case - see
+    // fetchSeasonEpisodesWithFallback's `metadata.tmdbId || null`) as
+    // "already resolved to TMDb id 0", short-circuiting past the real
+    // imdbId/title lookup below and returning a falsy id that callers then
+    // treat as "not found" - silently skipping TMDb entirely.
+    const numericTmdbId = Number(tmdbId);
+    if (tmdbId !== null && tmdbId !== undefined && Number.isFinite(numericTmdbId) && numericTmdbId > 0) {
+        return numericTmdbId;
+    }
 
     const normalizedImdb = String(imdbId || '').trim();
     if (normalizedImdb) {
