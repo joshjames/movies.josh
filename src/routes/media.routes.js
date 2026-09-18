@@ -1026,8 +1026,9 @@ function listSubtitleCandidatesForDirectory(dirPath, options = {}) {
     for (const file of files) {
         const filePath = path.join(dirPath, file);
         const fileToken = normalizeSubtitleToken(file);
+        const allowGenericEnglishFallback = options.isSeriesEpisode !== true;
 
-        if (normalizedBaseHint && !isSubtitleRelatedToVideo(file, baseHint, { allowGenericEnglishFallback: true })) {
+        if (normalizedBaseHint && !isSubtitleRelatedToVideo(file, baseHint, { allowGenericEnglishFallback })) {
             continue;
         }
 
@@ -1241,6 +1242,27 @@ function readMediaMetadataForMovieFolder(folderPath) {
     }
 }
 
+function resolveSeriesSeasonFolderPath(showFolder, seasonNumber) {
+    const showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
+    if (!showPath || !fs.existsSync(showPath)) return null;
+
+    let entries;
+    try {
+        entries = fs.readdirSync(showPath, { withFileTypes: true });
+    } catch (_err) {
+        return null;
+    }
+
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const match = entry.name.match(/season[\s._-]?(\d{1,3})/i);
+        if (match && parseInt(match[1], 10) === Number(seasonNumber)) {
+            return path.join(showPath, entry.name);
+        }
+    }
+    return null;
+}
+
 function resolveSubtitleContextForRequest(mediaId, season, episode, requestedFile) {
     const videoPath = resolveVideoPathForMediaRequest(mediaId, season, episode, requestedFile);
     if (videoPath && fs.existsSync(videoPath)) {
@@ -1257,6 +1279,25 @@ function resolveSubtitleContextForRequest(mediaId, season, episode, requestedFil
 
     const normalizedMediaId = normalizeMediaIdInput(mediaId);
     if (normalizedMediaId.startsWith('series/')) {
+        // No local video for this episode (e.g. a satellite region playing
+        // it from cloud storage with no local copy at all) - subtitles can
+        // still be served from the season folder if they were synced down,
+        // matched purely by season/episode number since there's no real
+        // video filename here to compare candidates against.
+        if (Number.isFinite(season) && Number.isFinite(episode)) {
+            const showFolder = normalizedMediaId.replace(/^series\//, '');
+            const seasonFolderPath = resolveSeriesSeasonFolderPath(showFolder, season);
+            if (seasonFolderPath) {
+                return {
+                    mode: 'folder',
+                    videoPath: null,
+                    folderPath: seasonFolderPath,
+                    metadata: {},
+                    baseHint: `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`,
+                    isSeriesEpisode: true
+                };
+            }
+        }
         return null;
     }
 
@@ -3978,7 +4019,7 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
 
         const candidates = subtitleContext.mode === 'video'
             ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true, isSeriesEpisode: subtitleContext.isSeriesEpisode })
-            : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint });
+            : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint, isSeriesEpisode: subtitleContext.isSeriesEpisode });
         const selectedDefault = String(metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || '').trim();
         return res.json({
             success: true,
@@ -4014,7 +4055,7 @@ router.get('/subtitles/:id', async (req, res) => {
 
         const candidates = subtitleContext.mode === 'video'
             ? listSubtitleCandidatesForVideo(subtitleContext.videoPath, { includeEmbedded: true, isSeriesEpisode: subtitleContext.isSeriesEpisode })
-            : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint });
+            : listSubtitleCandidatesForDirectory(subtitleContext.folderPath, { baseHint: subtitleContext.baseHint, isSeriesEpisode: subtitleContext.isSeriesEpisode });
         const selected = pickSubtitleCandidate(candidates, {
             ...req.query,
             preferredRelativePath: metadata.subtitleSelection?.defaultRelativePath || metadata.subtitleDefault || ''
