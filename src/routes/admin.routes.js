@@ -2029,12 +2029,23 @@ router.post('/manual-worker-run', async (req, res) => {
 
         let preflight = null;
         if (cleanWorker === 'TRANSCODE' && payload.contentType === 'series') {
-            const subtitleResponse = await axios.post(WORKER_ENDPOINTS.SUBTITLES, payload, { timeout: 1800000 });
-            if (subtitleResponse?.data?.success !== false) {
-                preflight = {
-                    worker: 'SUBTITLES',
-                    response: subtitleResponse.data
-                };
+            // Best-effort: a subtitles preflight hiccup (e.g. subtitle-worker
+            // mid-restart during a deploy) shouldn't block a manually-
+            // triggered transcode retry entirely - previously this call being
+            // unwrapped meant any failure here aborted the whole request and
+            // surfaced as a confusing "TRANSCODE failed: <subtitle-worker's
+            // own error>", blaming the wrong step.
+            try {
+                const subtitleResponse = await axios.post(WORKER_ENDPOINTS.SUBTITLES, payload, { timeout: 1800000 });
+                if (subtitleResponse?.data?.success !== false) {
+                    preflight = {
+                        worker: 'SUBTITLES',
+                        response: subtitleResponse.data
+                    };
+                }
+            } catch (preflightErr) {
+                logger.warn(`⚠️ [Admin] SUBTITLES preflight before manual TRANSCODE failed for ${folder}: ${preflightErr.message}`);
+                preflight = { worker: 'SUBTITLES', error: preflightErr.response?.data?.error || preflightErr.message };
             }
         }
 
