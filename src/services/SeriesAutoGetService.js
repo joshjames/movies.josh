@@ -39,11 +39,21 @@ const WORKER_ENABLED = !['false', '0', 'no'].includes(String(process.env.ENABLE_
 // then qBittorrent's broader (but less precise - see the known
 // "no confident search result" scoring gap) search API joins in once EZTV
 // hasn't delivered within a reasonable window, and finally settles into
-// backfill mode (same slower cadence as before) rather than ever giving up.
+// backfill mode once there's a real backlog to work through.
 const TIER1_HOURS = Math.max(1, Number(process.env.TV_AUTO_GET_TIER1_HOURS || 12));
 const TIER2_HOURS = Math.max(TIER1_HOURS, Number(process.env.TV_AUTO_GET_TIER2_HOURS || 72));
 const TIER1_CHECK_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_TIER1_CHECK_MINUTES || 90));
 const TIER2_CHECK_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_TIER2_CHECK_MINUTES || 180));
+// Backfill only ever queues one episode per check (see processRule below),
+// so this interval is what actually determines how fast a user catching up
+// on a show gets fed new episodes. Deliberately independent of the rule's
+// own (much longer, e.g. 120min) checkCycleMinutes default, which exists to
+// keep quiet/no-backlog shows from being checked pointlessly often - a
+// confirmed backlog is the opposite case: someone catching up should never
+// be left waiting on the scheduler between episodes, so this defaults to
+// roughly the length of a short episode rather than reusing that slower
+// general-purpose cadence.
+const BACKFILL_CHECK_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_BACKFILL_CHECK_MINUTES || 20));
 // How often to re-resolve the next target episode + its air date from
 // TMDb/OMDb - not every tick, since most rules' answer won't have changed.
 const AIR_DATE_REFRESH_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.TV_AUTO_GET_AIR_DATE_REFRESH_INTERVAL_MS || 6 * 60 * 60 * 1000));
@@ -437,10 +447,13 @@ async function resolveNextTargetEpisode(rule, availability, pendingKeys) {
     return null;
 }
 
-// defaultCheckIntervalMinutes is the rule's own checkCycleMinutes - used
-// whenever there's no tier-specific interval (no known air date at all, or
-// backfill mode), so a show acquisition tiers can't confidently place still
-// gets checked on the same cadence this always used before tiers existed.
+// defaultCheckIntervalMinutes is the rule's own checkCycleMinutes - used only
+// for the 'no-confirmed-date' tier (no known air date at all), so a show
+// acquisition tiers can't confidently place still gets checked on the same
+// cadence this always used before tiers existed. Backfill has its own faster
+// BACKFILL_CHECK_MINUTES instead (see computeAcquisitionTier) - once there's
+// a real backlog, the point is to clear it quickly, not idle on the rule's
+// general-purpose interval.
 // Some sources represent "we don't actually know" as an implausibly early
 // sentinel date (e.g. 1900-01-01) rather than an explicit null/N/A -
 // confirmed as a real risk here, not a hypothetical: treat anything before
@@ -476,7 +489,7 @@ function computeAcquisitionTier(nextKnownAirDateIso, nowMs, defaultCheckInterval
     if (hoursSinceAirDate < TIER2_HOURS) {
         return { tier: 'tier2', useEztv: true, useQbitSearch: true, checkIntervalMinutes: TIER2_CHECK_MINUTES };
     }
-    return { tier: 'backfill', useEztv: true, useQbitSearch: true, checkIntervalMinutes: defaultCheckIntervalMinutes };
+    return { tier: 'backfill', useEztv: true, useQbitSearch: true, checkIntervalMinutes: BACKFILL_CHECK_MINUTES };
 }
 
 function matchesRuleWindow(candidate, rule) {
