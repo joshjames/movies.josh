@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 
 const logger = require('./logger');
 const ProfileService = require('./ProfileService');
@@ -13,6 +12,7 @@ const { resolveSeriesFolderPath } = require('./StoragePathResolver');
 const { createJob, getAllJobs } = require('./PipelineQueueService');
 const metadataProvider = require('./MetadataProvider');
 const SeriesAcquisitionService = require('./SeriesAcquisitionService');
+const EztvCatalogService = require('./EztvCatalogService');
 
 const DATA_ROOT_CANDIDATES = [
     String(process.env.APP_DATA_DIR || '').trim(),
@@ -348,58 +348,33 @@ async function fetchEztvCandidates(imdbId = '', maxPages = 5) {
         return { items: [], upstreamWarnings: ['invalid_imdb_id'] };
     }
 
-    const baseUrls = [
-        'https://eztv.wf/api/get-torrents',
-        'https://eztv.re/api/get-torrents'
-    ];
+    const fetched = await EztvCatalogService.getTorrentsForImdb(imdbDigits, { maxPages });
+    const collected = Array.isArray(fetched.torrents) ? fetched.torrents : [];
 
-    const upstreamWarnings = [];
-    for (const baseUrl of baseUrls) {
-        const collected = [];
-        try {
-            for (let page = 1; page <= maxPages; page += 1) {
-                const response = await axios.get(baseUrl, {
-                    params: { imdb_id: imdbDigits, page },
-                    timeout: 12000,
-                    headers: { 'User-Agent': 'movie-streamer-auto-get/1.0' }
-                });
+    const mapped = collected.map((row) => {
+        const title = String(row?.title || row?.filename || '').trim();
+        const parsed = parseSeasonEpisodeFromTitle(title);
+        const magnetUrl = String(row?.magnet_url || row?.magnet || '').trim();
+        return {
+            title,
+            magnetUrl,
+            season: Number.isFinite(parsed.season) ? parsed.season : null,
+            episode: Number.isFinite(parsed.episode) ? parsed.episode : null,
+            seeds: parseInt(row?.seeds, 10) || 0,
+            peers: parseInt(row?.peers, 10) || 0,
+            sizeBytes: parseFloat(row?.size_bytes || row?.size || 0) || 0,
+            sizeMb: Math.round(((parseFloat(row?.size_bytes || row?.size || 0) || 0) / (1024 * 1024)) * 10) / 10,
+            quality: inferQualityLabel(title),
+            releasedAt: row?.date_released_unix ? new Date(Number(row.date_released_unix) * 1000).toISOString() : null,
+            hash: String(row?.hash || '').trim().toLowerCase(),
+            raw: row
+        };
+    }).filter((item) => item.title && item.magnetUrl && item.season && item.episode);
 
-                const torrents = Array.isArray(response.data?.torrents) ? response.data.torrents : [];
-                if (!torrents.length) break;
-                collected.push(...torrents);
-                if (torrents.length < 100) break;
-            }
-
-            const mapped = collected.map((row) => {
-                const title = String(row?.title || row?.filename || '').trim();
-                const parsed = parseSeasonEpisodeFromTitle(title);
-                const magnetUrl = String(row?.magnet_url || row?.magnet || '').trim();
-                return {
-                    title,
-                    magnetUrl,
-                    season: Number.isFinite(parsed.season) ? parsed.season : null,
-                    episode: Number.isFinite(parsed.episode) ? parsed.episode : null,
-                    seeds: parseInt(row?.seeds, 10) || 0,
-                    peers: parseInt(row?.peers, 10) || 0,
-                    sizeBytes: parseFloat(row?.size_bytes || row?.size || 0) || 0,
-                    sizeMb: Math.round(((parseFloat(row?.size_bytes || row?.size || 0) || 0) / (1024 * 1024)) * 10) / 10,
-                    quality: inferQualityLabel(title),
-                    releasedAt: row?.date_released_unix ? new Date(Number(row.date_released_unix) * 1000).toISOString() : null,
-                    hash: String(row?.hash || '').trim().toLowerCase(),
-                    raw: row
-                };
-            }).filter((item) => item.title && item.magnetUrl && item.season && item.episode);
-
-            return {
-                items: mapped,
-                upstreamWarnings
-            };
-        } catch (err) {
-            upstreamWarnings.push(`${baseUrl}: ${err.message}`);
-        }
-    }
-
-    return { items: [], upstreamWarnings };
+    return {
+        items: mapped,
+        upstreamWarnings: fetched.upstreamWarnings || []
+    };
 }
 
 // Walks forward from the rule's seasonStart/episodeStart using TMDb/OMDb's

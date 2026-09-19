@@ -24,6 +24,9 @@ const logger = require('../services/logger');
 const TorrentService = require('../services/TorrentService');
 const TorrentSearchService = require('../services/TorrentSearchService');
 const SeriesAcquisitionService = require('../services/SeriesAcquisitionService');
+const EztvCatalogService = require('../services/EztvCatalogService');
+const YtsCatalogService = require('../services/YtsCatalogService');
+const metadataProvider = require('../services/MetadataProvider');
 const PipelineWorker = require('../services/workers/PipelineWorker');
 const MetadataRegistry = require('../services/MetadataRegistry');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
@@ -544,7 +547,7 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
     const seasonNum = Number.isFinite(parseInt(season, 10)) ? parseInt(season, 10) : null;
     const episodeNum = Number.isFinite(parseInt(episode, 10)) ? parseInt(episode, 10) : null;
 
-    const fetched = await fetchEztvPages(imdbDigits, 5);
+    const fetched = await EztvCatalogService.getTorrentsForImdb(imdbDigits, { maxPages: 5 });
     const reduced = mapRawEztvRows(fetched.torrents || [], normalizedImdb, '', packsOnly, 400);
     const rows = Array.isArray(reduced?.items) ? reduced.items : [];
 
@@ -979,57 +982,6 @@ function mapRawEztvRows(rawTorrents, targetImdbId, cover, packsOnly, limit = 100
     };
 }
 
-async function fetchEztvPages(imdbId, maxPages = 5) {
-    const endpointCandidates = [
-        'https://eztv.wf/api/get-torrents',
-        'https://eztv.re/api/get-torrents'
-    ];
-
-    const collected = [];
-    const upstreamWarnings = [];
-    let scannedPages = 0;
-
-    for (let page = 1; page <= maxPages; page++) {
-        scannedPages += 1;
-        let pageData = null;
-        let lastError = null;
-
-        for (const endpoint of endpointCandidates) {
-            try {
-                const response = await axios.get(`${endpoint}?imdb_id=${imdbId}&limit=100&page=${page}`, {
-                    timeout: 10000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (MovieStreamer/1.0)',
-                        'Accept': 'application/json,text/plain,*/*'
-                    }
-                });
-
-                if (Array.isArray(response.data?.torrents)) {
-                    pageData = response.data.torrents;
-                    break;
-                }
-                lastError = new Error(`Invalid payload from ${endpoint}`);
-            } catch (err) {
-                lastError = err;
-            }
-        }
-
-        if (!pageData) {
-            upstreamWarnings.push(`Page ${page} unavailable: ${lastError ? lastError.message : 'unknown upstream error'}`);
-            break;
-        }
-
-        collected.push(...pageData);
-        if (pageData.length < 100) break;
-    }
-
-    return {
-        torrents: collected,
-        scannedPages,
-        upstreamWarnings
-    };
-}
-
 function parseIntSafe(value, fallback = 0) {
     const parsed = parseInt(value, 10);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -1369,8 +1321,7 @@ router.get('/yts/browse', async (req, res) => {
     try {
         // Collect the incoming variables sent from the frontend template
         const { query_term, page, genre, minimum_rating, sort_by } = req.query;
-        const ytsUrl = `https://movies-api.accel.li/api/v2/list_movies.json`;
-        
+
         // Build an explicit clean object containing only valid API arguments
         const apiParams = {
             page: page || 1,
@@ -1400,11 +1351,8 @@ router.get('/yts/browse', async (req, res) => {
             apiParams.sort_by = 'date_added'; // Safe fallback baseline
         }
 
-        console.log(`📡 Relaying sanitized query params to YTS:`, apiParams);
-
-        const response = await axios.get(ytsUrl, { params: apiParams });
-
-        res.json(response.data);
+        const body = await YtsCatalogService.browse(apiParams);
+        res.json(body);
     } catch (err) {
         console.error("❌ YTS directory route communication failure:", err.message);
         res.status(500).json({ error: "Failed to fetch media data source indices." });
@@ -1426,13 +1374,16 @@ router.get('/eztv/browse', async (req, res) => {
         if (!queryTerm && !targetImdbId) return res.json({ success: true, torrents: [] });
 
         if (!targetImdbId) {
-            const omdbRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&s=${encodeURIComponent(queryTerm)}&type=series`);
-            
-            if (omdbRes.data?.Search?.length > 0) {
-                const match = omdbRes.data.Search[0];
-                targetImdbId = match.imdbID.replace(/^tt/i, '');
-                const detailRes = await axios.get(`http://www.omdbapi.com/?apikey=84196d01&i=${match.imdbID}`);
-                omdbMeta = detailRes.data;
+            // Was a hardcoded, inline OMDb call using OMDB_API_KEY_OLD (the
+            // retired key, not the .env-configured OMDB_API_KEY everything
+            // else in the app uses) with no cooldown/fallback handling.
+            // MetadataProvider.fetchMetadataWithFallback already does this
+            // correctly (current key, OMDb-then-TMDb fallback, auth-error
+            // cooldown) - reuse it instead of a second, drifted copy.
+            const resolved = await metadataProvider.fetchMetadataWithFallback({ title: queryTerm, contentType: 'series' });
+            if (resolved?.data?.imdbID) {
+                targetImdbId = String(resolved.data.imdbID).replace(/^tt/i, '');
+                omdbMeta = resolved.data;
             } else {
                 targetImdbId = queryTerm.startsWith('tt') ? queryTerm.replace('tt', '') : '';
             }
@@ -1443,7 +1394,7 @@ router.get('/eztv/browse', async (req, res) => {
         const normalizedImdbId = normalizeImdbId(targetImdbId);
         if (!normalizedImdbId) return res.json({ success: true, torrents: [] });
 
-        const eztvFetch = await fetchEztvPages(targetImdbId, 5);
+        const eztvFetch = await EztvCatalogService.getTorrentsForImdb(targetImdbId, { maxPages: 5 });
         const allTorrents = eztvFetch.torrents;
 
         const posterUrl = typeof omdbMeta?.Poster === 'string' ? omdbMeta.Poster.trim() : '';

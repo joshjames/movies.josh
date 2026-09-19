@@ -38,6 +38,7 @@ const {
 const MediaService = require('../services/MediaService');
 const { normalizeSubtitleToken, isSubtitleRelatedToVideo } = require('../services/SubtitleFileMatching');
 const { getAllJobs } = require('../services/PipelineQueueService');
+const YtsCatalogService = require('../services/YtsCatalogService');
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
@@ -2521,7 +2522,6 @@ router.get('/movies/search/unified', async (req, res) => {
         let remotePageLimit = remoteLimit;
 
         if (shouldFetchRemote) {
-            const ytsUrl = 'https://movies-api.accel.li/api/v2/list_movies.json';
             const apiParams = {
                 page,
                 limit: remoteLimit,
@@ -2533,8 +2533,8 @@ router.get('/movies/search/unified', async (req, res) => {
             if (genre && genre.toLowerCase() !== 'all') apiParams.genre = genre.toLowerCase();
             if (minimumRating && minimumRating !== '0') apiParams.minimum_rating = minimumRating;
 
-            const ytsRes = await axios.get(ytsUrl, { params: apiParams, timeout: 12000 });
-            const ytsData = ytsRes?.data?.data || {};
+            const ytsBody = await YtsCatalogService.browse(apiParams);
+            const ytsData = ytsBody?.data || {};
             const remoteRows = Array.isArray(ytsData.movies) ? ytsData.movies : [];
             remoteTotal = Number(ytsData.movie_count || 0);
             remotePageLimit = Number(ytsData.limit || remoteLimit) || remoteLimit;

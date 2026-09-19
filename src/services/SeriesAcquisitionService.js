@@ -1,5 +1,5 @@
-const axios = require('axios');
 const TorrentSearchService = require('./TorrentSearchService');
+const EztvCatalogService = require('./EztvCatalogService');
 const logger = require('./logger');
 
 function normalizeDisplayTitle(value = '') {
@@ -264,57 +264,6 @@ async function collectAutoSeriesSearchCandidates(searchId, context = {}, options
     }
 }
 
-async function fetchEztvPages(imdbId, maxPages = 5) {
-    const endpointCandidates = [
-        'https://eztv.wf/api/get-torrents',
-        'https://eztv.re/api/get-torrents'
-    ];
-
-    const collected = [];
-    const upstreamWarnings = [];
-    let scannedPages = 0;
-
-    for (let page = 1; page <= maxPages; page++) {
-        scannedPages += 1;
-        let pageData = null;
-        let lastError = null;
-
-        for (const endpoint of endpointCandidates) {
-            try {
-                const response = await axios.get(`${endpoint}?imdb_id=${imdbId}&limit=100&page=${page}`, {
-                    timeout: 10000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (MovieStreamer/1.0)',
-                        'Accept': 'application/json,text/plain,*/*'
-                    }
-                });
-
-                if (Array.isArray(response.data?.torrents)) {
-                    pageData = response.data.torrents;
-                    break;
-                }
-                lastError = new Error(`Invalid payload from ${endpoint}`);
-            } catch (err) {
-                lastError = err;
-            }
-        }
-
-        if (!pageData) {
-            upstreamWarnings.push(`Page ${page} unavailable: ${lastError ? lastError.message : 'unknown upstream error'}`);
-            break;
-        }
-
-        collected.push(...pageData);
-        if (pageData.length < 100) break;
-    }
-
-    return {
-        torrents: collected,
-        scannedPages,
-        upstreamWarnings
-    };
-}
-
 async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = null, sourceType = 'episode', allow2160 = false } = {}) {
     const normalizedImdb = normalizeImdbId(imdbId);
     if (!normalizedImdb) {
@@ -326,7 +275,7 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
     const seasonNum = Number.isFinite(parseInt(season, 10)) ? parseInt(season, 10) : null;
     const episodeNum = Number.isFinite(parseInt(episode, 10)) ? parseInt(episode, 10) : null;
 
-    const fetched = await fetchEztvPages(imdbDigits, 5);
+    const fetched = await EztvCatalogService.getTorrentsForImdb(imdbDigits, { maxPages: 5 });
     const rows = Array.isArray(fetched.torrents) ? fetched.torrents : [];
 
     const exact = rows
