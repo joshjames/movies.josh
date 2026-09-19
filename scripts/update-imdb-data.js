@@ -90,9 +90,13 @@ async function downloadFile(fileName, force = false) {
 
 async function main() {
   const forceDownload = process.argv.includes('--force') || process.argv.includes('-f');
-  const selectedFiles = process.argv.length > 2
-    ? process.argv.slice(2).filter(arg => !arg.startsWith('-'))
-    : FILES;
+  // Bug fixed 2026-09-19: this used to key off raw argv.length, so passing
+  // *only* a flag like --force (no explicit file names) counted as "the
+  // user selected files", then filtered every flag out and landed on an
+  // empty list - failing with "no files selected" instead of falling back
+  // to the default set, exactly as if no arguments had been passed at all.
+  const selectedFilesFromArgs = process.argv.slice(2).filter(arg => !arg.startsWith('-'));
+  const selectedFiles = selectedFilesFromArgs.length > 0 ? selectedFilesFromArgs : FILES;
 
   if (!selectedFiles.length) {
     throw new Error('No IMDb data files were selected to download. Pass file names or omit arguments to download the default set.');
