@@ -66,6 +66,17 @@ function runRsyncLeg(target, leg) {
     return new Promise((resolve) => {
         const args = [
             '-az', '--no-owner', '--no-group',
+            // Without this, a rename/removal on the primary (e.g. the TV
+            // show renamer tool) never reaches the satellite - rsync only
+            // ever adds/updates, so the old name just accumulates forever
+            // alongside the new one. Confirmed live before enabling this:
+            // combined with --exclude below (and rsync's default behavior of
+            // never deleting excluded files unless --delete-excluded is also
+            // given), video files are never candidates for deletion here -
+            // only stale non-video leftovers (old folder names, old episode/
+            // subtitle filenames) are, which is exactly what this needs to
+            // clean up.
+            '--delete',
             '-e', `ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new`,
             ...(leg.excludeVideo ? VIDEO_EXCLUDE_ARGS : []),
             `${leg.src}/`,
