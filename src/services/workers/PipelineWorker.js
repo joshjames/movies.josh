@@ -33,6 +33,9 @@ const {
     removeJob
 } = require('../PipelineQueueService');
 const { withDistributedLock } = require('../DistributedLockService');
+const { Worker } = require('bullmq');
+const { getSchedulerRedisConnection } = require('../BullMQConnection');
+const { PIPELINE_TICK_QUEUE_NAME, ensurePipelineTickSchedule } = require('../SchedulerService');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
@@ -1161,7 +1164,14 @@ async function checkPipelineCompletions() {
         isProcessingPipeline = false;
 
     } catch (err) {
-        isProcessingPipeline = false; 
+        isProcessingPipeline = false;
+        // Was silently swallowed with no log line at all - a tick failure
+        // (Redis down, qBittorrent unreachable, etc.) was invisible even in
+        // debug logs. Now rethrown too, so the BullMQ tick job (see
+        // startPipelineWorker below) surfaces it as a failed job instead of
+        // always reporting success regardless of what actually happened.
+        logger.error(`❌ [Pipeline] Tick failed: ${err.message}`);
+        throw err;
     }
 }
 
@@ -1272,11 +1282,37 @@ async function reconcileQueueStartupState() {
     }
 }
 
+// Phase 1 of the pipeline's BullMQ migration (see docs/scheduled-tasks.md):
+// only the tick trigger moves onto BullMQ here - same checkPipelineCompletions
+// logic, same job-store (PipelineQueueService's Redis blobs), same per-job/
+// per-torrent DistributedLock. This just replaces the raw setInterval with a
+// BullMQ repeatable job + Worker, run inside this same container
+// (pipeline-runner) rather than centralized in scheduler-worker - see
+// SchedulerService.js's PIPELINE_TICK_QUEUE_NAME comment for why. Failure
+// visibility is the immediate payoff: a tick that throws now shows up as a
+// failed BullMQ job instead of vanishing silently.
+function startPipelineWorker(intervalMs = 10000) {
+    logger.debug(`⚙️  Autonomous pipeline queue manager active. Monitoring completions every ${intervalMs}ms (via BullMQ)...`);
+
+    ensurePipelineTickSchedule(intervalMs)
+        .then(() => {
+            const tickWorker = new Worker(
+                PIPELINE_TICK_QUEUE_NAME,
+                () => checkPipelineCompletions(),
+                { connection: getSchedulerRedisConnection(), concurrency: 1 }
+            );
+            tickWorker.on('failed', (job, err) => {
+                logger.error(`[Pipeline] tick job ${job?.id || 'unknown'} failed: ${err.message}`);
+            });
+        })
+        .catch((err) => {
+            logger.error(`❌ [Pipeline] Failed to start BullMQ tick schedule: ${err.message}`);
+        });
+}
+
 module.exports = {
-    startPipelineWorker(intervalMs = 10000) {
-        logger.debug(`⚙️  Autonomous pipeline queue manager active. Monitoring completions every ${intervalMs}ms...`);
-        setInterval(checkPipelineCompletions, intervalMs);
-    },
+    startPipelineWorker,
+    checkPipelineCompletions,
     kickQueueJob,
     reconcileQueueStartupState,
     createJob,

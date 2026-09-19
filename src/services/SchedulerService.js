@@ -69,6 +69,22 @@ async function ensureImdbRefreshSchedule() {
     await ensureRepeatableJob(IMDB_REFRESH_QUEUE_NAME, IMDB_REFRESH_JOB_ID, IMDB_REFRESH_INTERVAL_MS, 'refresh');
 }
 
+// Unlike the three jobs above, this queue's consumer Worker does NOT run in
+// the central scheduler-worker container - it runs inside PipelineWorker.js/
+// PipelineRunner.js's own dedicated pipeline-runner container, since that's
+// where checkPipelineCompletions()'s qBittorrent/worker-container network
+// access already lives, and there's no reason to fold a separately-scaled
+// container into scheduler-worker just to centralize a queue definition.
+// This module still owns the queue name + schedule-ensuring call for
+// consistency - see docs/scheduled-tasks.md for the full pattern writeup.
+const PIPELINE_TICK_QUEUE_NAME = 'pipeline-tick';
+const PIPELINE_TICK_JOB_ID = 'pipeline-tick-repeatable';
+
+async function ensurePipelineTickSchedule(intervalMs) {
+    const safeInterval = Math.max(1000, parseInt(intervalMs, 10) || 10000);
+    await ensureRepeatableJob(PIPELINE_TICK_QUEUE_NAME, PIPELINE_TICK_JOB_ID, safeInterval, 'tick');
+}
+
 module.exports = {
     METADATA_MIRROR_QUEUE_NAME,
     METADATA_MIRROR_INTERVAL_MS,
@@ -78,5 +94,7 @@ module.exports = {
     ensureTvAutoGetSchedule,
     IMDB_REFRESH_QUEUE_NAME,
     IMDB_REFRESH_INTERVAL_MS,
-    ensureImdbRefreshSchedule
+    ensureImdbRefreshSchedule,
+    PIPELINE_TICK_QUEUE_NAME,
+    ensurePipelineTickSchedule
 };
