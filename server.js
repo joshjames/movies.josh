@@ -176,7 +176,13 @@ app.get('/api/runtime/version', (_req, res) => {
         deployedAt: DEPLOYED_AT,
         startedAt: new Date(SERVER_STARTED_AT_MS).toISOString(),
         node: process.version,
-        pid: process.pid
+        pid: process.pid,
+        // REGION_NAME is a per-host .env value (set on each region's own
+        // .env, same convention as WIREGUARD_HOST_IP/SATELLITE_SYNC_TARGETS)
+        // - unset on any host that hasn't been given one yet, rather than
+        // guessed from hostname/IP, so it's never silently wrong.
+        region: process.env.REGION_NAME || null,
+        hostname: os.hostname()
     });
 });
 
