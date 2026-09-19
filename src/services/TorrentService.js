@@ -316,10 +316,28 @@ class TorrentService {
             form.append('tags', [targetTag, userTag, ownerTag, imdbTag, ...seriesQueueTags].filter(Boolean).join(','));
 
             const endpoint = `${QBIT_BASE_URL}/torrents/add`;
-            await axios.post(endpoint, form, {
-                headers: form.getHeaders(),
-                timeout: 5000
-            });
+            try {
+                await axios.post(endpoint, form, {
+                    headers: form.getHeaders(),
+                    timeout: 5000
+                });
+            } catch (addErr) {
+                // Recent qBittorrent versions (confirmed on v5.2.1, 2026-09-19)
+                // return 409 Conflict for "this torrent is already registered"
+                // instead of the older, more permissive silent 200 - which is
+                // completely benign (the existing/already-downloading torrent
+                // just gets picked up by the normal completion-polling flow
+                // regardless), but was being thrown as a hard failure here and
+                // surfaced to the user as a scary "Failed Jobs" entry for a
+                // title that was actually downloading fine the whole time.
+                // Everything below (hash/user mapping) still needs to run for
+                // the pre-existing torrent, so this falls through rather than
+                // returning early.
+                if (addErr?.response?.status !== 409) {
+                    throw addErr;
+                }
+                logger.info(`ℹ️ [Torrent Service] qBittorrent reports this torrent is already registered (409) - treating as already in progress, not a failure.`);
+            }
 
             const infoHashFromMagnet = extractInfoHashFromMagnet(magnetUrl);
             if (infoHashFromMagnet && imdbId) {
