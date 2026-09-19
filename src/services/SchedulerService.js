@@ -58,11 +58,25 @@ async function ensureTvAutoGetSchedule() {
     await ensureRepeatableJob(TV_AUTO_GET_QUEUE_NAME, TV_AUTO_GET_JOB_ID, TV_AUTO_GET_INTERVAL_MS, 'check-due-rules');
 }
 
+// Was manual-trigger-only (admin Operations panel). Default daily - IMDb's
+// own bulk datasets are themselves only updated daily, so anything tighter
+// than that just re-downloads ~1GB+ for no new data.
+const IMDB_REFRESH_QUEUE_NAME = 'imdb-refresh';
+const IMDB_REFRESH_JOB_ID = 'imdb-refresh-repeatable';
+const IMDB_REFRESH_INTERVAL_MS = Math.max(60 * 60 * 1000, parseInt(process.env.IMDB_REFRESH_INTERVAL_MS, 10) || 24 * 60 * 60 * 1000);
+
+async function ensureImdbRefreshSchedule() {
+    await ensureRepeatableJob(IMDB_REFRESH_QUEUE_NAME, IMDB_REFRESH_JOB_ID, IMDB_REFRESH_INTERVAL_MS, 'refresh');
+}
+
 module.exports = {
     METADATA_MIRROR_QUEUE_NAME,
     METADATA_MIRROR_INTERVAL_MS,
     ensureMetadataMirrorSchedule,
     TV_AUTO_GET_QUEUE_NAME,
     TV_AUTO_GET_INTERVAL_MS,
-    ensureTvAutoGetSchedule
+    ensureTvAutoGetSchedule,
+    IMDB_REFRESH_QUEUE_NAME,
+    IMDB_REFRESH_INTERVAL_MS,
+    ensureImdbRefreshSchedule
 };

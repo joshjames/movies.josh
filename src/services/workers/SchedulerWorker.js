@@ -8,6 +8,7 @@
 // instead of an external crontab entry.
 'use strict';
 
+const path = require('path');
 const { execFile } = require('child_process');
 const { Worker } = require('bullmq');
 const { getSchedulerRedisConnection } = require('../BullMQConnection');
@@ -15,7 +16,9 @@ const {
     METADATA_MIRROR_QUEUE_NAME,
     ensureMetadataMirrorSchedule,
     TV_AUTO_GET_QUEUE_NAME,
-    ensureTvAutoGetSchedule
+    ensureTvAutoGetSchedule,
+    IMDB_REFRESH_QUEUE_NAME,
+    ensureImdbRefreshSchedule
 } = require('../SchedulerService');
 const SeriesAutoGetService = require('../SeriesAutoGetService');
 const logger = require('../logger');
@@ -79,6 +82,44 @@ function runRsyncLeg(target, leg) {
     });
 }
 
+// Repo root (same scripts/*.js the admin "Refresh IMDb Data" button already
+// runs via this exact execFile pattern - see admin.routes.js's
+// runNodeScript()) - reused here rather than refactored into a shared
+// util, since it's a two-line wrapper and this is its only other caller.
+const REPO_ROOT = path.join(__dirname, '..', '..', '..');
+
+function runNodeScript(scriptName, args = []) {
+    return new Promise((resolve, reject) => {
+        const scriptPath = path.join(REPO_ROOT, 'scripts', scriptName);
+        execFile(process.execPath, [scriptPath, ...args], {
+            cwd: REPO_ROOT,
+            maxBuffer: 50 * 1024 * 1024,
+            timeout: 30 * 60 * 1000 // the IMDb TSV downloads are large; give it real headroom
+        }, (err, stdout, stderr) => {
+            if (err) {
+                reject(new Error((stderr || '').trim() || err.message));
+            } else {
+                resolve({ stdout, stderr });
+            }
+        });
+    });
+}
+
+async function processImdbRefreshJob() {
+    // --force: without it, update-imdb-data.js skips re-downloading a file
+    // that already exists on disk - harmless on a freshly-deployed
+    // container (nothing exists yet) but would silently turn every run
+    // after the first in this container's lifetime into a no-op, since
+    // .data/ persists across job runs even though it doesn't survive a
+    // redeploy. A scheduled "refresh" must always actually refresh.
+    const updateResult = await runNodeScript('update-imdb-data.js', ['--force']);
+    const buildResult = await runNodeScript('build-imdb-catalogs.js', []);
+    return {
+        updateOutputLines: updateResult.stdout.trim() ? updateResult.stdout.trim().split('\n').length : 0,
+        buildOutputLines: buildResult.stdout.trim() ? buildResult.stdout.trim().split('\n').length : 0
+    };
+}
+
 async function processMetadataMirrorJob() {
     const targets = parseSatelliteTargets();
     const results = [];
@@ -107,6 +148,7 @@ async function processMetadataMirrorJob() {
 async function main() {
     await ensureMetadataMirrorSchedule();
     await ensureTvAutoGetSchedule();
+    await ensureImdbRefreshSchedule();
 
     const metadataMirrorWorker = new Worker(
         METADATA_MIRROR_QUEUE_NAME,
@@ -148,7 +190,25 @@ async function main() {
         logger.error(`[Scheduler] tv-auto-get job ${job?.id} failed: ${err.message}`);
     });
 
-    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror and tv-auto-get queues active.');
+    // Was manual-trigger-only via the admin Operations panel; same two
+    // scripts, same execFile pattern, just on a schedule now.
+    const imdbRefreshWorker = new Worker(
+        IMDB_REFRESH_QUEUE_NAME,
+        async (job) => {
+            logger.info(`[Scheduler] Running imdb-refresh job ${job.id} (downloads can take several minutes)...`);
+            return processImdbRefreshJob();
+        },
+        { connection: getSchedulerRedisConnection(), concurrency: 1 }
+    );
+
+    imdbRefreshWorker.on('completed', (job, result) => {
+        logger.info(`[Scheduler] imdb-refresh job ${job.id} completed - update=${result.updateOutputLines} lines, build=${result.buildOutputLines} lines.`);
+    });
+    imdbRefreshWorker.on('failed', (job, err) => {
+        logger.error(`[Scheduler] imdb-refresh job ${job?.id} failed: ${err.message}`);
+    });
+
+    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror, tv-auto-get, and imdb-refresh queues active.');
 }
 
 main().catch((err) => {
