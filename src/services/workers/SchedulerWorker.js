@@ -114,9 +114,16 @@ async function processImdbRefreshJob() {
     // redeploy. A scheduled "refresh" must always actually refresh.
     const updateResult = await runNodeScript('update-imdb-data.js', ['--force']);
     const buildResult = await runNodeScript('build-imdb-catalogs.js', []);
+    // build-tmdb-catalogs.js reads metadata/tv-show-index.json - the file
+    // build-imdb-catalogs.js just (re)wrote above - so it has to run after,
+    // not on its own independent schedule where it could run against a
+    // stale or (on a fresh deploy) not-yet-existing index. No CLI args of
+    // its own; TMDb credentials come from .env like everything else here.
+    const tmdbResult = await runNodeScript('build-tmdb-catalogs.js', []);
     return {
         updateOutputLines: updateResult.stdout.trim() ? updateResult.stdout.trim().split('\n').length : 0,
-        buildOutputLines: buildResult.stdout.trim() ? buildResult.stdout.trim().split('\n').length : 0
+        buildOutputLines: buildResult.stdout.trim() ? buildResult.stdout.trim().split('\n').length : 0,
+        tmdbOutputLines: tmdbResult.stdout.trim() ? tmdbResult.stdout.trim().split('\n').length : 0
     };
 }
 
@@ -190,8 +197,11 @@ async function main() {
         logger.error(`[Scheduler] tv-auto-get job ${job?.id} failed: ${err.message}`);
     });
 
-    // Was manual-trigger-only via the admin Operations panel; same two
-    // scripts, same execFile pattern, just on a schedule now.
+    // Was manual-trigger-only via the admin Operations panel (IMDb) or not
+    // wired into any trigger at all (TMDb - previously only ever run by
+    // hand via `npm run build:catalogs:tmdb`); same scripts, same execFile
+    // pattern, chained in the one job now since TMDb's catalog build reads
+    // the IMDb catalog build's own output file.
     const imdbRefreshWorker = new Worker(
         IMDB_REFRESH_QUEUE_NAME,
         async (job) => {
@@ -202,7 +212,7 @@ async function main() {
     );
 
     imdbRefreshWorker.on('completed', (job, result) => {
-        logger.info(`[Scheduler] imdb-refresh job ${job.id} completed - update=${result.updateOutputLines} lines, build=${result.buildOutputLines} lines.`);
+        logger.info(`[Scheduler] imdb-refresh job ${job.id} completed - update=${result.updateOutputLines} lines, build=${result.buildOutputLines} lines, tmdb=${result.tmdbOutputLines} lines.`);
     });
     imdbRefreshWorker.on('failed', (job, err) => {
         logger.error(`[Scheduler] imdb-refresh job ${job?.id} failed: ${err.message}`);
