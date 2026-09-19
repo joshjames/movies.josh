@@ -1,22 +1,13 @@
 // src/services/SchedulerService.js
-// Central home for this app's BullMQ-backed recurring jobs. Starts with just
-// the metadata-mirror job (replacing the host-level rsync cron) - the first,
-// lowest-stakes piece of a broader move off ad-hoc setInterval loops and
-// host cron jobs, onto one queueing/scheduling backbone. See
-// SchedulerWorker.js for the job's actual processor.
+// Central home for this app's BullMQ-backed recurring jobs - the ongoing
+// move off ad-hoc setInterval loops and host cron jobs onto one
+// queueing/scheduling backbone. See SchedulerWorker.js for the jobs'
+// actual processors (all run in the one scheduler-worker container).
 'use strict';
 
 const { Queue } = require('bullmq');
 const { getSchedulerRedisConnection } = require('./BullMQConnection');
 const logger = require('./logger');
-
-const METADATA_MIRROR_QUEUE_NAME = 'metadata-mirror';
-const METADATA_MIRROR_JOB_ID = 'metadata-mirror-repeatable';
-const METADATA_MIRROR_INTERVAL_MS = parseInt(process.env.METADATA_MIRROR_INTERVAL_MS, 10) || 30000;
-
-function getMetadataMirrorQueue() {
-    return new Queue(METADATA_MIRROR_QUEUE_NAME, { connection: getSchedulerRedisConnection() });
-}
 
 // Idempotent: upsertJobScheduler updates the existing scheduler in place when
 // one already exists under this ID, so calling this on every SchedulerWorker
@@ -27,14 +18,14 @@ function getMetadataMirrorQueue() {
 // `upsertJobScheduler` is the only thing that actually registers a recurring
 // job. Worth remembering since the old add-with-repeat pattern still shows up
 // in plenty of BullMQ examples/tutorials online.
-async function ensureMetadataMirrorSchedule() {
-    const queue = getMetadataMirrorQueue();
+async function ensureRepeatableJob(queueName, jobId, everyMs, jobName) {
+    const queue = new Queue(queueName, { connection: getSchedulerRedisConnection() });
     try {
         await queue.upsertJobScheduler(
-            METADATA_MIRROR_JOB_ID,
-            { every: METADATA_MIRROR_INTERVAL_MS },
+            jobId,
+            { every: everyMs },
             {
-                name: 'sync',
+                name: jobName,
                 data: {},
                 opts: {
                     removeOnComplete: { count: 20 },
@@ -42,15 +33,36 @@ async function ensureMetadataMirrorSchedule() {
                 }
             }
         );
-        logger.info(`[Scheduler] metadata-mirror repeatable job ensured (every ${METADATA_MIRROR_INTERVAL_MS}ms).`);
+        logger.info(`[Scheduler] ${queueName} repeatable job ensured (every ${everyMs}ms).`);
     } finally {
         await queue.close();
     }
 }
 
+const METADATA_MIRROR_QUEUE_NAME = 'metadata-mirror';
+const METADATA_MIRROR_JOB_ID = 'metadata-mirror-repeatable';
+const METADATA_MIRROR_INTERVAL_MS = parseInt(process.env.METADATA_MIRROR_INTERVAL_MS, 10) || 30000;
+
+async function ensureMetadataMirrorSchedule() {
+    await ensureRepeatableJob(METADATA_MIRROR_QUEUE_NAME, METADATA_MIRROR_JOB_ID, METADATA_MIRROR_INTERVAL_MS, 'sync');
+}
+
+// Same cadence the old setInterval used (TV_AUTO_GET_WORKER_INTERVAL_MS,
+// default 15min) - migrating the trigger mechanism first, the "smarter than
+// blind polling" redesign is a separate follow-up.
+const TV_AUTO_GET_QUEUE_NAME = 'tv-auto-get';
+const TV_AUTO_GET_JOB_ID = 'tv-auto-get-repeatable';
+const TV_AUTO_GET_INTERVAL_MS = Math.max(60 * 1000, parseInt(process.env.TV_AUTO_GET_WORKER_INTERVAL_MS, 10) || 15 * 60 * 1000);
+
+async function ensureTvAutoGetSchedule() {
+    await ensureRepeatableJob(TV_AUTO_GET_QUEUE_NAME, TV_AUTO_GET_JOB_ID, TV_AUTO_GET_INTERVAL_MS, 'check-due-rules');
+}
+
 module.exports = {
     METADATA_MIRROR_QUEUE_NAME,
     METADATA_MIRROR_INTERVAL_MS,
-    getMetadataMirrorQueue,
-    ensureMetadataMirrorSchedule
+    ensureMetadataMirrorSchedule,
+    TV_AUTO_GET_QUEUE_NAME,
+    TV_AUTO_GET_INTERVAL_MS,
+    ensureTvAutoGetSchedule
 };

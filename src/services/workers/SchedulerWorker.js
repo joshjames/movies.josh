@@ -11,7 +11,13 @@
 const { execFile } = require('child_process');
 const { Worker } = require('bullmq');
 const { getSchedulerRedisConnection } = require('../BullMQConnection');
-const { METADATA_MIRROR_QUEUE_NAME, ensureMetadataMirrorSchedule } = require('../SchedulerService');
+const {
+    METADATA_MIRROR_QUEUE_NAME,
+    ensureMetadataMirrorSchedule,
+    TV_AUTO_GET_QUEUE_NAME,
+    ensureTvAutoGetSchedule
+} = require('../SchedulerService');
+const SeriesAutoGetService = require('../SeriesAutoGetService');
 const logger = require('../logger');
 
 const SSH_KEY_PATH = process.env.SCHEDULER_SYNC_SSH_KEY || '/app/.ssh/id_ed25519_scheduler_sync';
@@ -100,8 +106,9 @@ async function processMetadataMirrorJob() {
 
 async function main() {
     await ensureMetadataMirrorSchedule();
+    await ensureTvAutoGetSchedule();
 
-    const worker = new Worker(
+    const metadataMirrorWorker = new Worker(
         METADATA_MIRROR_QUEUE_NAME,
         async (job) => {
             logger.debug(`[Scheduler] Running metadata-mirror job ${job.id}`);
@@ -110,14 +117,38 @@ async function main() {
         { connection: getSchedulerRedisConnection(), concurrency: 1 }
     );
 
-    worker.on('completed', (job) => {
+    metadataMirrorWorker.on('completed', (job) => {
         logger.debug(`[Scheduler] metadata-mirror job ${job.id} completed.`);
     });
-    worker.on('failed', (job, err) => {
+    metadataMirrorWorker.on('failed', (job, err) => {
         logger.error(`[Scheduler] metadata-mirror job ${job?.id} failed: ${err.message}`);
     });
 
-    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror queue active.');
+    // Trigger-mechanism migration only for now (setInterval -> BullMQ
+    // repeatable job, same cadence) - processDueRules() itself is untouched.
+    // The "check known air dates instead of blind polling" redesign is a
+    // separate follow-up once we know what EZTV/TMDb actually give us.
+    const tvAutoGetWorker = new Worker(
+        TV_AUTO_GET_QUEUE_NAME,
+        async (job) => {
+            logger.debug(`[Scheduler] Running tv-auto-get job ${job.id}`);
+            return SeriesAutoGetService.processDueRules();
+        },
+        { connection: getSchedulerRedisConnection(), concurrency: 1 }
+    );
+
+    tvAutoGetWorker.on('completed', (job, result) => {
+        if (result?.queuedCount > 0 || result?.scannedRules > 0) {
+            logger.info(`[Scheduler] tv-auto-get job ${job.id} completed - scanned=${result.scannedRules} queued=${result.queuedCount}`);
+        } else {
+            logger.debug(`[Scheduler] tv-auto-get job ${job.id} completed.`);
+        }
+    });
+    tvAutoGetWorker.on('failed', (job, err) => {
+        logger.error(`[Scheduler] tv-auto-get job ${job?.id} failed: ${err.message}`);
+    });
+
+    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror and tv-auto-get queues active.');
 }
 
 main().catch((err) => {

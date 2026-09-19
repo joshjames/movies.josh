@@ -14,7 +14,6 @@ const LibraryScanner = require('./src/services/LibraryScanner');
 const { startPipelineWorker, reconcileQueueStartupState } = require('./src/services/workers/PipelineWorker');
 const { initRedis } = require('./src/services/PipelineQueueService');
 const ProfileService = require('./src/services/ProfileService');
-const { startWorker: startTvAutoGetWorker } = require('./src/services/SeriesAutoGetService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -408,11 +407,9 @@ app.use('/api/*', (req, res) => {
         logger.info('Pipeline watcher disabled on this node via ENABLE_PIPELINE_WATCHER=false.');
     }
 
-    try {
-        startTvAutoGetWorker();
-    } catch (err) {
-        logger.warn(`TV auto-get worker start failed: ${err.message}`);
-    }
+    // Migrated to a BullMQ repeatable job in scheduler-worker (see
+    // SchedulerWorker.js) - starting it here too would double-process every
+    // due rule on whichever tick both happened to fire close together.
 })();
 
 app.listen(PORT, () => {
