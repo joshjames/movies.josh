@@ -11,6 +11,8 @@ const { rebuildSeriesManifest } = require('./SeriesIndexService');
 const { getSeriesByImdbId, loadIndex } = require('./TvSeriesIndexService');
 const { resolveSeriesFolderPath } = require('./StoragePathResolver');
 const { createJob, getAllJobs } = require('./PipelineQueueService');
+const metadataProvider = require('./MetadataProvider');
+const SeriesAcquisitionService = require('./SeriesAcquisitionService');
 
 const DATA_ROOT_CANDIDATES = [
     String(process.env.APP_DATA_DIR || '').trim(),
@@ -25,6 +27,26 @@ const LEGACY_RULES_FILE = path.join(LEGACY_DATA_ROOT, 'tv-auto-get-rules.json');
 const DEFAULT_CHECK_CYCLE_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_DEFAULT_CHECK_CYCLE_MINUTES || 120));
 const WORKER_INTERVAL_MS = Math.max(60 * 1000, Number(process.env.TV_AUTO_GET_WORKER_INTERVAL_MS || 15 * 60 * 1000));
 const WORKER_ENABLED = !['false', '0', 'no'].includes(String(process.env.ENABLE_TV_AUTO_GET_WORKER || 'true').trim().toLowerCase());
+
+// --- Acquisition tiers ---------------------------------------------------
+// Instead of polling every rule on a flat interval forever, each rule now
+// tracks the next episode's known air date (from TMDb/OMDb via
+// MetadataProvider - the same source already proven accurate). "Tier" gates
+// both *whether* to check at all right now and *which* sources to check:
+// EZTV is fast for popular/well-seeded shows but its release lag relative to
+// the real air date is undocumented and can be long (see the EZTV/TMDb
+// research this design is based on, 2026-09-19) - so it's tried alone first,
+// then qBittorrent's broader (but less precise - see the known
+// "no confident search result" scoring gap) search API joins in once EZTV
+// hasn't delivered within a reasonable window, and finally settles into
+// backfill mode (same slower cadence as before) rather than ever giving up.
+const TIER1_HOURS = Math.max(1, Number(process.env.TV_AUTO_GET_TIER1_HOURS || 12));
+const TIER2_HOURS = Math.max(TIER1_HOURS, Number(process.env.TV_AUTO_GET_TIER2_HOURS || 72));
+const TIER1_CHECK_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_TIER1_CHECK_MINUTES || 90));
+const TIER2_CHECK_MINUTES = Math.max(5, Number(process.env.TV_AUTO_GET_TIER2_CHECK_MINUTES || 180));
+// How often to re-resolve the next target episode + its air date from
+// TMDb/OMDb - not every tick, since most rules' answer won't have changed.
+const AIR_DATE_REFRESH_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.TV_AUTO_GET_AIR_DATE_REFRESH_INTERVAL_MS || 6 * 60 * 60 * 1000));
 
 let workerTimer = null;
 let workerRunning = false;
@@ -168,7 +190,13 @@ function normalizeRule(input = {}) {
             queuedJobId: input.state?.queuedJobId || null,
             lastError: input.state?.lastError || null,
             lastScanCount: Number(input.state?.lastScanCount || 0) || 0,
-            nextRunAt: input.state?.nextRunAt || null
+            nextRunAt: input.state?.nextRunAt || null,
+            // Acquisition-tier tracking (see TIER1_HOURS/TIER2_HOURS above).
+            nextKnownSeason: Number.isFinite(Number(input.state?.nextKnownSeason)) ? Number(input.state.nextKnownSeason) : null,
+            nextKnownEpisode: Number.isFinite(Number(input.state?.nextKnownEpisode)) ? Number(input.state.nextKnownEpisode) : null,
+            nextKnownAirDate: input.state?.nextKnownAirDate || null,
+            airDateCheckedAt: input.state?.airDateCheckedAt || null,
+            lastTier: input.state?.lastTier || null
         }
     };
 }
@@ -374,6 +402,89 @@ async function fetchEztvCandidates(imdbId = '', maxPages = 5) {
     return { items: [], upstreamWarnings };
 }
 
+// Walks forward from the rule's seasonStart/episodeStart using TMDb/OMDb's
+// per-season episode data (via MetadataProvider, the same source already
+// proven accurate) to find the earliest episode that's neither already in
+// the library nor already mid-pipeline, and that episode's known air date.
+// Independent of what EZTV has - this answers "when is the next episode we
+// actually want", not "what's already been released that we don't have".
+// Bounded to a few seasons so a bad/stale seasonStart on a long-running
+// show can't cause unbounded scanning.
+async function resolveNextTargetEpisode(rule, availability, pendingKeys) {
+    const showTitle = rule.title || '';
+    const startSeason = Math.max(1, Number(rule.seasonStart || 1));
+    const maxSeasonsToScan = 3;
+
+    for (let offset = 0; offset < maxSeasonsToScan; offset += 1) {
+        const season = startSeason + offset;
+        let episodes;
+        try {
+            episodes = await metadataProvider.fetchSeasonEpisodesWithFallback({
+                imdbId: rule.imdbId,
+                title: showTitle,
+                season
+            });
+        } catch (_err) {
+            episodes = [];
+        }
+
+        if (!Array.isArray(episodes) || episodes.length === 0) {
+            // No data for this season (or none exists yet) - nothing further
+            // to find by scanning later seasons either.
+            break;
+        }
+
+        const episodeFloor = offset === 0 ? Math.max(1, Number(rule.episodeStart || 1)) : 1;
+        const sorted = episodes
+            .map((ep) => ({ episodeNumber: parseInt(ep.Episode, 10), released: ep.Released }))
+            .filter((ep) => Number.isFinite(ep.episodeNumber) && ep.episodeNumber >= episodeFloor)
+            .sort((a, b) => a.episodeNumber - b.episodeNumber);
+
+        for (const ep of sorted) {
+            const key = `${season}-${ep.episodeNumber}`;
+            if (availability.availableEpisodeKeys.has(key)) continue;
+            if (pendingKeys.has(key)) continue;
+
+            const parsedDate = ep.released && ep.released !== 'N/A' && ep.released !== 'Unknown'
+                ? new Date(ep.released)
+                : null;
+
+            return {
+                season,
+                episode: ep.episodeNumber,
+                airDate: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null
+            };
+        }
+        // Every episode TMDb knows about for this season is already
+        // available/pending - keep scanning forward into the next season.
+    }
+
+    return null;
+}
+
+// defaultCheckIntervalMinutes is the rule's own checkCycleMinutes - used
+// whenever there's no tier-specific interval (no known air date at all, or
+// backfill mode), so a show acquisition tiers can't confidently place still
+// gets checked on the same cadence this always used before tiers existed.
+function computeAcquisitionTier(nextKnownAirDateIso, nowMs, defaultCheckIntervalMinutes) {
+    const airDateMs = nextKnownAirDateIso ? Date.parse(nextKnownAirDateIso) : NaN;
+    if (!Number.isFinite(airDateMs)) {
+        return { tier: 'unknown', useEztv: true, useQbitSearch: true, checkIntervalMinutes: defaultCheckIntervalMinutes };
+    }
+
+    const hoursSinceAirDate = (nowMs - airDateMs) / (1000 * 60 * 60);
+    if (hoursSinceAirDate < 0) {
+        return { tier: 'not-yet', useEztv: false, useQbitSearch: false, checkIntervalMinutes: null };
+    }
+    if (hoursSinceAirDate < TIER1_HOURS) {
+        return { tier: 'tier1', useEztv: true, useQbitSearch: false, checkIntervalMinutes: TIER1_CHECK_MINUTES };
+    }
+    if (hoursSinceAirDate < TIER2_HOURS) {
+        return { tier: 'tier2', useEztv: true, useQbitSearch: true, checkIntervalMinutes: TIER2_CHECK_MINUTES };
+    }
+    return { tier: 'backfill', useEztv: true, useQbitSearch: true, checkIntervalMinutes: defaultCheckIntervalMinutes };
+}
+
 function matchesRuleWindow(candidate, rule) {
     const seasonStart = Number(rule.seasonStart || 1);
     const episodeStart = Number(rule.episodeStart || 1);
@@ -384,15 +495,35 @@ function matchesRuleWindow(candidate, rule) {
 
 function isRuleDue(rule, nowMs = Date.now()) {
     if (!rule.enabled) return false;
-    const cycleMs = Math.max(5, Number(rule.checkCycleMinutes || DEFAULT_CHECK_CYCLE_MINUTES)) * 60 * 1000;
-    const lastRunMs = rule.state?.lastRunAt ? Date.parse(rule.state.lastRunAt) : 0;
-    if (lastRunMs && nowMs - lastRunMs < cycleMs) return false;
 
     const airDay = normalizeDayToken(rule.airDay || '');
     if (airDay) {
         const today = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(nowMs).getDay()];
         if (today !== airDay) return false;
     }
+
+    const state = rule.state || {};
+
+    // Stale/missing air-date info takes priority over everything else below -
+    // let processRule refresh it (cheap: it's gated to AIR_DATE_REFRESH_INTERVAL_MS
+    // internally too, this is just what makes that refresh actually happen).
+    const airDateCheckedAtMs = state.airDateCheckedAt ? Date.parse(state.airDateCheckedAt) : 0;
+    if (!airDateCheckedAtMs || (nowMs - airDateCheckedAtMs) >= AIR_DATE_REFRESH_INTERVAL_MS) {
+        return true;
+    }
+
+    const nextKnownAirDateMs = state.nextKnownAirDate ? Date.parse(state.nextKnownAirDate) : NaN;
+    if (Number.isFinite(nextKnownAirDateMs) && nextKnownAirDateMs > nowMs) {
+        return false; // known air date hasn't arrived yet - nothing to check
+    }
+
+    const defaultCycleMinutes = Math.max(5, Number(rule.checkCycleMinutes || DEFAULT_CHECK_CYCLE_MINUTES));
+    const tier = computeAcquisitionTier(state.nextKnownAirDate, nowMs, defaultCycleMinutes);
+    if (tier.tier === 'not-yet') return false;
+
+    const cycleMs = Math.max(5, Number(tier.checkIntervalMinutes || defaultCycleMinutes)) * 60 * 1000;
+    const lastRunMs = state.lastRunAt ? Date.parse(state.lastRunAt) : 0;
+    if (lastRunMs && nowMs - lastRunMs < cycleMs) return false;
 
     return true;
 }
@@ -496,15 +627,112 @@ async function queueCandidate(rule, candidate, options = {}) {
     return { queuedJob, mediaTitle };
 }
 
+async function queueViaQbitSearch(rule, target, options = {}) {
+    const showTitle = rule.title || getSeriesByImdbId(rule.imdbId)?.title || rule.imdbId;
+    const query = SeriesAcquisitionService.buildAutoSeriesSearchQuery(showTitle, target.season, target.episode, 'episode');
+    const queueContext = {
+        imdbId: rule.imdbId,
+        season: target.season,
+        episode: target.episode,
+        sourceType: 'episode',
+        targetShowFolder: rule.showFolder || null,
+        addedByUser: options.addedByUser || null
+    };
+    const mediaTitle = `${showTitle} S${String(target.season).padStart(2, '0')}E${String(target.episode).padStart(2, '0')}`;
+
+    const queuedJob = await createJob({
+        status: 'QUEUED',
+        currentStep: 'SEARCH',
+        imdbId: rule.imdbId,
+        contentType: 'series',
+        payload: {
+            searchIntent: {
+                title: showTitle,
+                imdbId: rule.imdbId,
+                season: target.season,
+                episode: target.episode,
+                sourceType: 'episode',
+                category: 'tv',
+                plugins: 'enabled',
+                timeoutMs: null,
+                minScore: null,
+                addedByUser: options.addedByUser || null
+            },
+            mediaTitle,
+            queueContext
+        }
+    });
+
+    // Best-effort immediate kick (same pattern as the manual "Queue Episode"
+    // button) - if this fails, PipelineWorker's own tick picks the job up
+    // regardless, just without the head start.
+    try {
+        const { kickQueueJob } = require('./workers/PipelineWorker');
+        await kickQueueJob(queuedJob.id);
+    } catch (_err) {
+        // Not fatal - see comment above.
+    }
+
+    return { queuedJob, mediaTitle };
+}
+
 async function processRule(ruleInput, options = {}) {
     const rule = normalizeRule(ruleInput);
     const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const subscribers = await listSubscribersForImdb(rule.imdbId);
     const subscriberKeys = subscribers.filter((item) => item.autoGet !== false).map((item) => item.userKey);
 
     const availability = await resolveShowAvailability(rule.imdbId, rule.showFolder);
     const pendingKeys = await getPendingEpisodeKeys(rule.imdbId);
-    const fetched = await fetchEztvCandidates(rule.imdbId, 5);
+
+    const state = { ...rule.state };
+    const defaultCycleMinutes = Math.max(5, Number(rule.checkCycleMinutes || DEFAULT_CHECK_CYCLE_MINUTES));
+
+    // Refresh the known-next-episode/air-date if stale or missing. Failure
+    // here (metadata provider down, show not found, etc.) just leaves the
+    // previous cached value in place rather than blowing up the whole rule.
+    const airDateCheckedAtMs = state.airDateCheckedAt ? Date.parse(state.airDateCheckedAt) : 0;
+    if (!airDateCheckedAtMs || (nowMs - airDateCheckedAtMs) >= AIR_DATE_REFRESH_INTERVAL_MS) {
+        try {
+            const target = await resolveNextTargetEpisode(rule, availability, pendingKeys);
+            state.nextKnownSeason = target?.season ?? null;
+            state.nextKnownEpisode = target?.episode ?? null;
+            state.nextKnownAirDate = target?.airDate ?? null;
+            state.airDateCheckedAt = nowIso;
+        } catch (err) {
+            logger.warn(`[AutoGet] Air-date refresh failed for ${rule.imdbId}: ${err.message}`);
+        }
+    }
+
+    const tier = computeAcquisitionTier(state.nextKnownAirDate, nowMs, defaultCycleMinutes);
+    state.lastTier = tier.tier;
+
+    // Known air date hasn't arrived yet - nothing productive to do. Still
+    // save the refreshed air-date state above so isRuleDue() has it for next
+    // time, but skip the EZTV/qBittorrent network calls entirely.
+    if (tier.tier === 'not-yet') {
+        state.lastRunAt = nowIso;
+        state.nextRunAt = state.nextKnownAirDate;
+        state.lastError = null;
+        const nextRule = { ...rule, showFolder: rule.showFolder || availability.showFolder || rule.showFolder, state };
+        upsertRule(nextRule);
+        return {
+            success: true,
+            rule: nextRule,
+            subscribers,
+            availability: { inLibrary: availability.inLibrary, availableCount: availability.availableEpisodeKeys.size, pendingCount: pendingKeys.size },
+            scanned: 0,
+            filtered: 0,
+            queued: null,
+            tier: tier.tier,
+            upstreamWarnings: []
+        };
+    }
+
+    const fetched = tier.useEztv
+        ? await fetchEztvCandidates(rule.imdbId, 5)
+        : { items: [], upstreamWarnings: [] };
     const filtered = filterCandidates(fetched.items, rule);
     const ranked = pickBestByEpisode(filtered);
 
@@ -516,41 +744,57 @@ async function processRule(ruleInput, options = {}) {
         return true;
     }) || null;
 
-    const state = {
-        ...rule.state,
-        lastRunAt: nowIso,
-        lastScanCount: ranked.length,
-        nextRunAt: new Date(Date.now() + (Math.max(5, Number(rule.checkCycleMinutes || DEFAULT_CHECK_CYCLE_MINUTES)) * 60 * 1000)).toISOString(),
-        lastError: null
-    };
+    state.lastRunAt = nowIso;
+    state.lastScanCount = ranked.length;
+    state.nextRunAt = new Date(nowMs + (Math.max(5, Number(tier.checkIntervalMinutes || defaultCycleMinutes)) * 60 * 1000)).toISOString();
+    state.lastError = null;
 
     let queued = null;
+    let queueSource = null;
+
     if (nextCandidate) {
         const queuedResult = await queueCandidate(rule, nextCandidate, { addedByUser: null });
-        queued = {
-            season: nextCandidate.season,
-            episode: nextCandidate.episode,
-            title: queuedResult.mediaTitle,
-            jobId: queuedResult.queuedJob.id
-        };
+        queued = { season: nextCandidate.season, episode: nextCandidate.episode, title: queuedResult.mediaTitle, jobId: queuedResult.queuedJob.id };
+        queueSource = 'eztv';
+    } else if (tier.useQbitSearch && state.nextKnownSeason && state.nextKnownEpisode) {
+        // EZTV came up empty (or wasn't tried this tier) and we're far enough
+        // past the air date to widen the net - try qBittorrent's search
+        // plugins for the specific episode TMDb told us is next.
+        const target = { season: state.nextKnownSeason, episode: state.nextKnownEpisode };
+        const key = `${target.season}-${target.episode}`;
+        const alreadyPending = availability.availableEpisodeKeys.has(key) || pendingKeys.has(key);
+        if (!alreadyPending) {
+            try {
+                const queuedResult = await queueViaQbitSearch(rule, target, { addedByUser: null });
+                queued = { season: target.season, episode: target.episode, title: queuedResult.mediaTitle, jobId: queuedResult.queuedJob.id };
+                queueSource = 'qbittorrent-search';
+            } catch (err) {
+                logger.warn(`[AutoGet] qBittorrent-search fallback failed for ${rule.imdbId} S${target.season}E${target.episode}: ${err.message}`);
+            }
+        }
+    }
+
+    if (queued) {
         state.lastMatchAt = nowIso;
         state.lastQueuedAt = nowIso;
-        state.lastQueuedEpisodeKey = `${nextCandidate.season}-${nextCandidate.episode}`;
-        state.lastQueuedTitle = queuedResult.mediaTitle;
-        state.queuedJobId = queuedResult.queuedJob.id;
+        state.lastQueuedEpisodeKey = `${queued.season}-${queued.episode}`;
+        state.lastQueuedTitle = queued.title;
+        state.queuedJobId = queued.jobId;
 
         for (const userKey of subscriberKeys) {
             await NotificationService.push(userKey, {
                 category: 'library',
-                title: `${rule.title || 'TV Show'} S${String(nextCandidate.season).padStart(2, '0')}E${String(nextCandidate.episode).padStart(2, '0')} queued`,
-                message: 'Auto-get picked up a new episode release and added it to the queue.',
+                title: `${rule.title || 'TV Show'} S${String(queued.season).padStart(2, '0')}E${String(queued.episode).padStart(2, '0')} queued`,
+                message: queueSource === 'qbittorrent-search'
+                    ? 'Auto-get widened its search after EZTV had nothing yet, and found this episode.'
+                    : 'Auto-get picked up a new episode release and added it to the queue.',
                 href: rule.showFolder ? `/series.html?id=${encodeURIComponent(`series/${rule.showFolder}`)}` : '',
                 payload: {
                     imdbId: rule.imdbId,
-                    season: nextCandidate.season,
-                    episode: nextCandidate.episode,
-                    jobId: queuedResult.queuedJob.id,
-                    source: 'series-auto-get'
+                    season: queued.season,
+                    episode: queued.episode,
+                    jobId: queued.jobId,
+                    source: queueSource === 'qbittorrent-search' ? 'series-auto-get-qbit-fallback' : 'series-auto-get'
                 }
             });
         }
@@ -575,6 +819,7 @@ async function processRule(ruleInput, options = {}) {
         scanned: fetched.items.length,
         filtered: ranked.length,
         queued,
+        tier: tier.tier,
         upstreamWarnings: fetched.upstreamWarnings || []
     };
 }
