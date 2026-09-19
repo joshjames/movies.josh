@@ -479,12 +479,30 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
         return Boolean(episodeNum && rowEpisode === episodeNum);
     }) || null;
 
-    const selectedSearchCandidate = (scored.best && Number(scored.best.confidenceScore || 0) >= threshold)
+    const bestBySeededExact = (scored.best && Number(scored.best.confidenceScore || 0) >= threshold)
         ? scored.best
         : seededExactSearchFallback;
 
+    // scoreAutoSeriesCandidate() *penalizes* a season/episode mismatch but
+    // never fully eliminates it - a high-seed wrong-season release can still
+    // out-score everything else and cross `threshold` (confirmed live:
+    // "X-Men.97.S02E01" with 2495 seeds won a search for S03E01, since
+    // Math.min(220, seeds*5) alone dwarfs the -140/-180 mismatch penalty).
+    // Hard-reject here rather than tune the scoring weights, since no seed
+    // count should ever make the wrong episode an acceptable answer.
+    const candidateMatchesRequestedTarget = (candidate) => {
+        if (!candidate) return false;
+        if (seasonNum && Number(candidate.season) !== seasonNum) return false;
+        if (sourceType === 'episode' && episodeNum && Number(candidate.episode) !== episodeNum) return false;
+        return true;
+    };
+    const selectedSearchCandidate = candidateMatchesRequestedTarget(bestBySeededExact) ? bestBySeededExact : null;
+
     if (!selectedSearchCandidate || !selectedSearchCandidate.magnetUrl) {
         const topCandidates = scored.candidates.slice(0, 3).map((row) => `${row.title} [score=${row.confidenceScore} seeds=${row.seeds}]`).join(' | ');
+        if (bestBySeededExact && !candidateMatchesRequestedTarget(bestBySeededExact)) {
+            logger.warn(`[AutoAcquire] Rejected wrong-season/episode result | query="${query}" wanted=S${seasonNum || '-'}E${episodeNum || '-'} got="${bestBySeededExact.title}" [S${bestBySeededExact.season}E${bestBySeededExact.episode}]`);
+        }
         logger.warn(`[AutoAcquire] No confident result | query="${query}" searchId=${searchId} status=${collected?.stats?.status || 'unknown'} top=${topCandidates || 'none'}`);
         return {
             success: false,

@@ -466,10 +466,29 @@ async function resolveNextTargetEpisode(rule, availability, pendingKeys) {
 // whenever there's no tier-specific interval (no known air date at all, or
 // backfill mode), so a show acquisition tiers can't confidently place still
 // gets checked on the same cadence this always used before tiers existed.
+// Some sources represent "we don't actually know" as an implausibly early
+// sentinel date (e.g. 1900-01-01) rather than an explicit null/N/A -
+// confirmed as a real risk here, not a hypothetical: treat anything before
+// this floor the same as "no date at all", never as a genuinely-past date.
+const SENTINEL_DATE_FLOOR_MS = Date.UTC(1970, 0, 1);
+
 function computeAcquisitionTier(nextKnownAirDateIso, nowMs, defaultCheckIntervalMinutes) {
-    const airDateMs = nextKnownAirDateIso ? Date.parse(nextKnownAirDateIso) : NaN;
+    const parsedAirDateMs = nextKnownAirDateIso ? Date.parse(nextKnownAirDateIso) : NaN;
+    const airDateMs = Number.isFinite(parsedAirDateMs) && parsedAirDateMs >= SENTINEL_DATE_FLOOR_MS ? parsedAirDateMs : NaN;
+
     if (!Number.isFinite(airDateMs)) {
-        return { tier: 'unknown', useEztv: true, useQbitSearch: true, checkIntervalMinutes: defaultCheckIntervalMinutes };
+        // No confirmed air date at all - found in metadata but not yet
+        // scheduled/aired, sentinel "unknown" date, or metadata lookup
+        // failed outright. Confirmed live why this must never reach for
+        // qBittorrent's fuzzy search: two shows whose next season hadn't
+        // actually aired yet ("The Gentlemen" S03, "X-Men '97" S03) both got
+        // confidently matched to the *wrong* season by that search, because
+        // there was nothing real to find and it picked the closest-scoring
+        // wrong answer instead. EZTV is safe to still try - it only ever
+        // matches on an exact season/episode parsed from the release title
+        // (see matchesRuleWindow/pickBestByEpisode), so it can't misfire the
+        // same way; it just won't find anything for a season that isn't out.
+        return { tier: 'no-confirmed-date', useEztv: true, useQbitSearch: false, checkIntervalMinutes: defaultCheckIntervalMinutes };
     }
 
     const hoursSinceAirDate = (nowMs - airDateMs) / (1000 * 60 * 60);
