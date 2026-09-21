@@ -62,6 +62,48 @@ function isPackShaped(title, parsedSeasonEpisode = {}) {
     return looksLikeSeasonPack(title) || Boolean(parsedSeasonEpisode?.season && !parsedSeasonEpisode?.episode);
 }
 
+// Extra pack-integrity checks, applied as hard rejects in
+// scoreAutoSeriesCandidate rather than folded into isPackShaped - these
+// catch a title that superficially looks pack-shaped but isn't a clean
+// single-season release: an explicit episode marker parseSeasonEpisodeFromTitle's
+// narrower regex missed, or a second season number (a multi-season bundle
+// like "S01-S06", or a stray reference elsewhere in the title).
+function hasAnyEpisodeMarker(title) {
+    const t = String(title || '');
+    return /\bs\d{1,2}\s*e\d{1,3}\b/i.test(t)
+        || /\b(?:ep|episode)\.?\s*\d{1,3}\b/i.test(t)
+        // Catches a standalone "E05" immediately after a season number
+        // with no separator (e.g. "S02E05") that isn't already caught by
+        // the combined SxxExx pattern above for some reason, while the
+        // lookbehind keeps it from matching inside an unrelated word
+        // ("Elite", "Extended") since a real episode marker's "e" is never
+        // preceded by another letter.
+        || /(?<![a-z])e\d{1,3}\b/i.test(t);
+}
+
+function hasOtherSeasonNumbers(title, targetSeason) {
+    if (!Number.isFinite(targetSeason)) return false;
+    const found = Array.from(String(title || '').matchAll(/\bs(\d{1,2})\b/gi)).map((m) => parseInt(m[1], 10));
+    return found.some((n) => Number.isFinite(n) && n !== targetSeason);
+}
+
+// A real season is always a multi-episode bundle, so it's always
+// meaningfully larger than a single episode - a "season" release under a
+// few GB is almost certainly mislabeled. Only enforced when size is
+// actually known (some search plugins don't report it) - missing data
+// isn't treated as a strike against a candidate. Quality-aware: x265/HEVC
+// achieves much smaller files than x264/BluRay for the same visual
+// quality (confirmed live - a real, well-seeded 13-episode x265 season
+// pack came in at 3.55GB, well under a flat 4GB floor, while an X264
+// release of the same season was 39.89GB), so a single floor would have
+// rejected a legitimate release. Both are env-overridable.
+const PACK_MIN_SIZE_BYTES_STANDARD = Math.max(0, parseFloat(process.env.AUTO_SERIES_PACK_MIN_SIZE_GB) || 4) * 1024 * 1024 * 1024;
+const PACK_MIN_SIZE_BYTES_EFFICIENT = Math.max(0, parseFloat(process.env.AUTO_SERIES_PACK_MIN_SIZE_EFFICIENT_GB) || 2) * 1024 * 1024 * 1024;
+
+function usesEfficientCodec(title) {
+    return /\b(x265|h\.?265|hevc)\b/i.test(String(title || ''));
+}
+
 function buildAutoSeriesSearchQuery(showTitle, season = null, episode = null, sourceType = 'episode') {
     const title = normalizeDisplayTitle(showTitle || '');
     const s = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
@@ -181,6 +223,25 @@ function scoreAutoSeriesCandidate(candidate, context = {}) {
     if (sourceType === 'pack' && candidate.sourceType !== 'pack') {
         reasons.push(`REJECT: pack requested but row parsed as sourceType=${candidate.sourceType}`);
         return { score: Number.NEGATIVE_INFINITY, reasons };
+    }
+
+    if (sourceType === 'pack') {
+        if (hasAnyEpisodeMarker(candidate.title)) {
+            reasons.push('REJECT: pack requested but title contains an episode-number marker');
+            return { score: Number.NEGATIVE_INFINITY, reasons };
+        }
+        if (season && hasOtherSeasonNumbers(candidate.title, season)) {
+            reasons.push('REJECT: pack requested but title references a season number other than the one requested');
+            return { score: Number.NEGATIVE_INFINITY, reasons };
+        }
+        if (candidate.sizeBytes > 0) {
+            const efficient = usesEfficientCodec(candidate.title);
+            const sizeFloor = efficient ? PACK_MIN_SIZE_BYTES_EFFICIENT : PACK_MIN_SIZE_BYTES_STANDARD;
+            if (candidate.sizeBytes < sizeFloor) {
+                reasons.push(`REJECT: pack requested but size ${(candidate.sizeBytes / (1024 ** 3)).toFixed(2)}GB is below the ${(sizeFloor / (1024 ** 3)).toFixed(0)}GB pack floor (${efficient ? 'x265/HEVC' : 'standard'} codec)`);
+                return { score: Number.NEGATIVE_INFINITY, reasons };
+            }
+        }
     }
 
     if (season && candidate.season === season) {
