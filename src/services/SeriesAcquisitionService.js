@@ -49,6 +49,19 @@ function looksLikeSeasonPack(title) {
     return /(season\s*pack|\bcomplete\b|s\d{1,2}\s*complete|seasons?\s*\d+\s*-\s*\d+|\[pack\]|\bpack\b)/i.test(String(title || ''));
 }
 
+// A title with a parsed season but no parsed episode number is, by strong
+// convention for TV releases, a full-season/pack release - real scene/
+// BluRay-box season releases very rarely spell out "pack"/"complete" in
+// the title at all (e.g. "Better Call Saul S02 1080p BluRay x265
+// KONTRAST"). looksLikeSeasonPack() alone was hard-rejecting exactly this
+// kind of release from pack requests, even though the scoring function's
+// own "+60 pack shape" bonus already treats season-without-episode as the
+// key pack signal - this aligns classification with that same signal
+// instead of relying on keyword-matching alone.
+function isPackShaped(title, parsedSeasonEpisode = {}) {
+    return looksLikeSeasonPack(title) || Boolean(parsedSeasonEpisode?.season && !parsedSeasonEpisode?.episode);
+}
+
 function buildAutoSeriesSearchQuery(showTitle, season = null, episode = null, sourceType = 'episode') {
     const title = normalizeDisplayTitle(showTitle || '');
     const s = Number.isFinite(parseInt(season, 10)) && parseInt(season, 10) > 0 ? parseInt(season, 10) : null;
@@ -59,7 +72,13 @@ function buildAutoSeriesSearchQuery(showTitle, season = null, episode = null, so
         return `${title} S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`.trim();
     }
     if (s && source === 'pack') {
-        return `${title} S${String(s).padStart(2, '0')} season pack complete`.trim();
+        // Was "{title} S{season} season pack complete" - a phrase real
+        // releases almost never contain (confirmed live: this returned
+        // zero raw results from qBittorrent's search plugins for "Better
+        // Call Saul S02", while the exact same plugins returned 22 raw
+        // results, including a well-seeded real season pack, for the
+        // plain "{title} S{season}" shape used elsewhere in the app).
+        return `${title} S${String(s).padStart(2, '0')}`.trim();
     }
     if (s) {
         return `${title} season ${s}`.trim();
@@ -103,7 +122,7 @@ function mapRawSearchRow(raw = {}) {
     const sizeBytes = parseFloat(raw?.fileSize ?? raw?.size ?? 0) || 0;
     const source = String(raw?.siteUrl || raw?.site || '').trim();
     const parsed = parseSeasonEpisodeFromTitle(title);
-    const sourceType = looksLikeSeasonPack(title) ? 'pack' : 'episode';
+    const sourceType = isPackShaped(title, parsed) ? 'pack' : 'episode';
 
     return {
         title,
@@ -381,7 +400,10 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
     // diagnostics when a pack request falls through to search-confidence
     // simply because EZTV never had a pack to offer, vs. having one that
     // didn't match season/quality.
-    const packRawCount = rows.filter((row) => looksLikeSeasonPack(String(row.title || row.filename || ''))).length;
+    const packRawCount = rows.filter((row) => {
+        const rowTitle = String(row.title || row.filename || '');
+        return isPackShaped(rowTitle, parseSeasonEpisodeFromTitle(rowTitle));
+    }).length;
 
     const exact = rows
         .map((row) => {
@@ -393,7 +415,7 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
             const episodeRaw = parseInt(row.episode, 10);
             const seasonValue = Number.isFinite(seasonRaw) ? seasonRaw : parsed.season;
             const episodeValue = Number.isFinite(episodeRaw) ? episodeRaw : parsed.episode;
-            const rowType = looksLikeSeasonPack(title) ? 'pack' : 'episode';
+            const rowType = isPackShaped(title, { season: seasonValue, episode: episodeValue }) ? 'pack' : 'episode';
             if (!Number.isFinite(seasonValue) || !seasonNum || seasonValue !== seasonNum) return null;
             if (packsOnly) return rowType === 'pack' ? { ...row, title, season: seasonValue, episode: Number.isFinite(episodeValue) ? episodeValue : null, sourceType: rowType } : null;
             return rowType === 'episode' && Number.isFinite(episodeValue) && episodeValue === episodeNum
