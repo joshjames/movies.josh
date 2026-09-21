@@ -120,7 +120,13 @@ function mapRawSearchRow(raw = {}) {
     };
 }
 
+// Returns { score, reasons } instead of a bare number - reasons is a
+// human-readable trail of every rule that fired and what it contributed,
+// so a candidate's final score can actually be explained (not just
+// observed) when tuning confidence for a specific show/query. Logged by
+// pickBestAutoSeriesCandidate's caller, not printed here.
 function scoreAutoSeriesCandidate(candidate, context = {}) {
+    const reasons = [];
     const targetTitle = normalizeTitleForCompare(context.showTitle || '');
     const titleNorm = normalizeTitleForCompare(candidate.title || '');
     const imdbDigits = String(context.imdbId || '').replace(/^tt/i, '');
@@ -129,10 +135,18 @@ function scoreAutoSeriesCandidate(candidate, context = {}) {
 
     let score = 0;
 
-    if (titleNorm && targetTitle && titleNorm.includes(targetTitle)) score += 140;
+    if (titleNorm && targetTitle && titleNorm.includes(targetTitle)) {
+        score += 140;
+        reasons.push('+140 full title match');
+    }
+    let tokenBonus = 0;
     for (const token of titleTokens) {
         if (token.length < 2) continue;
-        if (titleNorm.includes(token)) score += 14;
+        if (titleNorm.includes(token)) tokenBonus += 14;
+    }
+    if (tokenBonus) {
+        score += tokenBonus;
+        reasons.push(`+${tokenBonus} title token matches`);
     }
 
     const season = Number.isFinite(parseInt(context.season, 10)) ? parseInt(context.season, 10) : null;
@@ -141,50 +155,110 @@ function scoreAutoSeriesCandidate(candidate, context = {}) {
     const allow2160 = Boolean(context.allow2160);
 
     if (!allow2160 && candidate.quality === '2160p') {
-        return Number.NEGATIVE_INFINITY;
+        reasons.push('REJECT: 2160p not allowed for this request');
+        return { score: Number.NEGATIVE_INFINITY, reasons };
     }
 
     if (sourceType === 'pack' && candidate.sourceType !== 'pack') {
-        return Number.NEGATIVE_INFINITY;
+        reasons.push(`REJECT: pack requested but row parsed as sourceType=${candidate.sourceType}`);
+        return { score: Number.NEGATIVE_INFINITY, reasons };
     }
 
-    if (season && candidate.season === season) score += 90;
-    if (season && candidate.season && candidate.season !== season) score -= 140;
+    if (season && candidate.season === season) {
+        score += 90;
+        reasons.push('+90 season match');
+    }
+    if (season && candidate.season && candidate.season !== season) {
+        score -= 140;
+        reasons.push(`-140 season mismatch (wanted S${season}, row is S${candidate.season})`);
+    }
 
-    if (episode && candidate.episode === episode) score += 130;
-    if (episode && candidate.episode && candidate.episode !== episode) score -= 180;
+    if (episode && candidate.episode === episode) {
+        score += 130;
+        reasons.push('+130 episode match');
+    }
+    if (episode && candidate.episode && candidate.episode !== episode) {
+        score -= 180;
+        reasons.push(`-180 episode mismatch (wanted E${episode}, row is E${candidate.episode})`);
+    }
 
-    if (sourceType === 'pack' && season && candidate.season === season && !candidate.episode) score += 60;
-    if (sourceType === 'pack' && candidate.episode) score -= 50;
+    if (sourceType === 'pack' && season && candidate.season === season && !candidate.episode) {
+        score += 60;
+        reasons.push('+60 pack shape (season matches, no episode number parsed)');
+    }
+    if (sourceType === 'pack' && candidate.episode) {
+        score -= 50;
+        reasons.push(`-50 pack requested but row has an episode number (E${candidate.episode})`);
+    }
 
-    if (imdbDigits && combined.includes(imdbDigits)) score += 85;
+    if (imdbDigits && combined.includes(imdbDigits)) {
+        score += 85;
+        reasons.push('+85 imdb id present in title/source');
+    }
 
-    score += Math.min(220, candidate.seeds * 5);
-    score += Math.min(60, candidate.peers * 2);
+    const seedBonus = Math.min(220, candidate.seeds * 5);
+    if (seedBonus) {
+        score += seedBonus;
+        reasons.push(`+${seedBonus} seeds (${candidate.seeds})`);
+    }
+    const peerBonus = Math.min(60, candidate.peers * 2);
+    if (peerBonus) {
+        score += peerBonus;
+        reasons.push(`+${peerBonus} peers (${candidate.peers})`);
+    }
 
-    if (candidate.quality === '2160p') score += 18;
-    else if (candidate.quality === '1080p') score += 14;
-    else if (candidate.quality === '720p') score += 8;
+    if (candidate.quality === '2160p') {
+        score += 18;
+        reasons.push('+18 quality 2160p');
+    } else if (candidate.quality === '1080p') {
+        score += 14;
+        reasons.push('+14 quality 1080p');
+    } else if (candidate.quality === '720p') {
+        score += 8;
+        reasons.push('+8 quality 720p');
+    }
 
-    return score;
+    return { score, reasons };
 }
 
+// stats gives visibility into how the raw plugin-result pool got whittled
+// down to a scored candidate list - essential for telling apart "the
+// search plugins just didn't return any real season packs" from "packs
+// came back but none scored well enough", which look identical from the
+// outside (both end in "no confident result") but need completely
+// different fixes.
 function pickBestAutoSeriesCandidate(rows = [], context = {}) {
-    const candidates = rows
-        .map(mapRawSearchRow)
-        .filter((row) => row.title && row.magnetUrl && row.magnetUrl.startsWith('magnet:?'))
-        .filter((row) => Boolean(context.allow2160) || row.quality !== '2160p')
-        .filter((row) => String(context.sourceType || '').toLowerCase() !== 'pack' || row.sourceType === 'pack')
-        .map((row) => ({
-            ...row,
-            confidenceScore: scoreAutoSeriesCandidate(row, context)
-        }))
+    const packsOnly = String(context.sourceType || '').toLowerCase() === 'pack';
+    const mapped = rows.map(mapRawSearchRow);
+    const totalRaw = mapped.length;
+    const packRaw = mapped.filter((row) => row.sourceType === 'pack').length;
+    const episodeRaw = mapped.filter((row) => row.sourceType === 'episode').length;
+
+    const withMagnet = mapped.filter((row) => row.title && row.magnetUrl && row.magnetUrl.startsWith('magnet:?'));
+    const qualityFiltered = withMagnet.filter((row) => Boolean(context.allow2160) || row.quality !== '2160p');
+    const typeFiltered = qualityFiltered.filter((row) => !packsOnly || row.sourceType === 'pack');
+
+    const scored = typeFiltered.map((row) => {
+        const result = scoreAutoSeriesCandidate(row, context);
+        return { ...row, confidenceScore: result.score, scoreReasons: result.reasons };
+    });
+
+    const candidates = scored
         .filter((row) => Number.isFinite(row.confidenceScore) && row.confidenceScore > Number.NEGATIVE_INFINITY)
         .sort((a, b) => b.confidenceScore - a.confidenceScore);
 
     return {
         best: candidates[0] || null,
-        candidates
+        candidates,
+        stats: {
+            totalRaw,
+            packRaw,
+            episodeRaw,
+            missingMagnet: mapped.length - withMagnet.length,
+            excluded2160: withMagnet.length - qualityFiltered.length,
+            excludedWrongType: qualityFiltered.length - typeFiltered.length,
+            hardRejected: typeFiltered.length - candidates.length
+        }
     };
 }
 
@@ -203,14 +277,32 @@ async function collectAutoSeriesSearchCandidates(searchId, context = {}, options
     let bestScore = Number.NEGATIVE_INFINITY;
     let best = null;
     let candidates = [];
+    let lastPoolStats = null;
+
+    logger.debug(`[AutoAcquire][Search] Polling started | searchId=${searchId} sourceType=${context.sourceType || 'episode'} season=${context.season ?? '-'} episode=${context.episode ?? '-'} maxWaitMs=${maxWaitMs} minWaitMs=${minWaitMs} pollMs=${pollMs} settleWindowMs=${settleWindowMs}`);
 
     while (true) {
         sampleCount += 1;
 
-        const [statuses, searchResult] = await Promise.all([
-            TorrentSearchService.getStatus(searchId).catch(() => []),
-            TorrentSearchService.getResults(searchId, { limit: resultLimit, offset: 0 }).catch(() => ({ results: [] }))
+        const [statusOutcome, resultsOutcome] = await Promise.all([
+            TorrentSearchService.getStatus(searchId).then((value) => ({ ok: true, value })).catch((error) => ({ ok: false, error })),
+            TorrentSearchService.getResults(searchId, { limit: resultLimit, offset: 0 }).then((value) => ({ ok: true, value })).catch((error) => ({ ok: false, error }))
         ]);
+
+        // Previously swallowed into an empty fallback with zero logging -
+        // an auth/host failure on the search plugin backend looked
+        // identical to "the search just hasn't found anything yet" from
+        // outside this loop. Now surfaced explicitly (TorrentService.js's
+        // requestSearch also logs the underlying transport failure).
+        if (!statusOutcome.ok) {
+            logger.warn(`[AutoAcquire][Search] poll #${sampleCount} status check failed | searchId=${searchId} error="${statusOutcome.error.message}"`);
+        }
+        if (!resultsOutcome.ok) {
+            logger.warn(`[AutoAcquire][Search] poll #${sampleCount} results fetch failed | searchId=${searchId} error="${resultsOutcome.error.message}"`);
+        }
+
+        const statuses = statusOutcome.ok ? statusOutcome.value : [];
+        const searchResult = resultsOutcome.ok ? resultsOutcome.value : { results: [] };
 
         const row = Array.isArray(statuses)
             ? statuses.find((item) => Number(item?.id) === Number(searchId))
@@ -219,9 +311,14 @@ async function collectAutoSeriesSearchCandidates(searchId, context = {}, options
 
         const rawRows = Array.isArray(searchResult?.results) ? searchResult.results : [];
         const scored = pickBestAutoSeriesCandidate(rawRows, context);
+        lastPoolStats = scored.stats;
         const currentBest = scored.best;
-        const currentScore = Number(currentBest?.confidenceScore || Number.NEGATIVE_INFINITY);
+        const currentScore = Number(currentBest?.confidenceScore ?? Number.NEGATIVE_INFINITY);
         const totalCandidates = scored.candidates.length;
+
+        logger.debug(
+            `[AutoAcquire][Search] poll #${sampleCount} | status=${lastStatus} raw=${rawRows.length} pack=${scored.stats.packRaw} episode=${scored.stats.episodeRaw} scored=${totalCandidates} rejected=${scored.stats.hardRejected} best=${currentBest ? `"${currentBest.title}" score=${currentScore} seeds=${currentBest.seeds}` : 'none'}`
+        );
 
         if (currentBest && (currentScore > bestScore || totalCandidates > candidates.length)) {
             bestScore = currentScore;
@@ -245,6 +342,7 @@ async function collectAutoSeriesSearchCandidates(searchId, context = {}, options
         const readyByTimeout = elapsedMs >= maxWaitMs;
 
         if (readyBySettleWindow || readyByTerminal || readyByTimeout) {
+            logger.debug(`[AutoAcquire][Search] Polling done | searchId=${searchId} reason=${readyByTimeout ? 'timeout' : (readyByTerminal ? 'terminal-status' : 'settled')} samples=${sampleCount} elapsedMs=${elapsedMs}`);
             return {
                 best,
                 candidates,
@@ -255,7 +353,8 @@ async function collectAutoSeriesSearchCandidates(searchId, context = {}, options
                     idleMs,
                     maxWaitMs,
                     minWaitMs,
-                    settleWindowMs
+                    settleWindowMs,
+                    poolStats: lastPoolStats
                 }
             };
         }
@@ -277,6 +376,12 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
 
     const fetched = await EztvCatalogService.getTorrentsForImdb(imdbDigits, { maxPages: 5 });
     const rows = Array.isArray(fetched.torrents) ? fetched.torrents : [];
+    // EZTV is overwhelmingly a per-episode tracker - real season-pack
+    // releases there are rare. Counting this up front makes it obvious in
+    // diagnostics when a pack request falls through to search-confidence
+    // simply because EZTV never had a pack to offer, vs. having one that
+    // didn't match season/quality.
+    const packRawCount = rows.filter((row) => looksLikeSeasonPack(String(row.title || row.filename || ''))).length;
 
     const exact = rows
         .map((row) => {
@@ -323,6 +428,7 @@ async function selectBestEztvAutoCandidate({ imdbId, season = null, episode = nu
                 ? 'seeded_exact_match'
                 : (exact.length ? 'exact_match_without_seeds' : 'no_exact_match'),
             rawCount: rows.length,
+            packRawCount,
             exactCount: exact.length,
             seededExactCount: seededExact.length,
             upstreamWarnings: fetched.upstreamWarnings || []
@@ -379,7 +485,7 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
     }
 
     logger.info(
-        `[AutoAcquire] EZTV seeded exact unavailable; fallback to search-confidence | query="${query}" reason=${String(eztvSelection?.diagnostics?.reason || 'no_seeded_match')} raw=${Number(eztvSelection?.diagnostics?.rawCount || 0)} exact=${Number(eztvSelection?.diagnostics?.exactCount || 0)} seeded=${Number(eztvSelection?.diagnostics?.seededExactCount || 0)}`
+        `[AutoAcquire] EZTV seeded exact unavailable; fallback to search-confidence | query="${query}" reason=${String(eztvSelection?.diagnostics?.reason || 'no_seeded_match')} raw=${Number(eztvSelection?.diagnostics?.rawCount || 0)} packRaw=${Number(eztvSelection?.diagnostics?.packRawCount || 0)} exact=${Number(eztvSelection?.diagnostics?.exactCount || 0)} seeded=${Number(eztvSelection?.diagnostics?.seededExactCount || 0)}`
     );
 
     const started = await TorrentSearchService.startSearch({
@@ -417,6 +523,18 @@ async function resolveAutoSeriesAcquisition(intent = {}) {
         best: collected.best,
         candidates: Array.isArray(collected.candidates) ? collected.candidates : []
     };
+
+    const poolStats = collected?.stats?.poolStats || {};
+    logger.debug(
+        `[AutoAcquire][Search] Final pool | query="${query}" searchId=${searchId} status=${collected?.stats?.status || 'unknown'} elapsedMs=${collected?.stats?.elapsedMs ?? '-'} totalRaw=${poolStats.totalRaw || 0} packRaw=${poolStats.packRaw || 0} episodeRaw=${poolStats.episodeRaw || 0} missingMagnet=${poolStats.missingMagnet || 0} excluded2160=${poolStats.excluded2160 || 0} excludedWrongType=${poolStats.excludedWrongType || 0} hardRejected=${poolStats.hardRejected || 0} scoredCandidates=${scored.candidates.length}`
+    );
+    if (scored.candidates.length) {
+        const table = scored.candidates.slice(0, 10).map((row, idx) => (
+            `  #${idx + 1} score=${row.confidenceScore} seeds=${row.seeds} S${row.season ?? '-'}E${row.episode ?? '-'} type=${row.sourceType} "${row.title}" [${(row.scoreReasons || []).join('; ')}]`
+        )).join('\n');
+        logger.debug(`[AutoAcquire][Search] Top ${Math.min(10, scored.candidates.length)} scored candidates:\n${table}`);
+    }
+
     const threshold = Number.isFinite(parseFloat(intent.minScore)) ? parseFloat(intent.minScore) : 90;
     const seededExactSearchFallback = scored.candidates.find((row) => {
         const rowSeason = Number.isFinite(parseInt(row?.season, 10)) ? parseInt(row.season, 10) : null;

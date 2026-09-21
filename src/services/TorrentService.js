@@ -265,12 +265,20 @@ async function requestSearch({ method = 'get', path, params, data, headers = {},
             QBIT_SEARCH_USER &&
             QBIT_SEARCH_PASSWORD
         ) {
+            logger.debug(`[TorrentSearch] ${action} got 403, refreshing search session and retrying once.`);
             qbitSearchSessionCookie = null;
             qbitSearchSessionAt = 0;
             response = await run(true);
         }
 
         if (response.status >= 400) {
+            // This was previously invisible - a plugin-search auth failure,
+            // a dead search host, or a qBittorrent-side error on this
+            // specific action would surface only as a generic downstream
+            // "no confident result", with nothing in the logs pointing at
+            // the actual transport-level cause. response.data often carries
+            // qBittorrent's own error text, so it's worth logging directly.
+            logger.warn(`[TorrentSearch] ${action} failed | status=${response.status} host=${QBIT_SEARCH_BASE_URL} body=${JSON.stringify(response.data).slice(0, 300)}`);
             const err = new Error(`qBittorrent ${action} failed with status ${response.status}`);
             err.response = response;
             throw err;
@@ -278,6 +286,12 @@ async function requestSearch({ method = 'get', path, params, data, headers = {},
 
         return response;
     } catch (err) {
+        if (!err.response) {
+            // Network-level failure (connection refused, timeout, DNS) -
+            // the branch above already logged HTTP-level failures, this
+            // covers everything that never got an HTTP response at all.
+            logger.warn(`[TorrentSearch] ${action} failed before a response was received | host=${QBIT_SEARCH_BASE_URL} error="${err.message}"`);
+        }
         throw buildUpstreamError(action, err);
     }
 }
