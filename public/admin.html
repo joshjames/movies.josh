@@ -2680,6 +2680,7 @@
                             <div class="ops-inline-row">
                                 ${hasQuarantinedArchive ? `<span style="font-size:0.78rem;color:#bfdbfe;background:#0b1220;border:1px solid #1d4ed8;border-radius:6px;padding:6px 8px;">Archive retained until: ${localArchivePurgeAfter || 'unknown'}</span>` : ''}
                                 <select id="worker-${item.folder}" style="min-width:180px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:6px 8px;">
+                                    <option value="RUN_ALL">Run All (Whole Pipeline)</option>
                                     <option value="INGEST">INGEST</option>
                                     <option value="METADATA">METADATA</option>
                                     <option value="SUBTITLES">SUBTITLES</option>
@@ -3252,8 +3253,13 @@
         }
 
         async function runWorkerNow(folder, type) {
+            const worker = document.getElementById(`worker-${folder}`)?.value || 'METADATA';
+            if (worker === 'RUN_ALL') {
+                await runAllWorkersNow(folder, type);
+                return;
+            }
+
             try {
-                const worker = document.getElementById(`worker-${folder}`)?.value || 'METADATA';
                 const forceReprocess = worker === 'TRANSCODE'
                     ? Boolean(document.getElementById(`force-reprocess-${folder}`)?.checked)
                     : false;
@@ -3277,6 +3283,44 @@
             } catch (_err) {
                 showToast('Worker trigger request failed.', 'error', 4200);
             }
+        }
+
+        // Runs the full pipeline against an already-in-place folder (a
+        // manual add or library-sweep item that never went through
+        // PipelineWorker's job-based chain), by calling the same
+        // single-worker endpoint the dropdown already uses, once per step,
+        // in order. Each step already reads the folder's current
+        // metadata.json/series.json fresh from disk (no in-memory patch
+        // handoff needed between calls, unlike the torrent-driven job
+        // queue), so simply running them back-to-back is enough. Kept as 5
+        // separate requests rather than one long server-side call so no
+        // single request risks a proxy/gateway timeout during a long
+        // TRANSCODE or CLOUDSYNC step - each step is bounded by the same
+        // per-worker timeout the existing single-step runs already rely on.
+        async function runAllWorkersNow(folder, type) {
+            const sequence = ['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC'];
+            for (const worker of sequence) {
+                showToast(`Run All: ${worker} for ${folder}...`, 'info', 3000);
+                try {
+                    const res = await fetch('/api/admin/manual-worker-run', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ folder, contentType: type, worker })
+                    });
+                    const data = await res.json();
+                    if (!data.success) {
+                        showToast(`Run All stopped at ${worker}: ` + (data.error || 'Unknown error'), 'error', 5000);
+                        fetchLibraryData();
+                        return;
+                    }
+                } catch (_err) {
+                    showToast(`Run All stopped at ${worker}: request failed.`, 'error', 5000);
+                    fetchLibraryData();
+                    return;
+                }
+            }
+            showToast(`Whole pipeline finished for ${folder}.`, 'success', 3500);
+            fetchLibraryData();
         }
 
         function toggleForceReprocess(folder) {
