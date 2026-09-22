@@ -43,6 +43,34 @@
             font-size: 0.82rem;
             margin: 4px 0 12px 0;
         }
+        .collection-switch-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .collection-switch-row label {
+            font-size: 0.78rem;
+            color: #94a3b8;
+        }
+        .collection-switch-row select {
+            background: #0b1220;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: 0.82rem;
+            outline: none;
+            max-width: 260px;
+        }
+        .collection-switch-row select:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        @media (max-width: 640px) {
+            .collection-switch-row { justify-content: flex-start; flex-wrap: wrap; }
+        }
         .toolbar {
             display: grid;
             grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -174,6 +202,10 @@
         <div class="topbar">
             <a href="/" class="back-link">← Back to Home</a>
             <h1 id="page-title">Grid View</h1>
+        </div>
+        <div class="collection-switch-row">
+            <label for="collection-select">Browse another collection</label>
+            <select id="collection-select"><option value="">My Library (All)</option></select>
         </div>
         <div class="meta-line" id="meta-line">Loading...</div>
 
@@ -308,12 +340,32 @@
             };
         }
 
-        async function fetchRowItems(rowId) {
+        // Cached across both the "show all" data fetch and the collection
+        // dropdown's option list, so switching collections never re-fires
+        // this request more than once per page load.
+        let rowsCatalogCache = null;
+        async function getRowsCatalog() {
+            if (rowsCatalogCache) return rowsCatalogCache;
             const res = await fetch('/api/rows');
             const data = await res.json();
-            const row = (Array.isArray(data?.rows) ? data.rows : []).find((r) => r.id === rowId);
+            rowsCatalogCache = Array.isArray(data?.rows) ? data.rows : [];
+            return rowsCatalogCache;
+        }
+
+        async function fetchRowItems(rowId) {
+            const rows = await getRowsCatalog();
+            const row = rows.find((r) => r.id === rowId);
             if (!row) return { title: 'Row not found', items: [] };
             return { title: row.title, items: (row.items || []).map(rowItemToGridItem) };
+        }
+
+        async function populateCollectionDropdown() {
+            const select = document.getElementById('collection-select');
+            if (!select) return;
+            const rows = await getRowsCatalog();
+            const options = ['<option value="">My Library (All)</option>']
+                .concat(rows.map((row) => `<option value="${row.id}">${String(row.title || row.id)}</option>`));
+            select.innerHTML = options.join('');
         }
 
         function filterAndSort(items, state) {
@@ -421,38 +473,55 @@
             renderGrid(rows, state);
         }
 
-        async function init() {
-            const urlParams = new URLSearchParams(window.location.search);
-            activeRowId = urlParams.get('rowId') || '';
-
-            const state = parseParams();
-            applyParamsToForm(state);
+        // Loads whichever collection (a preset row, or the plain local
+        // library) is now active and re-renders the grid for it. Shared by
+        // the initial page load and the "Browse another collection"
+        // dropdown, so switching collections mid-visit reuses the exact
+        // same fetch/render path a fresh page load would use.
+        async function switchToCollection(rowId, { titleOverride = null } = {}) {
+            activeRowId = rowId || '';
+            const select = document.getElementById('collection-select');
+            if (select) select.value = activeRowId;
 
             const grid = document.getElementById('grid');
             grid.innerHTML = '<div class="empty">Loading...</div>';
 
             try {
                 if (activeRowId) {
-                    // "Show all" from the sidebar's chevron next to a public
-                    // row (see sidebar.js) - same filter/sort/render path as
-                    // the local library grid, just a different data source.
+                    // A public row (see PublicRowBuilderService.js) - either
+                    // "show all" from the sidebar's chevron, or a manual
+                    // switch via the dropdown below.
                     const { title, items } = await fetchRowItems(activeRowId);
                     allItems = items;
-                    if (!urlParams.get('title')) {
-                        document.getElementById('page-title').textContent = title;
-                    }
+                    document.getElementById('page-title').textContent = titleOverride || title;
                 } else {
                     allItems = await fetchAllMovies();
+                    document.getElementById('page-title').textContent = titleOverride || 'My Library';
                 }
                 applyAndRender();
             } catch (_err) {
                 grid.innerHTML = '<div class="empty" style="color:#fca5a5;">Failed loading catalog data.</div>';
             }
+        }
+
+        async function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialRowId = urlParams.get('rowId') || '';
+
+            const state = parseParams();
+            applyParamsToForm(state);
 
             document.getElementById('filter-form').addEventListener('submit', (event) => {
                 event.preventDefault();
                 applyAndRender();
             });
+
+            document.getElementById('collection-select').addEventListener('change', (event) => {
+                switchToCollection(event.target.value);
+            });
+
+            await populateCollectionDropdown();
+            await switchToCollection(initialRowId, { titleOverride: urlParams.get('title') ? state.title : null });
         }
 
         init();
