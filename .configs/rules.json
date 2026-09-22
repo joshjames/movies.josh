@@ -9,7 +9,10 @@
       "https://anyseries.online",
       "https://anymovie.today",
       "https://anymovie.app",
-      "https://aus.any.movie"
+      "https://aus.any.movie",
+      "https://au.any.movie",
+      "https://la.any.movie"
+
     ],
     "allowedOperations": [
       "b2_download_file_by_id",
