@@ -3,11 +3,20 @@
 // a hover-reveal edge tab (desktop). Self-contained - injects its own markup
 // and styles, so any page just needs a single <script src="/js/sidebar.js">.
 //
-// "My Library" / "My Shows" link straight to their existing rows on the
-// homepage (index.html already renders them via /api/home-feed's
-// per-user myLibraryCollection/myShowsCollection - see media.routes.js -
-// with stable ids `my-library-row` / `my-shows-row` on the slider div), so
-// this is just an anchor link, no new backend/page needed.
+// "My Library" / "My Shows" / "Continue Watching" link straight to their
+// existing rows on the homepage (index.html already renders them via
+// /api/home-feed's per-user collections - see media.routes.js - with stable
+// ids `my-library-row` / `my-shows-row` / `continue-watching-row` on the
+// slider div), so these are just anchor links, no new backend/page needed.
+//
+// Every row below that (Streaming Now / By Service) is one of
+// PublicRowBuilderService.js's public rows - each gets TWO links: the row
+// title text jumps to that row on the homepage (an anchor, matching the
+// pattern above), and a chevron next to it opens gridview.html?rowId=<id>
+// for a full-grid "show all" view of that row's items (see gridview.html's
+// rowId handling). Hardcoded here (not fetched from /api/rows) since this
+// runs on every page that includes sidebar.js and the row list itself is
+// fixed, not something worth an extra request per page load for.
 //
 // "New Episodes" and "+ New Row" are placeholders for features not built yet
 // (a dedicated unwatched-episodes view, and user-created CDN-backed
@@ -20,6 +29,25 @@
     // the point is a short, stable, recognizable list. Everything else is one
     // click away via "More genres" -> gridview.html's full genre dropdown.
     const FEATURED_GENRES = ['Action', 'Comedy', 'Drama', 'Horror', 'Animation', 'Sci-Fi'];
+
+    // Mirrors PublicRowBuilderService.js's getRowDisplayOrder() grouping -
+    // keep these in sync if a row id/label changes there.
+    const STREAMING_NOW_ROWS = [
+        { id: 'popular-streaming-movies', label: 'Popular Streaming Movies' },
+        { id: 'popular-tv', label: 'Popular TV' }
+    ];
+    const BY_SERVICE_ROWS = [
+        { id: 'netflix-movies', label: 'Netflix Movies' },
+        { id: 'netflix-tv', label: 'Netflix TV' },
+        { id: 'prime-movies', label: 'Prime Video Movies' },
+        { id: 'prime-tv', label: 'Prime Video TV' },
+        { id: 'disney-movies', label: 'Disney+ Movies' },
+        { id: 'disney-tv', label: 'Disney+ TV' },
+        { id: 'appletv-movies', label: 'Apple TV+ Movies' },
+        { id: 'appletv-tv', label: 'Apple TV+ TV' },
+        { id: 'hbomax-movies', label: 'HBO Max Movies' },
+        { id: 'hbomax-tv', label: 'HBO Max TV' }
+    ];
 
     function genreHref(genre) {
         const q = encodeURIComponent(genre);
@@ -97,9 +125,35 @@
             .app-sidebar-caret.open { transform: rotate(90deg); }
 
             .app-sidebar-genres { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
-            .app-sidebar-genres.open { max-height: 320px; }
+            .app-sidebar-genres.open { max-height: 480px; }
+
+            /* Row link with a "show all" chevron alongside the jump-to-row
+               text link - two separate clickable targets in one row. */
+            .app-sidebar-row-link {
+                display: flex; align-items: stretch;
+            }
+            .app-sidebar-row-link .app-sidebar-link {
+                flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            }
+            .app-sidebar-chevron {
+                flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+                width: 36px; color: #64748b; text-decoration: none; font-size: 1.1rem;
+                cursor: pointer;
+            }
+            .app-sidebar-chevron:hover { color: #e2e8f0; background: rgba(255, 255, 255, 0.06); }
         `;
         document.head.appendChild(style);
+    }
+
+    function buildRowLinkHtml(row) {
+        const anchorHref = `/index.html#${encodeURIComponent(row.id)}`;
+        const gridHref = `/gridview.html?rowId=${encodeURIComponent(row.id)}&title=${encodeURIComponent(row.label)}`;
+        return `
+            <div class="app-sidebar-row-link">
+                <a class="app-sidebar-link app-sidebar-indent" href="${anchorHref}">${row.label}</a>
+                <a class="app-sidebar-chevron" href="${gridHref}" title="Show all" aria-label="Show all: ${row.label}">&rsaquo;</a>
+            </div>
+        `;
     }
 
     function buildMarkup() {
@@ -112,12 +166,26 @@
             <div id="app-sidebar-overlay"></div>
             <nav id="app-sidebar-panel" aria-hidden="true">
                 <button type="button" class="app-sidebar-close-btn" aria-label="Close menu">&times;</button>
+                <a class="app-sidebar-link" href="/index.html#continue-watching-row">Continue Watching</a>
                 <a class="app-sidebar-link" href="/index.html#my-library-row">My Library</a>
                 <a class="app-sidebar-link app-sidebar-indent" href="/index.html#my-shows-row">My Shows</a>
                 <button type="button" class="app-sidebar-add-row" data-coming-soon="Custom rows">+ New Row</button>
                 <button type="button" class="app-sidebar-placeholder app-sidebar-indent" data-coming-soon="New episodes">New Episodes</button>
                 <div class="app-sidebar-divider"></div>
-                <button type="button" class="app-sidebar-toggle" id="app-sidebar-categories-toggle">
+                <button type="button" class="app-sidebar-toggle" data-toggle-target="app-sidebar-streaming-rows">
+                    Streaming Now <span class="app-sidebar-caret">&#9656;</span>
+                </button>
+                <div class="app-sidebar-genres" id="app-sidebar-streaming-rows">
+                    ${STREAMING_NOW_ROWS.map(buildRowLinkHtml).join('')}
+                </div>
+                <button type="button" class="app-sidebar-toggle" data-toggle-target="app-sidebar-service-rows">
+                    By Service <span class="app-sidebar-caret">&#9656;</span>
+                </button>
+                <div class="app-sidebar-genres" id="app-sidebar-service-rows">
+                    ${BY_SERVICE_ROWS.map(buildRowLinkHtml).join('')}
+                </div>
+                <div class="app-sidebar-divider"></div>
+                <button type="button" class="app-sidebar-toggle" data-toggle-target="app-sidebar-genres">
                     Categories <span class="app-sidebar-caret">&#9656;</span>
                 </button>
                 <div class="app-sidebar-genres" id="app-sidebar-genres"></div>
@@ -157,11 +225,8 @@
         const hamburger = document.getElementById('app-sidebar-hamburger-btn');
         const edgeTab = document.getElementById('app-sidebar-edge-tab');
         const closeBtn = panel.querySelector('.app-sidebar-close-btn');
-        const categoriesToggle = document.getElementById('app-sidebar-categories-toggle');
-        const genresContainer = document.getElementById('app-sidebar-genres');
-        const caret = categoriesToggle.querySelector('.app-sidebar-caret');
 
-        buildGenreLinks(genresContainer);
+        buildGenreLinks(document.getElementById('app-sidebar-genres'));
 
         function openSidebar() {
             panel.classList.add('open');
@@ -182,18 +247,27 @@
             if (e.key === 'Escape') closeSidebar();
         });
 
-        categoriesToggle.addEventListener('click', () => {
-            genresContainer.classList.toggle('open');
-            caret.classList.toggle('open');
+        // Every collapsible section (Streaming Now / By Service / Categories)
+        // shares the same open/close toggle behavior, keyed off
+        // data-toggle-target rather than one hardcoded element per section.
+        panel.querySelectorAll('.app-sidebar-toggle[data-toggle-target]').forEach((toggleBtn) => {
+            const targetId = toggleBtn.getAttribute('data-toggle-target');
+            const target = document.getElementById(targetId);
+            const caret = toggleBtn.querySelector('.app-sidebar-caret');
+            if (!target) return;
+            toggleBtn.addEventListener('click', () => {
+                target.classList.toggle('open');
+                if (caret) caret.classList.toggle('open');
+            });
         });
 
         panel.addEventListener('click', (e) => {
-            const target = e.target.closest('[data-coming-soon]');
-            if (target) {
-                showComingSoonToast(target.getAttribute('data-coming-soon'));
+            const comingSoon = e.target.closest('[data-coming-soon]');
+            if (comingSoon) {
+                showComingSoonToast(comingSoon.getAttribute('data-coming-soon'));
                 return;
             }
-            if (e.target.closest('a.app-sidebar-link')) closeSidebar();
+            if (e.target.closest('a.app-sidebar-link, a.app-sidebar-chevron')) closeSidebar();
         });
     }
 

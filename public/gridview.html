@@ -202,6 +202,7 @@
         const NO_COVER_DATA_URI = "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'200'%20height%3D'300'%3E%3Crect%20width%3D'100%25'%20height%3D'100%25'%20fill%3D'%23020617'%2F%3E%3Ctext%20x%3D'50%25'%20y%3D'50%25'%20dominant-baseline%3D'middle'%20text-anchor%3D'middle'%20fill%3D'%23475569'%3ENo%20Cover%3C%2Ftext%3E%3C%2Fsvg%3E";
 
         let allItems = [];
+        let activeRowId = '';
 
         function safeNumber(value) {
             const parsed = parseFloat(value);
@@ -277,8 +278,42 @@
         }
 
         function buildHref(item) {
+            // A public-row item (see rowItemToGridItem) already carries its
+            // own resolved href - a local player/series link if owned, or a
+            // browse-search link if not - since it isn't a plain local
+            // library row with a usable item.id either way.
+            if (item._rowHref) return item._rowHref;
             const targetEndpoint = (item.contentType === 'series') ? 'series.html' : 'player.html';
             return `/${targetEndpoint}?id=${encodeURIComponent(item.id)}`;
+        }
+
+        // Adapts a PublicRowBuilderService row item (see that file for the
+        // full schema) into the same shape filterAndSort/renderGrid already
+        // expect for local library items, so this "show all" view can reuse
+        // that exact rendering path instead of a second one.
+        function rowItemToGridItem(item) {
+            const inLibrary = Boolean(item.inLibrary);
+            return {
+                id: inLibrary ? item.localId : null,
+                title: item.title,
+                year: item.year,
+                genre: '',
+                contentType: item.mediaType === 'tv' ? 'series' : 'movie',
+                cover: item.poster,
+                imdbId: item.imdbId,
+                updatedAt: null,
+                _rowHref: inLibrary && item.localHref
+                    ? item.localHref
+                    : `/browse.html?q=${encodeURIComponent(item.title || '')}`
+            };
+        }
+
+        async function fetchRowItems(rowId) {
+            const res = await fetch('/api/rows');
+            const data = await res.json();
+            const row = (Array.isArray(data?.rows) ? data.rows : []).find((r) => r.id === rowId);
+            if (!row) return { title: 'Row not found', items: [] };
+            return { title: row.title, items: (row.items || []).map(rowItemToGridItem) };
         }
 
         function filterAndSort(items, state) {
@@ -367,6 +402,7 @@
 
         function updateUrl(state) {
             const params = new URLSearchParams();
+            if (activeRowId) params.set('rowId', activeRowId);
             if (state.title) params.set('title', state.title);
             if (state.q) params.set('q', state.q);
             if (state.type && state.type !== 'all') params.set('type', state.type);
@@ -386,14 +422,28 @@
         }
 
         async function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            activeRowId = urlParams.get('rowId') || '';
+
             const state = parseParams();
             applyParamsToForm(state);
 
             const grid = document.getElementById('grid');
-            grid.innerHTML = '<div class="empty">Loading library items...</div>';
+            grid.innerHTML = '<div class="empty">Loading...</div>';
 
             try {
-                allItems = await fetchAllMovies();
+                if (activeRowId) {
+                    // "Show all" from the sidebar's chevron next to a public
+                    // row (see sidebar.js) - same filter/sort/render path as
+                    // the local library grid, just a different data source.
+                    const { title, items } = await fetchRowItems(activeRowId);
+                    allItems = items;
+                    if (!urlParams.get('title')) {
+                        document.getElementById('page-title').textContent = title;
+                    }
+                } else {
+                    allItems = await fetchAllMovies();
+                }
                 applyAndRender();
             } catch (_err) {
                 grid.innerHTML = '<div class="empty" style="color:#fca5a5;">Failed loading catalog data.</div>';

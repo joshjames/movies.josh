@@ -575,6 +575,15 @@
             color: #f1f5f9;
         }
 
+        .row-title-logo {
+            height: 22px;
+            width: auto;
+            max-width: 140px;
+            object-fit: contain;
+            display: block;
+            vertical-align: middle;
+        }
+
         .scroller-title span {
             color: #94a3b8;
             font-size: 0.8rem;
@@ -1444,11 +1453,16 @@
                 ? `<a class="view-all-link" href="${viewAllHref}">View all</a>`
                 : '';
 
+            const titleLogo = String(collection.titleLogo || '').trim();
+            const titleHtml = titleLogo
+                ? `<h2><img class="row-title-logo" src="${sanitizeImageSrc(titleLogo)}" alt="${escapeHtml(collection.title || '')}"></h2>`
+                : `<h2>${collection.title || 'Collection'}</h2>`;
+
             return `
                 <section class="collection-row">
                     <div class="scroller-title">
                         <div class="scroller-title-main">
-                            <h2>${collection.title || 'Collection'}</h2>
+                            ${titleHtml}
                             ${collection.subtitle ? `<span>${collection.subtitle}</span>` : ''}
                         </div>
                         ${viewAllHtml}
@@ -1639,6 +1653,21 @@
             hbomax: '/images/logos/hbomax.jpeg'
         };
 
+        // Row-title logo (replaces the row's own "Top Movies on X" text with
+        // the provider's mark) needs real alpha transparency to look right
+        // against the dark row header - checked directly (identify -format
+        // '%A'), not assumed from the filename: only netflix.png and
+        // prime.png actually have it. disneyplus.png/.webp, appletv.png, and
+        // hbomax.jpeg are all fully opaque (solid background box) despite
+        // what their names suggest, so those three stay as plain text here
+        // until a properly-transparent version is provided - the per-card
+        // corner badge (badgeLogo above) still uses them fine since that
+        // badge already sits on its own dark chip regardless.
+        const TITLE_LOGO_READY = {
+            netflix: '/images/logos/netflix.png',
+            prime: '/images/logos/prime.png'
+        };
+
         // Converts a PublicRowBuilderService row (see that file for the full
         // schema) into the {id, title, subtitle, cards} shape renderFeedRow
         // already knows how to draw - same row renderer, same card markup,
@@ -1647,6 +1676,7 @@
         function publicRowToCollection(row) {
             const badgeSlug = Array.isArray(row.badges) && row.badges.length ? row.badges[0] : null;
             const badgeLogo = badgeSlug ? (PROVIDER_LOGOS[badgeSlug] || null) : null;
+            const titleLogo = badgeSlug ? (TITLE_LOGO_READY[badgeSlug] || null) : null;
 
             const cards = (Array.isArray(row.items) ? row.items : []).map((item) => {
                 const contentType = item.mediaType === 'tv' ? 'series' : 'movie';
@@ -1671,7 +1701,7 @@
                 };
             });
 
-            return { id: row.id, title: row.title, subtitle: '', cards };
+            return { id: row.id, title: row.title, subtitle: '', titleLogo, cards };
         }
 
         async function fetchPublicRowCollections() {
@@ -1695,7 +1725,28 @@
                     fetchPublicRowCollections()
                 ]);
                 const data = homeFeedRes;
-                const collections = [...publicRowCollections, ...(data?.feed?.collections || [])];
+                const homeFeedCollections = data?.feed?.collections || [];
+
+                // Continue Watching is already positioned first within
+                // homeFeedCollections (see media.routes.js's /home-feed
+                // handler) - pulled out here so it lands right after our
+                // own "Recently Added" public row instead of being pushed
+                // below all the new provider/popular rows.
+                const continueWatching = homeFeedCollections.find((c) => c.id === 'continue-watching-row') || null;
+                const restOfHomeFeed = homeFeedCollections.filter((c) => c.id !== 'continue-watching-row');
+
+                const recentlyAddedIndex = publicRowCollections.findIndex((c) => c.id === 'recently-added');
+                const recentlyAdded = recentlyAddedIndex >= 0 ? publicRowCollections[recentlyAddedIndex] : null;
+                const restOfPublicRows = recentlyAddedIndex >= 0
+                    ? publicRowCollections.filter((_, i) => i !== recentlyAddedIndex)
+                    : publicRowCollections;
+
+                const collections = [
+                    ...(recentlyAdded ? [recentlyAdded] : []),
+                    ...(continueWatching ? [continueWatching] : []),
+                    ...restOfPublicRows,
+                    ...restOfHomeFeed
+                ];
                 const flattenedCards = collections.flatMap((collection) => Array.isArray(collection.cards) ? collection.cards : []);
                 const dedupedCards = new Map();
                 for (const card of flattenedCards) {
