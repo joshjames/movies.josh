@@ -176,16 +176,23 @@ function normalizeQueueContext(queueContext, magnetUrl) {
     };
 }
 
+// Movies-only lookup - its two callers (attachExistingMediaToUserLibrary,
+// used from /downloader/add and /yts/add) are both explicitly movie-only
+// short-circuits ("Only short-circuit already-available requests for
+// movies" - TV requests never call this at all). Used to also search
+// library.shows too, which had no business being checked here - a movie
+// request should never be able to match (and silently short-circuit
+// against) a TV show that happens to carry the same imdbId. Not the
+// confirmed cause of the live "already in library" false-positive seen
+// with "The Furious" (tt33311069) - that one traced to queueCatalogItem's
+// remote[0] fallback substituting an unrelated movie - but this was still
+// a real, separate correctness gap worth closing regardless.
 function findLibraryItemByImdbId(library, imdbId) {
     const target = normalizeImdbId(imdbId);
     if (!target) return null;
 
-    const allItems = [
-        ...(Array.isArray(library?.movies) ? library.movies : []),
-        ...(Array.isArray(library?.shows) ? library.shows : [])
-    ];
-
-    return allItems.find((item) => normalizeImdbId(item?.imdbId || item?.imdb_id) === target) || null;
+    const movies = Array.isArray(library?.movies) ? library.movies : [];
+    return movies.find((item) => normalizeImdbId(item?.imdbId || item?.imdb_id) === target) || null;
 }
 
 function safelyReadJson(filePath, fallback = {}) {

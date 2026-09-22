@@ -802,10 +802,22 @@
                 }
 
                 const normalizedTitle = normalizeSearchText(title);
+                // No remote[0] fallback - a catalog title with no confident
+                // match (exact imdbId, or title+year, or at least an exact
+                // title) is not "close enough", it's a different movie
+                // entirely. Confirmed live: "The Furious" (tt33311069) fell
+                // through to remote[0], silently substituted a completely
+                // unrelated movie whose imdbId already happened to be in the
+                // library, and reported "already in library" for a title
+                // that was never actually owned - exactly the kind of wrong
+                // guess this app already hard-rejects for TV search matching.
                 const selected = remote.find(row => String(row.imdbId || '').toLowerCase() === cleanImdb)
                     || remote.find(row => normalizeSearchText(row.title || '') === normalizedTitle && String(row.year || '') === cleanYear)
-                    || remote.find(row => normalizeSearchText(row.title || '') === normalizedTitle)
-                    || remote[0];
+                    || remote.find(row => normalizeSearchText(row.title || '') === normalizedTitle);
+
+                if (!selected) {
+                    throw new Error('No confident match found for this title in the remote index.');
+                }
 
                 const magnet = buildMovieMagnet(selected);
                 if (!magnet) {
@@ -813,11 +825,11 @@
                 }
 
                 await addMediaAsset(button, btoa(magnet), 'movie-streamer', selected.imdbId || cleanImdb);
-            } catch (_err) {
+            } catch (err) {
                 button.disabled = false;
                 button.textContent = 'Find & Queue';
                 button.style.background = '#10b981';
-                showToast('Could not queue this title from current remote index.');
+                showToast((err && err.message) ? err.message : 'Could not queue this title from current remote index.');
             }
         }
 
