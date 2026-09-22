@@ -1983,6 +1983,13 @@ router.post('/manual-worker-run', async (req, res) => {
         const { folder, contentType, worker } = req.body || {};
         const forceReprocess = req.body?.forceReprocess === true || String(req.body?.forceReprocess || '').toLowerCase() === 'true';
         const audioFixOnly = req.body?.audioFixOnly === true || String(req.body?.audioFixOnly || '').toLowerCase() === 'true';
+        // A large CLOUDSYNC (or TRANSCODE) upload can legitimately take many
+        // minutes - held open synchronously, whatever reverse proxy sits in
+        // front of this (NPM/Cloudflare) kills the connection well before
+        // the worker actually finishes, even though the worker keeps running
+        // regardless and completes fine. Mirrors override-metadata's
+        // deferCloudSync - same fix, same reasoning.
+        const deferCompletion = req.body?.deferCompletion === true || String(req.body?.deferCompletion || '').toLowerCase() === 'true';
         if (!folder || !worker) {
             return res.status(400).json({ success: false, error: 'Missing folder or worker.' });
         }
@@ -2047,6 +2054,29 @@ router.post('/manual-worker-run', async (req, res) => {
                 logger.warn(`⚠️ [Admin] SUBTITLES preflight before manual TRANSCODE failed for ${folder}: ${preflightErr.message}`);
                 preflight = { worker: 'SUBTITLES', error: preflightErr.response?.data?.error || preflightErr.message };
             }
+        }
+
+        if (deferCompletion) {
+            axios.post(workerUrl, payload, { timeout: 1800000 })
+                .then(async (workerResponse) => {
+                    if (workerResponse?.data?.success === false) {
+                        logger.error(`❌ [Admin] Deferred ${cleanWorker} run failed for ${folder}: ${workerResponse.data.error || 'unsuccessful result.'}`);
+                        return;
+                    }
+                    await LibraryScanner.runLibraryScanSweep();
+                    logger.info(`✅ [Admin] Deferred ${cleanWorker} run completed for ${folder}.`);
+                })
+                .catch((err) => {
+                    logger.error(`❌ [Admin] Deferred ${cleanWorker} run failed for ${folder}: ${err.response?.data?.error || err.message}`);
+                });
+
+            return res.json({
+                success: true,
+                worker: cleanWorker,
+                deferred: true,
+                preflight,
+                message: `${cleanWorker} queued in the background - large uploads/transcodes can take a while, check back shortly.`
+            });
         }
 
         const workerResponse = await axios.post(workerUrl, payload, { timeout: 1800000 });
