@@ -1445,7 +1445,27 @@
                     body: JSON.stringify({ magnetUrl, category: targetCategory, imdbId, queueContext })
                 });
 
-                if (!response.ok) throw new Error('Request failed');
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || data.success === false) {
+                    throw new Error(data.error || 'Request failed');
+                }
+
+                // /api/yts/add and /api/downloader/add both have an early-
+                // return path (attachExistingMediaToUserLibrary) that
+                // succeeds without ever queuing a real download - the
+                // title's imdbId already matched something in the local
+                // library index, so it just attached that existing item to
+                // this user's shelf instead. Previously reported as "Added
+                // to movie queue" regardless, which looked identical to a
+                // real queue success even though nothing was actually
+                // downloading - this was never checking the response body
+                // at all, only the HTTP status.
+                if (data.alreadyAvailable) {
+                    showToast(data.message || 'Already in your library - added to your shelf.');
+                    btn.innerText = 'In Library';
+                    btn.style.background = '#059669';
+                    return;
+                }
 
                 showToast(targetCategory === 'series-streamer'
                     ? 'Release pushed to series queue.'
@@ -1453,8 +1473,8 @@
                 );
                 btn.innerText = 'Queued';
                 btn.style.background = '#059669';
-            } catch (_err) {
-                showToast('Core pipeline rejected tracker linkage.');
+            } catch (err) {
+                showToast((err && err.message) ? err.message : 'Failed to queue this title.');
                 btn.disabled = false;
                 btn.style.background = '#10b981';
                 btn.innerText = targetCategory === 'series-streamer' ? 'Ingest Release' : 'Add to Library';
