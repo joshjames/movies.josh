@@ -3,25 +3,17 @@
 // a hover-reveal edge tab (desktop). Self-contained - injects its own markup
 // and styles, so any page just needs a single <script src="/js/sidebar.js">.
 //
-// "My Library" / "My Shows" / "Continue Watching" link straight to their
-// existing rows on the homepage (index.html already renders them via
-// /api/home-feed's per-user collections - see media.routes.js - with stable
-// ids `my-library-row` / `my-shows-row` / `continue-watching-row` on the
-// slider div), so these are just anchor links, no new backend/page needed.
-//
-// Every row below that (Streaming Now / By Service) is one of
-// PublicRowBuilderService.js's public rows - each gets TWO links: the row
-// title text jumps to that row on the homepage (an anchor, matching the
-// pattern above), and a chevron next to it opens gridview.html?rowId=<id>
-// for a full-grid "show all" view of that row's items (see gridview.html's
-// rowId handling). Hardcoded here (not fetched from /api/rows) since this
-// runs on every page that includes sidebar.js and the row list itself is
-// fixed, not something worth an extra request per page load for.
-//
-// "New Episodes" and "+ New Row" are placeholders for features not built yet
-// (a dedicated unwatched-episodes view, and user-created CDN-backed
-// collections per docs/flat-cdn-json-architecture-plan.md) - they show a
-// "coming soon" toast rather than linking anywhere.
+// Every real row link here (anything not a "coming soon" placeholder or a
+// section toggle) is a pair: the label text is an anchor jump to that row on
+// index.html, and a chevron next to it opens gridview.html for a full "show
+// all" grid view of that row's items - the exact same gridview.html page
+// used by index.html's own "View all" link at the end of a row (see
+// getCollectionViewAllHref there), just linked to directly instead of via a
+// rendered row. Rows built from PublicRowBuilderService.js's public rows
+// route through gridview.html?rowId=<id> (reads /api/rows, see that file's
+// own rowId handling); "My Library"/"My Shows" aren't public rows at all,
+// so their chevrons go to the same plain local-library grid view
+// getCollectionViewAllHref already uses for those.
 (function () {
     'use strict';
 
@@ -30,29 +22,44 @@
     // click away via "More genres" -> gridview.html's full genre dropdown.
     const FEATURED_GENRES = ['Action', 'Comedy', 'Drama', 'Horror', 'Animation', 'Sci-Fi'];
 
-    // Mirrors PublicRowBuilderService.js's getRowDisplayOrder() grouping -
-    // keep these in sync if a row id/label changes there.
-    const STREAMING_NOW_ROWS = [
-        { id: 'popular-streaming-movies', label: 'Popular Streaming Movies' },
-        { id: 'popular-tv', label: 'Popular TV' }
-    ];
-    const BY_SERVICE_ROWS = [
-        { id: 'netflix-movies', label: 'Netflix Movies' },
-        { id: 'netflix-tv', label: 'Netflix TV' },
-        { id: 'prime-movies', label: 'Prime Video Movies' },
-        { id: 'prime-tv', label: 'Prime Video TV' },
-        { id: 'disney-movies', label: 'Disney+ Movies' },
-        { id: 'disney-tv', label: 'Disney+ TV' },
-        { id: 'appletv-movies', label: 'Apple TV+ Movies' },
-        { id: 'appletv-tv', label: 'Apple TV+ TV' },
-        { id: 'hbomax-movies', label: 'HBO Max Movies' },
-        { id: 'hbomax-tv', label: 'HBO Max TV' }
-    ];
+    function encodeQ(value) {
+        return encodeURIComponent(String(value || '').trim());
+    }
 
     function genreHref(genre) {
-        const q = encodeURIComponent(genre);
+        const q = encodeQ(genre);
         return `/gridview.html?title=${q}&genre=${q}&sort=title`;
     }
+
+    // A PublicRowBuilderService row's "show all" - reads /api/rows,
+    // filtered to this rowId (see gridview.html's fetchRowItems()).
+    function rowGridHref(rowId, label) {
+        return `/gridview.html?rowId=${encodeQ(rowId)}&title=${encodeQ(label)}`;
+    }
+
+    // Mirrors PublicRowBuilderService.js's getRowDisplayOrder() grouping -
+    // keep these in sync if a row id/label changes there.
+    const STREAMING_CONTENT_ROWS = [
+        { anchorId: 'popular-streaming-movies', label: 'Popular Streaming Movies' },
+        { anchorId: 'netflix-movies', label: 'Top Movies on Netflix' },
+        { anchorId: 'netflix-tv', label: 'Top TV Shows on Netflix' },
+        { anchorId: 'prime-movies', label: 'Top Movies on Prime Video' },
+        { anchorId: 'prime-tv', label: 'Top TV Shows on Prime Video' },
+        { anchorId: 'disney-movies', label: 'Top Movies on Disney+' },
+        { anchorId: 'disney-tv', label: 'Top TV Shows on Disney+' },
+        { anchorId: 'appletv-movies', label: 'Top Movies on Apple TV+' },
+        { anchorId: 'appletv-tv', label: 'Top TV Shows on Apple TV+' },
+        { anchorId: 'hbomax-movies', label: 'Top Movies on HBO Max' },
+        { anchorId: 'hbomax-tv', label: 'Top TV Shows on HBO Max' }
+    ].map((row) => ({ ...row, gridHref: rowGridHref(row.anchorId, row.label) }));
+
+    // Not under a section toggle - sits between Streaming Content and
+    // Movie Categories as its own small standalone block. Airing Today is
+    // a placeholder (the TV calendar/air-date view discussed but not built
+    // yet) - "coming soon" like New Episodes below.
+    const TV_DISCOVERY_ROWS = [
+        { anchorId: 'popular-tv', label: 'Popular TV', gridHref: rowGridHref('popular-tv', 'Popular TV') }
+    ];
 
     function injectStyles() {
         const style = document.createElement('style');
@@ -125,7 +132,7 @@
             .app-sidebar-caret.open { transform: rotate(90deg); }
 
             .app-sidebar-genres { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
-            .app-sidebar-genres.open { max-height: 480px; }
+            .app-sidebar-genres.open { max-height: 520px; }
 
             /* Row link with a "show all" chevron alongside the jump-to-row
                text link - two separate clickable targets in one row. */
@@ -145,13 +152,18 @@
         document.head.appendChild(style);
     }
 
-    function buildRowLinkHtml(row) {
-        const anchorHref = `/index.html#${encodeURIComponent(row.id)}`;
-        const gridHref = `/gridview.html?rowId=${encodeURIComponent(row.id)}&title=${encodeURIComponent(row.label)}`;
+    // indent=false renders a top-level row link (Recently Added, My
+    // Library) instead of the indented style used inside a section.
+    function buildRowLinkHtml(row, { indent = true } = {}) {
+        const anchorHref = `/index.html#${encodeQ(row.anchorId)}`;
+        const linkClass = indent ? 'app-sidebar-link app-sidebar-indent' : 'app-sidebar-link';
+        const chevronHtml = row.gridHref
+            ? `<a class="app-sidebar-chevron" href="${row.gridHref}" title="Show all" aria-label="Show all: ${row.label}">&rsaquo;</a>`
+            : '';
         return `
             <div class="app-sidebar-row-link">
-                <a class="app-sidebar-link app-sidebar-indent" href="${anchorHref}">${row.label}</a>
-                <a class="app-sidebar-chevron" href="${gridHref}" title="Show all" aria-label="Show all: ${row.label}">&rsaquo;</a>
+                <a class="${linkClass}" href="${anchorHref}">${row.label}</a>
+                ${chevronHtml}
             </div>
         `;
     }
@@ -166,27 +178,31 @@
             <div id="app-sidebar-overlay"></div>
             <nav id="app-sidebar-panel" aria-hidden="true">
                 <button type="button" class="app-sidebar-close-btn" aria-label="Close menu">&times;</button>
-                <a class="app-sidebar-link" href="/index.html#continue-watching-row">Continue Watching</a>
-                <a class="app-sidebar-link" href="/index.html#my-library-row">My Library</a>
-                <a class="app-sidebar-link app-sidebar-indent" href="/index.html#my-shows-row">My Shows</a>
-                <button type="button" class="app-sidebar-add-row" data-coming-soon="Custom rows">+ New Row</button>
-                <button type="button" class="app-sidebar-placeholder app-sidebar-indent" data-coming-soon="New episodes">New Episodes</button>
+
+                ${buildRowLinkHtml({ anchorId: 'recently-added', label: 'Recently Added', gridHref: rowGridHref('recently-added', 'Recently Added') }, { indent: false })}
+                ${buildRowLinkHtml({ anchorId: 'continue-watching-row', label: 'Continue Watching' }, { indent: false })}
+                ${buildRowLinkHtml({ anchorId: 'my-library-row', label: 'My Library', gridHref: `/gridview.html?title=${encodeQ('My Library')}&sort=recent` }, { indent: false })}
                 <div class="app-sidebar-divider"></div>
+
+                <button type="button" class="app-sidebar-add-row" data-coming-soon="Custom rows">+ New Row</button>
+                ${buildRowLinkHtml({ anchorId: 'my-shows-row', label: 'My Shows', gridHref: `/gridview.html?title=${encodeQ('TV Shows')}&type=series&sort=title` })}
+                <button type="button" class="app-sidebar-placeholder app-sidebar-indent" data-coming-soon="Unwatched episodes view">New Episodes</button>
+                <div class="app-sidebar-divider"></div>
+
                 <button type="button" class="app-sidebar-toggle" data-toggle-target="app-sidebar-streaming-rows">
-                    Streaming Now <span class="app-sidebar-caret">&#9656;</span>
+                    Streaming Content <span class="app-sidebar-caret">&#9656;</span>
                 </button>
                 <div class="app-sidebar-genres" id="app-sidebar-streaming-rows">
-                    ${STREAMING_NOW_ROWS.map(buildRowLinkHtml).join('')}
-                </div>
-                <button type="button" class="app-sidebar-toggle" data-toggle-target="app-sidebar-service-rows">
-                    By Service <span class="app-sidebar-caret">&#9656;</span>
-                </button>
-                <div class="app-sidebar-genres" id="app-sidebar-service-rows">
-                    ${BY_SERVICE_ROWS.map(buildRowLinkHtml).join('')}
+                    ${STREAMING_CONTENT_ROWS.map((row) => buildRowLinkHtml(row)).join('')}
                 </div>
                 <div class="app-sidebar-divider"></div>
+
+                ${TV_DISCOVERY_ROWS.map((row) => buildRowLinkHtml(row)).join('')}
+                <button type="button" class="app-sidebar-placeholder app-sidebar-indent" data-coming-soon="TV airing calendar">Airing Today</button>
+                <div class="app-sidebar-divider"></div>
+
                 <button type="button" class="app-sidebar-toggle" data-toggle-target="app-sidebar-genres">
-                    Categories <span class="app-sidebar-caret">&#9656;</span>
+                    Movie Categories <span class="app-sidebar-caret">&#9656;</span>
                 </button>
                 <div class="app-sidebar-genres" id="app-sidebar-genres"></div>
             </nav>
@@ -247,7 +263,7 @@
             if (e.key === 'Escape') closeSidebar();
         });
 
-        // Every collapsible section (Streaming Now / By Service / Categories)
+        // Every collapsible section (Streaming Content / Movie Categories)
         // shares the same open/close toggle behavior, keyed off
         // data-toggle-target rather than one hardcoded element per section.
         panel.querySelectorAll('.app-sidebar-toggle[data-toggle-target]').forEach((toggleBtn) => {

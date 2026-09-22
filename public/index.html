@@ -1388,6 +1388,19 @@
             `;
         }
 
+        // Same ids PublicRowBuilderService.getRowDisplayOrder() produces -
+        // these rows live at metadata/publicdata/all/<id>.json and are only
+        // ever fully viewable via gridview.html?rowId=<id> (the generic
+        // fallback below only knows about the local library, so without
+        // this check "View all" on one of these rows would silently show
+        // the wrong content under the right title).
+        const PUBLIC_ROW_IDS = new Set([
+            'recently-added', 'popular-streaming-movies', 'popular-tv',
+            'netflix-movies', 'netflix-tv', 'prime-movies', 'prime-tv',
+            'disney-movies', 'disney-tv', 'appletv-movies', 'appletv-tv',
+            'hbomax-movies', 'hbomax-tv'
+        ]);
+
         function getCollectionViewAllHref(collection) {
             const id = String(collection?.id || '').trim();
             const title = String(collection?.title || '').trim();
@@ -1395,6 +1408,9 @@
 
             if (!id) return '';
             if (id === 'my-library-row') return '';
+            if (PUBLIC_ROW_IDS.has(id)) {
+                return `/gridview.html?rowId=${encodeQueryValue(id)}&title=${encodeQueryValue(title || 'Grid View')}`;
+            }
             if (id === 'recently-added-row') {
                 return `/gridview.html?title=${encodeQueryValue('Recently Added')}&sort=recent`;
             }
