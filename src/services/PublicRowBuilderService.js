@@ -222,6 +222,7 @@ async function buildOneRow(def, libraryIndex) {
             popularity: raw.popularity || 0,
             badges: def.badges,
             inLibrary: Boolean(libraryItem),
+            localId: libraryItem?.id || null,
             localHref: buildLibraryHref(libraryItem, contentType),
             overlay: { watched: false, progress: null }
         };
@@ -261,6 +262,7 @@ async function buildRecentlyAddedRow(library) {
         popularity: 0,
         badges: [],
         inLibrary: true,
+        localId: item.id || null,
         localHref: buildLibraryHref(item, item.contentType),
         overlay: { watched: false, progress: null }
     }));
@@ -321,7 +323,21 @@ async function buildAllRows() {
     return results;
 }
 
+// Curated display order for the home page - a single source of truth so
+// the frontend never has to hardcode (and keep in sync with) the row list
+// separately from what actually gets built above.
+function getRowDisplayOrder() {
+    const providerIds = buildProviderRowDefinitions().map((def) => def.id);
+    return [
+        'recently-added',
+        'popular-streaming-movies',
+        ...providerIds,
+        'popular-tv'
+    ];
+}
+
 module.exports = {
     ROWS_DIR,
-    buildAllRows
+    buildAllRows,
+    getRowDisplayOrder
 };

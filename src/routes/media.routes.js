@@ -39,6 +39,7 @@ const MediaService = require('../services/MediaService');
 const { normalizeSubtitleToken, isSubtitleRelatedToVideo } = require('../services/SubtitleFileMatching');
 const { getAllJobs } = require('../services/PipelineQueueService');
 const YtsCatalogService = require('../services/YtsCatalogService');
+const PublicRowBuilderService = require('../services/PublicRowBuilderService');
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
@@ -2144,6 +2145,35 @@ router.get('/library', async (req, res) => {
     try {
         const library = await getLibrary();
         return res.json({ success: true, library });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: /api/rows - serves the pre-built public rows from
+// PublicRowBuilderService.js ("Top on Netflix", "Popular Streaming
+// Movies", "Recently Added", etc), in the curated display order, in one
+// response so the frontend doesn't need N+1 requests. Static,
+// scheduled-job-refreshed data - never computed live.
+router.get('/rows', (req, res) => {
+    try {
+        const rowIds = PublicRowBuilderService.getRowDisplayOrder();
+        const rows = [];
+
+        for (const rowId of rowIds) {
+            const filePath = path.join(PublicRowBuilderService.ROWS_DIR, `${rowId}.json`);
+            if (!fs.existsSync(filePath)) continue;
+            try {
+                rows.push(JSON.parse(fs.readFileSync(filePath, 'utf-8')));
+            } catch (_err) {
+                // Skip a corrupt/partially-written row file rather than
+                // failing the whole response - the next scheduled build
+                // will overwrite it cleanly.
+            }
+        }
+
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.json({ success: true, rows });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

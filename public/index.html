@@ -684,6 +684,21 @@
             text-transform: uppercase;
         }
 
+        .slider-badge-logo {
+            background: rgba(2, 6, 23, 0.75);
+            padding: 3px 5px;
+            display: flex;
+            align-items: center;
+            border-radius: 6px;
+        }
+
+        .slider-badge-logo img {
+            height: 16px;
+            width: auto;
+            display: block;
+            object-fit: contain;
+        }
+
         .info-pill-btn {
             position: absolute;
             left: 8px;
@@ -1390,17 +1405,30 @@
         function renderFeedRow(collection) {
             const cards = Array.isArray(collection.cards) && collection.cards.length > 0
                     ? collection.cards.map(card => {
+                        // badgeLogo (a provider logo image, e.g. PublicRowBuilderService's
+                        // "Top on Netflix" rows) takes priority over the older
+                        // plain-text badge - falls back to text if no logo is set.
+                        const badgeLogo = String(card.badgeLogo || '').trim();
                         const badgeText = escapeHtml(String(card.badge || '').trim());
-                        const badgeHtml = badgeText ? `<span class="slider-badge">${badgeText}</span>` : '';
+                        const badgeHtml = badgeLogo
+                            ? `<span class="slider-badge slider-badge-logo"><img src="${sanitizeImageSrc(badgeLogo)}" alt=""></span>`
+                            : (badgeText ? `<span class="slider-badge">${badgeText}</span>` : '');
                         const encodedId = encodeURIComponent(String(card.id || ''));
                         const encodedType = encodeURIComponent(String(card.contentType || 'movie'));
+                        // Only a real local library item has a working /api/media/details
+                        // lookup behind it - a public-row card for a title you don't own
+                        // yet has no local id, so the info-pill would just be a dead
+                        // button if shown.
+                        const infoPillHtml = card.id
+                            ? `<button class="info-pill-btn" type="button" data-media-id="${encodedId}" data-content-type="${encodedType}" aria-label="Open info">i</button>`
+                            : '';
                     const metaBits = [card.year || '', card.genre || '', card.imdbScore ? `IMDb ${card.imdbScore}` : ''].filter(Boolean).join(' · ');
                     const cover = sanitizeImageSrc(card.cover);
 
                     return `
                         <a class="slider-card" href="${card.href}">
                             ${badgeHtml}
-                                <button class="info-pill-btn" type="button" data-media-id="${encodedId}" data-content-type="${encodedType}" aria-label="Open info">i</button>
+                                ${infoPillHtml}
                             <img src="${cover}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'300\' viewBox=\'0 0 200 300\'><rect width=\'100%\' height=\'100%\' fill=\'%23020617\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23475569\' font-family=\'sans-serif\' font-size=\'14\'>No Cover</text></svg>';" alt="${card.title}">
                             <div class="slider-card-overlay">
                                 <div class="title">${card.title}</div>
@@ -1599,13 +1627,75 @@
             updateInstallButton();
         }
 
+        // Maps PublicRowBuilderService's badge slugs to the actual logo files
+        // already downloaded into public/images/logos/ - a couple of names
+        // don't match the slug 1:1 (disney -> disneyplus.webp), everything
+        // else lines up directly.
+        const PROVIDER_LOGOS = {
+            netflix: '/images/logos/netflix.png',
+            prime: '/images/logos/prime.png',
+            disney: '/images/logos/disneyplus.webp',
+            appletv: '/images/logos/appletv.png',
+            hbomax: '/images/logos/hbomax.jpeg'
+        };
+
+        // Converts a PublicRowBuilderService row (see that file for the full
+        // schema) into the {id, title, subtitle, cards} shape renderFeedRow
+        // already knows how to draw - same row renderer, same card markup,
+        // for both the local-library-driven home feed and these
+        // TMDb-driven public rows.
+        function publicRowToCollection(row) {
+            const badgeSlug = Array.isArray(row.badges) && row.badges.length ? row.badges[0] : null;
+            const badgeLogo = badgeSlug ? (PROVIDER_LOGOS[badgeSlug] || null) : null;
+
+            const cards = (Array.isArray(row.items) ? row.items : []).map((item) => {
+                const contentType = item.mediaType === 'tv' ? 'series' : 'movie';
+                const inLibrary = Boolean(item.inLibrary);
+                return {
+                    // Only a real local library item gets an id - that's what
+                    // gates whether the info-pill button renders at all (see
+                    // renderFeedRow), since /api/media/details only knows
+                    // about local ids.
+                    id: inLibrary ? item.localId : null,
+                    title: item.title,
+                    year: item.year,
+                    genre: '',
+                    imdbScore: '',
+                    cover: item.poster,
+                    href: inLibrary && item.localHref
+                        ? item.localHref
+                        : `/browse.html?q=${encodeURIComponent(item.title || '')}`,
+                    badgeLogo,
+                    contentType,
+                    imdbId: item.imdbId || ''
+                };
+            });
+
+            return { id: row.id, title: row.title, subtitle: '', cards };
+        }
+
+        async function fetchPublicRowCollections() {
+            try {
+                const res = await fetch('/api/rows');
+                const data = await res.json();
+                const rows = Array.isArray(data?.rows) ? data.rows : [];
+                return rows.map(publicRowToCollection).filter((c) => c.cards.length > 0);
+            } catch (err) {
+                console.error('❌ Frontend failed to load public rows:', err);
+                return [];
+            }
+        }
+
         async function loadMovies(page = 1) {
             currentCatalogPage = page;
             try {
                 const grid = document.getElementById('movie-grid');
-                const res = await fetch('/api/home-feed');
-                const data = await res.json();
-                const collections = data?.feed?.collections || [];
+                const [homeFeedRes, publicRowCollections] = await Promise.all([
+                    fetch('/api/home-feed').then((r) => r.json()),
+                    fetchPublicRowCollections()
+                ]);
+                const data = homeFeedRes;
+                const collections = [...publicRowCollections, ...(data?.feed?.collections || [])];
                 const flattenedCards = collections.flatMap((collection) => Array.isArray(collection.cards) ? collection.cards : []);
                 const dedupedCards = new Map();
                 for (const card of flattenedCards) {
