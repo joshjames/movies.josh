@@ -2179,6 +2179,51 @@ router.get('/rows', (req, res) => {
     }
 });
 
+// GET: /api/library-status/:imdbId - a cheap live library lookup, used to
+// catch the window between "item was added to the library" and "the next
+// public-rows-refresh rebuild picks it up." A row card built from stale row
+// data can still link to /browse.html for something that's actually already
+// playable now - this lets that landing page skip straight to the player
+// instead of running the title back through search/queue.
+router.get('/library-status/:imdbId', async (req, res) => {
+    try {
+        const imdbId = formatImdbId(req.params.imdbId || '');
+        if (!imdbId) {
+            return res.status(400).json({ success: false, error: 'Invalid IMDb ID.' });
+        }
+
+        const library = await getLibrary();
+        const movies = Array.isArray(library?.movies) ? library.movies : [];
+        const shows = Array.isArray(library?.shows) ? library.shows : [];
+
+        const movieMatch = movies.find((item) => formatImdbId(item.imdbId || item.imdb_id || '') === imdbId);
+        if (movieMatch) {
+            return res.json({
+                success: true,
+                imdbId,
+                inLibrary: true,
+                contentType: 'movie',
+                localHref: movieMatch.id ? `/player.html?id=${encodeURIComponent(movieMatch.id)}` : null
+            });
+        }
+
+        const showMatch = shows.find((item) => formatImdbId(item.imdbId || item.imdb_id || '') === imdbId);
+        if (showMatch) {
+            return res.json({
+                success: true,
+                imdbId,
+                inLibrary: true,
+                contentType: 'series',
+                localHref: showMatch.id ? `/series.html?id=${encodeURIComponent(showMatch.id)}` : null
+            });
+        }
+
+        return res.json({ success: true, imdbId, inLibrary: false, contentType: null, localHref: null });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/home-feed (Serves the pre-generated home page collections cache)
 router.get('/home-feed', (req, res) => {
     res.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');

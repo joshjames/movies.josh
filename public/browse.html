@@ -1721,9 +1721,34 @@
             });
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
+        // A row card can only know "not in library" as of the last public-rows
+        // rebuild (once a day) - if the title was added since, this catches
+        // that window and sends the user straight to playback instead of
+        // running it back through search/queue for no reason.
+        async function redirectIfNowInLibrary(imdbId) {
+            if (!imdbId) return false;
+            try {
+                const res = await fetch(`/api/library-status/${encodeURIComponent(imdbId)}`);
+                const data = await res.json();
+                if (data?.success && data.inLibrary && data.localHref) {
+                    window.location.replace(data.localHref);
+                    return true;
+                }
+            } catch (_err) {
+                // Fall through to the normal search/browse flow on any error.
+            }
+            return false;
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(window.location.search);
             const initialQuery = String(params.get('q') || '').trim();
+            const initialImdbId = String(params.get('imdbId') || '').trim();
+
+            if (initialImdbId && await redirectIfNowInLibrary(initialImdbId)) {
+                return;
+            }
+
             if (initialQuery) {
                 const input = document.getElementById('searchIn');
                 if (input) input.value = initialQuery;

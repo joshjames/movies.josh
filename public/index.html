@@ -1710,7 +1710,7 @@
                     cover: item.poster,
                     href: inLibrary && item.localHref
                         ? item.localHref
-                        : `/browse.html?q=${encodeURIComponent(item.title || '')}`,
+                        : `/browse.html?q=${encodeURIComponent(item.title || '')}${item.imdbId ? `&imdbId=${encodeURIComponent(item.imdbId)}` : ''}`,
                     badgeLogo,
                     contentType,
                     imdbId: item.imdbId || ''
