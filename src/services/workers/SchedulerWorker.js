@@ -18,9 +18,12 @@ const {
     TV_AUTO_GET_QUEUE_NAME,
     ensureTvAutoGetSchedule,
     IMDB_REFRESH_QUEUE_NAME,
-    ensureImdbRefreshSchedule
+    ensureImdbRefreshSchedule,
+    PUBLIC_ROWS_QUEUE_NAME,
+    ensurePublicRowsSchedule
 } = require('../SchedulerService');
 const SeriesAutoGetService = require('../SeriesAutoGetService');
+const PublicRowBuilderService = require('../PublicRowBuilderService');
 const logger = require('../logger');
 
 const SSH_KEY_PATH = process.env.SCHEDULER_SYNC_SSH_KEY || '/app/.ssh/id_ed25519_scheduler_sync';
@@ -167,6 +170,7 @@ async function main() {
     await ensureMetadataMirrorSchedule();
     await ensureTvAutoGetSchedule();
     await ensureImdbRefreshSchedule();
+    await ensurePublicRowsSchedule();
 
     const metadataMirrorWorker = new Worker(
         METADATA_MIRROR_QUEUE_NAME,
@@ -229,7 +233,27 @@ async function main() {
         logger.error(`[Scheduler] imdb-refresh job ${job?.id} failed: ${err.message}`);
     });
 
-    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror, tv-auto-get, and imdb-refresh queues active.');
+    // Layer 1 of the rows-are-JSON-files redesign - see
+    // PublicRowBuilderService.js for the full design writeup. Data-only:
+    // builds/refreshes metadata/publicdata/all/<rowId>.json, never
+    // triggers acquisition for anything missing (that's a later layer).
+    const publicRowsWorker = new Worker(
+        PUBLIC_ROWS_QUEUE_NAME,
+        async (job) => {
+            logger.info(`[Scheduler] Running public-rows-refresh job ${job.id}...`);
+            return PublicRowBuilderService.buildAllRows();
+        },
+        { connection: getSchedulerRedisConnection(), concurrency: 1 }
+    );
+
+    publicRowsWorker.on('completed', (job, result) => {
+        logger.info(`[Scheduler] public-rows-refresh job ${job.id} completed - built=${result.built.length} failed=${result.failed.length}`);
+    });
+    publicRowsWorker.on('failed', (job, err) => {
+        logger.error(`[Scheduler] public-rows-refresh job ${job?.id} failed: ${err.message}`);
+    });
+
+    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror, tv-auto-get, imdb-refresh, and public-rows-refresh queues active.');
 }
 
 main().catch((err) => {

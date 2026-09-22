@@ -85,6 +85,19 @@ async function ensurePipelineTickSchedule(intervalMs) {
     await ensureRepeatableJob(PIPELINE_TICK_QUEUE_NAME, PIPELINE_TICK_JOB_ID, safeInterval, 'tick');
 }
 
+// Layer 1 of the "rows are JSON files" browse/home-page redesign - builds
+// the public/shared rows (Top on Netflix, Popular, Recently Added, etc.)
+// from TMDb + the local library. Daily by default, same reasoning as
+// imdb-refresh: the underlying data (what's popular/streaming) doesn't
+// meaningfully change faster than once a day.
+const PUBLIC_ROWS_QUEUE_NAME = 'public-rows-refresh';
+const PUBLIC_ROWS_JOB_ID = 'public-rows-refresh-repeatable';
+const PUBLIC_ROWS_INTERVAL_MS = Math.max(60 * 60 * 1000, parseInt(process.env.PUBLIC_ROWS_INTERVAL_MS, 10) || 24 * 60 * 60 * 1000);
+
+async function ensurePublicRowsSchedule() {
+    await ensureRepeatableJob(PUBLIC_ROWS_QUEUE_NAME, PUBLIC_ROWS_JOB_ID, PUBLIC_ROWS_INTERVAL_MS, 'build-rows');
+}
+
 module.exports = {
     METADATA_MIRROR_QUEUE_NAME,
     METADATA_MIRROR_INTERVAL_MS,
@@ -96,5 +109,7 @@ module.exports = {
     IMDB_REFRESH_INTERVAL_MS,
     ensureImdbRefreshSchedule,
     PIPELINE_TICK_QUEUE_NAME,
-    ensurePipelineTickSchedule
+    ensurePipelineTickSchedule,
+    PUBLIC_ROWS_QUEUE_NAME,
+    ensurePublicRowsSchedule
 };
