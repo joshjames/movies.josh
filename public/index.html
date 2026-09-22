@@ -1455,7 +1455,7 @@
 
             const titleLogo = String(collection.titleLogo || '').trim();
             const titleHtml = titleLogo
-                ? `<h2><img class="row-title-logo" src="${sanitizeImageSrc(titleLogo)}" alt="${escapeHtml(collection.title || '')}"></h2>`
+                ? `<h2>${collection.title || 'Collection'} <img class="row-title-logo" src="${sanitizeImageSrc(titleLogo)}" alt=""></h2>`
                 : `<h2>${collection.title || 'Collection'}</h2>`;
 
             return `
