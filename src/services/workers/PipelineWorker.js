@@ -115,6 +115,11 @@ function normalizeImdbId(value) {
     return `tt${cleaned}`;
 }
 
+function normalizePositiveInt(value) {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function cleanSeriesTitleFromTorrentName(value) {
     return String(value || '')
         .replace(/\bS\d{1,2}\s*E\d{1,3}\b.*$/i, '')
