@@ -46,6 +46,7 @@ const CdnSyncService = require('../services/CdnSyncService');
 const CdnAssetService = require('../services/CdnAssetService'); 
 const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed, loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { buildDefaultWorkerEndpoints, processToHealthUrl } = require('../services/WorkerEndpoints');
+const CollectionService = require('../services/CollectionService');
 
 const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
 const WORKER_HEALTH = {
@@ -3014,6 +3015,31 @@ router.get('/operations/scripts/stream', (req, res) => {
         watcher.close();
         clearInterval(exitPoller);
     });
+});
+
+// =========================================================================
+// 🏷️ CUSTOM TAG-BASED COLLECTIONS (see CollectionService.js)
+// =========================================================================
+router.post('/collections', async (req, res) => {
+    try {
+        const { title, tags, matchMode } = req.body || {};
+        const def = CollectionService.saveDefinition({ title, tags, matchMode });
+        return res.json({ success: true, collection: def });
+    } catch (err) {
+        return res.status(400).json({ success: false, error: err.message });
+    }
+});
+
+router.delete('/collections/:id', async (req, res) => {
+    try {
+        const removed = CollectionService.deleteDefinition(req.params.id);
+        if (!removed) {
+            return res.status(404).json({ success: false, error: 'Collection not found.' });
+        }
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // =========================================================================

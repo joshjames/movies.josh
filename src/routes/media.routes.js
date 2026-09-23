@@ -40,6 +40,7 @@ const { normalizeSubtitleToken, isSubtitleRelatedToVideo } = require('../service
 const { getAllJobs } = require('../services/PipelineQueueService');
 const YtsCatalogService = require('../services/YtsCatalogService');
 const PublicRowBuilderService = require('../services/PublicRowBuilderService');
+const CollectionService = require('../services/CollectionService');
 
 const TV_COVER_DIR = path.join(__dirname, '../../metadata/tv-covers');
 const CATALOG_DATA_DIR = path.join(__dirname, '../../metadata');
@@ -2203,6 +2204,20 @@ router.get('/rows', (req, res) => {
 
         res.set('Cache-Control', 'private, max-age=300');
         return res.json({ success: true, rows });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET: /api/collections - user-authored, tag-based collections (see
+// CollectionService.js). Unlike /api/rows, these are evaluated live against
+// the current library on every request rather than rebuilt on a schedule -
+// there's no external API involved, so there's nothing to cache against.
+router.get('/collections', async (req, res) => {
+    try {
+        const collections = await CollectionService.listMaterializedCollections();
+        res.set('Cache-Control', 'private, max-age=30');
+        return res.json({ success: true, collections });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }

@@ -73,7 +73,7 @@
         }
         .toolbar {
             display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
+            grid-template-columns: repeat(14, minmax(0, 1fr));
             gap: 10px;
             background: #111827;
             border: 1px solid #334155;
@@ -100,10 +100,37 @@
         .toolbar .query { grid-column: span 4; }
         .toolbar .type { grid-column: span 2; }
         .toolbar .genre { grid-column: span 2; }
+        .toolbar .tag { grid-column: span 2; }
         .toolbar .sort { grid-column: span 2; }
         .toolbar .score { grid-column: span 1; }
         .toolbar .apply { grid-column: span 1; background: #1d4ed8; border-color: #2563eb; font-weight: 700; cursor: pointer; }
         .toolbar .apply:hover { background: #1e40af; }
+
+        .collection-save-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin: -6px 0 14px 0;
+        }
+        .collection-save-row button {
+            background: #0b1220;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 7px 12px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .collection-save-row button:hover {
+            border-color: #3b82f6;
+            color: #dbeafe;
+        }
+        .collection-save-row button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
 
         .grid {
             display: grid;
@@ -176,9 +203,11 @@
         }
 
         @media (max-width: 900px) {
+            .toolbar { grid-template-columns: repeat(12, minmax(0, 1fr)); }
             .toolbar .query { grid-column: span 6; }
             .toolbar .type { grid-column: span 3; }
             .toolbar .genre { grid-column: span 3; }
+            .toolbar .tag { grid-column: span 4; }
             .toolbar .sort { grid-column: span 4; }
             .toolbar .score { grid-column: span 4; }
             .toolbar .apply { grid-column: span 4; }
@@ -190,6 +219,7 @@
             .toolbar .query,
             .toolbar .type,
             .toolbar .genre,
+            .toolbar .tag,
             .toolbar .sort,
             .toolbar .score,
             .toolbar .apply { grid-column: span 2; }
@@ -217,6 +247,8 @@
                 <option value="series">TV Shows</option>
             </select>
             <input class="genre" id="genre" type="text" placeholder="Genre (optional)">
+            <input class="tag" id="tag" type="text" list="tag-options" placeholder="Filter by tag...">
+            <datalist id="tag-options"></datalist>
             <select class="sort" id="sort">
                 <option value="recent">Sort: Recently Updated</option>
                 <option value="title">Sort: Title A-Z</option>
@@ -226,6 +258,10 @@
             <input class="score" id="minScore" type="number" min="0" max="10" step="0.1" placeholder="Min IMDb">
             <button class="apply" type="submit">Apply</button>
         </form>
+
+        <div class="collection-save-row" id="collection-save-row" style="display:none;">
+            <button type="button" id="save-collection-btn" disabled>Save as Collection</button>
+        </div>
 
         <div class="grid" id="grid"></div>
     </div>
@@ -284,6 +320,7 @@
                 q: params.get('q') || '',
                 type: params.get('type') || 'all',
                 genre: params.get('genre') || '',
+                tag: params.get('tag') || '',
                 sort: params.get('sort') || 'recent',
                 minScore: params.get('minScore') || ''
             };
@@ -294,6 +331,7 @@
             document.getElementById('query').value = state.q;
             document.getElementById('type').value = state.type;
             document.getElementById('genre').value = state.genre;
+            document.getElementById('tag').value = state.tag;
             document.getElementById('sort').value = state.sort;
             document.getElementById('minScore').value = state.minScore;
         }
@@ -304,6 +342,7 @@
                 q: document.getElementById('query').value.trim(),
                 type: document.getElementById('type').value,
                 genre: document.getElementById('genre').value.trim(),
+                tag: document.getElementById('tag').value.trim(),
                 sort: document.getElementById('sort').value,
                 minScore: document.getElementById('minScore').value.trim()
             };
@@ -343,13 +382,21 @@
 
         // Cached across both the "show all" data fetch and the collection
         // dropdown's option list, so switching collections never re-fires
-        // this request more than once per page load.
+        // these requests more than once per page load. Merges TMDb-driven
+        // preset rows (PublicRowBuilderService) with user-authored,
+        // tag-based collections (CollectionService) - both already share the
+        // same row-item shape, so everything downstream (fetchRowItems,
+        // rowItemToGridItem) treats them identically.
         let rowsCatalogCache = null;
         async function getRowsCatalog() {
             if (rowsCatalogCache) return rowsCatalogCache;
-            const res = await fetch('/api/rows');
-            const data = await res.json();
-            rowsCatalogCache = Array.isArray(data?.rows) ? data.rows : [];
+            const [rowsRes, collectionsRes] = await Promise.all([
+                fetch('/api/rows').then((r) => r.json()).catch(() => ({ rows: [] })),
+                fetch('/api/collections').then((r) => r.json()).catch(() => ({ collections: [] }))
+            ]);
+            const presetRows = Array.isArray(rowsRes?.rows) ? rowsRes.rows : [];
+            const collections = Array.isArray(collectionsRes?.collections) ? collectionsRes.collections : [];
+            rowsCatalogCache = [...presetRows, ...collections];
             return rowsCatalogCache;
         }
 
@@ -364,14 +411,26 @@
             const select = document.getElementById('collection-select');
             if (!select) return;
             const rows = await getRowsCatalog();
-            const options = ['<option value="">My Library (All)</option>']
-                .concat(rows.map((row) => `<option value="${row.id}">${String(row.title || row.id)}</option>`));
-            select.innerHTML = options.join('');
+            const presetOptions = rows
+                .filter((row) => row.source !== 'user-collection')
+                .map((row) => `<option value="${row.id}">${String(row.title || row.id)}</option>`)
+                .join('');
+            const collectionOptions = rows
+                .filter((row) => row.source === 'user-collection')
+                .map((row) => `<option value="${row.id}">${String(row.title || row.id)}</option>`)
+                .join('');
+
+            select.innerHTML = `
+                <option value="">My Library (All)</option>
+                ${presetOptions ? `<optgroup label="Preset Collections">${presetOptions}</optgroup>` : ''}
+                ${collectionOptions ? `<optgroup label="My Collections">${collectionOptions}</optgroup>` : ''}
+            `;
         }
 
         function filterAndSort(items, state) {
             const queryNorm = normalizeSearchText(state.q);
             const genreNorm = normalizeSearchText(state.genre);
+            const tagNorm = normalizeSearchText(state.tag);
             const minScore = state.minScore !== '' ? safeNumber(state.minScore) : null;
 
             let rows = items.filter((item) => {
@@ -390,6 +449,12 @@
                 }
 
                 if (genreNorm && !genreTextNorm.includes(genreNorm)) return false;
+
+                if (tagNorm) {
+                    const itemTags = Array.isArray(item.tags) ? item.tags : [];
+                    const matchesTag = itemTags.some((t) => normalizeSearchText(t).includes(tagNorm));
+                    if (!matchesTag) return false;
+                }
 
                 const score = getScore(item);
                 if (minScore !== null && (score === null || score < minScore)) return false;
@@ -460,6 +525,7 @@
             if (state.q) params.set('q', state.q);
             if (state.type && state.type !== 'all') params.set('type', state.type);
             if (state.genre) params.set('genre', state.genre);
+            if (state.tag) params.set('tag', state.tag);
             if (state.sort && state.sort !== 'recent') params.set('sort', state.sort);
             if (state.minScore) params.set('minScore', state.minScore);
             const query = params.toString();
@@ -472,6 +538,76 @@
             updateUrl(state);
             const rows = filterAndSort(allItems, state);
             renderGrid(rows, state);
+            updateSaveCollectionUI();
+        }
+
+        // Only local library items carry a real .tags array (rows/collections
+        // pulled in from /api/rows or /api/collections don't), so this is a
+        // no-op - not an error - whenever the active view isn't "My Library".
+        function populateTagOptions(items) {
+            const datalist = document.getElementById('tag-options');
+            if (!datalist) return;
+            const tagSet = new Set();
+            items.forEach((item) => {
+                (Array.isArray(item.tags) ? item.tags : []).forEach((tag) => {
+                    const clean = String(tag || '').trim();
+                    if (clean) tagSet.add(clean);
+                });
+            });
+            datalist.innerHTML = [...tagSet].sort((a, b) => a.localeCompare(b))
+                .map((tag) => `<option value="${tag}"></option>`)
+                .join('');
+        }
+
+        // "Save as Collection" only makes sense against a live tag filter on
+        // the plain local library (not a preset row or an existing
+        // collection - both of those are already collections in their own
+        // right), and only for admins, since tagging itself is admin-only
+        // for now (see admin.html's per-item Tags field).
+        let isAdminUser = false;
+        function updateSaveCollectionUI() {
+            const row = document.getElementById('collection-save-row');
+            const btn = document.getElementById('save-collection-btn');
+            if (!row || !btn) return;
+
+            const eligible = isAdminUser && !activeRowId;
+            row.style.display = eligible ? 'flex' : 'none';
+            if (!eligible) return;
+
+            const tagValue = document.getElementById('tag').value.trim();
+            btn.disabled = !tagValue;
+        }
+
+        async function saveCurrentTagAsCollection() {
+            const tagValue = document.getElementById('tag').value.trim();
+            if (!tagValue) return;
+
+            const suggestedTitle = tagValue.replace(/\b\w/g, (c) => c.toUpperCase());
+            const title = window.prompt('Name this collection:', suggestedTitle);
+            if (!title || !title.trim()) return;
+
+            const btn = document.getElementById('save-collection-btn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            try {
+                const res = await fetch('/api/admin/collections', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title.trim(), tags: [tagValue], matchMode: 'any' })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Save failed.');
+
+                rowsCatalogCache = null;
+                await populateCollectionDropdown();
+                btn.textContent = 'Saved!';
+                setTimeout(() => { btn.textContent = 'Save as Collection'; updateSaveCollectionUI(); }, 1500);
+            } catch (err) {
+                window.alert(`Could not save collection: ${err.message}`);
+                btn.textContent = 'Save as Collection';
+                updateSaveCollectionUI();
+            }
         }
 
         // Loads whichever collection (a preset row, or the plain local
@@ -499,9 +635,22 @@
                     allItems = await fetchAllMovies();
                     document.getElementById('page-title').textContent = titleOverride || 'My Library';
                 }
+                populateTagOptions(allItems);
                 applyAndRender();
             } catch (_err) {
                 grid.innerHTML = '<div class="empty" style="color:#fca5a5;">Failed loading catalog data.</div>';
+            }
+        }
+
+        async function checkIsAdminUser() {
+            try {
+                const res = await fetch('/api/auth/me');
+                const data = await res.json();
+                if (!data?.loggedIn) return false;
+                const username = String(data.username || '').toLowerCase().trim();
+                return username === 'josh' || username.startsWith('josh@') || data.config?.isAdmin === true;
+            } catch (_err) {
+                return false;
             }
         }
 
@@ -520,6 +669,11 @@
             document.getElementById('collection-select').addEventListener('change', (event) => {
                 switchToCollection(event.target.value);
             });
+
+            document.getElementById('tag').addEventListener('input', updateSaveCollectionUI);
+            document.getElementById('save-collection-btn').addEventListener('click', saveCurrentTagAsCollection);
+
+            isAdminUser = await checkIsAdminUser();
 
             await populateCollectionDropdown();
             await switchToCollection(initialRowId, { titleOverride: urlParams.get('title') ? state.title : null });
