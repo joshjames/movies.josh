@@ -505,6 +505,13 @@
         let activeCatalogSlug = '';
         let activeCatalogTitle = '';
         let catalogDrawerOpen = false;
+        // Carried in from a row card's ?q=&imdbId= deep link - stays attached
+        // to the unified search as long as the box still shows that same
+        // query, so a title YTS indexes under a different (translated/
+        // original-language) name than the one shown still gets found. The
+        // moment the user edits the query, this naturally stops applying.
+        let initialSearchQuery = '';
+        let initialSearchImdbId = '';
         let availableCatalogs = [];
         let availableTvCatalogs = [];
         let activeTvCatalogSlug = '';
@@ -1189,6 +1196,9 @@
             try {
                 let apiTarget = `/api/movies/search/unified?page=${currentBrowsePage}&remoteMode=always&remoteLimit=24&localLimit=8`;
                 if (query) apiTarget += `&q=${encodeURIComponent(query)}`;
+                if (initialSearchImdbId && query === initialSearchQuery) {
+                    apiTarget += `&imdbId=${encodeURIComponent(initialSearchImdbId)}`;
+                }
                 if (genre && genre !== 'All') apiTarget += `&genre=${genre}`;
                 if (rating && rating !== '0') apiTarget += `&minimum_rating=${rating}`;
                 if (sortBy) apiTarget += `&sort_by=${sortBy}`;
@@ -1752,6 +1762,8 @@
             if (initialQuery) {
                 const input = document.getElementById('searchIn');
                 if (input) input.value = initialQuery;
+                initialSearchQuery = initialQuery;
+                initialSearchImdbId = initialImdbId;
             }
             initMediaInfoModal();
             loadCatalogList();

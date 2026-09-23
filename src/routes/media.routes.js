@@ -2552,6 +2552,7 @@ router.get('/movies/search/unified', async (req, res) => {
     try {
         const query = String(req.query.q || req.query.query || '').trim();
         const queryNorm = normalizeSearchText(query);
+        const imdbId = normalizeMovieImdbId(req.query.imdbId || '');
         const page = Math.max(1, parseInt(req.query.page, 10) || 1);
         const remoteLimit = Math.max(1, Math.min(parseInt(req.query.remoteLimit, 10) || 24, 50));
         const localLimit = Math.max(1, Math.min(parseInt(req.query.localLimit, 10) || 8, 50));
@@ -2608,27 +2609,21 @@ router.get('/movies/search/unified', async (req, res) => {
             if (genre && genre.toLowerCase() !== 'all') apiParams.genre = genre.toLowerCase();
             if (minimumRating && minimumRating !== '0') apiParams.minimum_rating = minimumRating;
 
-            const ytsBody = await YtsCatalogService.browse(apiParams);
-            const ytsData = ytsBody?.data || {};
-            const remoteRows = Array.isArray(ytsData.movies) ? ytsData.movies : [];
-            remoteTotal = Number(ytsData.movie_count || 0);
-            remotePageLimit = Number(ytsData.limit || remoteLimit) || remoteLimit;
-
             const localKeys = indexLocalMovieKeys(localRows);
 
-            remoteResults = remoteRows.map((movie) => {
-                const imdbId = normalizeMovieImdbId(movie.imdb_code || movie.imdbId || '');
+            const mapYtsMovie = (movie) => {
+                const movieImdbId = normalizeMovieImdbId(movie.imdb_code || movie.imdbId || '');
                 const titleKey = normalizeSearchText(movie.title || '');
                 const yearKey = String(movie.year || '').trim();
                 const inLibrary = Boolean(
-                    (imdbId && localKeys.imdbSet.has(imdbId))
+                    (movieImdbId && localKeys.imdbSet.has(movieImdbId))
                     || (titleKey && yearKey && localKeys.titleYearSet.has(`${titleKey}|${yearKey}`))
                 );
 
                 return {
                     title: movie.title,
                     year: movie.year,
-                    imdbId,
+                    imdbId: movieImdbId,
                     imdbRating: movie.rating,
                     runtime: movie.runtime,
                     cover: movie.medium_cover_image || movie.large_cover_image || '',
@@ -2636,7 +2631,36 @@ router.get('/movies/search/unified', async (req, res) => {
                     inLibrary,
                     source: 'remote-yts'
                 };
-            });
+            };
+
+            const ytsBody = await YtsCatalogService.browse(apiParams);
+            const ytsData = ytsBody?.data || {};
+            const remoteRows = Array.isArray(ytsData.movies) ? ytsData.movies : [];
+            remoteTotal = Number(ytsData.movie_count || 0);
+            remotePageLimit = Number(ytsData.limit || remoteLimit) || remoteLimit;
+
+            remoteResults = remoteRows.map(mapYtsMovie);
+
+            // A caller that already knows the imdbId (e.g. a public-row card
+            // whose title came from TMDb's localized/English title) can miss
+            // here when the remote catalog indexes the same title under its
+            // original-language release name - "Facing El Chapo" vs YTS's own
+            // "La Captura", for example. Rather than replacing the title
+            // search or blending both into one fuzzy query, run a second,
+            // precise by-ID lookup and merge it in - only ever adds a result,
+            // never removes what the title search already found.
+            if (imdbId && !remoteResults.some((item) => item.imdbId === imdbId)) {
+                try {
+                    const idBody = await YtsCatalogService.browse({ ...apiParams, query_term: imdbId, page: 1 });
+                    const idRows = Array.isArray(idBody?.data?.movies) ? idBody.data.movies : [];
+                    const idMatches = idRows
+                        .filter((movie) => normalizeMovieImdbId(movie.imdb_code || movie.imdbId || '') === imdbId)
+                        .map(mapYtsMovie);
+                    remoteResults = [...idMatches, ...remoteResults];
+                } catch (_err) {
+                    // Best-effort supplement only - the title-search results above still stand.
+                }
+            }
         }
 
         return res.json({
