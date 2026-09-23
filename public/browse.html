@@ -840,7 +840,7 @@
             }
         }
 
-        function switchMode(mode) {
+        function switchMode(mode, { triggerSearch = true } = {}) {
             currentMode = mode;
             document.getElementById('tab-movies').classList.toggle('active', mode === 'movies');
             document.getElementById('tab-shows').classList.toggle('active', mode === 'shows');
@@ -865,7 +865,7 @@
                 setCatalogDrawerOpen(catalogDrawerOpen);
             }
 
-            triggerNewSearch();
+            if (triggerSearch) triggerNewSearch();
         }
 
         function triggerNewSearch() {
@@ -1754,8 +1754,28 @@
             const params = new URLSearchParams(window.location.search);
             const initialQuery = String(params.get('q') || '').trim();
             const initialImdbId = String(params.get('imdbId') || '').trim();
+            // A row card already knows whether its item is a movie or a show
+            // (PublicRowBuilderService's rows are one mediaType each - "Top TV
+            // Shows on Netflix" only ever contains tv items), so it passes
+            // that straight through instead of this page having to guess.
+            const initialType = String(params.get('type') || '').trim().toLowerCase();
+            const isSeriesDeepLink = ['series', 'tv', 'show', 'shows'].includes(initialType);
 
             if (initialImdbId && await redirectIfNowInLibrary(initialImdbId)) {
+                return;
+            }
+
+            initMediaInfoModal();
+            loadCatalogList();
+            loadTvCatalogList();
+
+            if (isSeriesDeepLink) {
+                switchMode('shows', { triggerSearch: false });
+                if (initialQuery) {
+                    const input = document.getElementById('searchIn');
+                    if (input) input.value = initialQuery;
+                }
+                fetchShowCatalog();
                 return;
             }
 
@@ -1765,9 +1785,6 @@
                 initialSearchQuery = initialQuery;
                 initialSearchImdbId = initialImdbId;
             }
-            initMediaInfoModal();
-            loadCatalogList();
-            loadTvCatalogList();
             fetchMovieCatalog(1);
         });
     </script>

@@ -1724,7 +1724,7 @@
                     cover: item.poster,
                     href: inLibrary && item.localHref
                         ? item.localHref
-                        : `/browse.html?q=${encodeURIComponent(item.title || '')}${item.imdbId ? `&imdbId=${encodeURIComponent(item.imdbId)}` : ''}`,
+                        : `/browse.html?q=${encodeURIComponent(item.title || '')}${item.imdbId ? `&imdbId=${encodeURIComponent(item.imdbId)}` : ''}${contentType === 'series' ? '&type=series' : ''}`,
                     badgeLogo,
                     contentType,
                     imdbId: item.imdbId || ''

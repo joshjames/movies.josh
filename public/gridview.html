@@ -325,18 +325,19 @@
         // that exact rendering path instead of a second one.
         function rowItemToGridItem(item) {
             const inLibrary = Boolean(item.inLibrary);
+            const contentType = item.mediaType === 'tv' ? 'series' : 'movie';
             return {
                 id: inLibrary ? item.localId : null,
                 title: item.title,
                 year: item.year,
                 genre: '',
-                contentType: item.mediaType === 'tv' ? 'series' : 'movie',
+                contentType,
                 cover: item.poster,
                 imdbId: item.imdbId,
                 updatedAt: null,
                 _rowHref: inLibrary && item.localHref
                     ? item.localHref
-                    : `/browse.html?q=${encodeURIComponent(item.title || '')}${item.imdbId ? `&imdbId=${encodeURIComponent(item.imdbId)}` : ''}`
+                    : `/browse.html?q=${encodeURIComponent(item.title || '')}${item.imdbId ? `&imdbId=${encodeURIComponent(item.imdbId)}` : ''}${contentType === 'series' ? '&type=series' : ''}`
             };
         }
 
