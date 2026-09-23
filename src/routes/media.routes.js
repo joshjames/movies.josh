@@ -962,6 +962,35 @@ function extractEmbeddedSubtitleSet(videoPath, maxTracks = 8) {
     return extracted;
 }
 
+// Player-facing label only - matching/selection still runs entirely on
+// langHint/file/streamIndex elsewhere in this file, untouched. Every track
+// today is 'eng'/'und' in practice, so this just replaces what used to be a
+// raw, often long and cluttered filename with a clean language name; a real
+// per-track display-title (e.g. from metadata.json) is future work, not this.
+const SUBTITLE_LANGUAGE_DISPLAY_NAMES = {
+    eng: 'English',
+    und: 'English',
+    hin: 'Hindi',
+    spa: 'Spanish',
+    fre: 'French',
+    fra: 'French',
+    ger: 'German',
+    deu: 'German',
+    ita: 'Italian',
+    por: 'Portuguese',
+    jpn: 'Japanese',
+    kor: 'Korean',
+    chi: 'Chinese',
+    zho: 'Chinese',
+    ara: 'Arabic',
+    rus: 'Russian'
+};
+
+function subtitleLanguageDisplayName(langHint) {
+    const clean = String(langHint || '').trim().toLowerCase();
+    return SUBTITLE_LANGUAGE_DISPLAY_NAMES[clean] || (clean ? clean.toUpperCase() : 'English');
+}
+
 function listSubtitleCandidatesForVideo(videoPath, options = {}) {
     const dir = path.dirname(videoPath);
     const base = path.parse(videoPath).name;
@@ -4130,7 +4159,7 @@ router.get('/subtitles/:id/tracks', async (req, res) => {
                 file: item.file,
                 relativePath: item.relativePath,
                 isDefault: selectedDefault ? String(item.relativePath || item.file || '').trim() === selectedDefault : false,
-                label: `${item.langHint.toUpperCase()}${item.streamIndex !== null ? ` (stream ${item.streamIndex})` : ''} - ${item.file}`
+                label: subtitleLanguageDisplayName(item.langHint)
             }))
         });
     } catch (err) {
