@@ -564,6 +564,13 @@
 
         .scroller-title-main {
             display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .scroller-title-line {
+            display: flex;
             align-items: baseline;
             gap: 12px;
             min-width: 0;
@@ -576,12 +583,11 @@
         }
 
         .row-title-logo {
-            height: 22px;
+            height: 42px;
             width: auto;
-            max-width: 140px;
+            max-width: 200px;
             object-fit: contain;
             display: block;
-            vertical-align: middle;
         }
 
         .scroller-title span {
@@ -694,18 +700,22 @@
         }
 
         .slider-badge-logo {
-            background: rgba(2, 6, 23, 0.75);
-            padding: 3px 5px;
+            top: 8px;
+            left: 8px;
+            right: auto;
+            background: transparent;
+            padding: 0;
             display: flex;
             align-items: center;
-            border-radius: 6px;
+            border-radius: 0;
         }
 
         .slider-badge-logo img {
-            height: 16px;
+            height: 36px;
             width: auto;
             display: block;
             object-fit: contain;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
         }
 
         .info-pill-btn {
@@ -1470,16 +1480,19 @@
                 : '';
 
             const titleLogo = String(collection.titleLogo || '').trim();
-            const titleHtml = titleLogo
-                ? `<h2>${collection.title || 'Collection'} <img class="row-title-logo" src="${sanitizeImageSrc(titleLogo)}" alt=""></h2>`
-                : `<h2>${collection.title || 'Collection'}</h2>`;
+            const titleHtml = `
+                <div class="scroller-title-line">
+                    <h2>${collection.title || 'Collection'}</h2>
+                    ${collection.subtitle ? `<span>${collection.subtitle}</span>` : ''}
+                </div>
+                ${titleLogo ? `<img class="row-title-logo" src="${sanitizeImageSrc(titleLogo)}" alt="">` : ''}
+            `;
 
             return `
                 <section class="collection-row">
                     <div class="scroller-title">
                         <div class="scroller-title-main">
                             ${titleHtml}
-                            ${collection.subtitle ? `<span>${collection.subtitle}</span>` : ''}
                         </div>
                         ${viewAllHtml}
                     </div>
@@ -1657,31 +1670,32 @@
             updateInstallButton();
         }
 
-        // Maps PublicRowBuilderService's badge slugs to the actual logo files
-        // already downloaded into public/images/logos/ - a couple of names
-        // don't match the slug 1:1 (disney -> disneyplus.webp), everything
-        // else lines up directly.
-        const PROVIDER_LOGOS = {
-            netflix: '/images/logos/netflix.png',
-            prime: '/images/logos/prime.png',
-            disney: '/images/logos/disneyplus.webp',
-            appletv: '/images/logos/appletv.png',
-            hbomax: '/images/logos/hbomax.jpeg'
+        // Maps PublicRowBuilderService's badge slugs to the dedicated square
+        // corner-badge files in public/images/logos/ (<slug>_badge.png).
+        // Verified directly (convert -alpha extract, not just the filename)
+        // 2026-09-23: netflix/prime/disneyplus/appletv all have real alpha
+        // transparency. hbomax_badge.png does not - it's a plain opaque RGB
+        // PNG despite the name - so it'll render with a hard square edge
+        // until a properly-transparent version is provided.
+        const PROVIDER_BADGES = {
+            netflix: '/images/logos/netflix_badge.png',
+            prime: '/images/logos/prime_badge.png',
+            disney: '/images/logos/disneyplus_badge.png',
+            appletv: '/images/logos/appletv_badge.png',
+            hbomax: '/images/logos/hbomax_badge.png'
         };
 
-        // Row-title logo (replaces the row's own "Top Movies on X" text with
-        // the provider's mark) needs real alpha transparency to look right
-        // against the dark row header - checked directly (identify -format
-        // '%A'), not assumed from the filename: only netflix.png and
-        // prime.png actually have it. disneyplus.png/.webp, appletv.png, and
-        // hbomax.jpeg are all fully opaque (solid background box) despite
-        // what their names suggest, so those three stay as plain text here
-        // until a properly-transparent version is provided - the per-card
-        // corner badge (badgeLogo above) still uses them fine since that
-        // badge already sits on its own dark chip regardless.
+        // Row-title logo (sits below the row's "Top Movies on X" text) needs
+        // real alpha transparency to look right against the dark row header.
+        // Verified directly 2026-09-23 (convert -alpha extract): all five of
+        // netflix.png/prime.png/disneyplus.png/appletv.png/hbomax.png have
+        // it now, so all five are wired up here.
         const TITLE_LOGO_READY = {
             netflix: '/images/logos/netflix.png',
-            prime: '/images/logos/prime.png'
+            prime: '/images/logos/prime.png',
+            disney: '/images/logos/disneyplus.png',
+            appletv: '/images/logos/appletv.png',
+            hbomax: '/images/logos/hbomax.png'
         };
 
         // Converts a PublicRowBuilderService row (see that file for the full
@@ -1691,7 +1705,7 @@
         // TMDb-driven public rows.
         function publicRowToCollection(row) {
             const badgeSlug = Array.isArray(row.badges) && row.badges.length ? row.badges[0] : null;
-            const badgeLogo = badgeSlug ? (PROVIDER_LOGOS[badgeSlug] || null) : null;
+            const badgeLogo = badgeSlug ? (PROVIDER_BADGES[badgeSlug] || null) : null;
             const titleLogo = badgeSlug ? (TITLE_LOGO_READY[badgeSlug] || null) : null;
 
             const cards = (Array.isArray(row.items) ? row.items : []).map((item) => {
