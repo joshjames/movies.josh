@@ -2104,6 +2104,39 @@ router.post('/manual-worker-run', async (req, res) => {
     }
 });
 
+// GET /api/admin/manual-worker-status?folder=X&contentType=movie|series
+// Cheap, single-folder read of metadata.json's real on-disk state
+// (storage.files / pipelineState) - built for polling a deferred manual
+// worker run (TRANSCODE/CLOUDSYNC) to genuine completion instead of relying
+// on a held-open HTTP request, which is exactly what deferCompletion exists
+// to avoid (see the /manual-worker-run handler above - a proxy/Cloudflare
+// timeout in front of a long transcode or upload kills that connection well
+// before the real work finishes, even though it keeps running regardless).
+router.get('/manual-worker-status', async (req, res) => {
+    try {
+        const folder = String(req.query.folder || '').trim();
+        const contentType = String(req.query.contentType || 'movie').trim();
+        if (!folder) {
+            return res.status(400).json({ success: false, error: 'Missing folder.' });
+        }
+
+        const folderPath = resolveContentFolderPath(contentType, folder);
+        const metaFilePath = path.join(folderPath, 'metadata.json');
+        if (!fs.existsSync(metaFilePath)) {
+            return res.status(404).json({ success: false, error: 'metadata.json not found.' });
+        }
+
+        const metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+        return res.json({
+            success: true,
+            pipelineState: metadata.pipelineState || null,
+            storage: metadata.storage || null
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.post('/generate-streaming-profiles', async (req, res) => {
     try {
         const { folder, contentType } = req.body || {};

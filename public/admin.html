@@ -3297,16 +3297,53 @@
         // single request risks a proxy/gateway timeout during a long
         // TRANSCODE or CLOUDSYNC step - each step is bounded by the same
         // per-worker timeout the existing single-step runs already rely on.
+        // Polls GET /api/admin/manual-worker-status (real on-disk metadata.json
+        // state) until isDone(status) is true, or gives up after timeoutMs.
+        // Built for TRANSCODE/CLOUDSYNC specifically - both long enough that
+        // holding the browser's own request open for the whole duration risks
+        // a proxy/Cloudflare timeout killing the connection well before the
+        // real work finishes (it keeps running server-side regardless - this
+        // is exactly the class of bug deferCompletion/deferCloudSync already
+        // exist to route around). Polling the actual disk state instead of
+        // trusting a held-open response is what makes "Run All" genuinely
+        // wait for one stage before starting the next.
+        async function pollForCompletion(folder, contentType, isDone, { intervalMs = 4000, timeoutMs = 20 * 60 * 1000, onTick = null } = {}) {
+            const startedAt = Date.now();
+            while (Date.now() - startedAt < timeoutMs) {
+                await new Promise((resolve) => setTimeout(resolve, intervalMs));
+                try {
+                    const res = await fetch(`/api/admin/manual-worker-status?folder=${encodeURIComponent(folder)}&contentType=${encodeURIComponent(contentType)}`);
+                    const data = await res.json();
+                    if (!data.success) continue;
+                    if (data.pipelineState?.error) {
+                        return { success: false, error: data.pipelineState.error };
+                    }
+                    if (onTick) onTick(data);
+                    if (isDone(data)) return { success: true, data };
+                } catch (_err) {
+                    // Transient - keep polling until the timeout gives up.
+                }
+            }
+            return { success: false, error: 'Timed out waiting for completion.' };
+        }
+
+        function isTranscodeDone(status) {
+            return Object.values(status.storage?.files || {}).some((f) => f.status && f.status !== 'waiting');
+        }
+
+        function isCloudSyncDone(status) {
+            return Object.values(status.storage?.files || {}).some((f) => f.status === 'synced');
+        }
+
         async function runAllWorkersNow(folder, type) {
             const sequence = ['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC'];
             for (const worker of sequence) {
-                // CLOUDSYNC (a big upload) is deferred - held open
-                // synchronously, a proxy/Cloudflare timeout in front of this
-                // kills the connection well before a large upload finishes,
-                // even though it keeps running and completes fine
-                // regardless. Deferred mode returns immediately instead, so
-                // this is always the last thing that happens in the loop.
-                const deferCompletion = worker === 'CLOUDSYNC';
+                // TRANSCODE and CLOUDSYNC are both long enough to risk a
+                // proxy timeout killing the held-open request - deferred mode
+                // returns immediately, and the real completion signal comes
+                // from polling manual-worker-status instead, so the loop only
+                // advances once the stage has genuinely finished on disk.
+                const deferCompletion = worker === 'TRANSCODE' || worker === 'CLOUDSYNC';
                 showToast(`Run All: ${worker} for ${folder}...`, 'info', 3000);
                 try {
                     const res = await fetch('/api/admin/manual-worker-run', {
@@ -3320,10 +3357,18 @@
                         fetchLibraryData();
                         return;
                     }
+
                     if (data.deferred) {
-                        showToast(`Run All: ${worker} queued in the background for ${folder} - large uploads can take a while, check back shortly.`, 'success', 5000);
-                        fetchLibraryData();
-                        return;
+                        showToast(`Run All: waiting for ${worker} to actually finish for ${folder}...`, 'info', 4000);
+                        const isDone = worker === 'TRANSCODE' ? isTranscodeDone : isCloudSyncDone;
+                        const timeoutMs = worker === 'CLOUDSYNC' ? 60 * 60 * 1000 : 20 * 60 * 1000;
+                        const result = await pollForCompletion(folder, type, isDone, { timeoutMs });
+                        if (!result.success) {
+                            showToast(`Run All stopped at ${worker}: ${result.error}`, 'error', 6000);
+                            fetchLibraryData();
+                            return;
+                        }
+                        showToast(`Run All: ${worker} genuinely finished for ${folder}.`, 'success', 3000);
                     }
                 } catch (_err) {
                     showToast(`Run All stopped at ${worker}: request failed.`, 'error', 5000);
@@ -3667,14 +3712,35 @@
                 }
 
                 if (data.cloudSyncDeferred) {
-                    document.getElementById(`progress-bar-${folder}`).style.width = '20%';
-                    document.getElementById(`progress-txt-${folder}`).textContent = 'Cloud sync queued in worker. You can continue using admin.';
-                    showToast(`Cloud sync queued for ${folder}.`, 'success', 3200);
+                    document.getElementById(`progress-bar-${folder}`).style.width = '25%';
+                    document.getElementById(`progress-txt-${folder}`).textContent = 'Uploading to cloud storage - this can take several minutes for a large file...';
+                    showToast(`Cloud sync started for ${folder} - watching for real completion...`, 'info', 3200);
+
+                    const result = await pollForCompletion(folder, type, isCloudSyncDone, {
+                        timeoutMs: 60 * 60 * 1000,
+                        onTick: () => {
+                            const bar = document.getElementById(`progress-bar-${folder}`);
+                            if (!bar) return;
+                            const current = parseInt(bar.style.width, 10) || 25;
+                            bar.style.width = `${Math.min(current + 8, 90)}%`;
+                        }
+                    });
+
+                    if (!result.success) {
+                        document.getElementById(`progress-txt-${folder}`).textContent = `Still not synced: ${result.error}`;
+                        showToast(`Cloud sync for ${folder}: ${result.error}`, 'error', 6000);
+                        activeSyncFolder = null;
+                        return;
+                    }
+
+                    document.getElementById(`progress-bar-${folder}`).style.width = '100%';
+                    document.getElementById(`progress-txt-${folder}`).textContent = 'Cloud sync completed.';
+                    showToast(`Cloud sync completed for ${folder}.`, 'success', 3200);
                     activeSyncFolder = null;
                     setTimeout(() => {
                         const holder = document.getElementById(`sync-container-${folder}`);
                         if (holder) holder.style.display = 'none';
-                    }, 1800);
+                    }, 2500);
                     return;
                 }
 
