@@ -207,8 +207,8 @@ function buildSearchText(item) {
     ].filter(Boolean).join(' '));
 }
 
-function searchIndex(query, limit = 40) {
-    const index = loadIndex();
+function searchIndex(query, limit = 40, indexOverride = null) {
+    const index = indexOverride || loadIndex();
     const cleanQuery = normalizeTerm(query);
     const cappedLimit = Math.max(1, Math.min(parseInt(limit, 10) || 40, 100));
 
@@ -253,13 +253,51 @@ function getSeriesByImdbId(imdbId) {
     return index.items.find(item => String(item.imdbId || '').replace(/^tt/i, '') === cleanImdbId) || null;
 }
 
-// Local title+year -> imdbId resolution, purely against this in-memory
-// index (built from the downloaded IMDb TSV dump) - no external API call.
-// A show's year is a run (startYear..endYear), not a single value, so a
-// year falling anywhere in that range counts as a match - more forgiving
-// than the movie version by nature, not by an extra tolerance pass.
+// A show's run year shows up in two different shapes depending on which
+// underlying file loadIndex() actually served: separate startYear/endYear
+// fields (the IMDb-TSV-built legacy catalog) or a single "2008–2013"-style
+// range string (the library-derived registry buildSeriesRegistryItem
+// produces, which is what loadIndex() prefers whenever the library isn't
+// empty). Handles both rather than assuming one.
+function extractYearRange(item) {
+    const start = parseInt(item.startYear, 10);
+    if (Number.isFinite(start)) {
+        const end = parseInt(item.endYear, 10);
+        return { start, end: Number.isFinite(end) ? end : start };
+    }
+
+    const numbers = String(item.year || '').match(/\d{4}/g);
+    if (!numbers || !numbers.length) return null;
+    return {
+        start: parseInt(numbers[0], 10),
+        end: parseInt(numbers[numbers.length - 1], 10)
+    };
+}
+
+// loadIndex() prefers the library-derived registry (PRIMARY_INDEX_FILE)
+// over the broad IMDb-TSV-built catalog (LEGACY_INDEX_FILE) whenever the
+// library isn't empty - by design, for the existing "shows I already own"
+// admin search. That means a plain searchIndex() call almost never actually
+// reaches the ~20k-title broad catalog once any show has been scanned in
+// (confirmed live: 60 library items vs 22863 in the legacy catalog file).
+// findBestMatch wants the opposite default - "resolve any show's imdbId",
+// owned or not - so it searches the broad catalog directly first.
+function loadBroadIndex() {
+    return readIndexFile(LEGACY_INDEX_FILE);
+}
+
+// Local title+year -> imdbId resolution - no external API call. Tries the
+// full IMDb-derived catalog first, then falls back to the library-derived
+// registry (covers a show added since the catalog was last rebuilt). A
+// show's year is a run, not a single value, so a year falling anywhere in
+// that range counts as a match - more forgiving than the movie version by
+// nature, not by an extra tolerance pass.
 function findBestMatch(title, year) {
-    const candidates = searchIndex(title, 25);
+    const broadIndex = loadBroadIndex();
+    let candidates = broadIndex.items.length ? searchIndex(title, 25, broadIndex) : [];
+    if (!candidates.length) {
+        candidates = searchIndex(title, 25);
+    }
     if (!candidates.length) return null;
 
     const targetYear = parseInt(year, 10);
@@ -268,10 +306,8 @@ function findBestMatch(title, year) {
     }
 
     const withinRun = (item) => {
-        const start = parseInt(item.startYear, 10);
-        if (!Number.isFinite(start)) return false;
-        const end = parseInt(item.endYear, 10);
-        return targetYear >= start && targetYear <= (Number.isFinite(end) ? end : start);
+        const range = extractYearRange(item);
+        return Boolean(range) && targetYear >= range.start && targetYear <= range.end;
     };
 
     const match = candidates.find(withinRun);
