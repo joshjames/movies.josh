@@ -279,11 +279,30 @@ function extractYearRange(item) {
 // library isn't empty - by design, for the existing "shows I already own"
 // admin search. That means a plain searchIndex() call almost never actually
 // reaches the ~20k-title broad catalog once any show has been scanned in
-// (confirmed live: 60 library items vs 22863 in the legacy catalog file).
+// (confirmed live: 60 library items vs 22863 in the real catalog file).
 // findBestMatch wants the opposite default - "resolve any show's imdbId",
 // owned or not - so it searches the broad catalog directly first.
+//
+// LEGACY_INDEX_FILE itself turned out not to be usable for this: it's a
+// hardcoded path under the writable data root, and writeIndex() mirrors the
+// library-derived registry to that exact same path - confirmed live, that
+// file is a ~60-item mirror, not the real catalog. build-tv-show-index.js
+// actually writes the real ~23k-item file under /app/catalog-metadata (the
+// read-only, git-tracked mount) - the same directory MovieTitleIndexService
+// already checks for its own catalog files - so this looks there directly
+// instead of reusing LEGACY_INDEX_FILE's path.
+const BROAD_CATALOG_DIRS = [
+    String(process.env.CATALOG_DATA_DIR || '').trim(),
+    '/app/catalog-metadata',
+    path.join(__dirname, '../../metadata')
+].filter(Boolean);
+
 function loadBroadIndex() {
-    return readIndexFile(LEGACY_INDEX_FILE);
+    for (const dir of BROAD_CATALOG_DIRS) {
+        const parsed = readIndexFile(path.join(dir, 'tv-show-index.json'));
+        if (parsed.items.length > 0) return parsed;
+    }
+    return { updatedAt: null, totalItems: 0, items: [] };
 }
 
 // Local title+year -> imdbId resolution - no external API call. Tries the
