@@ -108,10 +108,15 @@
 
         .collection-save-row {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
             margin: -6px 0 14px 0;
+        }
+        .collection-save-row .hint {
+            font-style: italic;
+            font-size: 0.78rem;
+            color: #94a3b8;
         }
         .collection-save-row button {
             background: #0b1220;
@@ -260,7 +265,8 @@
         </form>
 
         <div class="collection-save-row" id="collection-save-row" style="display:none;">
-            <button type="button" id="save-collection-btn" disabled>Save as Collection</button>
+            <span class="hint">Customize your search filters, then save as a new collection here</span>
+            <button type="button" id="save-collection-btn" disabled title="Type a tag above to enable saving">Save as Collection</button>
         </div>
 
         <div class="grid" id="grid"></div>
@@ -576,6 +582,9 @@
 
             const tagValue = document.getElementById('tag').value.trim();
             btn.disabled = !tagValue;
+            btn.title = tagValue
+                ? `Save everything tagged "${tagValue}" as a new collection`
+                : 'Type a tag above to enable saving';
         }
 
         async function saveCurrentTagAsCollection() {
