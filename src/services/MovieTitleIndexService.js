@@ -2,7 +2,15 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_DIR = path.join(__dirname, '../../metadata');
-const MAX_ENTRIES = Math.max(1000, Math.min(parseInt(process.env.MOVIE_INDEX_MAX || '10000', 10) || 10000, 50000));
+// movie-index.json (~56k titles, built alongside tv-show-index.json) is the
+// actual broad IMDb catalog - the catalog_*.json files are small, separately
+// curated lists (Top 100 All Time, Critics' Choices, Popular by decade,
+// etc.) meant for the browse/catalogs feature, not a general title search
+// source. Confirmed live: without this, findBestMatch could only ever
+// resolve movies popular enough to land in one of those curated lists (or
+// whatever the local library already happened to own) - anything more
+// obscure (foreign titles especially) came back null.
+const MAX_ENTRIES = Math.max(1000, Math.min(parseInt(process.env.MOVIE_INDEX_MAX || '60000', 10) || 60000, 100000));
 
 let cache = {
     loadedAt: 0,
@@ -35,7 +43,9 @@ function listCatalogFiles() {
     for (const dir of resolveCatalogDirs()) {
         if (!fs.existsSync(dir)) continue;
         for (const name of fs.readdirSync(dir)) {
-            if (!/^catalog_.*\.json$/i.test(name)) continue;
+            const isCuratedCatalog = /^catalog_.*\.json$/i.test(name);
+            const isBroadIndex = name.toLowerCase() === 'movie-index.json';
+            if (!isCuratedCatalog && !isBroadIndex) continue;
             files.push(path.join(dir, name));
         }
     }
