@@ -253,12 +253,38 @@ function getSeriesByImdbId(imdbId) {
     return index.items.find(item => String(item.imdbId || '').replace(/^tt/i, '') === cleanImdbId) || null;
 }
 
+// Local title+year -> imdbId resolution, purely against this in-memory
+// index (built from the downloaded IMDb TSV dump) - no external API call.
+// A show's year is a run (startYear..endYear), not a single value, so a
+// year falling anywhere in that range counts as a match - more forgiving
+// than the movie version by nature, not by an extra tolerance pass.
+function findBestMatch(title, year) {
+    const candidates = searchIndex(title, 25);
+    if (!candidates.length) return null;
+
+    const targetYear = parseInt(year, 10);
+    if (!Number.isFinite(targetYear)) {
+        return { item: candidates[0], matchQuality: 'title-only' };
+    }
+
+    const withinRun = (item) => {
+        const start = parseInt(item.startYear, 10);
+        if (!Number.isFinite(start)) return false;
+        const end = parseInt(item.endYear, 10);
+        return targetYear >= start && targetYear <= (Number.isFinite(end) ? end : start);
+    };
+
+    const match = candidates.find(withinRun);
+    return match ? { item: match, matchQuality: 'exact' } : null;
+}
+
 module.exports = {
     PRIMARY_INDEX_FILE,
     LEGACY_INDEX_FILE,
     loadIndex,
     searchIndex,
     getSeriesByImdbId,
+    findBestMatch,
     buildSearchText,
     normalizeTerm,
     normalizeImdbId,

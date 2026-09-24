@@ -12,7 +12,7 @@ const crypto = require('crypto');
 const { getLibrary } = require('../services/db');
 const { loadHomeFeedWithFallback, normalizeCard } = require('../services/HomeFeedService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
-const { loadIndex, searchIndex, getSeriesByImdbId } = require('../services/TvSeriesIndexService');
+const { loadIndex, searchIndex, getSeriesByImdbId, findBestMatch: findBestSeriesMatch } = require('../services/TvSeriesIndexService');
 const MovieTitleIndexService = require('../services/MovieTitleIndexService');
 const SeriesSubscriptionService = require('../services/SeriesSubscriptionService');
 const { buildContinueWatchingCollection } = require('../services/ContinueWatchingService');
@@ -2759,6 +2759,63 @@ router.get('/movies/search/index', async (req, res) => {
             count: items.length,
             items,
             localLibraryCount: localRows.length
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/imdb-lookup?title=<title>&year=<year>&type=movie|series
+// Simple title+year -> imdbId resolver against the local IMDb catalog
+// indexes (MovieTitleIndexService/TvSeriesIndexService, both built from the
+// downloaded IMDb TSV dump) - never calls OMDb/TMDb, unlike
+// MetadataProvider.fetchMetadataWithFallback. Built for exactly this: quick
+// manual/scripted lookups (admin work, curl, etc.) that don't need to burn
+// an external API call for data that's already sitting locally.
+router.get('/imdb-lookup', async (req, res) => {
+    try {
+        const title = String(req.query.title || '').trim();
+        const year = String(req.query.year || '').trim();
+        const type = String(req.query.type || '').trim().toLowerCase();
+
+        if (!title) {
+            return res.status(400).json({ success: false, error: 'Missing required "title" parameter.' });
+        }
+
+        const wantMovie = type !== 'series' && type !== 'tv';
+        const wantSeries = type !== 'movie';
+
+        const movieMatch = wantMovie ? MovieTitleIndexService.findBestMatch(title, year) : null;
+        const seriesMatch = wantSeries ? findBestSeriesMatch(title, year) : null;
+
+        // When checking both indexes (no explicit ?type=), prefer whichever
+        // came back with the stronger match quality rather than just
+        // whichever happened to run first.
+        const QUALITY_RANK = { exact: 2, close: 1, 'title-only': 0 };
+        let best = null;
+        let bestType = null;
+        if (movieMatch && (!best || QUALITY_RANK[movieMatch.matchQuality] > QUALITY_RANK[best.matchQuality])) {
+            best = movieMatch;
+            bestType = 'movie';
+        }
+        if (seriesMatch && (!best || QUALITY_RANK[seriesMatch.matchQuality] > QUALITY_RANK[best.matchQuality])) {
+            best = seriesMatch;
+            bestType = 'series';
+        }
+
+        if (!best) {
+            return res.json({ success: true, match: null });
+        }
+
+        return res.json({
+            success: true,
+            match: {
+                imdbId: best.item.imdbId,
+                title: best.item.title,
+                year: bestType === 'series' ? (best.item.startYear || '') : best.item.year,
+                contentType: bestType,
+                matchQuality: best.matchQuality
+            }
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });

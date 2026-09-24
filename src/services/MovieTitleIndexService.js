@@ -192,9 +192,36 @@ function getByImdbId(imdbId = '') {
     return index.items.find(item => item.imdbId === clean) || null;
 }
 
+// Local title+year -> imdbId resolution, purely against this in-memory
+// catalog (built from the downloaded IMDb TSV dump) - no external API call,
+// unlike MetadataProvider.fetchMetadataWithFallback which always hits OMDb/
+// TMDb. Deliberately returns null rather than a weak guess whenever a year
+// is given but nothing in the text-matched candidates lines up with it -
+// see feedback_never_guess_without_confirmed_data.md.
+function findBestMatch(title, year) {
+    const candidates = searchIndex(title, 25);
+    if (!candidates.length) return null;
+
+    const targetYear = parseInt(year, 10);
+    if (!Number.isFinite(targetYear)) {
+        return { item: candidates[0], matchQuality: 'title-only' };
+    }
+
+    const exact = candidates.find((item) => parseInt(item.year, 10) === targetYear);
+    if (exact) return { item: exact, matchQuality: 'exact' };
+
+    // Small tolerance for festival-premiere-vs-wide-release year drift -
+    // only when nothing matched exactly.
+    const close = candidates.find((item) => Math.abs(parseInt(item.year, 10) - targetYear) === 1);
+    if (close) return { item: close, matchQuality: 'close' };
+
+    return null;
+}
+
 module.exports = {
     searchIndex,
     getByImdbId,
+    findBestMatch,
     ensureLoaded,
     normalizeImdbId,
     normalizeText
