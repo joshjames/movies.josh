@@ -1398,19 +1398,6 @@
             `;
         }
 
-        // Same ids PublicRowBuilderService.getRowDisplayOrder() produces -
-        // these rows live at metadata/publicdata/all/<id>.json and are only
-        // ever fully viewable via gridview.html?rowId=<id> (the generic
-        // fallback below only knows about the local library, so without
-        // this check "View all" on one of these rows would silently show
-        // the wrong content under the right title).
-        const PUBLIC_ROW_IDS = new Set([
-            'recently-added', 'popular-streaming-movies', 'popular-tv',
-            'netflix-movies', 'netflix-tv', 'prime-movies', 'prime-tv',
-            'disney-movies', 'disney-tv', 'appletv-movies', 'appletv-tv',
-            'hbomax-movies', 'hbomax-tv'
-        ]);
-
         function getCollectionViewAllHref(collection) {
             const id = String(collection?.id || '').trim();
             const title = String(collection?.title || '').trim();
@@ -1418,7 +1405,13 @@
 
             if (!id) return '';
             if (id === 'my-library-row') return '';
-            if (PUBLIC_ROW_IDS.has(id)) {
+            // A server-built row (see publicRowToCollection) - a TMDb public
+            // row or a user collection, either way only fully viewable via
+            // gridview.html?rowId=<id> (/api/rows + /api/collections). The
+            // generic fallback below only knows about the local library, so
+            // without this check "View all" here would silently show the
+            // wrong content under the right title.
+            if (collection?.isServerRow) {
                 return `/gridview.html?rowId=${encodeQueryValue(id)}&title=${encodeQueryValue(title || 'Grid View')}`;
             }
             if (id === 'recently-added-row') {
@@ -1731,15 +1724,26 @@
                 };
             });
 
-            return { id: row.id, title: row.title, subtitle: '', titleLogo, cards };
+            // Marks this as a server-built row (whether a TMDb public row or
+            // a user collection) so getCollectionViewAllHref knows to route
+            // "View all" through gridview.html?rowId= for it - the generic
+            // fallback there only knows about the local library.
+            return { id: row.id, title: row.title, subtitle: '', titleLogo, cards, isServerRow: true };
         }
 
         async function fetchPublicRowCollections() {
             try {
-                const res = await fetch('/api/rows');
-                const data = await res.json();
-                const rows = Array.isArray(data?.rows) ? data.rows : [];
-                return rows.map(publicRowToCollection).filter((c) => c.cards.length > 0);
+                const [rowsRes, collectionsRes] = await Promise.all([
+                    fetch('/api/rows').then((r) => r.json()),
+                    fetch('/api/collections').then((r) => r.json()).catch(() => ({ collections: [] }))
+                ]);
+                const rows = Array.isArray(rowsRes?.rows) ? rowsRes.rows : [];
+                // User-authored, tag-based collections (CollectionService) -
+                // same row-item shape as a public row (mediaType/imdbId/
+                // title/poster/inLibrary/localHref), so publicRowToCollection
+                // adapts these unchanged.
+                const collections = Array.isArray(collectionsRes?.collections) ? collectionsRes.collections : [];
+                return [...rows, ...collections].map(publicRowToCollection).filter((c) => c.cards.length > 0);
             } catch (err) {
                 console.error('❌ Frontend failed to load public rows:', err);
                 return [];

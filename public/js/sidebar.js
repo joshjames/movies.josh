@@ -122,11 +122,18 @@
             .app-sidebar-placeholder:hover { background: rgba(255, 255, 255, 0.03); }
 
             .app-sidebar-add-row {
-                padding-left: 40px; font-size: 0.85rem; color: #38bdf8;
+                display: block; padding: 10px 24px 10px 40px; font-size: 0.85rem;
+                color: #38bdf8; text-decoration: none; box-sizing: border-box;
             }
             .app-sidebar-add-row:hover { text-decoration: underline; background: none; }
 
             .app-sidebar-divider { height: 1px; background: #1e293b; margin: 10px 0; }
+
+            .app-sidebar-section-label {
+                padding: 4px 24px; margin-top: 4px;
+                font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                letter-spacing: 0.05em; color: #64748b;
+            }
 
             .app-sidebar-caret { float: right; transition: transform 0.2s ease; color: #64748b; }
             .app-sidebar-caret.open { transform: rotate(90deg); }
@@ -184,7 +191,11 @@
                 ${buildRowLinkHtml({ anchorId: 'my-library-row', label: 'My Library', gridHref: `/gridview.html?title=${encodeQ('My Library')}&sort=recent` }, { indent: false })}
                 <div class="app-sidebar-divider"></div>
 
-                <button type="button" class="app-sidebar-add-row" data-coming-soon="Custom rows">+ New Row</button>
+                <div class="app-sidebar-section-label">Collections</div>
+                <a class="app-sidebar-add-row" href="/gridview.html">+ New Collection</a>
+                <div class="app-sidebar-divider"></div>
+                <div id="app-sidebar-collections-rows"></div>
+
                 ${buildRowLinkHtml({ anchorId: 'my-shows-row', label: 'My Shows', gridHref: `/gridview.html?title=${encodeQ('TV Shows')}&type=series&sort=title` })}
                 <button type="button" class="app-sidebar-placeholder app-sidebar-indent" data-coming-soon="Unwatched episodes view">New Episodes</button>
                 <div class="app-sidebar-divider"></div>
@@ -217,6 +228,26 @@
         container.innerHTML = `${links}<a class="app-sidebar-link app-sidebar-indent" href="/gridview.html">More genres &rsaquo;</a>`;
     }
 
+    // User-authored, tag-based collections (CollectionService) - the only
+    // dynamic section here, everything else is a fixed list. Fetched after
+    // the initial synchronous render so a slow/failed request never blocks
+    // the rest of the sidebar from opening; renders nothing (not an error
+    // state) when there aren't any yet - "+ New Collection" above already
+    // invites the user to make one.
+    async function renderCollectionsSection(container) {
+        if (!container) return;
+        try {
+            const res = await fetch('/api/collections');
+            const data = await res.json();
+            const collections = Array.isArray(data?.collections) ? data.collections : [];
+            container.innerHTML = collections
+                .map((c) => buildRowLinkHtml({ anchorId: c.id, label: c.title, gridHref: rowGridHref(c.id, c.title) }))
+                .join('');
+        } catch (_err) {
+            // Leave the section empty rather than surfacing a broken sidebar.
+        }
+    }
+
     function showComingSoonToast(label) {
         if (typeof window.showToast === 'function') {
             window.showToast(`${label} is coming soon.`, 'info', 2600);
@@ -243,6 +274,7 @@
         const closeBtn = panel.querySelector('.app-sidebar-close-btn');
 
         buildGenreLinks(document.getElementById('app-sidebar-genres'));
+        renderCollectionsSection(document.getElementById('app-sidebar-collections-rows'));
 
         function openSidebar() {
             panel.classList.add('open');
