@@ -297,12 +297,27 @@ const BROAD_CATALOG_DIRS = [
     path.join(__dirname, '../../metadata')
 ].filter(Boolean);
 
+// Deliberately does NOT go through readIndexFile/normalizeRegistry -
+// buildSeriesRegistryItem (what normalizeRegistry maps every item through)
+// only reads a single item.year field, built for the library-derived
+// registry's shape. The real catalog's items carry startYear/endYear
+// instead, which buildSeriesRegistryItem silently drops (year ends up
+// null), confirmed live: it also already carries everything searchIndex's
+// scoring needs (title, imdbId, searchText, numVotes, averageRating), so no
+// normalization is needed at all here - just read it as-is.
 function loadBroadIndex() {
     for (const dir of BROAD_CATALOG_DIRS) {
-        const parsed = readIndexFile(path.join(dir, 'tv-show-index.json'));
-        if (parsed.items.length > 0) return parsed;
+        const filePath = path.join(dir, 'tv-show-index.json');
+        if (!fs.existsSync(filePath)) continue;
+        try {
+            const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            const items = Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
+            if (items.length > 0) return { items };
+        } catch (_err) {
+            // Try the next candidate directory.
+        }
     }
-    return { updatedAt: null, totalItems: 0, items: [] };
+    return { items: [] };
 }
 
 // Local title+year -> imdbId resolution - no external API call. Tries the
