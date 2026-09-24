@@ -9,11 +9,15 @@
 #   ./scripts/imdb-lookup.sh "Fleabag" 2016 series
 #   ./scripts/imdb-lookup.sh "The Matrix" 1999 movie
 #
-# Needs a logged-in session cookie the first time (the whole app sits behind
-# requireAuth). Grab yours from the browser (DevTools -> Application ->
-# Cookies -> copy the session cookie's value) and export it once:
-#   export MOVIE_STREAMER_COOKIE="connect.sid=s%3A...."
-# then this script reuses it on every call.
+# Needs a logged-in cookie the first time (the whole app sits behind
+# requireAuth). This app's auth is just one plain cookie - no session ID -
+# named "user_profile", holding your username/email exactly as DevTools ->
+# Application -> Cookies shows it (already percent-encoded, e.g.
+# josh%40joshjames.site for josh@joshjames.site). Copy that value and export
+# the whole cookie once:
+#   export MOVIE_STREAMER_COOKIE="user_profile=josh%40joshjames.site"
+# then this script reuses it on every call. It doesn't expire quickly (see
+# the Expires column in DevTools), so you shouldn't need to redo this often.
 
 set -euo pipefail
 
