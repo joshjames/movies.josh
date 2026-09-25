@@ -259,6 +259,25 @@ async function fetchMetadataWithFallback({ imdbId = '', title = '', year = '', c
     });
 
     if (omdbData) {
+        // OMDb can return a fully "successful" record with no poster at all
+        // (Poster: "N/A") for a very new/obscure title - confirmed live for
+        // a 2026 release - not a lookup failure, so this never used to fall
+        // through to TMDb at all, and a repeated "refresh OMDb data" just
+        // hit the same gap every time. TMDb tends to have a poster sooner
+        // for new releases, so patch just that field in rather than
+        // discarding OMDb's richer text data (cast/plot/genre) for it.
+        if ((!omdbData.Poster || omdbData.Poster === 'N/A') && hasTmdbCredentials()) {
+            try {
+                const tmdbPosterData = normalizedImdb
+                    ? await resolveTmdbFromImdb(normalizedImdb)
+                    : await resolveTmdbByTitle({ title: normalizedTitle, year: normalizedYear, contentType: normalizedType });
+                if (tmdbPosterData?.Poster && tmdbPosterData.Poster !== 'N/A') {
+                    omdbData.Poster = tmdbPosterData.Poster;
+                }
+            } catch (err) {
+                logger.warn(`⚠️ [MetadataProvider] TMDb poster backfill failed: ${err.message}`);
+            }
+        }
         return { provider: 'omdb', data: omdbData };
     }
 

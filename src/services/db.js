@@ -111,10 +111,17 @@ async function connectWriteDb() {
 }
 
 async function syncLibraryToStorage(libraryData) {
-    await connectDb();
+    // Must go through the write client, not the read client - on a satellite
+    // region these are two different connections (the local Redis is a
+    // read-only replica of the primary's), and writing through the read
+    // client there always fails with "READONLY You can't write against a
+    // read only replica." On the primary itself this is a no-op change:
+    // SAME_ENDPOINT makes redisWriteClient literally the same object as
+    // redisClient, so behavior there is unchanged.
+    await connectWriteDb();
     try {
-        if (redisClient.isOpen) {
-            await redisClient.set('joshflix:library', JSON.stringify(libraryData));
+        if (redisWriteClient.isOpen) {
+            await redisWriteClient.set('joshflix:library', JSON.stringify(libraryData));
         }
     } catch (err) {
         logger.error(`Failed updating Redis cache keys: ${err.message}`);
