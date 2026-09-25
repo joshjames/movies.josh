@@ -2,9 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
-const { syncLibraryToStorage } = require('./db');
+const { syncLibraryToStorage, getLibrary } = require('./db');
 const { normalizeGroups } = require('./LibraryAccessService');
 const { refreshIndexFromLibrary } = require('./TvSeriesIndexService');
+const { isRunningAsSatellite } = require('../middleware/controlForward');
 
 const MOVIE_SCAN_PATHS = [
     process.env.MOVIES_DIR,
@@ -415,6 +416,30 @@ function scanAcrossRoots(roots, contentType) {
 }
 
 async function runLibraryScanSweep() {
+    // A satellite's disk is a one-way rsync mirror of the primary's, and its
+    // Redis is meant to reflect the primary's state via native replication
+    // (see db.js) - a local scan here wouldn't just be redundant, it would
+    // actively mutate files on a copy that isn't the source of truth
+    // (consumeImdbMarker below rewrites metadata.json and deletes marker
+    // files), refreshIndexFromLibrary would independently rewrite the TV
+    // index file, and the result now writes straight through to the shared
+    // write-Redis connection (same one the primary itself writes through -
+    // see db.js's syncLibraryToStorage), so a stale or differently-computed
+    // satellite scan could overwrite the primary's own correct cache entry.
+    // Only the primary region ever owns this.
+    if (isRunningAsSatellite()) {
+        logger.debug('⏭️ Skipping library scan sweep - this is a satellite region; library state is owned by the primary and arrives here via Redis replication.');
+        const cached = await getLibrary();
+        return {
+            movies: (cached.movies || []).length,
+            shows: (cached.shows || []).length,
+            movieRoots: [],
+            seriesRoots: [],
+            skipped: true,
+            reason: 'satellite_region'
+        };
+    }
+
     logger.info('🔍 Executing system-wide library asset inventory sweep...');
 
     const existingMovieRoots = MOVIE_SCAN_PATHS.filter(root => fs.existsSync(root));
