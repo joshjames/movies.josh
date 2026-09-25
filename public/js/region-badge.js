@@ -1,10 +1,15 @@
 // public/js/region-badge.js
-// Small, unobtrusive corner badge showing which region/host/container is
-// actually serving this page - useful for testing Cloudflare's Load
-// Balancer routing (confirming Sydney vs LA actually answers as expected)
-// and, once more satellites exist, for spotting a misbehaving node at a
-// glance rather than digging through logs. Deliberately tiny/low-opacity
-// by default so it doesn't intrude on the real UI - hover/tap for detail.
+// Small corner badge showing which region/host/container is actually
+// serving this page - useful for testing Cloudflare's Load Balancer routing
+// (confirming Sydney vs LA actually answers as expected) and, once more
+// satellites exist, for spotting a misbehaving node at a glance rather than
+// digging through logs.
+//
+// Debug-only: off unless the page URL has ?locationbadge=true. It used to
+// always render, fixed bottom-left - harmless on most pages, but on
+// player.html at mobile widths it sits right on top of the play button.
+// Append the query param to any URL to turn it on for a troubleshooting
+// session; it's not meant to be on by default for real users.
 (function () {
     'use strict';
 
@@ -68,7 +73,17 @@
         return badge;
     }
 
+    function isEnabled() {
+        try {
+            return new URLSearchParams(window.location.search).get('locationbadge') === 'true';
+        } catch (_err) {
+            return false;
+        }
+    }
+
     function init() {
+        if (!isEnabled()) return;
+
         fetch('/api/runtime/version')
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (data) {
