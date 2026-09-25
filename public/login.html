@@ -469,6 +469,15 @@
         function onTurnstileError() {
             clearTurnstileToken();
             resolveTurnstileWaiters('');
+            // The widget's own error UI is a real Cloudflare-rendered iframe (not
+            // something our CSS can restyle) and looks alarming - "Verification
+            // failed" with a Troubleshoot link - but per ensureTurnstileToken's
+            // design, an errored widget just means we proceed without a token,
+            // same as a disabled/misconfigured one; it was never going to block
+            // the login/signup. Hide it instead of leaving a scary, functionally
+            // irrelevant error box on screen.
+            const wrap = document.getElementById('turnstileWrap');
+            if (wrap) wrap.style.display = 'none';
         }
 
         function isTurnstileTokenFresh() {
