@@ -10,6 +10,7 @@ const cookieParser = require('cookie-parser');
 
 // All relative imports explicitly point down into the src/ directory tree
 const logger = require('./src/services/logger');
+const { isRunningAsSatellite } = require('./src/middleware/controlForward');
 const LibraryScanner = require('./src/services/LibraryScanner');
 const { startPipelineWorker, reconcileQueueStartupState } = require('./src/services/workers/PipelineWorker');
 const { initRedis } = require('./src/services/PipelineQueueService');
@@ -259,20 +260,39 @@ app.use('/api/auth', authRouter);
 // =========================================================================
 // 🛡️ ADMINISTRATIVE ACCESS GATEKEEPER (Terminal Route Execution)
 // =========================================================================
+// Admin actions (metadata edits, tag edits, worker triggers, collection
+// saves, ...) write straight to whichever region's local disk answers the
+// request. A satellite's disk is a one-way mirror of the primary's, so an
+// edit made there gets silently overwritten by the next metadata-mirror
+// sync (every 30s) instead of actually sticking - confirmed, not
+// theoretical. Rather than proxying every admin request server-side
+// (which would need real streaming support for admin.html's SSE/long-
+// running operations), just send the browser straight to the primary's own
+// instance - every admin action then always runs where it's actually meant
+// to, with zero per-route changes needed anywhere else.
+const PRIMARY_ADMIN_URL = String(process.env.PRIMARY_ADMIN_URL || '').trim().replace(/\/+$/, '');
+
+function serveOrRedirectAdmin(req, res) {
+    if (isRunningAsSatellite() && PRIMARY_ADMIN_URL) {
+        return res.redirect(`${PRIMARY_ADMIN_URL}${req.originalUrl}`);
+    }
+    return res.sendFile(path.join(__dirname, 'public/admin.html'));
+}
+
 app.get('/admin.html', async (req, res) => {
     const activeUser = req.cookies?.user_profile;
     const cleanUser = String(activeUser || '').toLowerCase().trim();
 
     const allowByIdentity = cleanUser === 'josh' || cleanUser.startsWith('josh@');
     if (allowByIdentity) {
-        return res.sendFile(path.join(__dirname, 'public/admin.html'));
+        return serveOrRedirectAdmin(req, res);
     }
 
     if (cleanUser) {
         try {
             const config = await ProfileService.readData(cleanUser, 'config', {});
             if (config?.isAdmin === true) {
-                return res.sendFile(path.join(__dirname, 'public/admin.html'));
+                return serveOrRedirectAdmin(req, res);
             }
         } catch (_err) {
             // Fall through to login redirect.
