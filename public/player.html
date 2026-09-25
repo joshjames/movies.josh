@@ -22,7 +22,19 @@
         .player-container {
             position: relative;
             width: 100vw;
+            /* 100vh on mobile Chrome/Firefox is sized against the "largest
+               possible" viewport (as if the address bar were hidden), not
+               the actually-visible one - this container ends up taller than
+               the real screen, pushing the control bar (bottom:0 of
+               .video-js, which fills this container) below the fold. With
+               overflow:hidden on body/html above, there's no way to scroll
+               down to it either - the controls are just gone. 100dvh (the
+               dynamic viewport height unit) is sized against the real,
+               currently-visible viewport instead; the plain 100vh stays
+               first as a fallback for browsers old enough not to know dvh
+               at all. */
             height: 100vh;
+            height: 100dvh;
             display: flex;
             align-items: center;
             justify-content: center;
