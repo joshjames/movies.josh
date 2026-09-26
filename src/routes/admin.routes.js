@@ -1889,24 +1889,24 @@ router.post('/repair-metadata', async (req, res) => {
         const filesOnDisk = fs.readdirSync(folderPath);
         metadata.folderPath = folderPath;
         metadata.folderName = folder;
+        // Only the app's own transcoded output filename shape counts as "done" for a
+        // profile - matching TranscoderWorker.js's own output naming (output1080Path/
+        // output720Path/output480Path). A loose substring match here (e.g. any .mkv/.mp4
+        // whose name merely contains "1080p") would rubber-stamp an untranscoded raw
+        // source file as synced without ffmpeg ever having run against it.
         const profileMatcher = {
-            '1080p': (f) => /\.web\.mp4$/i.test(f) || /1080p/i.test(f),
-            '720p': (f) => /720p/i.test(f),
-            '480p': (f) => /480p/i.test(f)
+            '1080p': (f) => /\.web\.mp4$/i.test(f),
+            '720p': (f) => /\.720p\.mp4$/i.test(f),
+            '480p': (f) => /\.480p\.mp4$/i.test(f)
         };
 
         const resolveLocalPath = (profile, existingLocalPath) => {
-            if (existingLocalPath && fs.existsSync(path.join(folderPath, existingLocalPath))) {
+            if (existingLocalPath && fs.existsSync(path.join(folderPath, existingLocalPath)) && profileMatcher[profile](existingLocalPath)) {
                 return existingLocalPath;
             }
 
-            const preferred = filesOnDisk.find(f => /\.(mp4|mkv|m4v)$/i.test(f) && profileMatcher[profile](f));
+            const preferred = filesOnDisk.find(f => profileMatcher[profile](f));
             if (preferred) return preferred;
-
-            if (profile === '1080p') {
-                const source = filesOnDisk.find(f => f.endsWith('.mp4') && !f.includes('.720p') && !f.includes('.480p'));
-                return source || null;
-            }
 
             return null;
         };
