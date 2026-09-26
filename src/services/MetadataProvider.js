@@ -354,17 +354,31 @@ function normalizeSeasonEpisodes(episodes = []) {
         .filter(ep => ep.Title && ep.Episode);
 }
 
+// OMDb's own "we don't have this episode yet" placeholder - "Episode #5.2",
+// no release date. Distinct from a real title that just happens to contain
+// "Episode" (e.g. "Episode One"), which this doesn't match.
+function looksLikeOmdbPlaceholderTitle(title = '') {
+    return /^Episode #\d+(\.\d+)?$/i.test(String(title || '').trim());
+}
+
+function episodeLooksReal(ep) {
+    if (!ep) return false;
+    if (!ep.Released || ep.Released === 'N/A' || ep.Released === 'Unknown') return false;
+    if (looksLikeOmdbPlaceholderTitle(ep.Title)) return false;
+    return true;
+}
+
 async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season, tmdbId = null } = {}) {
     const seasonNum = Number(season);
     if (!Number.isFinite(seasonNum) || seasonNum <= 0) return [];
 
     // OMDb's own TV episode coverage lags noticeably for brand-new/still-
-    // airing shows - it can return Response:"True" with a technically-valid
-    // but useless placeholder (e.g. one episode, no release date at all,
-    // while IMDb's own dataset already lists ten). Kept as a last-resort
-    // fallback below in case TMDb turns out to have nothing either, rather
-    // than accepted outright the moment OMDb merely responds successfully.
-    let omdbFallbackEpisodes = null;
+    // airing shows, and it's usually a partial gap, not a wholesale miss -
+    // a season response with 8 real episodes and 2 "Episode #5.2"/N/A
+    // placeholders mixed in (confirmed live: Stranger Things S5, Monster
+    // S4). Checking "did OMDb respond with SOMETHING" isn't enough to catch
+    // that - it has to check every individual episode.
+    let omdbEpisodes = [];
 
     const apiKey = getOmdbApiKey();
     if (apiKey && canUseOmdb() && (imdbId || title)) {
@@ -383,12 +397,7 @@ async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season
             if (isOmdbAuthOrLimitError(data, response.status)) {
                 markOmdbCooldown(data.Error || `status ${response.status}`);
             } else if (data.Response === 'True' && Array.isArray(data.Episodes)) {
-                const normalized = normalizeSeasonEpisodes(data.Episodes);
-                const looksUseless = normalized.length > 0 && normalized.every((ep) => !ep.Released || ep.Released === 'N/A');
-                if (!looksUseless) {
-                    return normalized;
-                }
-                omdbFallbackEpisodes = normalized;
+                omdbEpisodes = normalizeSeasonEpisodes(data.Episodes);
             }
         } catch (err) {
             const status = err?.response?.status;
@@ -402,19 +411,34 @@ async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season
         }
     }
 
-    if (!hasTmdbCredentials()) return omdbFallbackEpisodes || [];
+    const hasGaps = omdbEpisodes.length === 0 || omdbEpisodes.some((ep) => !episodeLooksReal(ep));
+    if (!hasGaps) return omdbEpisodes;
+    if (!hasTmdbCredentials()) return omdbEpisodes;
 
     const tvId = await resolveTmdbTvId({ imdbId, title, tmdbId });
-    if (!tvId) return omdbFallbackEpisodes || [];
+    if (!tvId) return omdbEpisodes;
 
     try {
         const seasonData = await tmdbGet(`/tv/${tvId}/season/${seasonNum}`, { language: 'en-US' });
-        const episodes = Array.isArray(seasonData?.episodes) ? seasonData.episodes : [];
-        const normalizedTmdb = normalizeSeasonEpisodes(episodes);
-        return normalizedTmdb.length > 0 ? normalizedTmdb : (omdbFallbackEpisodes || []);
+        const tmdbEpisodes = normalizeSeasonEpisodes(Array.isArray(seasonData?.episodes) ? seasonData.episodes : []);
+        if (!tmdbEpisodes.length) return omdbEpisodes;
+
+        // Merge per episode number rather than swapping the whole season -
+        // OMDb wins for any episode where it already has real data, TMDb
+        // only fills the specific gaps.
+        const byEpisode = new Map();
+        omdbEpisodes.forEach((ep) => byEpisode.set(ep.Episode, ep));
+        tmdbEpisodes.forEach((ep) => {
+            const existing = byEpisode.get(ep.Episode);
+            if (!existing || !episodeLooksReal(existing)) {
+                byEpisode.set(ep.Episode, ep);
+            }
+        });
+
+        return Array.from(byEpisode.values()).sort((a, b) => Number(a.Episode) - Number(b.Episode));
     } catch (err) {
         logger.warn(`⚠️ [MetadataProvider] TMDb season fetch failed: ${err.message}`);
-        return omdbFallbackEpisodes || [];
+        return omdbEpisodes;
     }
 }
 
