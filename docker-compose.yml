@@ -97,11 +97,18 @@ services:
 
   ingest-worker:
     <<: *app-common
-    container_name: movie-streamer-ingest-worker
     cpus: "1.0"
     command: ["node", "src/services/workers/IngestSanitizerWorker.js"]
-    ports:
-      - "5000:5000"
+    # No container_name / fixed host port (unlike the other stage workers
+    # still on the legacy HTTP-dispatch model): this service now also runs a
+    # real BullMQ Worker pulling from the pipeline-ingest queue (pipeline
+    # orchestrator redesign, phase 1), and a fixed container_name / 1:1 host
+    # port both block `docker compose up --scale ingest-worker=N` - replicas
+    # need unique names/no host-port clash to actually compete for jobs.
+    # `expose` keeps the port reachable on the docker network (still needed
+    # for WORKER_URL_INGEST's legacy HTTP calls) without publishing to the host.
+    expose:
+      - "5000"
 
   metadata-worker:
     <<: *app-common

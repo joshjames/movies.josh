@@ -36,6 +36,7 @@ const { withDistributedLock } = require('../DistributedLockService');
 const { Worker } = require('bullmq');
 const { getSchedulerRedisConnection } = require('../BullMQConnection');
 const { PIPELINE_TICK_QUEUE_NAME, ensurePipelineTickSchedule } = require('../SchedulerService');
+const { getPipelineQueue, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
@@ -927,6 +928,33 @@ async function processNextJob(job) {
         });
     }
 
+    // Pipeline orchestrator redesign (phased migration, INGEST first): jobs
+    // created with payload.pipelineMode === 'bullmq-ingest' get their INGEST
+    // stage enqueued into the real pipeline-ingest BullMQ queue instead of the
+    // direct axios dispatch below, so ingest-worker replicas actually
+    // pull-compete for jobs instead of one fixed HTTP target serializing
+    // everything. Status flips to 'WAITING' (not 'QUEUED') so this tick loop's
+    // strict QUEUED-only fetch never re-picks this job up mid-flight -
+    // PipelineOrchestratorService.js's QueueEvents listener flips it back to
+    // QUEUED/METADATA (or FAILED) once the BullMQ job resolves, handing
+    // control back to this same legacy flow for the remaining stages.
+    if (job.currentStep === 'INGEST' && job.payload?.pipelineMode === 'bullmq-ingest') {
+        const queue = getPipelineQueue('INGEST');
+        const jobOptions = STAGE_JOB_OPTIONS.INGEST;
+        await queue.add('ingest', stepConfig.payload, {
+            jobId: job.id,
+            attempts: jobOptions.attempts,
+            backoff: jobOptions.backoff,
+            removeOnComplete: { count: 50 },
+            removeOnFail: { count: 50 }
+        });
+        logger.debug(`🧵 [Queue] Job ${job.id} INGEST enqueued to BullMQ pipeline-ingest (jobId=${job.id}).`);
+        return await updateJob(job, {
+            status: 'WAITING',
+            history: [...(job.history || []), { step: 'INGEST_BULLMQ_ENQUEUED', timestamp: new Date().toISOString() }]
+        });
+    }
+
     try {
         logger.debug(`🧠 [Queue] Dispatching job ${job.id} to ${job.currentStep} -> ${stepConfig.workerUrl}`);
         const response = await axios.post(stepConfig.workerUrl, stepConfig.payload, { timeout: 1800000 });
@@ -1324,5 +1352,6 @@ module.exports = {
     getJob,
     getAllJobs,
     getJobSnapshot,
-    updateJob
+    updateJob,
+    persistPipelinePatchToDisk
 };

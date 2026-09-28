@@ -13,28 +13,56 @@ const IORedis = require('ioredis');
 
 const BASE_REDIS_URL = process.env.REDIS_WRITE_URL || process.env.REDIS_URL || 'redis://redis:6379/3';
 const SCHEDULER_REDIS_DB = parseInt(process.env.SCHEDULER_REDIS_DB, 10) || 5;
+// Separate DB from the scheduler's (5): the pipeline stage queues run orders
+// of magnitude more jobs than the 4 low-frequency periodic jobs living there,
+// and keeping them apart matches the existing DB-3/4/5 partitioning - one
+// concern's monitoring/backups never gets noisy with another's.
+const PIPELINE_REDIS_DB = parseInt(process.env.PIPELINE_REDIS_DB, 10) || 6;
 
-function buildSchedulerRedisUrl() {
+function buildRedisUrlForDb(dbIndex) {
     try {
         const parsed = new URL(BASE_REDIS_URL);
-        parsed.pathname = `/${SCHEDULER_REDIS_DB}`;
+        parsed.pathname = `/${dbIndex}`;
         return parsed.toString();
     } catch (_err) {
         return BASE_REDIS_URL;
     }
 }
 
-let sharedConnection = null;
+function buildSchedulerRedisUrl() {
+    return buildRedisUrlForDb(SCHEDULER_REDIS_DB);
+}
+
+function buildPipelineRedisUrl() {
+    return buildRedisUrlForDb(PIPELINE_REDIS_DB);
+}
+
+let sharedSchedulerConnection = null;
+let sharedPipelineConnection = null;
 
 function getSchedulerRedisConnection() {
-    if (!sharedConnection) {
-        sharedConnection = new IORedis(buildSchedulerRedisUrl(), {
+    if (!sharedSchedulerConnection) {
+        sharedSchedulerConnection = new IORedis(buildSchedulerRedisUrl(), {
             // Required by BullMQ - it manages its own retry/backoff semantics
             // and will throw at startup if this isn't set to null.
             maxRetriesPerRequest: null
         });
     }
-    return sharedConnection;
+    return sharedSchedulerConnection;
 }
 
-module.exports = { getSchedulerRedisConnection, buildSchedulerRedisUrl };
+function getPipelineRedisConnection() {
+    if (!sharedPipelineConnection) {
+        sharedPipelineConnection = new IORedis(buildPipelineRedisUrl(), {
+            maxRetriesPerRequest: null
+        });
+    }
+    return sharedPipelineConnection;
+}
+
+module.exports = {
+    getSchedulerRedisConnection,
+    buildSchedulerRedisUrl,
+    getPipelineRedisConnection,
+    buildPipelineRedisUrl
+};

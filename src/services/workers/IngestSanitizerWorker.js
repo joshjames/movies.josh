@@ -1029,3 +1029,37 @@ async function autoDiscoverAndOrganize(currentDir) {
 
 const PORT = process.env.INGEST_WORKER_PORT || 5000;
 app.listen(PORT, () => console.log(`🧹 Atomic Ingest Sanitizer Worker online on port ${PORT}`));
+
+// =========================================================================
+// 🧵 BULLMQ CONSUMER (pipeline orchestrator redesign, phased migration)
+// =========================================================================
+// A thin adapter, not a rewrite: this pulls jobs from the real pipeline-ingest
+// BullMQ queue (so multiple ingest-worker replicas genuinely compete for
+// work, instead of one fixed HTTP target serializing everything) but
+// delegates to the exact same, already-proven /process logic above via a
+// loopback call - zero duplication of the delicate ingest logic itself.
+// Only reached for jobs PipelineWorker.js explicitly tags with
+// payload.pipelineMode === 'bullmq-ingest' (see PipelineWorker.js's INGEST
+// branch) - every other ingest still goes through the plain Express route.
+const { Worker } = require('bullmq');
+const { getPipelineRedisConnection } = require('../BullMQConnection');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+
+const ingestQueueWorker = new Worker(
+    STAGE_QUEUE_NAMES.INGEST,
+    async (job) => {
+        const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
+        if (response.data?.success === false) {
+            throw new Error(response.data?.error || 'Ingest worker reported failure.');
+        }
+        return response.data;
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.INGEST.concurrency }
+);
+
+ingestQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-ingest job ${job.id} completed.`);
+});
+ingestQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-ingest job ${job?.id} failed: ${err.message}`);
+});

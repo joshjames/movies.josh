@@ -1,6 +1,7 @@
 const logger = require('../../utils/logger');
 const { initRedis } = require('../PipelineQueueService');
 const { startPipelineWorker } = require('./PipelineWorker');
+const { startPipelineOrchestrator } = require('./PipelineOrchestratorService');
 
 async function start() {
     try {
@@ -12,6 +13,7 @@ async function start() {
     const intervalMs = parseInt(process.env.PIPELINE_POLL_INTERVAL_MS || '10000', 10);
     logger.info(`Pipeline runner starting with interval ${intervalMs}ms`);
     startPipelineWorker(intervalMs);
+    startPipelineOrchestrator();
 }
 
 start().catch((err) => {
