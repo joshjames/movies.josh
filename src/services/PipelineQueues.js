@@ -44,7 +44,11 @@ const STAGE_JOB_OPTIONS = {
     INGEST: { concurrency: 2, attempts: 2, backoff: { type: 'fixed', delay: 5000 } },
     METADATA: { concurrency: 3, attempts: 3, backoff: { type: 'exponential', delay: 10000 } },
     SUBTITLES: { concurrency: 2, attempts: 2, backoff: { type: 'exponential', delay: 15000 } },
-    TRANSCODE: { concurrency: 1, attempts: 1, backoff: { type: 'fixed', delay: 60000 } },
+    // attempts:2 (not 1) - now that partial-batch failures fail loudly
+    // (see TranscoderWorker.js), a retry costs little: already-transcoded
+    // files are skipped via their own existsSync check, so a retry only
+    // reprocesses whatever actually failed last time.
+    TRANSCODE: { concurrency: 1, attempts: 2, backoff: { type: 'fixed', delay: 60000 } },
     CLOUDSYNC: { concurrency: 2, attempts: 3, backoff: { type: 'exponential', delay: 15000 } }
 };
 

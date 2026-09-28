@@ -95,52 +95,48 @@ services:
       redis:
         condition: service_healthy
 
+  # None of the 5 stage-worker services below use container_name or a fixed
+  # 1:1 host port - both block `docker compose up --scale <service>=N`, and
+  # each one now also runs a real BullMQ Worker pulling from its own pipeline
+  # stage queue (pipeline orchestrator redesign), not just the legacy
+  # HTTP-dispatch Express route - replicas need unique names/no host-port
+  # clash to actually compete for jobs. `expose` keeps each port reachable on
+  # the docker network (still needed for the legacy WORKER_URL_* HTTP calls
+  # to not-yet-migrated job-creation paths) without publishing to the host.
   ingest-worker:
     <<: *app-common
     cpus: "1.0"
     command: ["node", "src/services/workers/IngestSanitizerWorker.js"]
-    # No container_name / fixed host port (unlike the other stage workers
-    # still on the legacy HTTP-dispatch model): this service now also runs a
-    # real BullMQ Worker pulling from the pipeline-ingest queue (pipeline
-    # orchestrator redesign, phase 1), and a fixed container_name / 1:1 host
-    # port both block `docker compose up --scale ingest-worker=N` - replicas
-    # need unique names/no host-port clash to actually compete for jobs.
-    # `expose` keeps the port reachable on the docker network (still needed
-    # for WORKER_URL_INGEST's legacy HTTP calls) without publishing to the host.
     expose:
       - "5000"
 
   metadata-worker:
     <<: *app-common
-    container_name: movie-streamer-metadata-worker
     cpus: "1.0"
     command: ["node", "src/services/workers/MetadataWorker.js"]
-    ports:
-      - "5001:5001"
+    expose:
+      - "5001"
 
   subtitle-worker:
     <<: *app-common
-    container_name: movie-streamer-subtitle-worker
     cpus: "1.0"
     command: ["node", "src/services/workers/SubtitleWorker.js"]
-    ports:
-      - "5002:5002"
+    expose:
+      - "5002"
 
   transcoder-worker:
     <<: *app-common
-    container_name: movie-streamer-transcoder-worker
     cpus: "2.0"
     command: ["node", "src/services/workers/TranscoderWorker.js"]
-    ports:
-      - "5003:5003"
+    expose:
+      - "5003"
 
   cloudsync-worker:
     <<: *app-common
-    container_name: movie-streamer-cloudsync-worker
     cpus: "1.0"
     command: ["node", "src/services/workers/CloudSyncWorker.js"]
-    ports:
-      - "${APP_CLOUDSYNC_HOST_PORT:-5004}:5004"
+    expose:
+      - "5004"
 
   # Primary-region-only (see scripts/deploy-compose-versioned.sh's
   # DEPLOY_SERVICES - never started on a satellite). Runs BullMQ's

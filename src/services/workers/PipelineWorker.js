@@ -817,6 +817,71 @@ async function processSeriesSearchJob(job) {
     });
 }
 
+// Runs the same post-stage side effects (library scan sweep, recent-feed
+// card, completion hooks/notifications, qBittorrent torrent cleanup)
+// regardless of whether the stage that just finished was dispatched via the
+// legacy direct axios call or via a real BullMQ queue+worker
+// (PipelineOrchestratorService.js calls this too) - extracted so both paths
+// stay in parity instead of silently diverging on what "job just advanced"
+// actually triggers.
+async function runPostStageSideEffects(stageJustCompleted, updated) {
+    if (['INGEST', 'METADATA', 'CLOUDSYNC'].includes(stageJustCompleted) || updated.currentStep === 'COMPLETE') {
+        try {
+            await LibraryScanner.runLibraryScanSweep();
+            logger.debug(`♻️ [Queue] Library snapshot refreshed after ${stageJustCompleted} for job ${updated.id}`);
+
+            if (updated.currentStep === 'COMPLETE' || updated.status === 'COMPLETE') {
+                const library = await getLibrary();
+                const folderName = path.basename(updated.payload?.cleanPath || updated.payload?.rawPath || updated.payload?.torrentName || '');
+                const itemId = updated.contentType === 'series' ? `series/${encodeURIComponent(folderName)}` : encodeURIComponent(folderName);
+                const libraryItem = updated.contentType === 'series'
+                    ? (library.shows || []).find(item => item.id === itemId)
+                    : (library.movies || []).find(item => item.id === itemId);
+
+                if (libraryItem) {
+                    upsertRecentCard(normalizeCard({
+                        ...libraryItem,
+                        addedAt: libraryItem.addedAt || new Date().toISOString()
+                    }));
+                    logger.debug(`🆕 [Queue] Recent feed updated for ${folderName}`);
+                }
+
+                try {
+                    await runQueueCompletionHooks(updated, libraryItem || null);
+                } catch (completionErr) {
+                    logger.warn(`⚠️ [Queue] Completion hooks failed for ${updated.id}: ${completionErr.message}`);
+                }
+
+                try {
+                    await runSeriesSubscriberNotifications(updated, libraryItem || null);
+                } catch (subscriptionErr) {
+                    logger.warn(`⚠️ [Queue] Series subscriber notification hooks failed for ${updated.id}: ${subscriptionErr.message}`);
+                }
+            }
+        } catch (scanErr) {
+            logger.warn(`⚠️ [Queue] Library refresh failed after ${stageJustCompleted}: ${scanErr.message}`);
+        }
+    }
+
+    if (updated.status === 'COMPLETE' || updated.currentStep === 'COMPLETE') {
+        const removedFromClient = await removeCompletedTorrentFromClient(updated);
+        if (!removedFromClient) {
+            logger.warn(`⚠️ [Queue] Job ${updated.id} completed but torrent delete failed; retaining COMPLETE job for cleanup retry.`);
+            return await updateJob(updated, {
+                status: 'COMPLETE',
+                currentStep: 'COMPLETE',
+                error: 'Completed pipeline, pending qBittorrent cleanup retry.'
+            });
+        }
+
+        await removeJob(updated.id);
+        logger.debug(`✅ [Queue] Job ${updated.id} finalized and removed from active queue map.`);
+        return updated;
+    }
+
+    return updated;
+}
+
 async function processNextJob(job) {
     if (!job) return null;
 
@@ -928,30 +993,34 @@ async function processNextJob(job) {
         });
     }
 
-    // Pipeline orchestrator redesign (phased migration, INGEST first): jobs
-    // created with payload.pipelineMode === 'bullmq-ingest' get their INGEST
-    // stage enqueued into the real pipeline-ingest BullMQ queue instead of the
-    // direct axios dispatch below, so ingest-worker replicas actually
-    // pull-compete for jobs instead of one fixed HTTP target serializing
-    // everything. Status flips to 'WAITING' (not 'QUEUED') so this tick loop's
-    // strict QUEUED-only fetch never re-picks this job up mid-flight -
-    // PipelineOrchestratorService.js's QueueEvents listener flips it back to
-    // QUEUED/METADATA (or FAILED) once the BullMQ job resolves, handing
-    // control back to this same legacy flow for the remaining stages.
-    if (job.currentStep === 'INGEST' && job.payload?.pipelineMode === 'bullmq-ingest') {
-        const queue = getPipelineQueue('INGEST');
-        const jobOptions = STAGE_JOB_OPTIONS.INGEST;
-        await queue.add('ingest', stepConfig.payload, {
+    // Pipeline orchestrator redesign (phased migration): jobs created with
+    // payload.pipelineMode === 'bullmq' get EVERY stage enqueued into that
+    // stage's real BullMQ queue instead of the direct axios dispatch below,
+    // so worker replicas actually pull-compete for jobs instead of one fixed
+    // HTTP target serializing everything - this is what makes concurrent
+    // adds from multiple users safe: each job is an independent queue entry,
+    // not a shared global lock. Status flips to 'WAITING' (not 'QUEUED') so
+    // this tick loop's strict QUEUED-only fetch never re-picks this job up
+    // mid-flight - PipelineOrchestratorService.js's QueueEvents listener
+    // flips it back to QUEUED/<nextStage> (or FAILED, on a real validation
+    // failure - not just "the HTTP call didn't throw") once the BullMQ job
+    // resolves, handing control back to this same legacy flow for whichever
+    // stage comes next.
+    if (stepMap[job.currentStep] && job.payload?.pipelineMode === 'bullmq') {
+        const stage = job.currentStep;
+        const queue = getPipelineQueue(stage);
+        const jobOptions = STAGE_JOB_OPTIONS[stage];
+        await queue.add(stage.toLowerCase(), stepConfig.payload, {
             jobId: job.id,
             attempts: jobOptions.attempts,
             backoff: jobOptions.backoff,
             removeOnComplete: { count: 50 },
             removeOnFail: { count: 50 }
         });
-        logger.debug(`🧵 [Queue] Job ${job.id} INGEST enqueued to BullMQ pipeline-ingest (jobId=${job.id}).`);
+        logger.debug(`🧵 [Queue] Job ${job.id} ${stage} enqueued to BullMQ pipeline-${stage.toLowerCase()} (jobId=${job.id}).`);
         return await updateJob(job, {
             status: 'WAITING',
-            history: [...(job.history || []), { step: 'INGEST_BULLMQ_ENQUEUED', timestamp: new Date().toISOString() }]
+            history: [...(job.history || []), { step: `${stage}_BULLMQ_ENQUEUED`, timestamp: new Date().toISOString() }]
         });
     }
 
@@ -1022,66 +1091,17 @@ async function processNextJob(job) {
 
         logger.debug(`🧠 [Queue] Job ${updated.id} moved to ${updated.currentStep}`);
 
-        if (['INGEST', 'METADATA', 'CLOUDSYNC'].includes(job.currentStep) || updated.currentStep === 'COMPLETE') {
-            try {
-                await LibraryScanner.runLibraryScanSweep();
-                logger.debug(`♻️ [Queue] Library snapshot refreshed after ${job.currentStep} for job ${updated.id}`);
-
-                if (updated.currentStep === 'COMPLETE' || updated.status === 'COMPLETE') {
-                    const library = await getLibrary();
-                    const folderName = path.basename(updated.payload?.cleanPath || updated.payload?.rawPath || updated.payload?.torrentName || '');
-                    const itemId = updated.contentType === 'series' ? `series/${encodeURIComponent(folderName)}` : encodeURIComponent(folderName);
-                    const libraryItem = updated.contentType === 'series'
-                        ? (library.shows || []).find(item => item.id === itemId)
-                        : (library.movies || []).find(item => item.id === itemId);
-
-                    if (libraryItem) {
-                        upsertRecentCard(normalizeCard({
-                            ...libraryItem,
-                            addedAt: libraryItem.addedAt || new Date().toISOString()
-                        }));
-                        logger.debug(`🆕 [Queue] Recent feed updated for ${folderName}`);
-                    }
-
-                    try {
-                        await runQueueCompletionHooks(updated, libraryItem || null);
-                    } catch (completionErr) {
-                        logger.warn(`⚠️ [Queue] Completion hooks failed for ${updated.id}: ${completionErr.message}`);
-                    }
-
-                    try {
-                        await runSeriesSubscriberNotifications(updated, libraryItem || null);
-                    } catch (subscriptionErr) {
-                        logger.warn(`⚠️ [Queue] Series subscriber notification hooks failed for ${updated.id}: ${subscriptionErr.message}`);
-                    }
-                }
-            } catch (scanErr) {
-                logger.warn(`⚠️ [Queue] Library refresh failed after ${job.currentStep}: ${scanErr.message}`);
-            }
+        const afterSideEffects = await runPostStageSideEffects(job.currentStep, updated);
+        if (afterSideEffects.status === 'COMPLETE' || afterSideEffects.currentStep === 'COMPLETE') {
+            return afterSideEffects;
         }
 
-        if (updated.status === 'COMPLETE' || updated.currentStep === 'COMPLETE') {
-            const removedFromClient = await removeCompletedTorrentFromClient(updated);
-            if (!removedFromClient) {
-                logger.warn(`⚠️ [Queue] Job ${updated.id} completed but torrent delete failed; retaining COMPLETE job for cleanup retry.`);
-                return await updateJob(updated, {
-                    status: 'COMPLETE',
-                    currentStep: 'COMPLETE',
-                    error: 'Completed pipeline, pending qBittorrent cleanup retry.'
-                });
-            }
-
-            await removeJob(updated.id);
-            logger.debug(`✅ [Queue] Job ${updated.id} finalized and removed from active queue map.`);
-            return updated;
+        if (afterSideEffects.status === 'QUEUED' && afterSideEffects.currentStep !== 'COMPLETE' && afterSideEffects.currentStep !== 'FAILED') {
+            logger.debug(`🔁 [Queue] Continuing job ${afterSideEffects.id} to ${afterSideEffects.currentStep}`);
+            return processNextJob(afterSideEffects);
         }
 
-        if (updated.status === 'QUEUED' && updated.currentStep !== 'COMPLETE' && updated.currentStep !== 'FAILED') {
-            logger.debug(`🔁 [Queue] Continuing job ${updated.id} to ${updated.currentStep}`);
-            return processNextJob(updated);
-        }
-
-        return updated;
+        return afterSideEffects;
     } catch (err) {
         const responseError = err.response?.data?.error || err.response?.data?.message || null;
         logger.error(`❌ [Queue] Job ${job.id} failed during ${job.currentStep}: ${err.message}${responseError ? ` | workerError=${responseError}` : ''}`);
@@ -1353,5 +1373,6 @@ module.exports = {
     getAllJobs,
     getJobSnapshot,
     updateJob,
-    persistPipelinePatchToDisk
+    persistPipelinePatchToDisk,
+    runPostStageSideEffects
 };

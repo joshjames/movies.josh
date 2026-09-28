@@ -1541,12 +1541,11 @@ router.post('/downloader/add', async (req, res) => {
                 mediaTitle,
                 addedByUser: effectiveQueueContext.addedByUser || activeUser || null,
                 queueContext: effectiveQueueContext,
-                // Pipeline orchestrator redesign phase 1: route this job's
-                // INGEST stage through the real pipeline-ingest BullMQ queue
-                // instead of the legacy direct axios dispatch - see
-                // PipelineWorker.js's INGEST branch and
-                // PipelineOrchestratorService.js.
-                pipelineMode: 'bullmq-ingest'
+                // Pipeline orchestrator redesign: route every stage of this
+                // job through its real per-stage BullMQ queue instead of the
+                // legacy direct axios dispatch - see PipelineWorker.js's
+                // bullmq branch and PipelineOrchestratorService.js.
+                pipelineMode: 'bullmq'
             }
         });
 
@@ -1765,7 +1764,7 @@ router.post('/yts/add', async (req, res) => {
                 queueContext: effectiveQueueContext,
                 // Pipeline orchestrator redesign phase 1 - see the /downloader/add
                 // call site above for the full explanation.
-                pipelineMode: 'bullmq-ingest'
+                pipelineMode: 'bullmq'
             }
         });
 

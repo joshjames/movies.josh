@@ -163,6 +163,7 @@ app.post('/process', async (req, res) => {
         // =========================================================================
         // MULTI-SEASON TV SERIES EXTRACTION LOOP (RETAINED & SANITIZED)
         // =========================================================================
+        const failedSeasons = [];
         if (targetType === 'series') {
             const totalSeasons = parseInt(data.totalSeasons, 10) || 1;
             const diskItems = fs.readdirSync(folderPath);
@@ -239,18 +240,30 @@ app.post('/process', async (req, res) => {
                     }
                 } catch (seae) {
                     logger.error(`⚠️ Error processing details for season loop ${s}: ${seae.message}`, 'warn');
+                    failedSeasons.push(s);
                 }
                 fullSeriesStructure.seasons[s].episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
             }
 
             // Write out the companion catalog mapping manifest file directly
             fs.writeFileSync(path.join(folderPath, 'series.json'), JSON.stringify(fullSeriesStructure, null, 4));
+
+            if (failedSeasons.length > 0) {
+                // Named, not silent: a season fetch failure used to just leave
+                // that season's episode array empty with no signal anywhere.
+                // Still success:true (a transient per-season OMDb/TMDb hiccup
+                // shouldn't hard-fail the whole show's metadata pass - it can
+                // heal on the next pass), but now visible to the orchestrator
+                // and in series.json itself for admin/debugging visibility.
+                logger.warn(`⚠️ [Metadata] ${failedSeasons.length} season(s) failed to fetch for ${folderName}: ${failedSeasons.join(', ')}`);
+            }
         }
 
         return res.json({
             success: true,
             message: "Metadata alignment completed successfully.",
-            patchData: basePatchData
+            patchData: basePatchData,
+            failedSeasons: failedSeasons.length ? failedSeasons : undefined
         });
 
     } catch (err) {
@@ -261,3 +274,32 @@ app.post('/process', async (req, res) => {
 
 const PORT = process.env.METADATA_WORKER_PORT || 5001;
 app.listen(PORT, () => console.log(`📡 Atomic TV/Movie Metadata Worker listening on port ${PORT}`));
+
+// =========================================================================
+// 🧵 BULLMQ CONSUMER (pipeline orchestrator redesign, phased migration)
+// =========================================================================
+// Thin adapter, not a rewrite - see IngestSanitizerWorker.js for the same
+// pattern and its rationale. Only reached for jobs tagged
+// payload.pipelineMode === 'bullmq'.
+const { Worker } = require('bullmq');
+const { getPipelineRedisConnection } = require('../BullMQConnection');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+
+const metadataQueueWorker = new Worker(
+    STAGE_QUEUE_NAMES.METADATA,
+    async (job) => {
+        const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
+        if (response.data?.success === false) {
+            throw new Error(response.data?.error || 'Metadata worker reported failure.');
+        }
+        return response.data;
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.METADATA.concurrency }
+);
+
+metadataQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-metadata job ${job.id} completed.`);
+});
+metadataQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-metadata job ${job?.id} failed: ${err.message}`);
+});

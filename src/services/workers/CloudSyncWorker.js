@@ -2,7 +2,8 @@
 // Stateless Atomic Object Storage Sync Worker with Multi-Cloud Provider Drop-Ins.
 
 const express = require('express');
-const { S3Client } = require('@aws-sdk/client-s3');
+const axios = require('axios');
+const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const path = require('path');
@@ -32,6 +33,23 @@ const s3Client = new S3Client({
         requestTimeout: 5 * 60 * 1000
     })
 });
+
+// Confirmed root cause of a real incident (2026-09-27, Scott Pilgrim Takes
+// Off episode 7): a profile's manifest entry can carry a remoteKey without
+// the object actually existing in B2 (e.g. a write ordering race, or an
+// upload that got interrupted after the manifest update but before the
+// stream fully flushed). Everywhere that used to trust "remoteKey is set"
+// as proof of being synced now verifies it against B2 directly instead -
+// this is the one stage whose failure mode is silent data loss, so it's
+// worth the extra round trip other stages don't need.
+async function verifyRemoteObjectExists(key) {
+    try {
+        await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+        return true;
+    } catch (_err) {
+        return false;
+    }
+}
 
 // =========================================================================
 // 📺 SERIES/EPISODE OBJECT STORAGE - same bucket, a "series/" prefix instead
@@ -135,13 +153,21 @@ async function processSeriesFolder({ folderPath, folderName, imdbId, executeClou
     }
 
     const uploads = [];
+    const claimedSynced = [];
     for (const { season, episode, files } of episodeFiles.values()) {
         const existingStorage = existingStorageByKey[`${season}-${episode}`];
 
         for (const profile of RESOLUTION_PROFILES) {
             const localPath = files[profile];
-            if (!localPath) continue; // nothing local for this profile yet (needs transcode first)
-            if (existingStorage?.files?.[profile]?.remoteKey) continue; // already synced
+            const existingRemoteKey = existingStorage?.files?.[profile]?.remoteKey;
+
+            if (existingRemoteKey) {
+                // Manifest claims this is already synced - verified below,
+                // not trusted blindly (see verifyRemoteObjectExists comment).
+                claimedSynced.push({ season, episode, profile, remoteKey: existingRemoteKey, localPath: localPath || null });
+                continue;
+            }
+            if (!localPath) continue; // nothing local for this profile yet (needs transcode first) - legitimately not ready, not an error
 
             uploads.push({ season, episode, profile, localPath });
         }
@@ -158,14 +184,6 @@ async function processSeriesFolder({ folderPath, folderName, imdbId, executeClou
             success: true,
             message: `Safe-mode scan found ${uploads.length} episode profile(s) ready to sync.`,
             pending: uploads.map(({ season, episode, profile }) => ({ season, episode, profile })),
-            patchData: completePatch
-        };
-    }
-
-    if (uploads.length === 0) {
-        return {
-            success: true,
-            message: 'No new episode profiles to sync - already up to date.',
             patchData: completePatch
         };
     }
@@ -213,11 +231,46 @@ async function processSeriesFolder({ folderPath, folderName, imdbId, executeClou
         }
     }
 
+    // Verify what the manifest already claims is synced - not just what we
+    // just uploaded. This is the check that would have caught the confirmed
+    // incident: episode 7 had a remoteKey in series.json but the object was
+    // never actually in B2, and nothing here ever asked B2 to confirm it.
+    let verifiedCount = 0;
+    for (const item of claimedSynced) {
+        const exists = await verifyRemoteObjectExists(item.remoteKey);
+        if (exists) {
+            verifiedCount += 1;
+            continue;
+        }
+
+        const msg = `S${item.season}E${item.episode} [${item.profile}]: manifest claims synced (${item.remoteKey}) but the object is missing from B2.`;
+        logger.error(`❌ [Series Cloud Sync Verify] ${msg}`);
+
+        if (item.localPath && fs.existsSync(item.localPath)) {
+            try {
+                logger.info(`🚑 [Series Cloud Sync Verify] Local source still present - re-uploading S${item.season}E${item.episode} [${item.profile}].`);
+                await uploadLargeFileStream(item.localPath, item.remoteKey, item.profile);
+                verifiedCount += 1;
+            } catch (err) {
+                errors.push(`${msg} Re-upload attempt also failed: ${err.message}`);
+            }
+        } else {
+            errors.push(`${msg} Local source file is also missing - this episode needs to be re-transcoded before it can sync.`);
+        }
+    }
+
+    const totalConsidered = uploads.length + claimedSynced.length;
+    const totalGood = uploadedCount + verifiedCount;
+
     return {
         success: errors.length === 0,
-        message: `Synced ${uploadedCount}/${uploads.length} episode profile(s) to cloud storage.`,
+        message: totalConsidered === 0
+            ? 'No episode profiles found to sync.'
+            : `${totalGood}/${totalConsidered} episode profile(s) confirmed synced to cloud storage (${uploadedCount} newly uploaded, ${verifiedCount} verified already present).`,
         uploadedCount,
+        verifiedCount,
         totalQueued: uploads.length,
+        totalVerified: claimedSynced.length,
         errors,
         patchData: completePatch
     };
@@ -261,10 +314,11 @@ app.post('/process', async (req, res) => {
         const resolutionProfiles = ['1080p', '720p', '480p'];
         let patchData = { storage: { ...metadata.storage } };
         let hasProcessedAny = false;
+        const errors = [];
 
         for (const profile of resolutionProfiles) {
             const fileBlock = metadata.storage.files?.[profile];
-            
+
             if (!fileBlock || fileBlock.status !== 'pending') continue;
 
             let localVideoPath = fileBlock.localPath ? path.join(folderPath, fileBlock.localPath) : null;
@@ -273,14 +327,20 @@ app.post('/process', async (req, res) => {
                 const files = fs.readdirSync(folderPath);
                 const targetSuffix = profile === '1080p' ? '.web.mp4' : `.${profile}.mp4`;
                 const matchedFile = files.find(f => f.endsWith(targetSuffix));
-                
+
                 if (matchedFile) {
                     localVideoPath = path.join(folderPath, matchedFile);
                 }
             }
 
             if (!localVideoPath || !fs.existsSync(localVideoPath)) {
-                logger.warn(`ℹ️ [Cloud Sync Skip] Profile ${profile} for ${folderName} is pending but file is physically absent. Skipping.`);
+                // A named, real failure - not a silent skip. This profile was
+                // marked 'pending' (meaning TRANSCODE said it was ready), so a
+                // missing file here means something deleted the transcoded
+                // output between stages, not "nothing to do yet".
+                const msg = `Profile ${profile} for ${folderName} is marked pending but its local file is missing on disk.`;
+                logger.error(`❌ [Cloud Sync] ${msg}`);
+                errors.push(msg);
                 continue;
             }
 
@@ -313,6 +373,15 @@ app.post('/process', async (req, res) => {
             }
         }
 
+    if (executeCloudUpload && !hasProcessedAny && errors.length > 0) {
+        return res.json({
+            success: false,
+            error: errors.join('; '),
+            errors,
+            patchData: metadata
+        });
+    }
+
     if (executeCloudUpload && !hasProcessedAny) {
         return res.json({
             success: false,
@@ -330,7 +399,38 @@ app.post('/process', async (req, res) => {
         ...metadata.storage.files,
         ...patchData.storage.files
     };
-    
+
+    // Verify what the manifest claims is already synced, not just what this
+    // pass uploaded - closes the same silent-data-loss gap fixed on the
+    // series path (a remoteKey in the manifest isn't proof the object is
+    // actually in B2). Only runs in real (non-safe-mode) execution.
+    if (executeCloudUpload) {
+        for (const profile of resolutionProfiles) {
+            const fileBlock = metadata.storage.files?.[profile];
+            if (!fileBlock || fileBlock.status !== 'synced' || !fileBlock.remoteKey) continue;
+
+            const exists = await verifyRemoteObjectExists(fileBlock.remoteKey);
+            if (exists) continue;
+
+            const msg = `Profile ${profile} for ${folderName}: manifest claims synced (${fileBlock.remoteKey}) but the object is missing from B2.`;
+            logger.error(`❌ [Cloud Sync Verify] ${msg}`);
+
+            const localVideoPath = fileBlock.localPath ? path.join(folderPath, fileBlock.localPath) : null;
+            if (localVideoPath && fs.existsSync(localVideoPath)) {
+                try {
+                    logger.info(`🚑 [Cloud Sync Verify] Local source still present - re-uploading [${profile}] for ${folderName}.`);
+                    await uploadLargeFileStream(localVideoPath, fileBlock.remoteKey, profile);
+                } catch (err) {
+                    errors.push(`${msg} Re-upload attempt also failed: ${err.message}`);
+                    metadata.storage.files[profile] = { ...fileBlock, status: 'pending' };
+                }
+            } else {
+                errors.push(`${msg} Local source file is also missing - this title needs to be re-transcoded before it can sync.`);
+                metadata.storage.files[profile] = { ...fileBlock, status: 'pending' };
+            }
+        }
+    }
+
     // Synchronize downstream pipeline tracking states completely
     metadata.pipelineState = {
         currentStep: 'COMPLETED',
@@ -343,10 +443,13 @@ app.post('/process', async (req, res) => {
     logger.info(`💾 [Cloud Sync Manifest Update]: Successfully synced local state changes back to ${metaFilePath}`);
 
     return res.json({
-        success: true,
-        message: executeCloudUpload 
-            ? "Cloud synchronization cycles finalized seamlessly and state persisted to disk." 
-            : "Safe-mode manifest translation finalized successfully. Pipeline state updated to COMPLETED.",
+        success: errors.length === 0,
+        message: errors.length > 0
+            ? `Completed with ${errors.length} error(s) - see errors[] for detail.`
+            : (executeCloudUpload
+                ? "Cloud synchronization cycles finalized seamlessly and state persisted to disk."
+                : "Safe-mode manifest translation finalized successfully. Pipeline state updated to COMPLETED."),
+        errors: errors.length ? errors : undefined,
         patchData: metadata // Return full synchronized object back to orchestration queue loops
     });
 
@@ -384,3 +487,32 @@ async function uploadLargeFileStream(localPath, remoteKey, profile) {
 
 const PORT = process.env.CLOUD_SYNC_WORKER_PORT || 5004;
 app.listen(PORT, () => console.log(`☁️ Atomic Cloud Sync Engine safe-mode engine online on port ${PORT}`));
+
+// =========================================================================
+// 🧵 BULLMQ CONSUMER (pipeline orchestrator redesign, phased migration)
+// =========================================================================
+// Thin adapter, not a rewrite - see IngestSanitizerWorker.js for the same
+// pattern and its rationale. Only reached for jobs tagged
+// payload.pipelineMode === 'bullmq'.
+const { Worker } = require('bullmq');
+const { getPipelineRedisConnection } = require('../BullMQConnection');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+
+const cloudsyncQueueWorker = new Worker(
+    STAGE_QUEUE_NAMES.CLOUDSYNC,
+    async (job) => {
+        const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
+        if (response.data?.success === false) {
+            throw new Error(response.data?.error || 'Cloud sync worker reported failure.');
+        }
+        return response.data;
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.CLOUDSYNC.concurrency }
+);
+
+cloudsyncQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-cloudsync job ${job.id} completed.`);
+});
+cloudsyncQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-cloudsync job ${job?.id} failed: ${err.message}`);
+});

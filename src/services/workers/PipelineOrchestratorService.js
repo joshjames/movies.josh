@@ -4,12 +4,19 @@
 // the actual output (not just "the job didn't throw"), and only then hands
 // the pipeline item back to the legacy PipelineQueueService/PipelineWorker
 // flow for its next stage - by flipping status back to 'QUEUED' with the
-// next currentStep, exactly like a normal legacy-flow advance.
+// next currentStep, exactly like a normal legacy-flow advance. When the
+// stage that just completed is the last one (CLOUDSYNC), it runs the same
+// post-stage side effects (library scan, notifications, torrent cleanup)
+// the legacy flow runs on completion, via the shared
+// runPostStageSideEffects helper - so a job finishing through the new path
+// behaves identically to one that finished through the old one.
 //
-// Only INGEST is migrated so far (see the pipeline orchestrator plan) - this
-// file only attaches a listener for stages that actually have a BullMQ
-// consumer Worker; not-yet-migrated stages keep going through
-// PipelineWorker.js's direct axios dispatch untouched.
+// All 5 stages are migrated as of the pipeline orchestrator redesign's
+// "straight through" pass - every stage now has a live BullMQ consumer
+// Worker (see IngestSanitizerWorker.js / MetadataWorker.js /
+// SubtitleWorker.js / TranscoderWorker.js / CloudSyncWorker.js). SEARCH and
+// WAITING_DOWNLOAD deliberately stay outside this queue graph (see the plan
+// doc) - they're handled by PipelineWorker.js's existing tick/poll logic.
 'use strict';
 
 const fs = require('fs');
@@ -18,7 +25,7 @@ const logger = require('../../utils/logger');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
 const { STAGE_QUEUE_NAMES, NEXT_STAGE } = require('../PipelineQueues');
 const { getJob, updateJob } = require('../PipelineQueueService');
-const { persistPipelinePatchToDisk } = require('./PipelineWorker');
+const { persistPipelinePatchToDisk, runPostStageSideEffects } = require('./PipelineWorker');
 
 function normalizeImdbId(value) {
     const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
@@ -28,11 +35,13 @@ function normalizeImdbId(value) {
 
 // Per-stage sanity check on the worker's own reported output, run before
 // ever promoting to the next stage - this is deliberately separate from
-// "did the BullMQ job resolve without throwing", since the whole point of
-// this redesign is catching the class of bug already confirmed across every
-// worker (CloudSyncWorker/TranscoderWorker/etc all conflate partial success
-// with full success). Only INGEST has a check today; add one per stage as
-// each stage gets migrated.
+// "did the BullMQ job resolve without throwing". The substantive honesty
+// fixes for partial-failure masking (MetadataWorker/TranscoderWorker/
+// CloudSyncWorker all used to conflate "something worked" with "everything
+// worked") live inside each worker itself now, so by the time a job reaches
+// 'completed' here its own success flag is already trustworthy - these
+// validators are a second, independent sanity layer, not a duplicate of
+// that work.
 const STAGE_VALIDATORS = {
     INGEST: (result) => {
         const folderPath = result?.patchData?.folderPath;
@@ -41,6 +50,38 @@ const STAGE_VALIDATORS = {
         }
         if (!fs.existsSync(folderPath)) {
             return { ok: false, reason: `Ingest reported success but target folder does not exist on disk: ${folderPath}` };
+        }
+        return { ok: true };
+    },
+    METADATA: (result) => {
+        if (!result || typeof result !== 'object') {
+            return { ok: false, reason: 'Metadata response was empty or malformed.' };
+        }
+        if (!result.patchData?.title) {
+            return { ok: false, reason: 'Metadata response carried no title to advance with.' };
+        }
+        if (Array.isArray(result.failedSeasons) && result.failedSeasons.length > 0) {
+            // Not a hard failure - a per-season OMDb/TMDb hiccup can heal on a
+            // later pass - but worth a loud log line rather than silence.
+            logger.warn(`⚠️ [PipelineOrchestrator] Metadata succeeded with ${result.failedSeasons.length} failed season(s): ${result.failedSeasons.join(', ')}`);
+        }
+        return { ok: true };
+    },
+    SUBTITLES: (result) => {
+        if (!result || !Array.isArray(result.patchData?.subtitles)) {
+            return { ok: false, reason: 'Subtitle response did not include a subtitles array.' };
+        }
+        return { ok: true };
+    },
+    TRANSCODE: (result) => {
+        if (!result || typeof result !== 'object') {
+            return { ok: false, reason: 'Transcode response was empty or malformed.' };
+        }
+        return { ok: true };
+    },
+    CLOUDSYNC: (result) => {
+        if (!result || typeof result !== 'object') {
+            return { ok: false, reason: 'Cloud sync response was empty or malformed.' };
         }
         return { ok: true };
     }
@@ -92,6 +133,7 @@ function attachStageListener(stage) {
 
             const patchData = result.patchData || {};
             const nextStep = NEXT_STAGE[stage] || 'COMPLETE';
+            const isPipelineDone = nextStep === 'COMPLETE';
             const resolvedImdbId = normalizeImdbId(
                 patchData.imdbId || job.imdbId || job.payload?.imdbId || job.payload?.queueContext?.imdbId
             ) || null;
@@ -113,8 +155,8 @@ function attachStageListener(stage) {
                 logger.debug(`📝 [PipelineOrchestrator] Persisted metadata snapshot for job ${job.id} at ${metadataPath}`);
             }
 
-            await updateJob(job, {
-                status: 'QUEUED',
+            const updated = await updateJob(job, {
+                status: isPipelineDone ? 'COMPLETE' : 'QUEUED',
                 currentStep: nextStep,
                 imdbId: resolvedImdbId,
                 payload: mergedPayload,
@@ -123,6 +165,13 @@ function attachStageListener(stage) {
             });
 
             logger.info(`✅ [PipelineOrchestrator] ${stage} validated for job ${jobId}, promoted to ${nextStep}.`);
+
+            // Same side effects (library scan, recent-feed card, completion
+            // hooks/notifications, torrent cleanup) the legacy flow runs -
+            // this function itself no-ops for stages/transitions that
+            // wouldn't have triggered them in the legacy flow either, so it's
+            // safe to call unconditionally after every stage advance.
+            await runPostStageSideEffects(stage, updated);
         } catch (err) {
             logger.error(`❌ [PipelineOrchestrator] Error handling ${stage} completion for job ${jobId}: ${err.message}`);
         }
@@ -148,9 +197,11 @@ function attachStageListener(stage) {
 }
 
 function startPipelineOrchestrator() {
-    // Only stages with a live BullMQ consumer Worker get a listener - see the
-    // module comment. Extend this list as each stage is migrated.
     attachStageListener('INGEST');
+    attachStageListener('METADATA');
+    attachStageListener('SUBTITLES');
+    attachStageListener('TRANSCODE');
+    attachStageListener('CLOUDSYNC');
 }
 
 module.exports = { startPipelineOrchestrator };

@@ -614,3 +614,32 @@ app.post('/process', async (req, res) => {
 
 const PORT = process.env.SUBTITLE_WORKER_PORT || 5002;
 app.listen(PORT, () => console.log(`💬 Atomic Subtitle Engine running on loopback port ${PORT}`));
+
+// =========================================================================
+// 🧵 BULLMQ CONSUMER (pipeline orchestrator redesign, phased migration)
+// =========================================================================
+// Thin adapter, not a rewrite - see IngestSanitizerWorker.js for the same
+// pattern and its rationale. Only reached for jobs tagged
+// payload.pipelineMode === 'bullmq'.
+const { Worker } = require('bullmq');
+const { getPipelineRedisConnection } = require('../BullMQConnection');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+
+const subtitleQueueWorker = new Worker(
+    STAGE_QUEUE_NAMES.SUBTITLES,
+    async (job) => {
+        const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
+        if (response.data?.success === false) {
+            throw new Error(response.data?.error || 'Subtitle worker reported failure.');
+        }
+        return response.data;
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.SUBTITLES.concurrency }
+);
+
+subtitleQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-subtitles job ${job.id} completed.`);
+});
+subtitleQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-subtitles job ${job?.id} failed: ${err.message}`);
+});

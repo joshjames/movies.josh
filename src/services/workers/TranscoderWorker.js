@@ -4,6 +4,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 const { execSync } = require('child_process');
 const logger = require('../logger');
 const { isSubtitleRelatedToVideo } = require('../SubtitleFileMatching');
@@ -611,6 +612,25 @@ app.post('/process', async (req, res) => {
             return res.json({ success: false, error: 'No video files could be processed.', results });
         }
 
+        if (failures.length > 0) {
+            // Partial failure is a real failure now, not silently masked as
+            // success - this used to let e.g. one bad episode in an 8-episode
+            // season quietly never get transcoded while the season overall
+            // reported fine. The files that DID succeed are still on disk
+            // though (each one's output already exists, so re-running this
+            // same job later skips them via the fs.existsSync check above and
+            // only reprocesses whatever's still missing) - so failing loudly
+            // here doesn't throw away completed work, it just stops this pass
+            // from lying about being fully done.
+            return res.json({
+                success: false,
+                error: `${failures.length} of ${results.length} video file(s) failed to process.`,
+                succeededFiles: results.filter(item => item.success !== false).map(item => path.basename(item.inputPath || '')),
+                failedFiles: failures.map(item => ({ file: path.basename(item.inputPath || ''), error: item.error })),
+                results
+            });
+        }
+
         // The real transcoded output path, not a hardcoded guess - a movie
         // folder normally has exactly one source video, but pick the first
         // successful result defensively either way.
@@ -817,3 +837,35 @@ app.post('/process-low-res', async (req, res) => {
 
 const PORT = process.env.TRANSCODE_WORKER_PORT || 5003;
 app.listen(PORT, () => console.log(`⚙️ Multi-Profile Transcoder Engine listening on port ${PORT}`));
+
+// =========================================================================
+// 🧵 BULLMQ CONSUMER (pipeline orchestrator redesign, phased migration)
+// =========================================================================
+// Thin adapter, not a rewrite - see IngestSanitizerWorker.js for the same
+// pattern and its rationale. Only reached for jobs tagged
+// payload.pipelineMode === 'bullmq'. Concurrency is deliberately 1 here
+// (ffmpeg is CPU-bound - oversubscribing one container hurts throughput
+// rather than adding it); scale by running more transcoder-worker replicas
+// instead (see docker-compose.yml).
+const { Worker } = require('bullmq');
+const { getPipelineRedisConnection } = require('../BullMQConnection');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+
+const transcodeQueueWorker = new Worker(
+    STAGE_QUEUE_NAMES.TRANSCODE,
+    async (job) => {
+        const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
+        if (response.data?.success === false) {
+            throw new Error(response.data?.error || 'Transcoder worker reported failure.');
+        }
+        return response.data;
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.TRANSCODE.concurrency }
+);
+
+transcodeQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-transcode job ${job.id} completed.`);
+});
+transcodeQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-transcode job ${job?.id} failed: ${err.message}`);
+});
