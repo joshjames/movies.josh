@@ -2792,6 +2792,10 @@
                                     <input type="checkbox" id="audio-only-${item.folder}" disabled>
                                     Audio Only (fast)
                                 </label>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; color:#cbd5e1; user-select:none; white-space:nowrap;" title="Queue: creates a real pipeline job and returns immediately - safe to click through many items back-to-back, watch progress in the Operations Centre above. Unchecked: runs now and waits here for it to finish - use for a single urgent fix.">
+                                    <input type="checkbox" id="queue-mode-${item.folder}">
+                                    Queue (don't wait)
+                                </label>
                                 <button type="button" style="background:#1d4ed8;" onclick="runWorkerNow('${folderJs}', '${currentTabMode}')">Run Worker</button>
                                 ${currentTabMode === 'series' ? `<button type="button" style="background:#0ea5e9;" onclick="openEpisodeManagerForItem('${folderJs}', '${currentTabMode}')">Episode Manager</button>` : ''}
                                 ${currentTabMode === 'series' ? `<button type="button" style="background:#0891b2;" onclick="openEpisodeSubscriberForItem('${folderJs}', '${currentTabMode}', '${(item.metadata && item.metadata.imdbId) || ''}', '${escapeJsAttr(item.title || '')}')">Episode Subscriber</button>` : ''}
@@ -3349,8 +3353,34 @@
             }
         }
 
+        async function queueWorkerRun(folder, type, worker) {
+            try {
+                showToast(`Queuing ${worker === 'RUN_ALL' ? 'full pipeline' : worker} for ${folder}...`, 'info', 3000);
+                const res = await fetch('/api/admin/queue-worker-run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder, contentType: type, worker })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast(`Queue failed: ` + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+                showToast(`Queued (job ${data.jobId}, starting at ${data.currentStep}) - watch it in the Operations Centre.`, 'success', 5000);
+            } catch (_err) {
+                showToast('Queue request failed.', 'error', 4200);
+            }
+        }
+
         async function runWorkerNow(folder, type) {
             const worker = document.getElementById(`worker-${folder}`)?.value || 'METADATA';
+            const queueMode = Boolean(document.getElementById(`queue-mode-${folder}`)?.checked);
+
+            if (queueMode) {
+                await queueWorkerRun(folder, type, worker);
+                return;
+            }
+
             if (worker === 'RUN_ALL') {
                 await runAllWorkersNow(folder, type);
                 return;

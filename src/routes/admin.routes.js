@@ -2116,6 +2116,73 @@ router.post('/manual-worker-run', async (req, res) => {
     }
 });
 
+// POST /api/admin/queue-worker-run - the queued counterpart to
+// /manual-worker-run above. Instead of a direct, blocking HTTP call to the
+// worker container (which the admin has to sit and wait on, and which can
+// genuinely contend/break if several are clicked through back-to-back -
+// confirmed: this was the user's reported symptom adding ~10 movies or a
+// whole season manually), this creates a real pipeline-orchestrator job
+// (payload.pipelineMode: 'bullmq') and returns immediately. The job then
+// runs through the same real per-stage BullMQ queues/concurrency limits as
+// any other pipeline job, and shows up in the Operations Centre dashboard.
+// "Run All" always starts at INGEST, matching manual-worker-run's own
+// runAllWorkersNow sequence (always the full chain, not "resume from
+// wherever it's at") - a single specific stage starts there directly, and
+// (like any normal pipeline job) will keep cascading through the remaining
+// stages after it, same as the existing chain always has.
+router.post('/queue-worker-run', async (req, res) => {
+    try {
+        const { folder, contentType, worker } = req.body || {};
+        if (!folder || !worker) {
+            return res.status(400).json({ success: false, error: 'Missing folder or worker.' });
+        }
+
+        const cleanWorker = String(worker).toUpperCase();
+        const validStages = ['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC'];
+        const startStage = cleanWorker === 'RUN_ALL' ? 'INGEST' : cleanWorker;
+        if (!validStages.includes(startStage)) {
+            return res.status(400).json({ success: false, error: `Unsupported worker: ${worker}` });
+        }
+
+        const resolvedContentType = contentType || (folder.includes('/series') ? 'series' : 'movie');
+        const folderPath = resolveContentFolderPath(resolvedContentType, folder);
+        if (!fs.existsSync(folderPath)) {
+            return res.status(404).json({ success: false, error: 'Target folder not found.' });
+        }
+
+        let metadata = {};
+        const metaFilePath = path.join(folderPath, 'metadata.json');
+        if (fs.existsSync(metaFilePath)) {
+            try {
+                metadata = JSON.parse(fs.readFileSync(metaFilePath, 'utf-8'));
+            } catch (_err) {
+                metadata = {};
+            }
+        }
+
+        const imdbId = metadata.imdbId || metadata.imdb_id || metadata.imdbID || null;
+        const job = await PipelineQueueService.createJob({
+            status: 'QUEUED',
+            currentStep: startStage,
+            imdbId,
+            contentType: resolvedContentType === 'series' ? 'series' : 'movie',
+            payload: {
+                cleanPath: folderPath,
+                rawPath: folderPath,
+                torrentName: folder,
+                mediaTitle: metadata.title || folder,
+                imdbId,
+                queueContext: { imdbId, targetShowFolder: resolvedContentType === 'series' ? folder : null },
+                pipelineMode: 'bullmq'
+            }
+        });
+
+        return res.json({ success: true, jobId: job.id, currentStep: startStage });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET /api/admin/manual-worker-status?folder=X&contentType=movie|series
 // Cheap, single-folder read of metadata.json's real on-disk state
 // (storage.files / pipelineState) - built for polling a deferred manual
