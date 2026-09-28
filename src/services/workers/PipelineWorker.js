@@ -483,7 +483,11 @@ async function persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdb
 
 async function removeCompletedTorrentFromClient(job) {
     const torrentHash = String(job.payload?.torrentHash || '').trim();
-    if (!torrentHash) return false;
+    // Manually-queued jobs (e.g. the admin "Queue" button on an
+    // already-scanned-in item, never downloaded via a torrent at all) have
+    // no torrentHash to begin with - that's not a cleanup failure to keep
+    // retrying forever, there's just nothing to clean up, so the job is done.
+    if (!torrentHash) return true;
 
     const deleteParams = new URLSearchParams();
     deleteParams.append('hashes', torrentHash);
