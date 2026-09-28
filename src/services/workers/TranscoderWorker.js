@@ -849,7 +849,7 @@ app.listen(PORT, () => console.log(`⚙️ Multi-Profile Transcoder Engine liste
 // instead (see docker-compose.yml).
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const transcodeQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.TRANSCODE,
@@ -860,7 +860,7 @@ const transcodeQueueWorker = new Worker(
         }
         return response.data;
     },
-    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.TRANSCODE.concurrency }
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.TRANSCODE.concurrency, lockDuration: LOCK_DURATION_MS }
 );
 
 transcodeQueueWorker.on('completed', (job) => {

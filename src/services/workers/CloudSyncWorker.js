@@ -496,7 +496,7 @@ app.listen(PORT, () => console.log(`☁️ Atomic Cloud Sync Engine safe-mode en
 // payload.pipelineMode === 'bullmq'.
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const cloudsyncQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.CLOUDSYNC,
@@ -507,7 +507,7 @@ const cloudsyncQueueWorker = new Worker(
         }
         return response.data;
     },
-    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.CLOUDSYNC.concurrency }
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.CLOUDSYNC.concurrency, lockDuration: LOCK_DURATION_MS }
 );
 
 cloudsyncQueueWorker.on('completed', (job) => {

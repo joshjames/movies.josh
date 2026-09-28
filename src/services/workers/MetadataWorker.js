@@ -283,7 +283,7 @@ app.listen(PORT, () => console.log(`📡 Atomic TV/Movie Metadata Worker listeni
 // payload.pipelineMode === 'bullmq'.
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const metadataQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.METADATA,
@@ -294,7 +294,7 @@ const metadataQueueWorker = new Worker(
         }
         return response.data;
     },
-    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.METADATA.concurrency }
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.METADATA.concurrency, lockDuration: LOCK_DURATION_MS }
 );
 
 metadataQueueWorker.on('completed', (job) => {

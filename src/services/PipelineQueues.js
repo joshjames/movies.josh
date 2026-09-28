@@ -35,6 +35,20 @@ const STAGE_QUEUE_NAMES = {
     CLOUDSYNC: 'pipeline-cloudsync'
 };
 
+// BullMQ needs the event loop free to periodically renew a job's lock -
+// confirmed live (2026-09-28) that TranscoderWorker.js's execSync-based
+// ffmpeg calls block the event loop for the whole encode, so the default
+// 30s lockDuration expired mid-transcode on a real movie (a few seconds was
+// never a problem in earlier synthetic testing with tiny test videos). When
+// the lock expires, BullMQ's stalled-job recovery re-dispatches the SAME
+// job a second time; the first (real, successful) run then loses the race
+// to report its own result once the lock is gone, and the second
+// (redundant, "nothing left to do") run's response - missing patchData -
+// is what actually gets recorded. Matches the app's own existing 30-minute
+// axios timeout convention for a single stage call (comfortably longer than
+// any real single ffmpeg/upload operation) rather than the BullMQ default.
+const LOCK_DURATION_MS = 40 * 60 * 1000;
+
 // Starting values, to be tuned against real telemetry - see the pipeline
 // orchestrator plan for the reasoning behind each. CPU-bound stages
 // (transcode) stay low concurrency per-replica and scale via replica count
@@ -70,5 +84,6 @@ module.exports = {
     NEXT_STAGE,
     STAGE_QUEUE_NAMES,
     STAGE_JOB_OPTIONS,
+    LOCK_DURATION_MS,
     getPipelineQueue
 };

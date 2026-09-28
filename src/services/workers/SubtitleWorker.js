@@ -623,7 +623,7 @@ app.listen(PORT, () => console.log(`💬 Atomic Subtitle Engine running on loopb
 // payload.pipelineMode === 'bullmq'.
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const subtitleQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.SUBTITLES,
@@ -634,7 +634,7 @@ const subtitleQueueWorker = new Worker(
         }
         return response.data;
     },
-    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.SUBTITLES.concurrency }
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.SUBTITLES.concurrency, lockDuration: LOCK_DURATION_MS }
 );
 
 subtitleQueueWorker.on('completed', (job) => {

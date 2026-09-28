@@ -1048,7 +1048,7 @@ app.listen(PORT, () => console.log(`🧹 Atomic Ingest Sanitizer Worker online o
 // branch) - every other ingest still goes through the plain Express route.
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const ingestQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.INGEST,
@@ -1059,7 +1059,7 @@ const ingestQueueWorker = new Worker(
         }
         return response.data;
     },
-    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.INGEST.concurrency }
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.INGEST.concurrency, lockDuration: LOCK_DURATION_MS }
 );
 
 ingestQueueWorker.on('completed', (job) => {
