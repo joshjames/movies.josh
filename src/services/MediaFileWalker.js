@@ -137,6 +137,61 @@ function walkSeriesEpisodeFiles(seriesRootPath) {
     return episodes;
 }
 
+// Pure planning step for a series CLOUDSYNC pass: what needs uploading, and
+// what the manifest already claims is synced (to be verified, not trusted -
+// see CloudSyncWorker.js's verifyRemoteObjectExists). No B2/network calls
+// here - just a disk walk + series.json read - so this is safe to call from
+// PipelineWorker.js (a different container from cloudsync-worker) purely to
+// decide whether a job has enough items to fan out, without needing any B2
+// credentials there at all.
+function planSeriesUploads(folderPath, folderName, imdbId) {
+    const seriesJsonPath = path.join(folderPath, 'series.json');
+    if (!fs.existsSync(seriesJsonPath)) {
+        return { error: 'Aborting series sync: series.json tracking manifest missing.' };
+    }
+
+    const directoryId = (imdbId && imdbId !== 'N/A') ? imdbId : folderName;
+    const episodeFiles = walkSeriesEpisodeFiles(folderPath);
+
+    let currentStructure;
+    try {
+        currentStructure = JSON.parse(fs.readFileSync(seriesJsonPath, 'utf-8'));
+    } catch (err) {
+        return { error: `series.json is unreadable: ${err.message}` };
+    }
+
+    // What's already synced, per the tracking manifest - not the disk walk
+    // alone - so a re-run never re-uploads something that already has a
+    // remoteKey.
+    const existingStorageByKey = {};
+    for (const season of Object.values(currentStructure.seasons || {})) {
+        for (const ep of (season.episodes || [])) {
+            existingStorageByKey[`${season.seasonNumber}-${ep.episodeNumber}`] = ep.storage || null;
+        }
+    }
+
+    const uploads = [];
+    const claimedSynced = [];
+    for (const { season, episode, files } of episodeFiles.values()) {
+        const existingStorage = existingStorageByKey[`${season}-${episode}`];
+
+        for (const profile of RESOLUTION_PROFILES) {
+            const localPath = files[profile];
+            const existingRemoteKey = existingStorage?.files?.[profile]?.remoteKey;
+
+            if (existingRemoteKey) {
+                claimedSynced.push({ season, episode, profile, remoteKey: existingRemoteKey, localPath: localPath || null });
+                continue;
+            }
+            if (!localPath) continue; // nothing local for this profile yet (needs transcode first) - legitimately not ready, not an error
+
+            uploads.push({ season, episode, profile, localPath });
+        }
+    }
+
+    return { seriesJsonPath, directoryId, uploads, claimedSynced };
+}
+
 module.exports = {
     RESOLUTION_PROFILES,
     VIDEO_EXTENSIONS,
@@ -145,5 +200,6 @@ module.exports = {
     isVideoCandidate,
     walkVideoSources,
     walkWebProfiles,
-    walkSeriesEpisodeFiles
+    walkSeriesEpisodeFiles,
+    planSeriesUploads
 };

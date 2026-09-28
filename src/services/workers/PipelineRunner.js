@@ -13,7 +13,9 @@ async function start() {
     const intervalMs = parseInt(process.env.PIPELINE_POLL_INTERVAL_MS || '10000', 10);
     logger.info(`Pipeline runner starting with interval ${intervalMs}ms`);
     startPipelineWorker(intervalMs);
-    startPipelineOrchestrator();
+    startPipelineOrchestrator().catch((err) => {
+        logger.error(`Pipeline orchestrator failed to start: ${err.message}`);
+    });
 }
 
 start().catch((err) => {

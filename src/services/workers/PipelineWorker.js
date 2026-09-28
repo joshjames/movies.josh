@@ -44,7 +44,7 @@ const {
     FAN_OUT_PARENT_JOB_NAME,
     getFlowProducer
 } = require('../PipelineQueues');
-const { walkVideoSources } = require('../MediaFileWalker');
+const { walkVideoSources, planSeriesUploads } = require('../MediaFileWalker');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
@@ -1085,6 +1085,83 @@ async function processNextJob(job) {
                     status: 'WAITING',
                     history: [...(job.history || []), { step: 'TRANSCODE_BULLMQ_FANOUT_ENQUEUED', timestamp: new Date().toISOString() }]
                 });
+            }
+        }
+
+        // Same fan-out shape as TRANSCODE above, for CLOUDSYNC: an "item" here
+        // is either a real upload or a claimed-synced entry that needs
+        // verifying against B2 - both need their own child so one bad episode
+        // can fail loudly (failParentOnFailure) without ever letting the
+        // parent report a partial season as fully synced.
+        if (stage === 'CLOUDSYNC' && job.contentType === 'series') {
+            const plan = planSeriesUploads(stepConfig.payload.folderPath, stepConfig.payload.folderName, resolvedJobImdbId);
+            if (plan.error) {
+                logger.warn(`⚠️ [Queue] Could not plan CLOUDSYNC fan-out for ${stepConfig.payload.folderPath}: ${plan.error}`);
+            } else {
+                const totalItems = plan.uploads.length + plan.claimedSynced.length;
+                if (totalItems > 1) {
+                    const uploadChildren = plan.uploads.map((item, index) => ({
+                        name: 'cloudsync-upload',
+                        queueName: ITEM_QUEUE_NAMES.CLOUDSYNC,
+                        data: {
+                            mode: 'upload',
+                            seriesJsonPath: plan.seriesJsonPath,
+                            folderName: stepConfig.payload.folderName,
+                            directoryId: plan.directoryId,
+                            season: item.season,
+                            episode: item.episode,
+                            profile: item.profile,
+                            localPath: item.localPath
+                        },
+                        opts: {
+                            jobId: `${job.id}:upload:${index}`,
+                            attempts: jobOptions.attempts,
+                            backoff: jobOptions.backoff,
+                            failParentOnFailure: true,
+                            removeOnComplete: { count: 200 },
+                            removeOnFail: { count: 200 }
+                        }
+                    }));
+                    const verifyChildren = plan.claimedSynced.map((item, index) => ({
+                        name: 'cloudsync-verify',
+                        queueName: ITEM_QUEUE_NAMES.CLOUDSYNC,
+                        data: {
+                            mode: 'verify',
+                            season: item.season,
+                            episode: item.episode,
+                            profile: item.profile,
+                            localPath: item.localPath,
+                            remoteKey: item.remoteKey
+                        },
+                        opts: {
+                            jobId: `${job.id}:verify:${index}`,
+                            attempts: jobOptions.attempts,
+                            backoff: jobOptions.backoff,
+                            failParentOnFailure: true,
+                            removeOnComplete: { count: 200 },
+                            removeOnFail: { count: 200 }
+                        }
+                    }));
+
+                    const flowProducer = getFlowProducer();
+                    await flowProducer.add({
+                        name: FAN_OUT_PARENT_JOB_NAME.CLOUDSYNC,
+                        queueName: STAGE_QUEUE_NAMES.CLOUDSYNC,
+                        data: stepConfig.payload,
+                        opts: {
+                            jobId: job.id,
+                            attempts: 1,
+                            removeOnComplete: { count: 50 },
+                            removeOnFail: { count: 50 }
+                        },
+                        children: [...uploadChildren, ...verifyChildren]
+                    });
+                    logger.info(`🧵 [Queue] Job ${job.id} CLOUDSYNC fanned out into ${totalItems} per-episode children (${ITEM_QUEUE_NAMES.CLOUDSYNC}).`);
+                    return await updateJob(job, {
+                        status: 'WAITING',
+                        history: [...(job.history || []), { step: 'CLOUDSYNC_BULLMQ_FANOUT_ENQUEUED', timestamp: new Date().toISOString() }]
+                    });
+                }
             }
         }
 

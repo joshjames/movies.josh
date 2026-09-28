@@ -2942,11 +2942,12 @@ function getCachedSchedulerQueue(name) {
     return schedulerQueueCache.get(name);
 }
 
-// Per-episode fan-out child queues (TRANSCODE only so far) - not a pipeline
-// "stage" in the STAGE_ORDER sense, so not looped in via getPipelineQueue,
-// but real queues on the same pipeline Redis DB worth the same visibility.
+// Per-episode fan-out child queues - not a pipeline "stage" in the
+// STAGE_ORDER sense, so not looped in via getPipelineQueue, but real queues
+// on the same pipeline Redis DB worth the same visibility.
 const ITEM_QUEUE_DEFS = [
-    { key: 'TRANSCODE_ITEM', name: ITEM_QUEUE_NAMES.TRANSCODE, label: 'Transcode (per-episode)' }
+    { key: 'TRANSCODE_ITEM', name: ITEM_QUEUE_NAMES.TRANSCODE, label: 'Transcode (per-episode)' },
+    { key: 'CLOUDSYNC_ITEM', name: ITEM_QUEUE_NAMES.CLOUDSYNC, label: 'Cloud Sync (per-episode)' }
 ];
 const itemQueueCache = new Map();
 function getCachedItemQueue(name) {

@@ -17,14 +17,31 @@
 // SubtitleWorker.js / TranscoderWorker.js / CloudSyncWorker.js). SEARCH and
 // WAITING_DOWNLOAD deliberately stay outside this queue graph (see the plan
 // doc) - they're handled by PipelineWorker.js's existing tick/poll logic.
+//
+// Restart safety (2026-09-28): BullMQ's QueueEvents defaults to only
+// replaying events from '$' (i.e. only NEW events from the moment it
+// starts) - confirmed directly against the installed bullmq version's own
+// source (queue-events.js: `let id = opts.lastEventId || '$';`). This means
+// any stage completion/failure that happens while this container is down
+// (a deploy, a crash, anything) is silently missed forever, and the job
+// would sit in 'WAITING' status with nothing ever telling it to advance.
+// Fixed with `reconcileMissedCompletions()`, run once at startup before the
+// live listeners attach: for every job parked in 'WAITING', it checks that
+// stage's BullMQ queue directly for a job already resolved (completed or
+// failed) and replays the exact same handling the live listener would have
+// done. Both paths share one set of handler functions
+// (handleStageCompleted/handleStageFailed), each guarded by
+// `job.currentStep === stage` so replaying an already-processed or
+// stale event is always a safe no-op instead of regressing a job that has
+// since moved on to a later stage.
 'use strict';
 
 const fs = require('fs');
 const { QueueEvents } = require('bullmq');
 const logger = require('../../utils/logger');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, NEXT_STAGE } = require('../PipelineQueues');
-const { getJob, updateJob } = require('../PipelineQueueService');
+const { STAGE_QUEUE_NAMES, NEXT_STAGE, getPipelineQueue } = require('../PipelineQueues');
+const { getJob, getAllJobs, updateJob } = require('../PipelineQueueService');
 const { persistPipelinePatchToDisk, runPostStageSideEffects } = require('./PipelineWorker');
 
 function normalizeImdbId(value) {
@@ -97,6 +114,108 @@ function validateStageOutput(stage, result) {
     }
 }
 
+function parseReturnValue(returnvalue) {
+    try {
+        return typeof returnvalue === 'string' ? JSON.parse(returnvalue) : (returnvalue || {});
+    } catch (_err) {
+        return {};
+    }
+}
+
+// Shared by the live QueueEvents listener AND reconcileMissedCompletions -
+// guarded so replaying a stale/duplicate event for a job that has already
+// moved past this stage is always a safe no-op.
+async function handleStageCompleted(stage, jobId, returnvalue) {
+    try {
+        const job = await getJob(jobId);
+        if (!job) {
+            logger.warn(`[PipelineOrchestrator] ${stage} job ${jobId} completed but no matching pipeline item found (stale/removed) - ignoring.`);
+            return;
+        }
+        if (job.currentStep !== stage) {
+            logger.debug(`[PipelineOrchestrator] ${stage} job ${jobId} completed but job is already at ${job.currentStep} - stale/duplicate event, ignoring.`);
+            return;
+        }
+
+        const result = parseReturnValue(returnvalue);
+        const verdict = validateStageOutput(stage, result);
+        if (!verdict.ok) {
+            logger.error(`❌ [PipelineOrchestrator] ${stage} job ${jobId} failed validation: ${verdict.reason}`);
+            await updateJob(job, {
+                status: 'FAILED',
+                currentStep: 'FAILED',
+                error: verdict.reason,
+                history: [...(job.history || []), { step: `${stage}_VALIDATION_FAILED`, timestamp: new Date().toISOString() }]
+            });
+            return;
+        }
+
+        const patchData = result.patchData || {};
+        const nextStep = NEXT_STAGE[stage] || 'COMPLETE';
+        const isPipelineDone = nextStep === 'COMPLETE';
+        const resolvedImdbId = normalizeImdbId(
+            patchData.imdbId || job.imdbId || job.payload?.imdbId || job.payload?.queueContext?.imdbId
+        ) || null;
+
+        const mergedPayload = {
+            ...job.payload,
+            ...(patchData.payload || {}),
+            cleanPath:
+                patchData.cleanPath ||
+                patchData.folderPath ||
+                job.payload?.cleanPath ||
+                job.payload?.rawPath ||
+                null,
+            imdbId: resolvedImdbId
+        };
+
+        const metadataPath = await persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId);
+        if (metadataPath) {
+            logger.debug(`📝 [PipelineOrchestrator] Persisted metadata snapshot for job ${job.id} at ${metadataPath}`);
+        }
+
+        const updated = await updateJob(job, {
+            status: isPipelineDone ? 'COMPLETE' : 'QUEUED',
+            currentStep: nextStep,
+            imdbId: resolvedImdbId,
+            payload: mergedPayload,
+            error: null,
+            history: [...(job.history || []), { step: `${stage}_BULLMQ_COMPLETE`, timestamp: new Date().toISOString() }]
+        });
+
+        logger.info(`✅ [PipelineOrchestrator] ${stage} validated for job ${jobId}, promoted to ${nextStep}.`);
+
+        // Same side effects (library scan, recent-feed card, completion
+        // hooks/notifications, torrent cleanup) the legacy flow runs - this
+        // function itself no-ops for stages/transitions that wouldn't have
+        // triggered them in the legacy flow either, so it's safe to call
+        // unconditionally after every stage advance.
+        await runPostStageSideEffects(stage, updated);
+    } catch (err) {
+        logger.error(`❌ [PipelineOrchestrator] Error handling ${stage} completion for job ${jobId}: ${err.message}`);
+    }
+}
+
+async function handleStageFailed(stage, jobId, failedReason) {
+    try {
+        const job = await getJob(jobId);
+        if (!job) return;
+        if (job.currentStep !== stage) {
+            logger.debug(`[PipelineOrchestrator] ${stage} job ${jobId} failed but job is already at ${job.currentStep} - stale/duplicate event, ignoring.`);
+            return;
+        }
+        logger.error(`❌ [PipelineOrchestrator] ${stage} job ${jobId} failed permanently: ${failedReason}`);
+        await updateJob(job, {
+            status: 'FAILED',
+            currentStep: 'FAILED',
+            error: failedReason || `${stage} worker failed`,
+            history: [...(job.history || []), { step: `${stage}_BULLMQ_FAILED`, timestamp: new Date().toISOString() }]
+        });
+    } catch (err) {
+        logger.error(`❌ [PipelineOrchestrator] Error handling ${stage} failure for job ${jobId}: ${err.message}`);
+    }
+}
+
 const activeListeners = [];
 
 function attachStageListener(stage) {
@@ -104,99 +223,76 @@ function attachStageListener(stage) {
     const events = new QueueEvents(queueName, { connection: getPipelineRedisConnection() });
     activeListeners.push(events);
 
-    events.on('completed', async ({ jobId, returnvalue }) => {
-        try {
-            const job = await getJob(jobId);
-            if (!job) {
-                logger.warn(`[PipelineOrchestrator] ${stage} job ${jobId} completed but no matching pipeline item found (stale/removed) - ignoring.`);
-                return;
-            }
-
-            let result = {};
-            try {
-                result = typeof returnvalue === 'string' ? JSON.parse(returnvalue) : (returnvalue || {});
-            } catch (_err) {
-                result = {};
-            }
-
-            const verdict = validateStageOutput(stage, result);
-            if (!verdict.ok) {
-                logger.error(`❌ [PipelineOrchestrator] ${stage} job ${jobId} failed validation: ${verdict.reason}`);
-                await updateJob(job, {
-                    status: 'FAILED',
-                    currentStep: 'FAILED',
-                    error: verdict.reason,
-                    history: [...(job.history || []), { step: `${stage}_VALIDATION_FAILED`, timestamp: new Date().toISOString() }]
-                });
-                return;
-            }
-
-            const patchData = result.patchData || {};
-            const nextStep = NEXT_STAGE[stage] || 'COMPLETE';
-            const isPipelineDone = nextStep === 'COMPLETE';
-            const resolvedImdbId = normalizeImdbId(
-                patchData.imdbId || job.imdbId || job.payload?.imdbId || job.payload?.queueContext?.imdbId
-            ) || null;
-
-            const mergedPayload = {
-                ...job.payload,
-                ...(patchData.payload || {}),
-                cleanPath:
-                    patchData.cleanPath ||
-                    patchData.folderPath ||
-                    job.payload?.cleanPath ||
-                    job.payload?.rawPath ||
-                    null,
-                imdbId: resolvedImdbId
-            };
-
-            const metadataPath = await persistPipelinePatchToDisk(job, patchData, nextStep, resolvedImdbId);
-            if (metadataPath) {
-                logger.debug(`📝 [PipelineOrchestrator] Persisted metadata snapshot for job ${job.id} at ${metadataPath}`);
-            }
-
-            const updated = await updateJob(job, {
-                status: isPipelineDone ? 'COMPLETE' : 'QUEUED',
-                currentStep: nextStep,
-                imdbId: resolvedImdbId,
-                payload: mergedPayload,
-                error: null,
-                history: [...(job.history || []), { step: `${stage}_BULLMQ_COMPLETE`, timestamp: new Date().toISOString() }]
-            });
-
-            logger.info(`✅ [PipelineOrchestrator] ${stage} validated for job ${jobId}, promoted to ${nextStep}.`);
-
-            // Same side effects (library scan, recent-feed card, completion
-            // hooks/notifications, torrent cleanup) the legacy flow runs -
-            // this function itself no-ops for stages/transitions that
-            // wouldn't have triggered them in the legacy flow either, so it's
-            // safe to call unconditionally after every stage advance.
-            await runPostStageSideEffects(stage, updated);
-        } catch (err) {
-            logger.error(`❌ [PipelineOrchestrator] Error handling ${stage} completion for job ${jobId}: ${err.message}`);
-        }
-    });
-
-    events.on('failed', async ({ jobId, failedReason }) => {
-        try {
-            const job = await getJob(jobId);
-            if (!job) return;
-            logger.error(`❌ [PipelineOrchestrator] ${stage} job ${jobId} failed permanently: ${failedReason}`);
-            await updateJob(job, {
-                status: 'FAILED',
-                currentStep: 'FAILED',
-                error: failedReason || `${stage} worker failed`,
-                history: [...(job.history || []), { step: `${stage}_BULLMQ_FAILED`, timestamp: new Date().toISOString() }]
-            });
-        } catch (err) {
-            logger.error(`❌ [PipelineOrchestrator] Error handling ${stage} failure for job ${jobId}: ${err.message}`);
-        }
-    });
+    events.on('completed', ({ jobId, returnvalue }) => handleStageCompleted(stage, jobId, returnvalue));
+    events.on('failed', ({ jobId, failedReason }) => handleStageFailed(stage, jobId, failedReason));
 
     logger.info(`🧭 [PipelineOrchestrator] Listening for completions on ${queueName} (stage ${stage}).`);
 }
 
-function startPipelineOrchestrator() {
+// Restart safety: catches any job whose stage resolved (in BullMQ) while
+// nothing was listening (any pipeline-runner downtime - a deploy, a crash,
+// anything). Only jobs in 'WAITING' are at risk - that's the status this
+// service's own dispatch branch (PipelineWorker.js) sets right after
+// enqueueing a stage, specifically so the legacy tick loop won't re-pick it
+// up; a plain 'QUEUED' job is never at risk since the tick loop re-reads and
+// re-dispatches it regardless of how long the container was down.
+async function reconcileMissedCompletions() {
+    let jobs;
+    try {
+        jobs = await getAllJobs();
+    } catch (err) {
+        logger.error(`❌ [PipelineOrchestrator] Startup reconciliation could not read job list: ${err.message}`);
+        return;
+    }
+
+    const waitingJobs = jobs.filter((job) => String(job?.status || '').toUpperCase() === 'WAITING');
+    if (waitingJobs.length === 0) {
+        logger.info('🧭 [PipelineOrchestrator] Startup reconciliation: no WAITING jobs to check.');
+        return;
+    }
+
+    logger.info(`🧭 [PipelineOrchestrator] Startup reconciliation: checking ${waitingJobs.length} WAITING job(s) for missed completions...`);
+    let recovered = 0;
+
+    for (const job of waitingJobs) {
+        const stage = job.currentStep;
+        if (!STAGE_QUEUE_NAMES[stage]) continue; // not a BullMQ-migrated stage (shouldn't happen for WAITING, but be defensive)
+
+        try {
+            const queue = getPipelineQueue(stage);
+            const bullJob = await queue.getJob(job.id);
+            if (!bullJob) {
+                // Nothing found under this id - either genuinely still in
+                // flight under a different mechanism, or lost to
+                // removeOnComplete/removeOnFail cleanup before we got here.
+                // Leave it; if it's truly stuck, it'll surface as a job that
+                // never leaves WAITING for an admin to investigate.
+                continue;
+            }
+
+            const state = await bullJob.getState();
+            if (state === 'completed') {
+                logger.warn(`🧭 [PipelineOrchestrator] Recovering missed completion for job ${job.id} (${stage}) - resolved while this container was down.`);
+                await handleStageCompleted(stage, job.id, bullJob.returnvalue);
+                recovered += 1;
+            } else if (state === 'failed') {
+                logger.warn(`🧭 [PipelineOrchestrator] Recovering missed failure for job ${job.id} (${stage}) - resolved while this container was down.`);
+                await handleStageFailed(stage, job.id, bullJob.failedReason);
+                recovered += 1;
+            }
+            // 'active'/'waiting'/'delayed' - genuinely still in flight, leave
+            // it for the live listener (or the next restart's reconciliation).
+        } catch (err) {
+            logger.error(`❌ [PipelineOrchestrator] Startup reconciliation failed for job ${job.id} (${stage}): ${err.message}`);
+        }
+    }
+
+    logger.info(`🧭 [PipelineOrchestrator] Startup reconciliation complete: ${recovered}/${waitingJobs.length} job(s) recovered.`);
+}
+
+async function startPipelineOrchestrator() {
+    await reconcileMissedCompletions();
+
     attachStageListener('INGEST');
     attachStageListener('METADATA');
     attachStageListener('SUBTITLES');

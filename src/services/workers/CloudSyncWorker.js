@@ -15,11 +15,10 @@ const app = express();
 app.use(express.json());
 
 const BUCKET_NAME = process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
-// File-discovery logic (RESOLUTION_PROFILES/profileSuffix/
-// parseEpisodeFromFilename/walkSeriesEpisodeFiles) now lives in the shared
+// File-discovery/upload-planning logic now lives in the shared
 // MediaFileWalker.js - see TranscoderWorker.js's own require for the
 // matching rationale.
-const { RESOLUTION_PROFILES, profileSuffix, parseEpisodeFromFilename, walkSeriesEpisodeFiles } = require('../MediaFileWalker');
+const { planSeriesUploads } = require('../MediaFileWalker');
 
 const s3Client = new S3Client({
     endpoint: process.env.CLOUD_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com',
@@ -70,58 +69,83 @@ function buildSeriesRemoteKey(directoryId, season, episode, profile) {
         .replace(/\/+/g, '/');
 }
 
-async function processSeriesFolder({ folderPath, folderName, imdbId, executeCloudUpload }) {
-    const seriesJsonPath = path.join(folderPath, 'series.json');
-    if (!fs.existsSync(seriesJsonPath)) {
-        return { success: false, error: 'Aborting series sync: series.json tracking manifest missing.' };
-    }
+// 'COMPLETED' (not 'COMPLETE') to match the movie path below and every other
+// pipelineState.currentStep writer (TranscoderWorker.js, admin.routes.js) -
+// PipelineWorker.js translates either spelling to the job queue's own
+// 'COMPLETE' convention at the one place they meet.
+function buildSeriesCompletePatch() {
+    return { pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() } };
+}
 
-    const directoryId = (imdbId && imdbId !== 'N/A') ? imdbId : folderName;
-    const episodeFiles = walkSeriesEpisodeFiles(folderPath);
+// The real per-item work for a fan-out child (and for the plain, non-fanned-
+// -out loop below) - one upload + the same lock-protected per-episode merge
+// every completed upload already used before fan-out existed. Left to throw
+// naturally on failure, matching every other stage's BullMQ processor.
+async function uploadOneEpisodeProfile({ seriesJsonPath, folderName, directoryId, season, episode, profile, localPath }) {
+    const remoteKey = buildSeriesRemoteKey(directoryId, season, episode, profile);
+    logger.info(`🚀 [Series Cloud Sync] Uploading S${season}E${episode} [${profile}] -> ${remoteKey}`);
+    await uploadLargeFileStream(localPath, remoteKey, profile);
 
-    let currentStructure;
-    try {
-        currentStructure = JSON.parse(fs.readFileSync(seriesJsonPath, 'utf-8'));
-    } catch (err) {
-        return { success: false, error: `series.json is unreadable: ${err.message}` };
-    }
+    await MetadataRegistry.mergeAndCommit(seriesJsonPath, folderName, async (structure) => {
+        const next = { ...structure, seasons: { ...structure.seasons } };
+        const seasonEntry = next.seasons[season];
+        if (!seasonEntry) return next; // season vanished from series.json since we scanned - skip safely
 
-    // What's already synced, per the tracking manifest - not the disk walk
-    // alone - so a re-run never re-uploads something that already has a
-    // remoteKey.
-    const existingStorageByKey = {};
-    for (const season of Object.values(currentStructure.seasons || {})) {
-        for (const ep of (season.episodes || [])) {
-            existingStorageByKey[`${season.seasonNumber}-${ep.episodeNumber}`] = ep.storage || null;
-        }
-    }
+        const episodes = [...(seasonEntry.episodes || [])];
+        const idx = episodes.findIndex((e) => Number(e.episodeNumber) === episode);
+        if (idx === -1) return next;
 
-    const uploads = [];
-    const claimedSynced = [];
-    for (const { season, episode, files } of episodeFiles.values()) {
-        const existingStorage = existingStorageByKey[`${season}-${episode}`];
-
-        for (const profile of RESOLUTION_PROFILES) {
-            const localPath = files[profile];
-            const existingRemoteKey = existingStorage?.files?.[profile]?.remoteKey;
-
-            if (existingRemoteKey) {
-                // Manifest claims this is already synced - verified below,
-                // not trusted blindly (see verifyRemoteObjectExists comment).
-                claimedSynced.push({ season, episode, profile, remoteKey: existingRemoteKey, localPath: localPath || null });
-                continue;
+        const currentEp = episodes[idx];
+        const existingFiles = currentEp.storage?.files || {};
+        episodes[idx] = {
+            ...currentEp,
+            storage: {
+                location: 'remote',
+                files: {
+                    ...existingFiles,
+                    [profile]: { status: 'synced', localPath: path.basename(localPath), remoteKey }
+                }
             }
-            if (!localPath) continue; // nothing local for this profile yet (needs transcode first) - legitimately not ready, not an error
+        };
 
-            uploads.push({ season, episode, profile, localPath });
-        }
+        next.seasons[season] = { ...seasonEntry, episodes };
+        return next;
+    });
+
+    return { season, episode, profile, remoteKey };
+}
+
+// Verify what the manifest already claims is synced - not just what was just
+// uploaded. This is the check that would have caught the confirmed incident:
+// an episode had a remoteKey in series.json but the object was never
+// actually in B2, and nothing ever asked B2 to confirm it. Throws (rather
+// than swallowing) if the object is genuinely missing and there's no local
+// source left to re-upload from - matching every other stage's honesty fix.
+async function verifyOneEpisodeProfile({ season, episode, profile, localPath, remoteKey }) {
+    const exists = await verifyRemoteObjectExists(remoteKey);
+    if (exists) {
+        return { season, episode, profile, remoteKey, verified: true };
     }
 
-    // 'COMPLETED' (not 'COMPLETE') to match the movie path below and every
-    // other pipelineState.currentStep writer (TranscoderWorker.js,
-    // admin.routes.js) - PipelineWorker.js translates either spelling to the
-    // job queue's own 'COMPLETE' convention at the one place they meet.
-    const completePatch = { pipelineState: { currentStep: 'COMPLETED', lastUpdated: new Date().toISOString() } };
+    const msg = `S${season}E${episode} [${profile}]: manifest claims synced (${remoteKey}) but the object is missing from B2.`;
+    logger.error(`❌ [Series Cloud Sync Verify] ${msg}`);
+
+    if (localPath && fs.existsSync(localPath)) {
+        logger.info(`🚑 [Series Cloud Sync Verify] Local source still present - re-uploading S${season}E${episode} [${profile}].`);
+        await uploadLargeFileStream(localPath, remoteKey, profile);
+        return { season, episode, profile, remoteKey, reuploaded: true };
+    }
+
+    throw new Error(`${msg} Local source file is also missing - this episode needs to be re-transcoded before it can sync.`);
+}
+
+async function processSeriesFolder({ folderPath, folderName, imdbId, executeCloudUpload }) {
+    const plan = planSeriesUploads(folderPath, folderName, imdbId);
+    if (plan.error) {
+        return { success: false, error: plan.error };
+    }
+    const { seriesJsonPath, directoryId, uploads, claimedSynced } = plan;
+    const completePatch = buildSeriesCompletePatch();
 
     if (!executeCloudUpload) {
         return {
@@ -136,37 +160,8 @@ async function processSeriesFolder({ folderPath, folderName, imdbId, executeClou
     let uploadedCount = 0;
 
     for (const { season, episode, profile, localPath } of uploads) {
-        const remoteKey = buildSeriesRemoteKey(directoryId, season, episode, profile);
         try {
-            logger.info(`🚀 [Series Cloud Sync] Uploading S${season}E${episode} [${profile}] -> ${remoteKey}`);
-            await uploadLargeFileStream(localPath, remoteKey, profile);
-
-            await MetadataRegistry.mergeAndCommit(seriesJsonPath, folderName, async (structure) => {
-                const next = { ...structure, seasons: { ...structure.seasons } };
-                const seasonEntry = next.seasons[season];
-                if (!seasonEntry) return next; // season vanished from series.json since we scanned - skip safely
-
-                const episodes = [...(seasonEntry.episodes || [])];
-                const idx = episodes.findIndex((e) => Number(e.episodeNumber) === episode);
-                if (idx === -1) return next;
-
-                const currentEp = episodes[idx];
-                const existingFiles = currentEp.storage?.files || {};
-                episodes[idx] = {
-                    ...currentEp,
-                    storage: {
-                        location: 'remote',
-                        files: {
-                            ...existingFiles,
-                            [profile]: { status: 'synced', localPath: path.basename(localPath), remoteKey }
-                        }
-                    }
-                };
-
-                next.seasons[season] = { ...seasonEntry, episodes };
-                return next;
-            });
-
+            await uploadOneEpisodeProfile({ seriesJsonPath, folderName, directoryId, season, episode, profile, localPath });
             uploadedCount += 1;
         } catch (err) {
             const msg = `S${season}E${episode} [${profile}]: ${err.message}`;
@@ -175,31 +170,16 @@ async function processSeriesFolder({ folderPath, folderName, imdbId, executeClou
         }
     }
 
-    // Verify what the manifest already claims is synced - not just what we
-    // just uploaded. This is the check that would have caught the confirmed
-    // incident: episode 7 had a remoteKey in series.json but the object was
-    // never actually in B2, and nothing here ever asked B2 to confirm it.
     let verifiedCount = 0;
     for (const item of claimedSynced) {
-        const exists = await verifyRemoteObjectExists(item.remoteKey);
-        if (exists) {
+        try {
+            const result = await verifyOneEpisodeProfile(item);
             verifiedCount += 1;
-            continue;
-        }
-
-        const msg = `S${item.season}E${item.episode} [${item.profile}]: manifest claims synced (${item.remoteKey}) but the object is missing from B2.`;
-        logger.error(`❌ [Series Cloud Sync Verify] ${msg}`);
-
-        if (item.localPath && fs.existsSync(item.localPath)) {
-            try {
-                logger.info(`🚑 [Series Cloud Sync Verify] Local source still present - re-uploading S${item.season}E${item.episode} [${item.profile}].`);
-                await uploadLargeFileStream(item.localPath, item.remoteKey, item.profile);
-                verifiedCount += 1;
-            } catch (err) {
-                errors.push(`${msg} Re-upload attempt also failed: ${err.message}`);
+            if (result.reuploaded) {
+                logger.info(`✅ [Series Cloud Sync Verify] Re-upload succeeded for S${item.season}E${item.episode} [${item.profile}].`);
             }
-        } else {
-            errors.push(`${msg} Local source file is also missing - this episode needs to be re-transcoded before it can sync.`);
+        } catch (err) {
+            errors.push(err.message);
         }
     }
 
@@ -438,13 +418,26 @@ app.listen(PORT, () => console.log(`☁️ Atomic Cloud Sync Engine safe-mode en
 // Thin adapter, not a rewrite - see IngestSanitizerWorker.js for the same
 // pattern and its rationale. Only reached for jobs tagged
 // payload.pipelineMode === 'bullmq'.
+//
+// Per-episode fan-out (2026-09-28, mirrors TranscoderWorker.js): a season
+// with more than one item (upload or claimed-synced-to-verify) is dispatched
+// by PipelineWorker.js as a BullMQ Flow instead of a plain job - a trivial
+// parent on this same STAGE_QUEUE_NAMES.CLOUDSYNC queue with N real per-item
+// children on the separate ITEM_QUEUE_NAMES.CLOUDSYNC queue below. Each
+// child already calls the same lock-protected MetadataRegistry.mergeAndCommit
+// every completed upload used before fan-out existed, so concurrent
+// per-episode writers were already safe - fan-out didn't need to invent
+// anything new there, just expose it per-item instead of always looping.
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, ITEM_QUEUE_NAMES, FAN_OUT_PARENT_JOB_NAME, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const cloudsyncQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.CLOUDSYNC,
     async (job) => {
+        if (job.name === FAN_OUT_PARENT_JOB_NAME.CLOUDSYNC) {
+            return { success: true, patchData: buildSeriesCompletePatch() };
+        }
         const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
         if (response.data?.success === false) {
             throw new Error(response.data?.error || 'Cloud sync worker reported failure.');
@@ -459,4 +452,28 @@ cloudsyncQueueWorker.on('completed', (job) => {
 });
 cloudsyncQueueWorker.on('failed', (job, err) => {
     logger.error(`🧵 [BullMQ] pipeline-cloudsync job ${job?.id} failed: ${err.message}`);
+});
+
+// The real per-item work for a fan-out - one direct in-process call to
+// uploadOneEpisodeProfile/verifyOneEpisodeProfile (the exact same functions
+// the plain, non-fanned-out loop in processSeriesFolder uses), for one
+// specific {season,episode,profile} instead of whatever a folder-walk finds.
+// Lets exceptions propagate naturally (BullMQ's own attempts/backoff +
+// failParentOnFailure handle it), matching every other stage's processor.
+const cloudsyncItemQueueWorker = new Worker(
+    ITEM_QUEUE_NAMES.CLOUDSYNC,
+    async (job) => {
+        const { mode, ...item } = job.data;
+        if (mode === 'upload') return uploadOneEpisodeProfile(item);
+        if (mode === 'verify') return verifyOneEpisodeProfile(item);
+        throw new Error(`Unknown pipeline-cloudsync-item mode: ${mode}`);
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.CLOUDSYNC.concurrency, lockDuration: LOCK_DURATION_MS }
+);
+
+cloudsyncItemQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-cloudsync-item job ${job.id} (S${job.data?.season}E${job.data?.episode} ${job.data?.profile}) completed.`);
+});
+cloudsyncItemQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-cloudsync-item job ${job?.id} (S${job?.data?.season}E${job?.data?.episode} ${job?.data?.profile}) failed: ${err.message}`);
 });
