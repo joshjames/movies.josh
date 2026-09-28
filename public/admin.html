@@ -388,6 +388,80 @@
             }
         }
 
+        .ops-queue-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 8px;
+        }
+
+        .ops-queue-tile {
+            background: #020617;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 10px;
+        }
+
+        .ops-queue-tile.has-failed { border-color: #7f1d1d; }
+
+        .ops-queue-name {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .ops-queue-paused {
+            font-size: 0.62rem;
+            color: #fbbf24;
+            border: 1px solid #78350f;
+            background: #422006;
+            padding: 1px 5px;
+            border-radius: 4px;
+        }
+
+        .ops-queue-counts { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.7rem; color: #94a3b8; }
+        .ops-queue-counts .n { color: #f8fafc; font-weight: 700; }
+        .ops-queue-counts .n.failed-n { color: #f87171; }
+        .ops-queue-counts .n.active-n { color: #38bdf8; }
+
+        .ops-jobs-list { border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
+        .ops-job-row {
+            display: grid;
+            grid-template-columns: 1.6fr 0.9fr 0.9fr 1fr 0.7fr;
+            gap: 10px;
+            align-items: center;
+            padding: 8px 10px;
+            border-bottom: 1px solid #1e293b;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+        }
+        .ops-job-row:last-child { border-bottom: none; }
+        .ops-job-title { font-weight: 700; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ops-job-error { color: #fca5a5; font-size: 0.72rem; margin-top: 2px; }
+        .ops-job-meta { color: #64748b; font-size: 0.7rem; }
+
+        .stage-pill {
+            display: inline-block;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 3px 7px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            background: #1e293b;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            white-space: nowrap;
+        }
+        .stage-pill.step-complete { background: #064e3b; color: #34d399; border-color: #065f46; }
+        .stage-pill.step-failed { background: #450a0a; color: #f87171; border-color: #7f1d1d; }
+        .stage-pill.step-waiting_download, .stage-pill.step-waiting { background: #422006; color: #fbbf24; border-color: #78350f; }
+        .stage-pill.step-queued { background: #1e3a8a; color: #93c5fd; border-color: #1d4ed8; }
+
         .pill {
             display: inline-flex;
             align-items: center;
@@ -971,7 +1045,30 @@
             <button class="btn-trigger" style="background:#0f766e;" onclick="openAdminQueueManager()">Open Queue Manager</button>
             <a href="/" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">Return Dashboard</a>
         </div>
- 
+
+        <div class="panel" id="ops-centre-panel" style="margin-bottom:18px;">
+            <div class="row-header">🧭 Operations Centre — Pipeline Queues</div>
+            <div style="color:#94a3b8; font-size:0.78rem; margin-bottom:12px;">Live view of the BullMQ pipeline queues and the jobs moving through them. Auto-refreshes every 5s.</div>
+
+            <div style="margin-bottom:6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Pipeline Stage Queues</div>
+            <div class="ops-queue-grid" id="ops-pipeline-queue-grid">
+                <div style="color:#64748b; font-size:0.78rem;">Loading…</div>
+            </div>
+
+            <div style="margin:14px 0 6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Scheduled Job Queues</div>
+            <div class="ops-queue-grid" id="ops-scheduler-queue-grid">
+                <div style="color:#64748b; font-size:0.78rem;">Loading…</div>
+            </div>
+
+            <div style="margin:14px 0 6px; display:flex; justify-content:space-between; align-items:baseline;">
+                <span style="color:#93c5fd; font-size:0.78rem; font-weight:700;">Pipeline Jobs</span>
+                <span id="ops-jobs-summary" style="color:#64748b; font-size:0.72rem;"></span>
+            </div>
+            <div id="ops-jobs-list" class="ops-jobs-list">
+                <div style="color:#64748b; font-size:0.78rem; padding:10px;">Loading…</div>
+            </div>
+        </div>
+
         <div class="panel" style="margin-bottom:18px;">
             <div class="row-header">Live Local Search</div>
             <div class="catalog-filter-bar" style="grid-template-columns: 1fr minmax(160px, 200px) auto; align-items:center;">
@@ -3968,6 +4065,103 @@
             }
         }
 
+        function stagePillClass(value) {
+            return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        }
+
+        function opsQueueTile(queue) {
+            const c = queue.counts || {};
+            const hasFailed = (c.failed || 0) > 0;
+            return `
+                <div class="ops-queue-tile ${hasFailed ? 'has-failed' : ''}">
+                    <div class="ops-queue-name">
+                        <span>${queue.label}</span>
+                        ${queue.isPaused ? '<span class="ops-queue-paused">paused</span>' : ''}
+                    </div>
+                    <div class="ops-queue-counts">
+                        <span class="active-n">${c.active || 0} <span style="color:#64748b;">active</span></span>
+                        <span>${c.waiting || 0} <span style="color:#64748b;">waiting</span></span>
+                        <span>${c.delayed || 0} <span style="color:#64748b;">delayed</span></span>
+                        <span class="${hasFailed ? 'failed-n' : ''}">${c.failed || 0} <span style="color:#64748b;">failed</span></span>
+                        <span>${c.completed || 0} <span style="color:#64748b;">done</span></span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function opsJobRow(job) {
+            const errorLine = job.error ? `<div class="ops-job-error">${job.error}</div>` : '';
+            const managedBadge = job.bullmqManaged
+                ? '<span class="stage-pill" style="border-color:#1d4ed8; color:#93c5fd;">bullmq</span>'
+                : '<span class="stage-pill" style="opacity:0.6;">legacy</span>';
+            return `
+                <div class="ops-job-row">
+                    <div>
+                        <div class="ops-job-title" title="${job.title}">${job.title}</div>
+                        <div class="ops-job-meta">${job.contentType || ''}${job.imdbId ? ' • ' + job.imdbId : ''}</div>
+                        ${errorLine}
+                    </div>
+                    <div><span class="stage-pill step-${stagePillClass(job.status)}">${job.status}</span></div>
+                    <div><span class="stage-pill step-${stagePillClass(job.currentStep)}">${job.currentStep}</span></div>
+                    <div class="ops-job-meta">${formatRelativeTime(job.updatedAt || job.createdAt)}</div>
+                    <div>${managedBadge}</div>
+                </div>
+            `;
+        }
+
+        async function fetchOperationsCentreQueues() {
+            const pipelineGrid = document.getElementById('ops-pipeline-queue-grid');
+            const schedulerGrid = document.getElementById('ops-scheduler-queue-grid');
+            if (!pipelineGrid && !schedulerGrid) return;
+
+            try {
+                const res = await fetch('/api/admin/operations/queues', { credentials: 'include' });
+                const data = await res.json();
+                if (!res.ok || !data.success || !Array.isArray(data.queues)) {
+                    const msg = `<div style="color:#fca5a5; font-size:0.8rem;">Queue overview unavailable: ${data?.error || 'HTTP ' + res.status}</div>`;
+                    if (pipelineGrid) pipelineGrid.innerHTML = msg;
+                    if (schedulerGrid) schedulerGrid.innerHTML = '';
+                    return;
+                }
+
+                const pipeline = data.queues.filter(q => q.group === 'pipeline');
+                const scheduler = data.queues.filter(q => q.group === 'scheduler');
+                if (pipelineGrid) pipelineGrid.innerHTML = pipeline.map(opsQueueTile).join('') || '<div style="color:#64748b; font-size:0.78rem;">No pipeline queues found.</div>';
+                if (schedulerGrid) schedulerGrid.innerHTML = scheduler.map(opsQueueTile).join('') || '<div style="color:#64748b; font-size:0.78rem;">No scheduler queues found.</div>';
+            } catch (err) {
+                console.error('[Admin] fetchOperationsCentreQueues failed:', err);
+                if (pipelineGrid) pipelineGrid.innerHTML = '<div style="color:#f87171; font-size:0.8rem;">Queue overview request failed.</div>';
+            }
+        }
+
+        async function fetchOperationsCentreJobs() {
+            const container = document.getElementById('ops-jobs-list');
+            const summary = document.getElementById('ops-jobs-summary');
+            if (!container) return;
+
+            try {
+                const res = await fetch('/api/admin/operations/pipeline-jobs?limit=50', { credentials: 'include' });
+                const data = await res.json();
+                if (!res.ok || !data.success || !Array.isArray(data.jobs)) {
+                    container.innerHTML = `<div style="color:#fca5a5; font-size:0.8rem; padding:10px;">Job list unavailable: ${data?.error || 'HTTP ' + res.status}</div>`;
+                    return;
+                }
+
+                if (summary) summary.textContent = `${data.totalActive} total in queue`;
+                container.innerHTML = data.jobs.length
+                    ? data.jobs.map(opsJobRow).join('')
+                    : '<div style="color:#64748b; font-size:0.78rem; padding:10px;">No pipeline jobs right now.</div>';
+            } catch (err) {
+                console.error('[Admin] fetchOperationsCentreJobs failed:', err);
+                container.innerHTML = '<div style="color:#f87171; font-size:0.8rem; padding:10px;">Job list request failed.</div>';
+            }
+        }
+
+        function fetchOperationsCentreData() {
+            fetchOperationsCentreQueues();
+            fetchOperationsCentreJobs();
+        }
+
         async function fetchFailedJobs() {
             const container = document.getElementById('failed-jobs-list');
             if (!container) return;
@@ -4032,7 +4226,9 @@
         fetchLibraryData(true);
         fetchRuntimeMetrics();
         fetchFailedJobs();
+        fetchOperationsCentreData();
         setInterval(fetchRuntimeMetrics, 30000);
+        setInterval(fetchOperationsCentreData, 5000);
 
         const groupManagerSearch = document.getElementById('group-manager-search');
         if (groupManagerSearch) {

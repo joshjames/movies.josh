@@ -63,6 +63,11 @@ const metadataService = require('../services/MetadataService');
 const metadataProvider = require('../services/MetadataProvider');
 const AccountService = require('../services/AccountService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
+const { Queue: BullQueue } = require('bullmq');
+const { getPipelineQueue, STAGE_ORDER } = require('../services/PipelineQueues');
+const { getSchedulerRedisConnection } = require('../services/BullMQConnection');
+const SchedulerQueueDefs = require('../services/SchedulerService');
+const PipelineQueueService = require('../services/PipelineQueueService');
 const ProfileService = require('../services/ProfileService');
 const {
     loadRules: loadTvAutoGetRules,
@@ -2823,6 +2828,103 @@ router.post('/trigger-automation', async (req, res) => {
         console.log(`✅ Automated background library sync completed flawlessly.`);
     } catch (err) {
         console.error(`❌ Automated orchestration cycle block exception:`, err.message);
+    }
+});
+
+// =========================================================================
+// 🧭 OPERATIONS CENTRE - pipeline queue/job dashboard (read-only for now)
+// =========================================================================
+// The 6 real BullMQ pipeline stage queues (search->ingest->metadata->
+// subtitles->transcode->cloudsync) live on their own Redis DB via
+// getPipelineQueue() (PipelineQueues.js, cached Queue instances). The 5
+// pre-existing periodic queues (metadata-mirror/tv-auto-get/imdb-refresh/
+// pipeline-tick/public-rows-refresh) live on a different DB via
+// getSchedulerRedisConnection() and aren't exposed as cached Queue objects
+// by SchedulerService.js (it only ever constructs one inline per
+// ensureRepeatableJob call), so a small local cache is kept here instead.
+const SCHEDULER_QUEUE_DEFS = [
+    { key: 'METADATA_MIRROR', name: SchedulerQueueDefs.METADATA_MIRROR_QUEUE_NAME, label: 'Metadata Mirror' },
+    { key: 'TV_AUTO_GET', name: SchedulerQueueDefs.TV_AUTO_GET_QUEUE_NAME, label: 'TV Auto-Get' },
+    { key: 'IMDB_REFRESH', name: SchedulerQueueDefs.IMDB_REFRESH_QUEUE_NAME, label: 'IMDb Refresh' },
+    { key: 'PUBLIC_ROWS', name: SchedulerQueueDefs.PUBLIC_ROWS_QUEUE_NAME, label: 'Public Rows Refresh' },
+    { key: 'PIPELINE_TICK', name: SchedulerQueueDefs.PIPELINE_TICK_QUEUE_NAME, label: 'Pipeline Tick' }
+];
+
+const PIPELINE_STAGE_LABELS = {
+    SEARCH: 'Search',
+    INGEST: 'Ingest',
+    METADATA: 'Metadata',
+    SUBTITLES: 'Subtitles',
+    TRANSCODE: 'Transcode',
+    CLOUDSYNC: 'Cloud Sync'
+};
+
+const schedulerQueueCache = new Map();
+function getCachedSchedulerQueue(name) {
+    if (!schedulerQueueCache.has(name)) {
+        schedulerQueueCache.set(name, new BullQueue(name, { connection: getSchedulerRedisConnection() }));
+    }
+    return schedulerQueueCache.get(name);
+}
+
+async function describeQueue(queue, group, key, label) {
+    const [counts, isPaused] = await Promise.all([
+        queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed'),
+        queue.isPaused()
+    ]);
+    return { group, key, name: queue.name, label, counts, isPaused };
+}
+
+// GET /api/admin/operations/queues - depth/counts for every pipeline stage
+// queue plus every periodic scheduler queue, for the queue-overview tiles.
+router.get('/operations/queues', async (req, res) => {
+    try {
+        const pipelineQueues = await Promise.all(STAGE_ORDER.map((stage) =>
+            describeQueue(getPipelineQueue(stage), 'pipeline', stage, PIPELINE_STAGE_LABELS[stage] || stage)
+        ));
+        const schedulerQueues = await Promise.all(SCHEDULER_QUEUE_DEFS.map((def) =>
+            describeQueue(getCachedSchedulerQueue(def.name), 'scheduler', def.key, def.label)
+        ));
+
+        res.json({ success: true, queues: [...pipelineQueues, ...schedulerQueues] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/admin/operations/pipeline-jobs - the legacy PipelineQueueService
+// job list (id/status/currentStep/history) - this, not the BullMQ queues
+// themselves, is what actually shows a job moving stage to stage, since
+// per-stage BullMQ job entries are transient (removeOnComplete/removeOnFail)
+// while this store holds the job's whole lifecycle.
+router.get('/operations/pipeline-jobs', async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        const jobs = await PipelineQueueService.getAllJobs();
+        const sorted = jobs
+            .slice()
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+            .slice(0, limit)
+            .map((job) => ({
+                id: job.id,
+                status: job.status,
+                currentStep: job.currentStep,
+                contentType: job.contentType,
+                imdbId: job.imdbId,
+                title: job.payload?.mediaTitle
+                    || job.payload?.torrentName
+                    || (job.payload?.cleanPath || job.payload?.rawPath || '').split('/').filter(Boolean).pop()
+                    || job.id,
+                error: job.error,
+                createdAt: job.createdAt,
+                updatedAt: job.updatedAt,
+                history: job.history,
+                bullmqManaged: job.payload?.pipelineMode === 'bullmq'
+            }));
+
+        res.json({ success: true, count: sorted.length, totalActive: jobs.length, jobs: sorted });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
