@@ -730,7 +730,12 @@ app.post('/process', async (req, res) => {
             const showFolder = (hintedShowFolder && resolveSeriesFolderPath(hintedShowFolder, { mustExist: true }) ? hintedShowFolder : null)
                 || findExistingShowFolderByImdbId(requestImdbId, SERIES_ROOTS)
                 || findExistingShowFolder(targetShowTitle, SERIES_ROOTS)
-                || targetShowTitle.replace(/\s+/g, '.');
+                // Strip filesystem/URL-reserved characters before deriving a
+                // brand-new folder name from a canonical title (OMDb titles
+                // routinely carry these - "Law & Order: Special Victims
+                // Unit" produced a folder that needed shell-quoting just to
+                // `cd` into and broke folder-name-based admin routing).
+                || targetShowTitle.replace(/[&:/\\?*"<>|]/g, '').replace(/\s+/g, ' ').trim().replace(/\s+/g, '.');
             const showRootPath = resolveSeriesFolderPath(showFolder, { mustExist: true })
                 || path.join(getPrimarySeriesRoot(), showFolder);
 

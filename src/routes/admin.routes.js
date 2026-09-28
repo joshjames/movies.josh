@@ -197,6 +197,13 @@ function toSeriesFolderName(value = '') {
         .replace(/\bingest\b/gi, '')
         .replace(/\bSeason[\s._-]?\d{1,3}\b/gi, '')
         .replace(/\bS\d{1,2}E\d{1,3}\b/gi, '')
+        // Strip characters that are reserved on filesystems/URLs or need
+        // shell-quoting - confirmed to actually bite: "Law & Order: Special
+        // Victims Unit" derived straight into "Law.&.Order:.Special.Victims.
+        // Unit", which needed manual quoting just to `cd` into and broke the
+        // admin UI's folder-name-based routing. Many real show titles carry
+        // these (ampersands, colons), so this isn't a one-off.
+        .replace(/[&:/\\?*"<>|]/g, '')
         .replace(/[._-]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
