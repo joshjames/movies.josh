@@ -1210,7 +1210,23 @@
                 const remoteRows = Array.isArray(data.remoteResults) ? data.remoteResults : [];
 
                 if (!localRows.length && !remoteRows.length) {
-                    grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No matching movie indexes found.</div>';
+                    const effectiveImdbId = (initialSearchImdbId && query === initialSearchQuery) ? initialSearchImdbId : '';
+                    grid.innerHTML = `
+                        <div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">
+                            <div style="margin-bottom:18px;">No matching movie indexes found.</div>
+                            <button
+                                type="button"
+                                class="add-btn"
+                                style="width:auto; padding:12px 20px; font-size:0.95rem;"
+                                data-title="${escapeHtml(query)}"
+                                data-imdbid="${escapeHtml(effectiveImdbId)}"
+                                onclick="advancedFindAndAcquireMovie(this)"
+                            >Advanced Find and Acquire</button>
+                            <div style="max-width:420px; margin:12px auto 0; font-size:0.82rem; color:#64748b;">
+                                This will fire off the bots to go and find this movie, and if they find it, add it to your queue. Usually ready to watch in just a few minutes.
+                            </div>
+                        </div>
+                    `;
                     return;
                 }
 
@@ -1566,6 +1582,55 @@
             toast.innerText = msg;
             toast.style.display = 'block';
             setTimeout(() => { toast.style.display = 'none'; }, 5000);
+        }
+
+        // "Advanced Find and Acquire" - reuses the same qBittorrent-plugin
+        // search + confidence-scored matching TV auto-get already has
+        // (SeriesAcquisitionService.js), extended to movies. Fires a SEARCH
+        // pipeline job and returns immediately - no live polling here, this
+        // is deliberately just a single acknowledgment toast (Step 1 of a
+        // staged rollout; a friendlier per-stage notification system is a
+        // separate, later pass).
+        async function advancedFindAndAcquireMovie(buttonObj) {
+            const title = buttonObj.dataset.title || '';
+            const imdbId = buttonObj.dataset.imdbid || '';
+
+            if (!imdbId) {
+                showToast('Missing IMDb ID for this title - try searching by exact title first.');
+                return;
+            }
+
+            buttonObj.disabled = true;
+            buttonObj.innerText = 'Searching...';
+
+            try {
+                const res = await fetch('/api/downloader/add-auto', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, imdbId, contentType: 'movie' })
+                });
+                const data = await parseJsonOrThrow(res);
+
+                if (!data.success) {
+                    showToast('Could not queue a search: ' + (data.error || 'Unknown error'));
+                    buttonObj.disabled = false;
+                    buttonObj.innerText = 'Advanced Find and Acquire';
+                    return;
+                }
+
+                if (data.alreadyAvailable) {
+                    showToast(data.message || 'Already in your library.');
+                    buttonObj.innerText = 'Already in library';
+                    return;
+                }
+
+                showToast('Bots are on it - this title will appear in your library once found and processed.');
+                buttonObj.innerText = 'Queued - searching in background';
+            } catch (_err) {
+                showToast('Request failed. Please try again.');
+                buttonObj.disabled = false;
+                buttonObj.innerText = 'Advanced Find and Acquire';
+            }
         }
 
         function decodeInfoAttr(value) {

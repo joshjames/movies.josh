@@ -789,7 +789,13 @@ async function processSeriesSearchJob(job) {
         addedByUser: intent.addedByUser || job.payload?.queueContext?.addedByUser || null
     };
 
-    await TorrentService.addMagnet(searchOutcome.magnetUrl, 'series-streamer', effectiveImdbId, {
+    // Despite the function name (predates movie support), this handles ANY
+    // SEARCH-stage job - dispatched purely by currentStep, not contentType.
+    // The qBittorrent category tag has to match the job's real content type,
+    // not always 'series-streamer', or a movie ends up mis-tagged in the
+    // torrent client.
+    const torrentCategory = job.contentType === 'movie' ? 'movie-streamer' : 'series-streamer';
+    await TorrentService.addMagnet(searchOutcome.magnetUrl, torrentCategory, effectiveImdbId, {
         addedByUser: queueContext.addedByUser || null,
         queueContext
     });
@@ -812,7 +818,7 @@ async function processSeriesSearchJob(job) {
             mediaTitle: buildQueueMediaTitle({
                 title: torrentName,
                 imdbId: effectiveImdbId,
-                contentType: 'series',
+                contentType: job.contentType || 'series',
                 payload: {
                     torrentName,
                     queueContext

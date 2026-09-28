@@ -1567,9 +1567,13 @@ router.post('/downloader/add-auto', async (req, res) => {
         timeoutMs,
         plugins,
         category,
-        minScore
+        minScore,
+        contentType
     } = req.body || {};
 
+    // Defaults to 'series' - every existing TV auto-get caller predates this
+    // field and never sends it, so this branch must stay a no-op for them.
+    const resolvedContentType = String(contentType || '').toLowerCase() === 'movie' ? 'movie' : 'series';
     const activeUser = normalizeUserKey(getActiveUser(req));
     const cleanImdbId = normalizeImdbId(imdbId);
     const cleanTitle = normalizeDisplayTitle(title || '');
@@ -1588,37 +1592,71 @@ router.post('/downloader/add-auto', async (req, res) => {
     }
 
     try {
-        const libraryStatus = await getSeriesLibraryAvailabilityByImdb(cleanImdbId);
-        if (isSeriesRequestAlreadyInLibrary(libraryStatus, {
-            season: seasonNum,
-            episode: episodeNum,
-            sourceType: normalizedSourceType
-        })) {
-            return res.status(200).json({
-                success: true,
-                alreadyAvailable: true,
-                message: normalizedSourceType === 'pack'
-                    ? 'Season already complete in library.'
-                    : 'Episode already available in library.',
-                imdbId: cleanImdbId,
+        if (resolvedContentType === 'movie') {
+            // Movies have no season/episode-aware availability model - reuse
+            // the same already-in-library short-circuit /api/yts/add uses
+            // (checks library.movies by imdbId, attaches to the requesting
+            // user's groups if already present) instead of the series-only
+            // getSeriesLibraryAvailabilityByImdb, which would never match a
+            // movie's imdbId at all.
+            const attached = await attachExistingMediaToUserLibrary({ imdbId: cleanImdbId, activeUser });
+            if (attached.attached) {
+                return res.status(200).json({
+                    success: true,
+                    alreadyAvailable: true,
+                    message: 'Movie already available in your library.',
+                    imdbId: cleanImdbId
+                });
+            }
+        } else {
+            const libraryStatus = await getSeriesLibraryAvailabilityByImdb(cleanImdbId);
+            if (isSeriesRequestAlreadyInLibrary(libraryStatus, {
                 season: seasonNum,
                 episode: episodeNum,
                 sourceType: normalizedSourceType
+            })) {
+                return res.status(200).json({
+                    success: true,
+                    alreadyAvailable: true,
+                    message: normalizedSourceType === 'pack'
+                        ? 'Season already complete in library.'
+                        : 'Episode already available in library.',
+                    imdbId: cleanImdbId,
+                    season: seasonNum,
+                    episode: episodeNum,
+                    sourceType: normalizedSourceType
+                });
+            }
+        }
+
+        // Quota only actually applies to movie-flavored categories
+        // (isMovieAcquisitionCategory) - this route never reserved it at all
+        // before, which was fine while every caller was TV-only, but a real
+        // gap once movies can reach this same endpoint.
+        const targetCategory = resolvedContentType === 'movie' ? 'movie-streamer' : 'series-streamer';
+        const quotaReservation = await reserveMovieAcquisitionQuota({ userKey: activeUser, targetCategory });
+        if (!quotaReservation.allowed) {
+            return res.status(quotaReservation.reason === 'missing_user' ? 401 : 429).json({
+                success: false,
+                error: quotaReservation.reason === 'missing_user'
+                    ? 'Authentication required.'
+                    : 'Daily acquisition limit reached.',
+                quota: quotaReservation
             });
         }
 
-        const indexedShow = getSeriesByImdbId(cleanImdbId);
+        const indexedShow = resolvedContentType === 'movie' ? null : getSeriesByImdbId(cleanImdbId);
         const indexedTitle = normalizeDisplayTitle(indexedShow?.title || indexedShow?.originalTitle || '');
         const showTitle = cleanTitle || indexedTitle || cleanImdbId;
         const query = SeriesAcquisitionService.buildAutoSeriesSearchQuery(showTitle, seasonNum, episodeNum, normalizedSourceType);
-        logger.info(`[Auto Queue] Request | user=${activeUser || 'unknown'} imdb=${cleanImdbId} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${normalizedSourceType} query="${query}"`);
+        logger.info(`[Auto Queue] Request | user=${activeUser || 'unknown'} contentType=${resolvedContentType} imdb=${cleanImdbId} season=${seasonNum || '-'} episode=${episodeNum || '-'} sourceType=${normalizedSourceType} query="${query}"`);
         const searchIntent = {
             title: showTitle,
             imdbId: cleanImdbId,
             season: seasonNum,
             episode: episodeNum,
             sourceType: normalizedSourceType,
-            category: String(category || 'tv').trim() || 'tv',
+            category: String(category || (resolvedContentType === 'movie' ? 'movies' : 'tv')).trim() || 'tv',
             plugins: String(plugins || 'enabled').trim() || 'enabled',
             timeoutMs: Number.isFinite(parseInt(timeoutMs, 10)) ? parseInt(timeoutMs, 10) : null,
             minScore: Number.isFinite(parseFloat(minScore)) ? parseFloat(minScore) : null,
@@ -1636,7 +1674,7 @@ router.post('/downloader/add-auto', async (req, res) => {
         const mediaTitle = buildQueueMediaTitle({
             title: showTitle,
             imdbId: cleanImdbId,
-            contentType: 'series',
+            contentType: resolvedContentType,
             payload: { queueContext }
         });
 
@@ -1644,7 +1682,7 @@ router.post('/downloader/add-auto', async (req, res) => {
             status: 'QUEUED',
             currentStep: 'SEARCH',
             imdbId: cleanImdbId,
-            contentType: 'series',
+            contentType: resolvedContentType,
             payload: {
                 searchIntent,
                 mediaTitle,
