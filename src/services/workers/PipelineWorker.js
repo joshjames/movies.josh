@@ -669,7 +669,13 @@ async function enqueueCompletedTorrent(torrent) {
             rawPath: rawPath,
             cleanPath: null,
             videoFile: null,
-            queueContext: torrentQueueContext
+            queueContext: torrentQueueContext,
+            // Pipeline orchestrator redesign: this is the highest-traffic
+            // job-creation path (every completed torrent lands here), so it's
+            // deliberately the last one switched to the BullMQ per-stage
+            // queues - by now every stage has been proven end-to-end under
+            // lower-stakes traffic first. See PipelineOrchestratorService.js.
+            pipelineMode: 'bullmq'
         }
     });
 

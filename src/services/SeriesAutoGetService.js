@@ -627,7 +627,8 @@ async function queueCandidate(rule, candidate, options = {}) {
             mediaTitle,
             addedByUser: options.addedByUser || null,
             queueContext,
-            sourceSelection: 'series-auto-get'
+            sourceSelection: 'series-auto-get',
+            pipelineMode: 'bullmq'
         }
     });
 
@@ -666,7 +667,8 @@ async function queueViaQbitSearch(rule, target, options = {}) {
                 addedByUser: options.addedByUser || null
             },
             mediaTitle,
-            queueContext
+            queueContext,
+            pipelineMode: 'bullmq'
         }
     });
 

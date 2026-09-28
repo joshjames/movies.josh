@@ -628,7 +628,8 @@ async function queueAutoSeriesMagnet({
             mediaTitle,
             addedByUser: activeUser || null,
             queueContext,
-            sourceSelection: source
+            sourceSelection: source,
+            pipelineMode: 'bullmq'
         }
     });
 
@@ -1647,7 +1648,12 @@ router.post('/downloader/add-auto', async (req, res) => {
             payload: {
                 searchIntent,
                 mediaTitle,
-                queueContext
+                queueContext,
+                // SEARCH itself isn't BullMQ-migrated (it's resolved inline by
+                // processSeriesSearchJob), but this tag carries forward via
+                // updateJob's payload merge once SEARCH resolves to INGEST,
+                // so every stage after that runs through the real queues.
+                pipelineMode: 'bullmq'
             }
         });
 
@@ -2399,7 +2405,8 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
             queueContext: derivedQueueContext,
             queueOptions: {
                 ...getJobQueueOptions(job)
-            }
+            },
+            pipelineMode: 'bullmq'
         }
     });
 
