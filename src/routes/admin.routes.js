@@ -64,7 +64,8 @@ const metadataProvider = require('../services/MetadataProvider');
 const AccountService = require('../services/AccountService');
 const { rebuildSeriesManifest } = require('../services/SeriesIndexService');
 const { Queue: BullQueue } = require('bullmq');
-const { getPipelineQueue, STAGE_ORDER } = require('../services/PipelineQueues');
+const { getPipelineQueue, STAGE_ORDER, ITEM_QUEUE_NAMES } = require('../services/PipelineQueues');
+const { getPipelineRedisConnection } = require('../services/BullMQConnection');
 const { getSchedulerRedisConnection } = require('../services/BullMQConnection');
 const SchedulerQueueDefs = require('../services/SchedulerService');
 const PipelineQueueService = require('../services/PipelineQueueService');
@@ -2941,6 +2942,20 @@ function getCachedSchedulerQueue(name) {
     return schedulerQueueCache.get(name);
 }
 
+// Per-episode fan-out child queues (TRANSCODE only so far) - not a pipeline
+// "stage" in the STAGE_ORDER sense, so not looped in via getPipelineQueue,
+// but real queues on the same pipeline Redis DB worth the same visibility.
+const ITEM_QUEUE_DEFS = [
+    { key: 'TRANSCODE_ITEM', name: ITEM_QUEUE_NAMES.TRANSCODE, label: 'Transcode (per-episode)' }
+];
+const itemQueueCache = new Map();
+function getCachedItemQueue(name) {
+    if (!itemQueueCache.has(name)) {
+        itemQueueCache.set(name, new BullQueue(name, { connection: getPipelineRedisConnection() }));
+    }
+    return itemQueueCache.get(name);
+}
+
 async function describeQueue(queue, group, key, label) {
     const [counts, isPaused] = await Promise.all([
         queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed'),
@@ -2956,11 +2971,14 @@ router.get('/operations/queues', async (req, res) => {
         const pipelineQueues = await Promise.all(STAGE_ORDER.map((stage) =>
             describeQueue(getPipelineQueue(stage), 'pipeline', stage, PIPELINE_STAGE_LABELS[stage] || stage)
         ));
+        const itemQueues = await Promise.all(ITEM_QUEUE_DEFS.map((def) =>
+            describeQueue(getCachedItemQueue(def.name), 'pipeline', def.key, def.label)
+        ));
         const schedulerQueues = await Promise.all(SCHEDULER_QUEUE_DEFS.map((def) =>
             describeQueue(getCachedSchedulerQueue(def.name), 'scheduler', def.key, def.label)
         ));
 
-        res.json({ success: true, queues: [...pipelineQueues, ...schedulerQueues] });
+        res.json({ success: true, queues: [...pipelineQueues, ...itemQueues, ...schedulerQueues] });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }

@@ -36,7 +36,15 @@ const { withDistributedLock } = require('../DistributedLockService');
 const { Worker } = require('bullmq');
 const { getSchedulerRedisConnection } = require('../BullMQConnection');
 const { PIPELINE_TICK_QUEUE_NAME, ensurePipelineTickSchedule } = require('../SchedulerService');
-const { getPipelineQueue, STAGE_JOB_OPTIONS } = require('../PipelineQueues');
+const {
+    getPipelineQueue,
+    STAGE_JOB_OPTIONS,
+    STAGE_QUEUE_NAMES,
+    ITEM_QUEUE_NAMES,
+    FAN_OUT_PARENT_JOB_NAME,
+    getFlowProducer
+} = require('../PipelineQueues');
+const { walkVideoSources } = require('../MediaFileWalker');
 
 const QBIT_URL = process.env.QBIT_URL || 'http://qbittorrent:8080';
 const WORKER_ENDPOINTS = buildDefaultWorkerEndpoints();
@@ -1024,8 +1032,63 @@ async function processNextJob(job) {
     // stage comes next.
     if (stepMap[job.currentStep] && job.payload?.pipelineMode === 'bullmq') {
         const stage = job.currentStep;
-        const queue = getPipelineQueue(stage);
         const jobOptions = STAGE_JOB_OPTIONS[stage];
+
+        // Per-episode fan-out (2026-09-28, TRANSCODE first - CLOUDSYNC
+        // follows once this is proven live): a series job whose folder has
+        // more than one file to transcode gets a real BullMQ Flow - one
+        // trivial parent job (still in the ordinary pipeline-transcode
+        // queue, so the orchestrator's existing listener needs no changes)
+        // plus N per-file children in the separate pipeline-transcode-item
+        // queue, each tagged failParentOnFailure so one permanently-failed
+        // episode fails the whole job loudly instead of leaving CLOUDSYNC to
+        // silently sync a partial season. A movie, or a series job with only
+        // one file left to transcode, is intentionally excluded here and
+        // falls through to the plain single-job path below - no flow
+        // overhead for the common case.
+        if (stage === 'TRANSCODE' && job.contentType === 'series') {
+            let sourceVideos = [];
+            try {
+                sourceVideos = walkVideoSources(stepConfig.payload.folderPath);
+            } catch (err) {
+                logger.warn(`⚠️ [Queue] Could not walk ${stepConfig.payload.folderPath} for TRANSCODE fan-out check: ${err.message}`);
+            }
+
+            if (sourceVideos.length > 1) {
+                const flowProducer = getFlowProducer();
+                await flowProducer.add({
+                    name: FAN_OUT_PARENT_JOB_NAME.TRANSCODE,
+                    queueName: STAGE_QUEUE_NAMES.TRANSCODE,
+                    data: stepConfig.payload,
+                    opts: {
+                        jobId: job.id,
+                        attempts: 1,
+                        removeOnComplete: { count: 50 },
+                        removeOnFail: { count: 50 }
+                    },
+                    children: sourceVideos.map((inputPath, index) => ({
+                        name: 'transcode-episode',
+                        queueName: ITEM_QUEUE_NAMES.TRANSCODE,
+                        data: { inputPath, forceReprocess: false, audioFixOnly: false },
+                        opts: {
+                            jobId: `${job.id}:item:${index}`,
+                            attempts: jobOptions.attempts,
+                            backoff: jobOptions.backoff,
+                            failParentOnFailure: true,
+                            removeOnComplete: { count: 200 },
+                            removeOnFail: { count: 200 }
+                        }
+                    }))
+                });
+                logger.info(`🧵 [Queue] Job ${job.id} TRANSCODE fanned out into ${sourceVideos.length} per-episode children (${ITEM_QUEUE_NAMES.TRANSCODE}).`);
+                return await updateJob(job, {
+                    status: 'WAITING',
+                    history: [...(job.history || []), { step: 'TRANSCODE_BULLMQ_FANOUT_ENQUEUED', timestamp: new Date().toISOString() }]
+                });
+            }
+        }
+
+        const queue = getPipelineQueue(stage);
         await queue.add(stage.toLowerCase(), stepConfig.payload, {
             jobId: job.id,
             attempts: jobOptions.attempts,

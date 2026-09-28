@@ -12,70 +12,14 @@ const { isSubtitleRelatedToVideo } = require('../SubtitleFileMatching');
 const app = express();
 app.use(express.json());
 
-const EXTENSIONS = ['.mkv', '.mp4', '.m4v', '.avi', '.mov', '.wmv'];
 const BROWSER_SAFE_AUDIO_CODECS = new Set(['aac', 'mp3']);
-
-function isVideoCandidate(fileName) {
-    const lower = String(fileName || '').toLowerCase();
-    if (!EXTENSIONS.includes(path.extname(lower))) return false;
-    if (lower.endsWith('.web.mp4')) return false;
-    // Must match the *generated profile* filename shape exactly
-    // (`<stem>.720p.mp4` / `<stem>.480p.mp4` from generate720pProfile/
-    // generate480pProfile below), not just contain "720p"/"480p" anywhere -
-    // scene-release source filenames very commonly have their own resolution
-    // tag (e.g. "Show.S01E01.720p.WEB-DL.x264.mkv"), and the previous
-    // `.includes()` check silently excluded every one of those from ever
-    // being picked up for transcoding at all.
-    if (lower.endsWith('.720p.mp4')) return false;
-    if (lower.endsWith('.480p.mp4')) return false;
-    return true;
-}
-
-function walkVideoSources(rootFolder) {
-    const discovered = [];
-
-    function visit(currentPath) {
-        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.name.startsWith('.')) continue;
-            const absolutePath = path.join(currentPath, entry.name);
-            if (entry.isDirectory()) {
-                visit(absolutePath);
-                continue;
-            }
-
-            if (entry.isFile() && isVideoCandidate(entry.name)) {
-                discovered.push(absolutePath);
-            }
-        }
-    }
-
-    visit(rootFolder);
-    return discovered.sort((a, b) => a.localeCompare(b));
-}
-
-function walkWebProfiles(rootFolder) {
-    const discovered = [];
-
-    function visit(currentPath) {
-        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.name.startsWith('.')) continue;
-            const absolutePath = path.join(currentPath, entry.name);
-            if (entry.isDirectory()) {
-                visit(absolutePath);
-                continue;
-            }
-
-            if (entry.isFile() && /\.web\.mp4$/i.test(entry.name)) {
-                discovered.push(absolutePath);
-            }
-        }
-    }
-
-    visit(rootFolder);
-    return discovered.sort((a, b) => a.localeCompare(b));
-}
+// File-discovery logic (isVideoCandidate/walkVideoSources/walkWebProfiles)
+// now lives in the shared MediaFileWalker.js - previously three independent,
+// slightly-differently-scoped implementations across this file,
+// CloudSyncWorker.js, and MetadataWorker.js; consolidated so PipelineWorker.js
+// can also enumerate the same file list before deciding single-job vs.
+// per-episode fan-out (see the fan-out plan).
+const { walkVideoSources, walkWebProfiles } = require('../MediaFileWalker');
 
 function probeMediaStreams(filePath) {
     try {
@@ -847,13 +791,27 @@ app.listen(PORT, () => console.log(`⚙️ Multi-Profile Transcoder Engine liste
 // (ffmpeg is CPU-bound - oversubscribing one container hurts throughput
 // rather than adding it); scale by running more transcoder-worker replicas
 // instead (see docker-compose.yml).
+//
+// Per-episode fan-out (2026-09-28): a season with N>1 files to transcode is
+// dispatched by PipelineWorker.js as a BullMQ Flow instead of a plain job -
+// a trivial parent on this same STAGE_QUEUE_NAMES.TRANSCODE queue (name
+// FAN_OUT_PARENT_JOB_NAME.TRANSCODE) with N real per-file children on the
+// separate ITEM_QUEUE_NAMES.TRANSCODE queue below. The parent has nothing to
+// merge - for series, TRANSCODE's own patchData is already {} today (see
+// isSeries branch in /process) - it's just the join point BullMQ tracks, so
+// this Worker's processor only needs to special-case that one job name;
+// every other job (movies, single-file series jobs) is completely
+// unaffected, same loopback-to-/process behavior as before.
 const { Worker } = require('bullmq');
 const { getPipelineRedisConnection } = require('../BullMQConnection');
-const { STAGE_QUEUE_NAMES, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
+const { STAGE_QUEUE_NAMES, ITEM_QUEUE_NAMES, FAN_OUT_PARENT_JOB_NAME, STAGE_JOB_OPTIONS, LOCK_DURATION_MS } = require('../PipelineQueues');
 
 const transcodeQueueWorker = new Worker(
     STAGE_QUEUE_NAMES.TRANSCODE,
     async (job) => {
+        if (job.name === FAN_OUT_PARENT_JOB_NAME.TRANSCODE) {
+            return { success: true, patchData: {} };
+        }
         const response = await axios.post(`http://localhost:${PORT}/process`, job.data, { timeout: 1800000 });
         if (response.data?.success === false) {
             throw new Error(response.data?.error || 'Transcoder worker reported failure.');
@@ -868,4 +826,29 @@ transcodeQueueWorker.on('completed', (job) => {
 });
 transcodeQueueWorker.on('failed', (job, err) => {
     logger.error(`🧵 [BullMQ] pipeline-transcode job ${job?.id} failed: ${err.message}`);
+});
+
+// The real per-episode work for a fan-out - one direct in-process call to
+// the exact same processSingleVideoFile every plain job already uses via
+// the /process route above, just for one specific file instead of whatever
+// a folder-walk finds. Lets the exception propagate naturally on failure
+// (BullMQ's own attempts/backoff + failParentOnFailure handle it), matching
+// how every other stage's BullMQ processor in this codebase signals failure.
+const transcodeItemQueueWorker = new Worker(
+    ITEM_QUEUE_NAMES.TRANSCODE,
+    async (job) => {
+        const { inputPath, forceReprocess, audioFixOnly } = job.data;
+        return processSingleVideoFile(inputPath, {
+            forceReprocess: Boolean(forceReprocess),
+            audioFixOnly: Boolean(audioFixOnly)
+        });
+    },
+    { connection: getPipelineRedisConnection(), concurrency: STAGE_JOB_OPTIONS.TRANSCODE.concurrency, lockDuration: LOCK_DURATION_MS }
+);
+
+transcodeItemQueueWorker.on('completed', (job) => {
+    logger.debug(`🧵 [BullMQ] pipeline-transcode-item job ${job.id} (${job.data?.inputPath}) completed.`);
+});
+transcodeItemQueueWorker.on('failed', (job, err) => {
+    logger.error(`🧵 [BullMQ] pipeline-transcode-item job ${job?.id} (${job?.data?.inputPath}) failed: ${err.message}`);
 });

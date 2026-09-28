@@ -15,7 +15,11 @@ const app = express();
 app.use(express.json());
 
 const BUCKET_NAME = process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
-const RESOLUTION_PROFILES = ['1080p', '720p', '480p'];
+// File-discovery logic (RESOLUTION_PROFILES/profileSuffix/
+// parseEpisodeFromFilename/walkSeriesEpisodeFiles) now lives in the shared
+// MediaFileWalker.js - see TranscoderWorker.js's own require for the
+// matching rationale.
+const { RESOLUTION_PROFILES, profileSuffix, parseEpisodeFromFilename, walkSeriesEpisodeFiles } = require('../MediaFileWalker');
 
 const s3Client = new S3Client({
     endpoint: process.env.CLOUD_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com',
@@ -56,68 +60,8 @@ async function verifyRemoteObjectExists(key) {
 // of "movies/", keyed by episode instead of by folder.
 // =========================================================================
 
-// Same suffix convention used everywhere else in the pipeline for a
-// browser-ready profile: ".web.mp4" for 1080p, ".720p.mp4"/".480p.mp4" for
-// the rest (see TranscoderWorker.js / the movie logic below).
-function profileSuffix(profile) {
-    return profile === '1080p' ? '.web.mp4' : `.${profile}.mp4`;
-}
-
-// Same episode-matching regex MetadataWorker.js uses to build series.json,
-// reused here so file discovery can never disagree with what series.json
-// already thinks exists.
-function parseEpisodeFromFilename(fileName) {
-    const match = String(fileName || '').match(/s\s*(\d+)\s*e\s*(\d+)/i);
-    if (!match) return null;
-    return { season: parseInt(match[1], 10), episode: parseInt(match[2], 10) };
-}
-
-// Walk a series root's season subfolders and, for each episode found on
-// disk, record the local file path for whichever resolution profiles
-// already exist. One level deep only (season folders directly under the
-// series root), matching how MetadataWorker.js scans for episode files.
-function walkSeriesEpisodeFiles(seriesRootPath) {
-    const episodes = new Map(); // key: "season-episode" -> { season, episode, files: { profile: absolutePath } }
-
-    let entries;
-    try {
-        entries = fs.readdirSync(seriesRootPath, { withFileTypes: true });
-    } catch (_err) {
-        return episodes;
-    }
-
-    for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const seasonDir = path.join(seriesRootPath, entry.name);
-
-        let files;
-        try {
-            files = fs.readdirSync(seasonDir);
-        } catch (_err) {
-            continue;
-        }
-
-        for (const file of files) {
-            const parsed = parseEpisodeFromFilename(file);
-            if (!parsed) continue;
-
-            const key = `${parsed.season}-${parsed.episode}`;
-            if (!episodes.has(key)) {
-                episodes.set(key, { season: parsed.season, episode: parsed.episode, files: {} });
-            }
-            const record = episodes.get(key);
-
-            for (const profile of RESOLUTION_PROFILES) {
-                if (record.files[profile]) continue; // already matched one for this profile
-                if (file.toLowerCase().endsWith(profileSuffix(profile))) {
-                    record.files[profile] = path.join(seasonDir, file);
-                }
-            }
-        }
-    }
-
-    return episodes;
-}
+// profileSuffix/parseEpisodeFromFilename/walkSeriesEpisodeFiles now come
+// from the shared MediaFileWalker.js require above.
 
 function buildSeriesRemoteKey(directoryId, season, episode, profile) {
     const seasonPadded = String(season).padStart(2, '0');

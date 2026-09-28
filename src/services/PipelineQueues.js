@@ -12,7 +12,7 @@
 // handles those).
 'use strict';
 
-const { Queue } = require('bullmq');
+const { Queue, FlowProducer } = require('bullmq');
 const { getPipelineRedisConnection } = require('./BullMQConnection');
 
 const STAGE_ORDER = ['SEARCH', 'INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC'];
@@ -33,6 +33,28 @@ const STAGE_QUEUE_NAMES = {
     SUBTITLES: 'pipeline-subtitles',
     TRANSCODE: 'pipeline-transcode',
     CLOUDSYNC: 'pipeline-cloudsync'
+};
+
+// Per-episode fan-out (TRANSCODE/CLOUDSYNC only - see the fan-out plan for
+// why INGEST/METADATA aren't candidates). These are NOT pipeline stages in
+// the STAGE_ORDER/NEXT_STAGE sense - a job's currentStep never equals one of
+// these; they're the child-job queues a season's TRANSCODE/CLOUDSYNC parent
+// job (still living in the ordinary STAGE_QUEUE_NAMES.TRANSCODE/CLOUDSYNC
+// queue) fans out into via BullMQ's FlowProducer when there's more than one
+// file to process. A movie, or a series job with only one file, never uses
+// these - it stays on the plain single-job path.
+const ITEM_QUEUE_NAMES = {
+    TRANSCODE: 'pipeline-transcode-item',
+    CLOUDSYNC: 'pipeline-cloudsync-item'
+};
+
+// Job `name` used to tell a fan-out parent job apart from an ordinary
+// single-item job in the same (STAGE_QUEUE_NAMES) queue - see
+// PipelineWorker.js's dispatch branch and the matching check in each
+// worker's Worker processor.
+const FAN_OUT_PARENT_JOB_NAME = {
+    TRANSCODE: 'transcode-season-parent',
+    CLOUDSYNC: 'cloudsync-season-parent'
 };
 
 // BullMQ needs the event loop free to periodically renew a job's lock -
@@ -79,11 +101,23 @@ function getPipelineQueue(stage) {
     return queueCache.get(stage);
 }
 
+let sharedFlowProducer = null;
+
+function getFlowProducer() {
+    if (!sharedFlowProducer) {
+        sharedFlowProducer = new FlowProducer({ connection: getPipelineRedisConnection() });
+    }
+    return sharedFlowProducer;
+}
+
 module.exports = {
     STAGE_ORDER,
     NEXT_STAGE,
     STAGE_QUEUE_NAMES,
+    ITEM_QUEUE_NAMES,
+    FAN_OUT_PARENT_JOB_NAME,
     STAGE_JOB_OPTIONS,
     LOCK_DURATION_MS,
-    getPipelineQueue
+    getPipelineQueue,
+    getFlowProducer
 };
