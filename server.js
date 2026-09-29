@@ -272,27 +272,27 @@ app.use('/api/auth', authRouter);
 // to, with zero per-route changes needed anywhere else.
 const PRIMARY_ADMIN_URL = String(process.env.PRIMARY_ADMIN_URL || '').trim().replace(/\/+$/, '');
 
-function serveOrRedirectAdmin(req, res) {
+function serveOrRedirectAdmin(req, res, fileName = 'admin.html') {
     if (isRunningAsSatellite() && PRIMARY_ADMIN_URL) {
         return res.redirect(`${PRIMARY_ADMIN_URL}${req.originalUrl}`);
     }
-    return res.sendFile(path.join(__dirname, 'public/admin.html'));
+    return res.sendFile(path.join(__dirname, `public/${fileName}`));
 }
 
-app.get('/admin.html', async (req, res) => {
+async function requireAdminPage(req, res, fileName) {
     const activeUser = req.cookies?.user_profile;
     const cleanUser = String(activeUser || '').toLowerCase().trim();
 
     const allowByIdentity = cleanUser === 'josh' || cleanUser.startsWith('josh@');
     if (allowByIdentity) {
-        return serveOrRedirectAdmin(req, res);
+        return serveOrRedirectAdmin(req, res, fileName);
     }
 
     if (cleanUser) {
         try {
             const config = await ProfileService.readData(cleanUser, 'config', {});
             if (config?.isAdmin === true) {
-                return serveOrRedirectAdmin(req, res);
+                return serveOrRedirectAdmin(req, res, fileName);
             }
         } catch (_err) {
             // Fall through to login redirect.
@@ -300,7 +300,16 @@ app.get('/admin.html', async (req, res) => {
     }
 
     return res.redirect('/login.html');
-});
+}
+
+app.get('/admin.html', (req, res) => requireAdminPage(req, res, 'admin.html'));
+
+// Same gatekeeper as admin.html - operations.html carries the same class of
+// admin-only writes (job retry/remove, worker triggers) and the same
+// satellite-write-gets-silently-overwritten risk (see comment above), so it
+// needs the identical auth + primary-redirect treatment, not the plain
+// static-file serving the rest of public/ gets.
+app.get('/operations.html', (req, res) => requireAdminPage(req, res, 'operations.html'));
 
 app.get('/admin-users.html', async (req, res) => {
     const activeUser = req.cookies?.user_profile;

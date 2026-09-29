@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joshflix Operations Centre</title>
+    <link rel="stylesheet" href="/css/admin-shared.css">
+</head>
+<body>
+    <div id="toast-stack" class="toast-stack"></div>
+
+    <div class="container">
+        <h1>🧭 Joshflix Operations Centre</h1>
+
+        <div class="controls">
+            <a href="/admin.html" style="background: #475569; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">← Back to Admin</a>
+            <button class="btn-trigger" onclick="triggerSanitizer()">Run Sanitizer Sweep Now</button>
+            <button class="btn-trigger" style="background:#0ea5e9;" onclick="rebuildHomeFeed()">Rebuild Home Feed</button>
+        </div>
+
+        <div class="panel" id="ops-centre-panel" style="margin-bottom:18px;">
+            <div class="row-header">🧭 Operations Centre — Pipeline Queues</div>
+            <div style="color:#94a3b8; font-size:0.78rem; margin-bottom:12px;">Live view of the BullMQ pipeline queues and the jobs moving through them. Click a queue to see its current tasks. Auto-refreshes every 5s.</div>
+
+            <div style="margin-bottom:6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Pipeline Stage Queues</div>
+            <div class="ops-queue-grid" id="ops-pipeline-queue-grid">
+                <div style="color:#64748b; font-size:0.78rem;">Loading…</div>
+            </div>
+
+            <div style="margin:14px 0 6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Per-Episode Item Queues</div>
+            <div class="ops-queue-grid" id="ops-item-queue-grid">
+                <div style="color:#64748b; font-size:0.78rem;">Loading…</div>
+            </div>
+
+            <div style="margin:14px 0 6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Scheduled Job Queues</div>
+            <div class="ops-queue-grid" id="ops-scheduler-queue-grid">
+                <div style="color:#64748b; font-size:0.78rem;">Loading…</div>
+            </div>
+
+            <div id="ops-queue-expanded" style="display:none;"></div>
+
+            <div style="margin:14px 0 6px; display:flex; justify-content:space-between; align-items:baseline;">
+                <span style="color:#93c5fd; font-size:0.78rem; font-weight:700;">Pipeline Jobs (all stages)</span>
+                <span id="ops-jobs-summary" style="color:#64748b; font-size:0.72rem;"></span>
+            </div>
+            <div id="ops-jobs-list" class="ops-jobs-list">
+                <div style="color:#64748b; font-size:0.78rem; padding:10px;">Loading…</div>
+            </div>
+        </div>
+
+        <div class="admin-layout-wrapper">
+            <div class="panel" id="runtime-metrics-panel">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                    <h3 style="margin:0; border:none; padding:0;">📈 Runtime Metrics</h3>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button onclick="fetchRuntimeMetrics()" style="background:#0f766e; font-size:0.75rem; padding:4px 10px;">Refresh</button>
+                        <button onclick="toggleMetricsSize()" id="expand-metrics-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                    </div>
+                </div>
+                <div class="metrics-panel-body" id="metrics-panel-body">
+                    <div id="runtime-metrics-content">Loading runtime telemetry...</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="panel">
+                    <h3>🧯 Queue Failures & Retry</h3>
+                    <div id="failed-jobs-list" style="font-size: 0.85rem; color: #94a3b8;">Checking failed queue jobs...</div>
+                </div>
+
+                <div class="panel">
+                    <h3>📡 Engine Architecture Pipeline Monitor</h3>
+                    <div class="monitor-grid">
+                        <div class="service-card" id="srv-Orchestrator">
+                            <div class="service-info">
+                                <span class="service-name">Orchestrator Core</span>
+                                <span class="service-task" id="task-Orchestrator">Polling file tables...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-Orchestrator">Idle</span>
+                        </div>
+                        <div class="service-card" id="srv-Sanitizer">
+                            <div class="service-info">
+                                <span class="service-name">Ingest Sanitizer</span>
+                                <span class="service-task" id="task-Sanitizer">Waiting for download trigger...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-Sanitizer">Idle</span>
+                        </div>
+                        <div class="service-card" id="srv-Transcoder">
+                            <div class="service-info">
+                                <span class="service-name">FFmpeg Transcoder</span>
+                                <span class="service-task" id="task-Transcoder">No active video matrices...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-Transcoder">Idle</span>
+                        </div>
+                        <div class="service-card" id="srv-CloudSync">
+                            <div class="service-info">
+                                <span class="service-name">CloudSync Worker</span>
+                                <span class="service-task" id="task-CloudSync">R2/B2 channels clear...</span>
+                            </div>
+                            <span class="status-pill idle" id="status-CloudSync">Idle</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" id="log-monitor-panel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 12px;">
+                        <h3 style="margin: 0; border: none; padding: 0;">🖥️ Live Application Stream Monitor</h3>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="color: #cbd5e1; font-family: monospace; cursor: pointer; user-select: none; font-size: 0.8rem;">
+                                <input type="checkbox" id="pause-scroll-toggle"> ⏸️ Pause Auto-Scroll Tracking
+                            </label>
+                            <button onclick="toggleLogSize()" id="expand-log-btn" style="background: #334155; font-size: 0.75rem; padding: 4px 10px;">Expand Window ⛶</button>
+                        </div>
+                    </div>
+                    <div class="console-box" id="terminal-stream" style="overflow-y: auto; height: 500px;">Connecting to core logger pipeline...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="margin-bottom:18px;">
+            <div class="row-header">Universal Content Search</div>
+            <div style="color:#94a3b8; font-size:0.78rem; margin-bottom:10px;">Find an individual movie or show to run a worker against it, without loading the whole library.</div>
+            <div class="catalog-filter-bar" style="grid-template-columns: 1fr minmax(160px, 200px) auto; align-items:center;">
+                <input type="search" id="admin-live-search-input" placeholder="Search movies or TV by title, IMDb ID, or folder..." oninput="searchAdminLiveResults()">
+                <select id="admin-live-search-type" onchange="searchAdminLiveResults()">
+                    <option value="both">Movies + TV</option>
+                    <option value="movies">Movies</option>
+                    <option value="series">TV Shows</option>
+                </select>
+                <button type="button" style="background:#334155;" onclick="clearAdminLiveSearch()">Clear</button>
+            </div>
+            <div id="admin-live-search-results" class="admin-live-search-results"></div>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // Shared helpers (duplicated from admin.html - kept in sync manually,
+        // see docs note in each file's header comment)
+        // =====================================================================
+        function showToast(message, level = 'info', timeoutMs = 2600) {
+            const stack = document.getElementById('toast-stack');
+            if (!stack) return;
+            const toast = document.createElement('div');
+            toast.className = `toast ${level}`;
+            toast.textContent = message;
+            stack.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, timeoutMs);
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function debounce(fn, delayMs = 220) {
+            let timer = null;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn(...args), delayMs);
+            };
+        }
+
+        function formatBytes(bytes) {
+            const value = Number(bytes);
+            if (!Number.isFinite(value) || value <= 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let idx = 0;
+            let size = value;
+            while (size >= 1024 && idx < units.length - 1) {
+                size /= 1024;
+                idx += 1;
+            }
+            return `${size.toFixed(size >= 100 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+        }
+
+        function formatUptime(seconds) {
+            const total = Math.max(0, parseInt(seconds, 10) || 0);
+            const days = Math.floor(total / 86400);
+            const hours = Math.floor((total % 86400) / 3600);
+            const minutes = Math.floor((total % 3600) / 60);
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        function formatRelativeTime(isoValue) {
+            const ts = Date.parse(isoValue || '');
+            if (!Number.isFinite(ts)) return 'n/a';
+            const deltaSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+            if (deltaSec < 60) return `${deltaSec}s ago`;
+            if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
+            if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
+            return `${Math.floor(deltaSec / 86400)}d ago`;
+        }
+
+        // =====================================================================
+        // Toolbar actions
+        // =====================================================================
+        async function triggerSanitizer() {
+            try {
+                const res = await fetch('/api/admin/sanitizer/run', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) showToast('Library sanitization kicked off in background.', 'success', 3200);
+            } catch (e) { console.error(e); }
+        }
+
+        async function rebuildHomeFeed() {
+            try {
+                showToast('Rebuilding home feed cache...', 'info', 3000);
+                const res = await fetch('/api/admin/regenerate-home-feed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshLibrary: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Home feed rebuild failed: ' + (data.error || 'Unknown error'), 'error', 4500);
+                    return;
+                }
+                showToast(`Home feed ready. ${data.collections} collections / ${data.totalItems} items.`, 'success', 4500);
+            } catch (err) {
+                showToast('Home feed rebuild request failed.', 'error', 4500);
+            }
+        }
+
+        // =====================================================================
+        // Engine Architecture Pipeline Monitor + Live Log Stream
+        // =====================================================================
+        const WORKER_PORTS = {
+            'Orchestrator': 3000,
+            'Sanitizer': 5000,
+            'Metadata': 5001,
+            'Subtitle': 5002,
+            'Transcoder': 5003,
+            'CloudSync': 5004
+        };
+
+        async function checkWorkerHealth() {
+            for (const [service, port] of Object.entries(WORKER_PORTS)) {
+                try {
+                    const controller = new AbortController();
+                    const id = setTimeout(() => controller.abort(), 2000);
+                    const res = await fetch(`/api/admin/health-check/${service.toLowerCase()}`, { signal: controller.signal });
+                    clearTimeout(id);
+                    if (res.ok) {
+                        if (service === 'Orchestrator') updateMonitorCard('Orchestrator', 'active', 'Polling library filesystem trees...');
+                        if (service === 'Sanitizer') updateMonitorCard('Sanitizer', 'idle', 'Ingester online. Awaiting data drops...');
+                        if (service === 'Transcoder') updateMonitorCard('Transcoder', 'idle', 'No active video matrices...');
+                        if (service === 'CloudSync') updateMonitorCard('CloudSync', 'idle', 'R2/B2 channels clear...');
+                    } else {
+                        throw new Error("Down");
+                    }
+                } catch (e) {
+                    updateMonitorCard(service, 'idle', '❌ OFFLINE (Connection Refused)');
+                }
+            }
+        }
+
+        function updateMonitorCard(serviceId, state, taskMessage) {
+            const card = document.getElementById(`srv-${serviceId}`);
+            const textBlock = document.getElementById(`task-${serviceId}`);
+            const pill = document.getElementById(`status-${serviceId}`);
+            if (!card || !textBlock || !pill) return;
+            textBlock.textContent = taskMessage;
+            pill.textContent = state;
+            card.className = 'service-card';
+            pill.className = `status-pill ${state}`;
+            if (state !== 'idle' && !taskMessage.includes('OFFLINE')) {
+                card.classList.add('active-worker');
+                if (state === 'run') card.classList.add('processing');
+                if (state === 'sync') card.classList.add('syncing');
+            }
+        }
+
+        function parseLogForMonitor(logLine) {
+            if (logLine.includes('[SANITIZER]') || logLine.toLowerCase().includes('sanitize')) {
+                updateMonitorCard('Sanitizer', 'active', 'Analyzing core media directories...');
+            }
+            if (logLine.includes('[FFMPEG]') || logLine.toLowerCase().includes('transcode')) {
+                updateMonitorCard('Transcoder', 'run', 'Processing target video vectors...');
+            }
+            if (logLine.includes('[CLOUDSYNC]') || logLine.toLowerCase().includes('storage')) {
+                updateMonitorCard('CloudSync', 'sync', 'Synchronizing remote storage branches...');
+            }
+            // Note: this page doesn't own a manual "push to cloud" progress bar
+            // (that's a catalog-row feature on admin.html), so unlike the
+            // original admin.html copy of this function, there's nothing here
+            // to wire the "[Sync Chunk Tracking]" lines into.
+        }
+
+        function connectToLogStream() {
+            const consoleTerminal = document.getElementById('terminal-stream');
+            const pauseToggle = document.getElementById('pause-scroll-toggle');
+            consoleTerminal.innerHTML = '<div style="color: #64748b;">Establishing connection to backend stream...</div>';
+            let eventSource = new EventSource('/api/admin/log-stream');
+            eventSource.onopen = function() {
+                consoleTerminal.innerHTML = `<div style="color: #10b981;">[SYSTEM] Connected to core logger pipeline. Listening for updates...</div>`;
+            };
+            eventSource.onmessage = function(event) {
+                if (!event.data || event.data.trim() === '') return;
+                const rawLines = event.data.split('\n');
+                rawLines.forEach(line => {
+                    if (!line.trim()) return;
+                    const lineEl = document.createElement('div');
+                    lineEl.className = 'log-line';
+                    if (line.includes('[ERROR]') || line.includes('❌') || line.toLowerCase().includes('error')) lineEl.className += ' log-error';
+                    if (line.includes('[WARN]') || line.includes('⚠️') || line.toLowerCase().includes('warn')) lineEl.className += ' log-warn';
+                    lineEl.textContent = line;
+                    consoleTerminal.appendChild(lineEl);
+                    parseLogForMonitor(line);
+                });
+                if (!pauseToggle || !pauseToggle.checked) {
+                    consoleTerminal.scrollTop = consoleTerminal.scrollHeight;
+                }
+            };
+            eventSource.onerror = function() {
+                eventSource.close();
+                consoleTerminal.insertAdjacentHTML('beforeend', `<div class="log-error">[SYSTEM] Core log line transport dropped. Reconnecting in 5s...</div>`);
+                setTimeout(connectToLogStream, 5000);
+            };
+        }
+
+        function toggleLogSize() {
+            const panel = document.getElementById('log-monitor-panel');
+            const btn = document.getElementById('expand-log-btn');
+            const isFull = panel.classList.toggle('fullscreen-log');
+            btn.textContent = isFull ? "Collapse Window ↙" : "Expand Window ⛶";
+            btn.style.background = isFull ? "#b91c1c" : "#334155";
+            const consoleTerminal = document.getElementById('terminal-stream');
+            setTimeout(() => { consoleTerminal.scrollTop = consoleTerminal.scrollHeight; }, 50);
+        }
+
+        function toggleMetricsSize() {
+            const panel = document.getElementById('runtime-metrics-panel');
+            const btn = document.getElementById('expand-metrics-btn');
+            if (!panel || !btn) return;
+            const isFull = panel.classList.toggle('fullscreen-metrics');
+            btn.textContent = isFull ? 'Collapse Window ↙' : 'Expand Window ⛶';
+            btn.style.background = isFull ? '#b91c1c' : '#334155';
+        }
+
+        // =====================================================================
+        // Runtime Metrics
+        // =====================================================================
+        function metricTile(label, value, subtext = '') {
+            return `
+                <div class="metric-tile">
+                    <div class="metric-label">${label}</div>
+                    <div class="metric-value">${value}</div>
+                    <div class="metric-subtext">${subtext}</div>
+                </div>
+            `;
+        }
+
+        async function fetchRuntimeMetrics() {
+            try {
+                const res = await fetch('/api/runtime/metrics', { credentials: 'include' });
+                const data = await res.json();
+                const container = document.getElementById('runtime-metrics-content');
+                if (!container) return;
+
+                if (!res.ok || !data.success) {
+                    const reason = data?.error || `HTTP ${res.status}`;
+                    container.innerHTML = `<div style="color:#fca5a5; font-size:0.82rem; border:1px solid #7f1d1d; border-radius:8px; padding:10px; background:#1f1114;">Metrics unavailable: ${reason}</div>`;
+                    return;
+                }
+
+                const memory = data.memory || {};
+                const requestMetrics = data.requestMetrics || {};
+                const byStatus = requestMetrics.byStatusClass || {};
+                const sessionMetrics = data.sessionMetrics || {};
+                const activeUsers = Array.isArray(sessionMetrics.activeUsers) ? sessionMetrics.activeUsers : [];
+                const startedAt = data.startedAt ? formatRelativeTime(data.startedAt) : 'n/a';
+                const loadTriplet = data.system && Array.isArray(data.system.loadAverage)
+                    ? data.system.loadAverage.map((n) => Number(n).toFixed(2)).join(' / ')
+                    : 'n/a';
+
+                const activeUserRows = activeUsers.length
+                    ? activeUsers.slice(0, 8).map((row) => `
+                        <div class="metrics-user-row">
+                            <span>${row.user}</span>
+                            <span style="color:#94a3b8;">${row.requestCount || 0} req • ${formatRelativeTime(row.lastSeenAt)}</span>
+                        </div>
+                    `).join('')
+                    : '<div class="metrics-user-row" style="justify-content:center; color:#64748b;">No active users in current window.</div>';
+
+                container.innerHTML = `
+                    <div class="metrics-grid">
+                        ${metricTile('Active Users', String(sessionMetrics.activeUserCount || 0), `${sessionMetrics.windowMinutes || 15}m activity window`)}
+                        ${metricTile('Open Requests', String(requestMetrics.activeRequests || 0), `${requestMetrics.totalRequests || 0} total requests`)}
+                        ${metricTile('Error Rate', `${requestMetrics.totalErrors || 0}`, `5xx total, 4xx=${byStatus['4xx'] || 0} | 5xx=${byStatus['5xx'] || 0}`)}
+                        ${metricTile('Runtime', formatUptime(data.uptimeSec), `started ${startedAt}`)}
+                        ${metricTile('Heap Used', formatBytes(memory.heapUsed), `${formatBytes(memory.heapTotal)} total heap`)}
+                        ${metricTile('RSS Memory', formatBytes(memory.rss), `external ${formatBytes(memory.external)}`)}
+                        ${metricTile('Node', String(data.version || 'dev'), `pid ${data.pid || '-'} | ${data.service || 'service'}`)}
+                        ${metricTile('System Load', loadTriplet, data.system?.cpuCount ? `${data.system.cpuCount} vCPU` : 'load metrics pending')}
+                    </div>
+                    <div style="margin-top:4px; margin-bottom:6px; color:#93c5fd; font-size:0.78rem; font-weight:700;">Most Active Sessions</div>
+                    <div class="metrics-users-list">${activeUserRows}</div>
+                `;
+            } catch (err) {
+                const container = document.getElementById('runtime-metrics-content');
+                if (container) container.innerHTML = '<div style="color:#f87171; font-size:0.82rem;">Runtime metrics request failed.</div>';
+                console.error('[Ops] fetchRuntimeMetrics failed:', err);
+            }
+        }
+
+        // =====================================================================
+        // Queue Failures & Retry
+        // =====================================================================
+        async function fetchFailedJobs() {
+            const container = document.getElementById('failed-jobs-list');
+            if (!container) return;
+            try {
+                const res = await fetch('/api/jobs/failed', { credentials: 'include' });
+                const data = await res.json();
+                if (!data.success || !Array.isArray(data.jobs)) {
+                    container.innerHTML = '<span style="color:#f87171;">Failed to load queue failure state.</span>';
+                    return;
+                }
+                if (data.jobs.length === 0) {
+                    container.innerHTML = '<span style="color:#10b981;">No failed jobs detected.</span>';
+                    return;
+                }
+                container.innerHTML = data.jobs.map(job => `
+                    <div class="failed-job-row">
+                        <div class="failed-job-title">${job.title}</div>
+                        <div class="failed-job-meta">Stage: ${job.stage} | Error: ${job.error || 'Unknown error'}</div>
+                        <div class="failed-job-actions">
+                            <button class="btn-retry" onclick="retryFailedJob('${job.jobId}')">Retry Job</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<span style="color:#f87171;">Error loading failed jobs.</span>';
+                console.error('[Ops] fetchFailedJobs failed:', err);
+            }
+        }
+
+        async function retryFailedJob(jobId) {
+            try {
+                const res = await fetch(`/api/job/${jobId}/retry`, { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Retry failed: ' + (data.error || 'Unknown error'), 'error', 4200);
+                    return;
+                }
+                showToast('Job queued for retry.', 'success');
+                fetchFailedJobs();
+                checkWorkerHealth();
+            } catch (err) {
+                showToast('Retry request failed. See logs.', 'error', 4200);
+            }
+        }
+
+        // =====================================================================
+        // Operations Centre - pipeline/item/scheduler queue tiles + click-to-
+        // expand job detail with retry/remove control.
+        // =====================================================================
+        function stagePillClass(value) {
+            return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        }
+
+        let lastFetchedLegacyJobs = [];
+        let selectedQueueTile = null; // { group, key, label }
+
+        function opsQueueTile(queue) {
+            const c = queue.counts || {};
+            const hasFailed = (c.failed || 0) > 0;
+            const isSelected = selectedQueueTile && selectedQueueTile.group === queue.group && selectedQueueTile.key === queue.key;
+            return `
+                <div class="ops-queue-tile ${hasFailed ? 'has-failed' : ''} ${isSelected ? 'selected' : ''}" onclick="selectQueueTile('${queue.group}', '${escapeHtml(queue.key)}', '${escapeHtml(queue.label)}')">
+                    <div class="ops-queue-name">
+                        <span>${queue.label}</span>
+                        ${queue.isPaused ? '<span class="ops-queue-paused">paused</span>' : ''}
+                    </div>
+                    <div class="ops-queue-counts">
+                        <span class="active-n">${c.active || 0} <span style="color:#64748b;">active</span></span>
+                        <span>${c.waiting || 0} <span style="color:#64748b;">waiting</span></span>
+                        <span>${c.delayed || 0} <span style="color:#64748b;">delayed</span></span>
+                        <span class="${hasFailed ? 'failed-n' : ''}">${c.failed || 0} <span style="color:#64748b;">failed</span></span>
+                        <span>${c.completed || 0} <span style="color:#64748b;">done</span></span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function opsJobRow(job) {
+            const errorLine = job.error ? `<div class="ops-job-error">${job.error}</div>` : '';
+            const managedBadge = job.bullmqManaged
+                ? '<span class="stage-pill" style="border-color:#1d4ed8; color:#93c5fd;">bullmq</span>'
+                : '<span class="stage-pill" style="opacity:0.6;">legacy</span>';
+            return `
+                <div class="ops-job-row">
+                    <div>
+                        <div class="ops-job-title" title="${job.title}">${job.title}</div>
+                        <div class="ops-job-meta">${job.contentType || ''}${job.imdbId ? ' • ' + job.imdbId : ''}</div>
+                        ${errorLine}
+                    </div>
+                    <div><span class="stage-pill step-${stagePillClass(job.status)}">${job.status}</span></div>
+                    <div><span class="stage-pill step-${stagePillClass(job.currentStep)}">${job.currentStep}</span></div>
+                    <div class="ops-job-meta">${formatRelativeTime(job.updatedAt || job.createdAt)}</div>
+                    <div>${managedBadge}</div>
+                </div>
+            `;
+        }
+
+        async function fetchOperationsCentreQueues() {
+            const pipelineGrid = document.getElementById('ops-pipeline-queue-grid');
+            const itemGrid = document.getElementById('ops-item-queue-grid');
+            const schedulerGrid = document.getElementById('ops-scheduler-queue-grid');
+            if (!pipelineGrid && !itemGrid && !schedulerGrid) return;
+
+            try {
+                const res = await fetch('/api/admin/operations/queues', { credentials: 'include' });
+                const data = await res.json();
+                if (!res.ok || !data.success || !Array.isArray(data.queues)) {
+                    const msg = `<div style="color:#fca5a5; font-size:0.8rem;">Queue overview unavailable: ${data?.error || 'HTTP ' + res.status}</div>`;
+                    if (pipelineGrid) pipelineGrid.innerHTML = msg;
+                    if (itemGrid) itemGrid.innerHTML = '';
+                    if (schedulerGrid) schedulerGrid.innerHTML = '';
+                    return;
+                }
+
+                // /operations/queues groups everything as 'pipeline' or
+                // 'scheduler' - the per-episode item queues (TRANSCODE_ITEM /
+                // CLOUDSYNC_ITEM) come back tagged 'pipeline' too but with a
+                // key that isn't a real STAGE_ORDER stage, so split those out
+                // here rather than needing a third group value server-side.
+                const STAGE_KEYS = ['INGEST', 'METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC'];
+                const pipeline = data.queues.filter(q => q.group === 'pipeline' && STAGE_KEYS.includes(q.key));
+                const items = data.queues.filter(q => q.group === 'pipeline' && !STAGE_KEYS.includes(q.key));
+                const scheduler = data.queues.filter(q => q.group === 'scheduler');
+                if (pipelineGrid) pipelineGrid.innerHTML = pipeline.map(opsQueueTile).join('') || '<div style="color:#64748b; font-size:0.78rem;">No pipeline queues found.</div>';
+                if (itemGrid) itemGrid.innerHTML = items.map((q) => opsQueueTile({ ...q, group: 'pipeline-item' })).join('') || '<div style="color:#64748b; font-size:0.78rem;">No item queues found.</div>';
+                if (schedulerGrid) schedulerGrid.innerHTML = scheduler.map(opsQueueTile).join('') || '<div style="color:#64748b; font-size:0.78rem;">No scheduler queues found.</div>';
+            } catch (err) {
+                console.error('[Ops] fetchOperationsCentreQueues failed:', err);
+                if (pipelineGrid) pipelineGrid.innerHTML = '<div style="color:#f87171; font-size:0.8rem;">Queue overview request failed.</div>';
+            }
+        }
+
+        async function fetchOperationsCentreJobs() {
+            const container = document.getElementById('ops-jobs-list');
+            const summary = document.getElementById('ops-jobs-summary');
+            if (!container) return;
+
+            try {
+                const res = await fetch('/api/admin/operations/pipeline-jobs?limit=50', { credentials: 'include' });
+                const data = await res.json();
+                if (!res.ok || !data.success || !Array.isArray(data.jobs)) {
+                    container.innerHTML = `<div style="color:#fca5a5; font-size:0.8rem; padding:10px;">Job list unavailable: ${data?.error || 'HTTP ' + res.status}</div>`;
+                    return;
+                }
+
+                lastFetchedLegacyJobs = data.jobs;
+                if (summary) summary.textContent = `${data.totalActive} total in queue`;
+                container.innerHTML = data.jobs.length
+                    ? data.jobs.map(opsJobRow).join('')
+                    : '<div style="color:#64748b; font-size:0.78rem; padding:10px;">No pipeline jobs right now.</div>';
+
+                // Keep an open expand panel in sync with the latest fetch
+                // instead of going stale until the next click.
+                if (selectedQueueTile && selectedQueueTile.group === 'pipeline') {
+                    renderExpandedLegacyJobs();
+                }
+            } catch (err) {
+                console.error('[Ops] fetchOperationsCentreJobs failed:', err);
+                container.innerHTML = '<div style="color:#f87171; font-size:0.8rem; padding:10px;">Job list request failed.</div>';
+            }
+        }
+
+        function fetchOperationsCentreData() {
+            fetchOperationsCentreQueues();
+            fetchOperationsCentreJobs();
+        }
+
+        async function selectQueueTile(group, key, label) {
+            const expanded = document.getElementById('ops-queue-expanded');
+            if (!expanded) return;
+
+            if (selectedQueueTile && selectedQueueTile.group === group && selectedQueueTile.key === key) {
+                // Clicking the same tile again collapses it.
+                selectedQueueTile = null;
+                expanded.style.display = 'none';
+                expanded.innerHTML = '';
+                fetchOperationsCentreQueues();
+                return;
+            }
+
+            selectedQueueTile = { group, key, label };
+            expanded.style.display = 'block';
+            fetchOperationsCentreQueues(); // re-render tiles with the new selected state
+
+            if (group === 'pipeline') {
+                renderExpandedLegacyJobs();
+                return;
+            }
+
+            expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)}</div><div style="color:#64748b; font-size:0.78rem;">Loading…</div>`;
+            try {
+                const res = await fetch(`/api/admin/operations/queue-jobs?group=${encodeURIComponent(group)}&key=${encodeURIComponent(key)}`, { credentials: 'include' });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)}</div><div style="color:#fca5a5; font-size:0.8rem;">${escapeHtml(data?.error || 'Failed to load jobs.')}</div>`;
+                    return;
+                }
+                renderExpandedBullmqJobs(data.jobs, group, key, label);
+            } catch (err) {
+                expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)}</div><div style="color:#fca5a5; font-size:0.8rem;">Request failed.</div>`;
+            }
+        }
+
+        function renderExpandedLegacyJobs() {
+            const expanded = document.getElementById('ops-queue-expanded');
+            if (!expanded || !selectedQueueTile) return;
+            const { key, label } = selectedQueueTile;
+            const rows = lastFetchedLegacyJobs.filter((job) => job.currentStep === key);
+
+            if (!rows.length) {
+                expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)} - current tasks</div><div style="color:#64748b; font-size:0.78rem;">Nothing at this stage right now.</div>`;
+                return;
+            }
+
+            expanded.innerHTML = `
+                <div class="ops-expanded-title">${escapeHtml(label)} - current tasks (${rows.length})</div>
+                ${rows.map((job) => `
+                    <div class="ops-expanded-job">
+                        <div>
+                            <div class="ops-job-title">${escapeHtml(job.title)}</div>
+                            <div class="ops-job-meta">${escapeHtml(job.status)} • ${formatRelativeTime(job.updatedAt || job.createdAt)}${job.error ? ` • <span style="color:#fca5a5;">${escapeHtml(job.error)}</span>` : ''}</div>
+                        </div>
+                        <div class="ops-expanded-job-actions">
+                            ${job.status === 'FAILED' ? `<button class="btn-retry" onclick="retryLegacyJob('${escapeHtml(job.id)}')">Retry</button>` : ''}
+                            <button style="background:#334155;" onclick="removeLegacyJob('${escapeHtml(job.id)}')">Remove</button>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function renderExpandedBullmqJobs(jobs, group, key, label) {
+            const expanded = document.getElementById('ops-queue-expanded');
+            if (!expanded) return;
+
+            if (!Array.isArray(jobs) || !jobs.length) {
+                expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)} - recent jobs</div><div style="color:#64748b; font-size:0.78rem;">No recent jobs in this queue.</div>`;
+                return;
+            }
+
+            expanded.innerHTML = `
+                <div class="ops-expanded-title">${escapeHtml(label)} - recent jobs (${jobs.length})</div>
+                ${jobs.map((job) => {
+                    const when = job.finishedOn || job.processedOn || job.timestamp;
+                    const detail = job.data?.localPath || job.data?.inputPath || job.name || job.id;
+                    return `
+                        <div class="ops-expanded-job">
+                            <div>
+                                <div class="ops-job-title">${escapeHtml(String(detail))}</div>
+                                <div class="ops-job-meta">${escapeHtml(job.state)} • ${when ? formatRelativeTime(new Date(when).toISOString()) : 'n/a'}${job.failedReason ? ` • <span style="color:#fca5a5;">${escapeHtml(job.failedReason)}</span>` : ''}</div>
+                            </div>
+                            <div class="ops-expanded-job-actions">
+                                ${job.state === 'failed' ? `<button class="btn-retry" onclick="retryBullmqJob('${escapeHtml(group)}','${escapeHtml(key)}','${escapeHtml(job.id)}')">Retry</button>` : ''}
+                                <button style="background:#334155;" onclick="removeBullmqJob('${escapeHtml(group)}','${escapeHtml(key)}','${escapeHtml(job.id)}')">Remove</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            `;
+        }
+
+        async function retryLegacyJob(id) {
+            try {
+                const res = await fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(id)}/retry`, { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) { showToast('Retry failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
+                showToast('Job re-queued.', 'success', 2600);
+                fetchOperationsCentreData();
+            } catch (err) {
+                showToast('Retry request failed.', 'error', 4200);
+            }
+        }
+
+        async function removeLegacyJob(id) {
+            if (!confirm('Remove this job record? This cannot be undone.')) return;
+            try {
+                const res = await fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(id)}/remove`, { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) { showToast('Remove failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
+                showToast('Job removed.', 'success', 2400);
+                fetchOperationsCentreData();
+            } catch (err) {
+                showToast('Remove request failed.', 'error', 4200);
+            }
+        }
+
+        async function retryBullmqJob(group, key, jobId) {
+            try {
+                const res = await fetch(`/api/admin/operations/queue-jobs/${encodeURIComponent(group)}/${encodeURIComponent(key)}/${encodeURIComponent(jobId)}/retry`, { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) { showToast('Retry failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
+                showToast('Job re-queued.', 'success', 2600);
+                const label = selectedQueueTile?.label || key;
+                selectedQueueTile = null; // force selectQueueTile to re-open with a fresh fetch, not toggle-close
+                selectQueueTile(group, key, label);
+            } catch (err) {
+                showToast('Retry request failed.', 'error', 4200);
+            }
+        }
+
+        async function removeBullmqJob(group, key, jobId) {
+            if (!confirm('Remove this job? This cannot be undone.')) return;
+            try {
+                const res = await fetch(`/api/admin/operations/queue-jobs/${encodeURIComponent(group)}/${encodeURIComponent(key)}/${encodeURIComponent(jobId)}/remove`, { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) { showToast('Remove failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
+                showToast('Job removed.', 'success', 2400);
+                const label = selectedQueueTile?.label || key;
+                selectedQueueTile = null; // force selectQueueTile to treat this as a fresh open, not a toggle-close
+                selectQueueTile(group, key, label);
+            } catch (err) {
+                showToast('Remove request failed.', 'error', 4200);
+            }
+        }
+
+        // =====================================================================
+        // Universal Content Search (blank by default, search-on-demand - does
+        // not load the whole library) - find an item, then run a worker
+        // against it. Deeper editing (rename/repair/archive/etc) still opens
+        // the full admin catalog for now.
+        // =====================================================================
+        function setAdminLiveSearchResults(items = []) {
+            const box = document.getElementById('admin-live-search-results');
+            if (!box) return;
+
+            if (!Array.isArray(items) || items.length === 0) {
+                box.innerHTML = '<div style="color:#94a3b8;padding:12px;text-align:center;">Type a title or IMDb ID to search local movies and TV.</div>';
+                return;
+            }
+
+            box.innerHTML = items.map((item, index) => {
+                const yearValue = item.type === 'series' ? item.startYear || item.year || '' : item.year || '';
+                const title = item.title || item.originalTitle || item.id || 'Untitled';
+                const metaParts = [];
+                if (yearValue) metaParts.push(yearValue);
+                if (item.imdbId) metaParts.push(item.imdbId);
+                if (item.type) metaParts.push(item.type === 'series' ? 'TV' : 'Movie');
+                if (item.inLibrary) metaParts.push('In library');
+
+                const workerOptions = ['METADATA', 'SUBTITLES', 'TRANSCODE', 'CLOUDSYNC', 'RUN_ALL'];
+                const runControls = (item.inLibrary && item.folderName)
+                    ? `
+                        <select id="search-worker-${index}" style="font-size:0.78rem; padding:6px;">
+                            ${workerOptions.map((w) => `<option value="${w}">${w}</option>`).join('')}
+                        </select>
+                        <button type="button" style="background:#1d4ed8;" onclick="runWorkerFromSearch(${index})">Run Worker</button>
+                    `
+                    : '';
+
+                return `
+                    <div class="admin-live-search-item" data-folder="${escapeHtml(item.folderName || '')}" data-type="${escapeHtml(item.type || '')}">
+                        <div class="admin-live-search-item-main">
+                            <div class="admin-live-search-item-title">${escapeHtml(title)}</div>
+                            <div class="admin-live-search-item-meta">${escapeHtml(metaParts.join(' • '))}</div>
+                        </div>
+                        <div class="admin-live-search-item-actions">
+                            ${item.localHref ? `<a href="${escapeHtml(item.localHref)}" style="background:#334155;color:white;border-radius:6px;padding:8px 10px;text-decoration:none;font-size:0.82rem;">Open</a>` : ''}
+                            ${runControls}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        let lastAdminLiveSearchResults = [];
+
+        async function runWorkerFromSearch(index) {
+            const item = lastAdminLiveSearchResults[index];
+            const select = document.getElementById(`search-worker-${index}`);
+            if (!item || !select) return;
+            const worker = select.value;
+
+            try {
+                showToast(`Queuing ${worker} for ${item.title}...`, 'info', 2400);
+                const res = await fetch('/api/admin/queue-worker-run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: item.folderName, contentType: item.type === 'series' ? 'series' : 'movie', worker })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast(`Failed to queue: ${data.error || 'Unknown error'}`, 'error', 4200);
+                    return;
+                }
+                showToast(`Queued (job ${data.jobId}, starting at ${data.currentStep}) - watch it in the Operations Centre above.`, 'success', 5000);
+            } catch (err) {
+                showToast('Worker trigger request failed.', 'error', 4200);
+            }
+        }
+
+        function hideAdminLiveSearchResults() {
+            const box = document.getElementById('admin-live-search-results');
+            if (!box) return;
+            box.innerHTML = '<div style="color:#94a3b8;padding:12px;text-align:center;">Type a title or IMDb ID to search local movies and TV.</div>';
+        }
+
+        function clearAdminLiveSearch() {
+            const input = document.getElementById('admin-live-search-input');
+            if (input) input.value = '';
+            hideAdminLiveSearchResults();
+        }
+
+        async function performAdminLiveSearch() {
+            const query = (document.getElementById('admin-live-search-input')?.value || '').trim();
+            const type = (document.getElementById('admin-live-search-type')?.value || 'both').trim().toLowerCase();
+            const results = [];
+
+            if (!query) {
+                hideAdminLiveSearchResults();
+                return;
+            }
+
+            try {
+                const moviePromise = (type === 'movies' || type === 'both')
+                    ? fetch(`/api/movies/search/index?q=${encodeURIComponent(query)}&limit=12&localOnly=0`, { credentials: 'include' })
+                    : Promise.resolve({ ok: true, json: async () => ({ success: true, items: [] }) });
+                const tvPromise = (type === 'series' || type === 'both')
+                    ? fetch(`/api/tv-shows/search?q=${encodeURIComponent(query)}&limit=12&localOnly=1`, { credentials: 'include' })
+                    : Promise.resolve({ ok: true, json: async () => ({ success: true, items: [] }) });
+
+                const [movieRes, tvRes] = await Promise.all([moviePromise, tvPromise]);
+                const [movieData, tvData] = await Promise.all([movieRes.ok ? movieRes.json() : { success: false }, tvRes.ok ? tvRes.json() : { success: false }]);
+
+                if (movieData.success && Array.isArray(movieData.items)) {
+                    results.push(...movieData.items.map((item) => ({
+                        title: item.title || item.id || 'Movie',
+                        imdbId: item.imdbId || item.imdbID || '',
+                        year: item.year || '',
+                        type: 'movie',
+                        inLibrary: Boolean(item.inLibrary),
+                        folderName: item.localItem?.id || '',
+                        localHref: item.localItem?.href || null
+                    })));
+                }
+
+                if (tvData.success && Array.isArray(tvData.items)) {
+                    results.push(...tvData.items.map((item) => ({
+                        title: item.title || item.originalTitle || 'TV Show',
+                        imdbId: item.imdbId || '',
+                        year: item.startYear || item.year || '',
+                        type: 'series',
+                        inLibrary: Boolean(item.inLibrary),
+                        folderName: item.folderName || '',
+                        localHref: item.localHref || null
+                    })));
+                }
+
+                lastAdminLiveSearchResults = results.slice(0, 16);
+                setAdminLiveSearchResults(lastAdminLiveSearchResults);
+            } catch (err) {
+                lastAdminLiveSearchResults = [];
+                setAdminLiveSearchResults([]);
+                showToast(`Search failed: ${err.message || 'Unknown error'}`, 'error', 4200);
+            }
+        }
+
+        const searchAdminLiveResults = debounce(performAdminLiveSearch, 260);
+
+        // Execution mounts
+        connectToLogStream();
+        fetchRuntimeMetrics();
+        fetchFailedJobs();
+        fetchOperationsCentreData();
+        checkWorkerHealth();
+        setInterval(fetchRuntimeMetrics, 30000);
+        setInterval(fetchOperationsCentreData, 5000);
+        setInterval(checkWorkerHealth, 5000);
+        setInterval(fetchFailedJobs, 7000);
+    </script>
+    <script src="/js/api-failover.js"></script>
+    <script src="/js/region-badge.js" defer></script>
+</body>
+</html>

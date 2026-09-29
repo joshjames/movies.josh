@@ -3042,6 +3042,116 @@ router.get('/operations/pipeline-jobs', async (req, res) => {
     }
 });
 
+// POST /api/admin/operations/pipeline-jobs/:id/retry - re-queue a legacy
+// job at its current stage (the pipeline-runner's poll loop only ever picks
+// up status:'QUEUED' jobs - see PipelineQueueService.getNextRunnableJob).
+router.post('/operations/pipeline-jobs/:id/retry', async (req, res) => {
+    try {
+        const job = await PipelineQueueService.getJob(req.params.id);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+        const updated = await PipelineQueueService.updateJob(job, { status: 'QUEUED', error: null });
+        return res.json({ success: true, job: updated });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /api/admin/operations/pipeline-jobs/:id/remove - drop a legacy job
+// record entirely (e.g. a stale FAILED entry after the underlying issue was
+// fixed a different way - previously only doable via a manual script).
+router.post('/operations/pipeline-jobs/:id/remove', async (req, res) => {
+    try {
+        await PipelineQueueService.removeJob(req.params.id);
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Resolves a {group, key} pair (as shown in the /operations/queues tiles)
+// back to the real BullQueue instance backing it, for the generic
+// queue-jobs listing/control endpoints below. Covers every queue on the
+// dashboard: pipeline stages, per-episode item queues, and scheduler queues.
+function resolveQueueByGroupAndKey(group, key) {
+    if (group === 'pipeline' && STAGE_ORDER.includes(key)) {
+        return getPipelineQueue(key);
+    }
+    if (group === 'pipeline-item') {
+        const itemDef = ITEM_QUEUE_DEFS.find((d) => d.key === key);
+        return itemDef ? getCachedItemQueue(itemDef.name) : null;
+    }
+    if (group === 'scheduler') {
+        const schedulerDef = SCHEDULER_QUEUE_DEFS.find((d) => d.key === key);
+        return schedulerDef ? getCachedSchedulerQueue(schedulerDef.name) : null;
+    }
+    return null;
+}
+
+// GET /api/admin/operations/queue-jobs?group=X&key=Y - real BullMQ job list
+// for one queue tile. Scheduler and per-episode item queues have no legacy
+// PipelineQueueService equivalent (that store only tracks whole-content-item
+// progress, not individual BullMQ jobs), so this is the only place to see
+// what a scheduler/item queue actually did recently.
+router.get('/operations/queue-jobs', async (req, res) => {
+    try {
+        const { group, key } = req.query;
+        const queue = resolveQueueByGroupAndKey(String(group || ''), String(key || ''));
+        if (!queue) {
+            return res.status(400).json({ success: false, error: 'Unknown group/key.' });
+        }
+
+        const states = ['active', 'waiting', 'delayed', 'failed', 'completed'];
+        const jobs = await queue.getJobs(states, 0, 24);
+        const withState = await Promise.all(jobs.map(async (job) => ({
+            id: job.id,
+            name: job.name,
+            data: job.data,
+            state: await job.getState(),
+            attemptsMade: job.attemptsMade,
+            timestamp: job.timestamp,
+            processedOn: job.processedOn,
+            finishedOn: job.finishedOn,
+            failedReason: job.failedReason || null,
+            returnvalue: job.returnvalue ?? null
+        })));
+        withState.sort((a, b) => (b.finishedOn || b.processedOn || b.timestamp || 0) - (a.finishedOn || a.processedOn || a.timestamp || 0));
+
+        return res.json({ success: true, group, key, count: withState.length, jobs: withState });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /api/admin/operations/queue-jobs/:group/:key/:jobId/:action - retry
+// or remove one real BullMQ job directly (action is 'retry' or 'remove').
+router.post('/operations/queue-jobs/:group/:key/:jobId/:action', async (req, res) => {
+    try {
+        const { group, key, jobId, action } = req.params;
+        if (!['retry', 'remove'].includes(action)) {
+            return res.status(400).json({ success: false, error: 'Unsupported action.' });
+        }
+        const queue = resolveQueueByGroupAndKey(group, key);
+        if (!queue) {
+            return res.status(400).json({ success: false, error: 'Unknown group/key.' });
+        }
+        const job = await queue.getJob(jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: 'Job not found.' });
+        }
+
+        if (action === 'retry') {
+            await job.retry();
+        } else {
+            await job.remove();
+        }
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // =========================================================================
 // 📦 IMDb Dataset Operations Endpoints
 // =========================================================================
