@@ -255,7 +255,7 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
 
         for (const folder of currentFolders) {
             const normalizedFolder = folder.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (normalizedFolder === normalizedTarget || normalizedFolder.includes(normalizedTarget)) {
+            if (normalizedFolder === normalizedTarget) {
                 return folder;
             }
 
@@ -267,7 +267,13 @@ function findExistingShowFolder(cleanTitle, targetSeriesDir) {
                 const metaTitle = String(metadata.title || metadata.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
                 const metaImdb = normalizeImdbId(metadata.imdbId || metadata.imdbID || '');
 
-                if (metaTitle && (metaTitle === normalizedTarget || metaTitle.includes(normalizedTarget) || normalizedTarget.includes(metaTitle))) {
+                // Exact-normalized-title match only. This is a fallback path used
+                // when no imdbId match was found (findExistingShowFolderByImdbId
+                // above), so it must not resolve two DIFFERENT shows into one
+                // folder just because one title is a substring of the other
+                // (e.g. "Dark Matter" contains "Dark") - a real collision that
+                // merged two shows' files and metadata into one folder.
+                if (metaTitle && metaTitle === normalizedTarget) {
                     return folder;
                 }
             } catch (_err) {

@@ -2985,6 +2985,27 @@ router.get('/operations/queues', async (req, res) => {
     }
 });
 
+// POST /api/admin/scheduler-run - force one of the periodic scheduler queues
+// (public-rows-refresh, metadata-mirror, etc) to run right now instead of
+// waiting for its own schedule. Each of these queues' Worker ignores job
+// name/data and just re-runs its one full task, so adding any job is enough
+// to trigger it (see SchedulerWorker.js).
+router.post('/scheduler-run', async (req, res) => {
+    try {
+        const { queueKey } = req.body || {};
+        const def = SCHEDULER_QUEUE_DEFS.find((d) => d.key === String(queueKey || '').toUpperCase());
+        if (!def) {
+            return res.status(400).json({ success: false, error: `Unknown queueKey. Valid: ${SCHEDULER_QUEUE_DEFS.map((d) => d.key).join(', ')}` });
+        }
+
+        const queue = getCachedSchedulerQueue(def.name);
+        const job = await queue.add('manual-run', { triggeredBy: 'admin', triggeredAt: new Date().toISOString() });
+        return res.json({ success: true, queueKey: def.key, jobId: job.id });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET /api/admin/operations/pipeline-jobs - the legacy PipelineQueueService
 // job list (id/status/currentStep/history) - this, not the BullMQ queues
 // themselves, is what actually shows a job moving stage to stage, since

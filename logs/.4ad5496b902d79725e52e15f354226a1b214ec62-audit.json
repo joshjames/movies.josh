@@ -19,6 +19,16 @@
             "date": 1790061002558,
             "name": "/home/epic/movie-streamer/logs/anymovie-2026-09-22.log",
             "hash": "cb172a7d02cb0ef8ef90445f2aad38b981054d7563cd3b340c4d383b65e9fa95"
+        },
+        {
+            "date": 1790507072288,
+            "name": "/home/epic/movie-streamer/logs/anymovie-2026-09-27.log",
+            "hash": "273485640fc6a045fec15d8193dd42c10c040122596e411d791fdcc4c1063793"
+        },
+        {
+            "date": 1790582158143,
+            "name": "/home/epic/movie-streamer/logs/anymovie-2026-09-28.log",
+            "hash": "549c4dd4b5e3af8bf567739e2ebd1d463b0958f73b0336cd4e49c5651f1ff152"
         }
     ],
     "hashType": "sha256"

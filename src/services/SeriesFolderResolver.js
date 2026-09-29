@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { listSeriesFolders } = require('./StoragePathResolver');
+const logger = require('../utils/logger');
 
 function normalizeImdbId(value) {
     const cleaned = String(value || '').trim().toLowerCase().replace(/^tt/, '');
@@ -59,6 +60,16 @@ function ensureSeriesMetadataImdb(showRootPath, { imdbId = '', title = '' } = {}
     const folderName = path.basename(showRootPath);
     const metadataPath = path.join(showRootPath, 'metadata.json');
     const existing = readJsonSafe(metadataPath) || {};
+
+    const existingImdbId = normalizeImdbId(existing.imdbId || existing.imdb_id || '');
+    if (existingImdbId && existingImdbId !== cleanImdbId) {
+        // The folder already claims a DIFFERENT show's imdbId - writing over it
+        // silently is exactly how the Dark/Dark Matter folder collision merged
+        // two shows' metadata into one file. Log loudly so a wrong-folder match
+        // upstream is visible instead of getting quietly compounded.
+        logger.warn(`⚠️ [SeriesFolderResolver] Refusing to guess: ${folderName}'s metadata.json already has imdbId ${existingImdbId}, but this call wants to set ${cleanImdbId} - a wrong-folder match upstream likely caused this. Skipping write.`);
+        return { updated: false, imdbId: existingImdbId, conflict: true };
+    }
 
     const merged = {
         ...existing,
