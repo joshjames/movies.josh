@@ -448,21 +448,51 @@
         .ops-queue-counts .n.failed-n { color: #f87171; }
         .ops-queue-counts .n.active-n { color: #38bdf8; }
 
-        .ops-jobs-list { border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
-        .ops-job-row {
-            display: grid;
-            grid-template-columns: 1.6fr 0.9fr 0.9fr 1fr 0.7fr;
-            gap: 10px;
+        .ops-jobs-list { border: 1px solid #334155; border-radius: 8px; overflow: auto; max-height: 480px; }
+
+        .ops-table-toolbar {
+            display: flex;
             align-items: center;
-            padding: 8px 10px;
-            border-bottom: 1px solid #1e293b;
-            font-size: 0.78rem;
-            color: #cbd5e1;
+            gap: 8px;
+            padding: 6px 8px;
+            background: #0b1220;
+            border-bottom: 1px solid #334155;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
-        .ops-job-row:last-child { border-bottom: none; }
-        .ops-job-title { font-weight: 700; color: #f8fafc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .ops-job-error { color: #fca5a5; font-size: 0.72rem; margin-top: 2px; }
-        .ops-job-meta { color: #64748b; font-size: 0.7rem; }
+        .ops-table-toolbar .ops-selected-count { font-size: 0.72rem; color: #93c5fd; margin-right: auto; }
+        .ops-table-toolbar button { font-size: 0.72rem; padding: 4px 9px; }
+        .ops-table-toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .ops-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; color: #cbd5e1; }
+        .ops-table th {
+            position: sticky;
+            top: 33px; /* sits directly under the toolbar row above */
+            background: #0f172a;
+            text-align: left;
+            padding: 5px 8px;
+            font-size: 0.64rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #93c5fd;
+            border-bottom: 1px solid #334155;
+            white-space: nowrap;
+        }
+        .ops-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 260px;
+        }
+        .ops-table tr.ops-row:hover { background: #111827; cursor: pointer; }
+        .ops-table tr.ops-row.selected { background: #0b1220; }
+        .ops-table td.ops-col-check { width: 22px; padding-right: 0; }
+        .ops-table td.ops-col-title { font-weight: 700; color: #f8fafc; }
+        .ops-table td.ops-col-error { color: #fca5a5; max-width: 320px; }
 
         .stage-pill {
             display: inline-block;

@@ -467,7 +467,10 @@
         }
 
         let lastFetchedLegacyJobs = [];
+        let lastFetchedExpandedBullmqJobs = [];
         let selectedQueueTile = null; // { group, key, label }
+        let selectedJobIds = new Set(); // selection for the main "Pipeline Jobs (all stages)" table
+        let selectedExpandedIds = new Set(); // selection for whichever queue tile is currently expanded
 
         function opsQueueTile(queue) {
             const c = queue.counts || {};
@@ -490,24 +493,72 @@
             `;
         }
 
-        function opsJobRow(job) {
-            const errorLine = job.error ? `<div class="ops-job-error">${job.error}</div>` : '';
-            const managedBadge = job.bullmqManaged
-                ? '<span class="stage-pill" style="border-color:#1d4ed8; color:#93c5fd;">bullmq</span>'
-                : '<span class="stage-pill" style="opacity:0.6;">legacy</span>';
-            return `
-                <div class="ops-job-row">
-                    <div>
-                        <div class="ops-job-title" title="${job.title}">${job.title}</div>
-                        <div class="ops-job-meta">${job.contentType || ''}${job.imdbId ? ' • ' + job.imdbId : ''}</div>
-                        ${errorLine}
-                    </div>
-                    <div><span class="stage-pill step-${stagePillClass(job.status)}">${job.status}</span></div>
-                    <div><span class="stage-pill step-${stagePillClass(job.currentStep)}">${job.currentStep}</span></div>
-                    <div class="ops-job-meta">${formatRelativeTime(job.updatedAt || job.createdAt)}</div>
-                    <div>${managedBadge}</div>
+        function toggleJobSelection(id) {
+            if (selectedJobIds.has(id)) selectedJobIds.delete(id); else selectedJobIds.add(id);
+            renderJobsTable(lastFetchedLegacyJobs);
+        }
+
+        function renderJobsTable(jobs) {
+            const container = document.getElementById('ops-jobs-list');
+            if (!container) return;
+
+            if (!jobs.length) {
+                container.innerHTML = '<div style="color:#64748b; font-size:0.78rem; padding:10px;">No pipeline jobs right now.</div>';
+                return;
+            }
+
+            const selectedCount = jobs.filter((j) => selectedJobIds.has(j.id)).length;
+            const anyFailedSelected = jobs.some((j) => selectedJobIds.has(j.id) && j.status === 'FAILED');
+
+            container.innerHTML = `
+                <div class="ops-table-toolbar">
+                    <span class="ops-selected-count">${selectedCount} selected</span>
+                    <button class="btn-retry" ${anyFailedSelected ? '' : 'disabled'} onclick="bulkRetryLegacyJobs()">Retry Selected</button>
+                    <button style="background:#334155;" ${selectedCount ? '' : 'disabled'} onclick="bulkRemoveLegacyJobs()">Remove Selected</button>
                 </div>
+                <table class="ops-table">
+                    <thead><tr><th></th><th>Title</th><th>Status</th><th>Stage</th><th>Updated</th><th>Type</th><th>Error</th></tr></thead>
+                    <tbody>
+                        ${jobs.map((job) => {
+                            const isSelected = selectedJobIds.has(job.id);
+                            return `
+                                <tr class="ops-row ${isSelected ? 'selected' : ''}" onclick="toggleJobSelection('${escapeHtml(job.id)}')">
+                                    <td class="ops-col-check"><input type="checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleJobSelection('${escapeHtml(job.id)}')"></td>
+                                    <td class="ops-col-title" title="${escapeHtml(job.title)}">${escapeHtml(job.title)}</td>
+                                    <td><span class="stage-pill step-${stagePillClass(job.status)}">${escapeHtml(job.status)}</span></td>
+                                    <td><span class="stage-pill step-${stagePillClass(job.currentStep)}">${escapeHtml(job.currentStep)}</span></td>
+                                    <td>${formatRelativeTime(job.updatedAt || job.createdAt)}</td>
+                                    <td>${job.bullmqManaged ? 'bullmq' : 'legacy'}</td>
+                                    <td class="ops-col-error" title="${escapeHtml(job.error || '')}">${escapeHtml(job.error || '')}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
             `;
+        }
+
+        async function bulkRetryLegacyJobs() {
+            const targets = lastFetchedLegacyJobs.filter((j) => selectedJobIds.has(j.id) && j.status === 'FAILED');
+            if (!targets.length) return;
+            await Promise.all(targets.map((j) => fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(j.id)}/retry`, { method: 'POST', credentials: 'include' })));
+            showToast(`Re-queued ${targets.length} job(s).`, 'success', 2600);
+            selectedJobIds.clear();
+            fetchOperationsCentreData();
+        }
+
+        async function bulkRemoveLegacyJobs() {
+            const ids = jobsCurrentlySelected();
+            if (!ids.length) return;
+            if (!confirm(`Remove ${ids.length} job record(s)? This cannot be undone.`)) return;
+            await Promise.all(ids.map((id) => fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(id)}/remove`, { method: 'POST', credentials: 'include' })));
+            showToast(`Removed ${ids.length} job(s).`, 'success', 2400);
+            selectedJobIds.clear();
+            fetchOperationsCentreData();
+        }
+
+        function jobsCurrentlySelected() {
+            return lastFetchedLegacyJobs.filter((j) => selectedJobIds.has(j.id)).map((j) => j.id);
         }
 
         async function fetchOperationsCentreQueues() {
@@ -560,9 +611,7 @@
 
                 lastFetchedLegacyJobs = data.jobs;
                 if (summary) summary.textContent = `${data.totalActive} total in queue`;
-                container.innerHTML = data.jobs.length
-                    ? data.jobs.map(opsJobRow).join('')
-                    : '<div style="color:#64748b; font-size:0.78rem; padding:10px;">No pipeline jobs right now.</div>';
+                renderJobsTable(data.jobs);
 
                 // Keep an open expand panel in sync with the latest fetch
                 // instead of going stale until the next click.
@@ -587,6 +636,7 @@
             if (selectedQueueTile && selectedQueueTile.group === group && selectedQueueTile.key === key) {
                 // Clicking the same tile again collapses it.
                 selectedQueueTile = null;
+                selectedExpandedIds.clear();
                 expanded.style.display = 'none';
                 expanded.innerHTML = '';
                 fetchOperationsCentreQueues();
@@ -594,6 +644,8 @@
             }
 
             selectedQueueTile = { group, key, label };
+            selectedExpandedIds.clear();
+            lastFetchedExpandedBullmqJobs = [];
             expanded.style.display = 'block';
             fetchOperationsCentreQueues(); // re-render tiles with the new selected state
 
@@ -610,10 +662,17 @@
                     expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)}</div><div style="color:#fca5a5; font-size:0.8rem;">${escapeHtml(data?.error || 'Failed to load jobs.')}</div>`;
                     return;
                 }
-                renderExpandedBullmqJobs(data.jobs, group, key, label);
+                lastFetchedExpandedBullmqJobs = data.jobs;
+                renderExpandedBullmqJobs();
             } catch (err) {
                 expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)}</div><div style="color:#fca5a5; font-size:0.8rem;">Request failed.</div>`;
             }
+        }
+
+        function toggleExpandedSelection(id) {
+            if (selectedExpandedIds.has(id)) selectedExpandedIds.delete(id); else selectedExpandedIds.add(id);
+            if (selectedQueueTile?.group === 'pipeline') renderExpandedLegacyJobs();
+            else renderExpandedBullmqJobs();
         }
 
         function renderExpandedLegacyJobs() {
@@ -627,105 +686,121 @@
                 return;
             }
 
+            const selectedCount = rows.filter((r) => selectedExpandedIds.has(r.id)).length;
+            const anyFailedSelected = rows.some((r) => selectedExpandedIds.has(r.id) && r.status === 'FAILED');
+
             expanded.innerHTML = `
                 <div class="ops-expanded-title">${escapeHtml(label)} - current tasks (${rows.length})</div>
-                ${rows.map((job) => `
-                    <div class="ops-expanded-job">
-                        <div>
-                            <div class="ops-job-title">${escapeHtml(job.title)}</div>
-                            <div class="ops-job-meta">${escapeHtml(job.status)} • ${formatRelativeTime(job.updatedAt || job.createdAt)}${job.error ? ` • <span style="color:#fca5a5;">${escapeHtml(job.error)}</span>` : ''}</div>
-                        </div>
-                        <div class="ops-expanded-job-actions">
-                            ${job.status === 'FAILED' ? `<button class="btn-retry" onclick="retryLegacyJob('${escapeHtml(job.id)}')">Retry</button>` : ''}
-                            <button style="background:#334155;" onclick="removeLegacyJob('${escapeHtml(job.id)}')">Remove</button>
-                        </div>
-                    </div>
-                `).join('')}
+                <div class="ops-table-toolbar">
+                    <span class="ops-selected-count">${selectedCount} selected</span>
+                    <button class="btn-retry" ${anyFailedSelected ? '' : 'disabled'} onclick="bulkRetryExpandedLegacy()">Retry Selected</button>
+                    <button style="background:#334155;" ${selectedCount ? '' : 'disabled'} onclick="bulkRemoveExpandedLegacy()">Remove Selected</button>
+                </div>
+                <table class="ops-table">
+                    <thead><tr><th></th><th>Title</th><th>Status</th><th>Updated</th><th>Error</th></tr></thead>
+                    <tbody>
+                        ${rows.map((job) => {
+                            const isSelected = selectedExpandedIds.has(job.id);
+                            return `
+                                <tr class="ops-row ${isSelected ? 'selected' : ''}" onclick="toggleExpandedSelection('${escapeHtml(job.id)}')">
+                                    <td class="ops-col-check"><input type="checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleExpandedSelection('${escapeHtml(job.id)}')"></td>
+                                    <td class="ops-col-title" title="${escapeHtml(job.title)}">${escapeHtml(job.title)}</td>
+                                    <td><span class="stage-pill step-${stagePillClass(job.status)}">${escapeHtml(job.status)}</span></td>
+                                    <td>${formatRelativeTime(job.updatedAt || job.createdAt)}</td>
+                                    <td class="ops-col-error" title="${escapeHtml(job.error || '')}">${escapeHtml(job.error || '')}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
             `;
         }
 
-        function renderExpandedBullmqJobs(jobs, group, key, label) {
+        function renderExpandedBullmqJobs() {
             const expanded = document.getElementById('ops-queue-expanded');
-            if (!expanded) return;
+            if (!expanded || !selectedQueueTile) return;
+            const { label } = selectedQueueTile;
+            const jobs = lastFetchedExpandedBullmqJobs;
 
-            if (!Array.isArray(jobs) || !jobs.length) {
+            if (!jobs.length) {
                 expanded.innerHTML = `<div class="ops-expanded-title">${escapeHtml(label)} - recent jobs</div><div style="color:#64748b; font-size:0.78rem;">No recent jobs in this queue.</div>`;
                 return;
             }
 
+            const selectedCount = jobs.filter((j) => selectedExpandedIds.has(j.id)).length;
+            const anyFailedSelected = jobs.some((j) => selectedExpandedIds.has(j.id) && j.state === 'failed');
+
             expanded.innerHTML = `
                 <div class="ops-expanded-title">${escapeHtml(label)} - recent jobs (${jobs.length})</div>
-                ${jobs.map((job) => {
-                    const when = job.finishedOn || job.processedOn || job.timestamp;
-                    const detail = job.data?.localPath || job.data?.inputPath || job.name || job.id;
-                    return `
-                        <div class="ops-expanded-job">
-                            <div>
-                                <div class="ops-job-title">${escapeHtml(String(detail))}</div>
-                                <div class="ops-job-meta">${escapeHtml(job.state)} • ${when ? formatRelativeTime(new Date(when).toISOString()) : 'n/a'}${job.failedReason ? ` • <span style="color:#fca5a5;">${escapeHtml(job.failedReason)}</span>` : ''}</div>
-                            </div>
-                            <div class="ops-expanded-job-actions">
-                                ${job.state === 'failed' ? `<button class="btn-retry" onclick="retryBullmqJob('${escapeHtml(group)}','${escapeHtml(key)}','${escapeHtml(job.id)}')">Retry</button>` : ''}
-                                <button style="background:#334155;" onclick="removeBullmqJob('${escapeHtml(group)}','${escapeHtml(key)}','${escapeHtml(job.id)}')">Remove</button>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
+                <div class="ops-table-toolbar">
+                    <span class="ops-selected-count">${selectedCount} selected</span>
+                    <button class="btn-retry" ${anyFailedSelected ? '' : 'disabled'} onclick="bulkRetryExpandedBullmq()">Retry Selected</button>
+                    <button style="background:#334155;" ${selectedCount ? '' : 'disabled'} onclick="bulkRemoveExpandedBullmq()">Remove Selected</button>
+                </div>
+                <table class="ops-table">
+                    <thead><tr><th></th><th>Detail</th><th>State</th><th>When</th><th>Error</th></tr></thead>
+                    <tbody>
+                        ${jobs.map((job) => {
+                            const when = job.finishedOn || job.processedOn || job.timestamp;
+                            const detail = job.data?.localPath || job.data?.inputPath || job.name || job.id;
+                            const isSelected = selectedExpandedIds.has(job.id);
+                            return `
+                                <tr class="ops-row ${isSelected ? 'selected' : ''}" onclick="toggleExpandedSelection('${escapeHtml(job.id)}')">
+                                    <td class="ops-col-check"><input type="checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleExpandedSelection('${escapeHtml(job.id)}')"></td>
+                                    <td class="ops-col-title" title="${escapeHtml(String(detail))}">${escapeHtml(String(detail))}</td>
+                                    <td><span class="stage-pill step-${stagePillClass(job.state)}">${escapeHtml(job.state)}</span></td>
+                                    <td>${when ? formatRelativeTime(new Date(when).toISOString()) : 'n/a'}</td>
+                                    <td class="ops-col-error" title="${escapeHtml(job.failedReason || '')}">${escapeHtml(job.failedReason || '')}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
             `;
         }
 
-        async function retryLegacyJob(id) {
-            try {
-                const res = await fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(id)}/retry`, { method: 'POST', credentials: 'include' });
-                const data = await res.json();
-                if (!data.success) { showToast('Retry failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
-                showToast('Job re-queued.', 'success', 2600);
-                fetchOperationsCentreData();
-            } catch (err) {
-                showToast('Retry request failed.', 'error', 4200);
-            }
+        async function bulkRetryExpandedLegacy() {
+            const targets = lastFetchedLegacyJobs.filter((j) => selectedExpandedIds.has(j.id) && j.status === 'FAILED');
+            if (!targets.length) return;
+            await Promise.all(targets.map((j) => fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(j.id)}/retry`, { method: 'POST', credentials: 'include' })));
+            showToast(`Re-queued ${targets.length} job(s).`, 'success', 2600);
+            selectedExpandedIds.clear();
+            fetchOperationsCentreData();
         }
 
-        async function removeLegacyJob(id) {
-            if (!confirm('Remove this job record? This cannot be undone.')) return;
-            try {
-                const res = await fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(id)}/remove`, { method: 'POST', credentials: 'include' });
-                const data = await res.json();
-                if (!data.success) { showToast('Remove failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
-                showToast('Job removed.', 'success', 2400);
-                fetchOperationsCentreData();
-            } catch (err) {
-                showToast('Remove request failed.', 'error', 4200);
-            }
+        async function bulkRemoveExpandedLegacy() {
+            const ids = Array.from(selectedExpandedIds);
+            if (!ids.length) return;
+            if (!confirm(`Remove ${ids.length} job record(s)? This cannot be undone.`)) return;
+            await Promise.all(ids.map((id) => fetch(`/api/admin/operations/pipeline-jobs/${encodeURIComponent(id)}/remove`, { method: 'POST', credentials: 'include' })));
+            showToast(`Removed ${ids.length} job(s).`, 'success', 2400);
+            selectedExpandedIds.clear();
+            fetchOperationsCentreData();
         }
 
-        async function retryBullmqJob(group, key, jobId) {
-            try {
-                const res = await fetch(`/api/admin/operations/queue-jobs/${encodeURIComponent(group)}/${encodeURIComponent(key)}/${encodeURIComponent(jobId)}/retry`, { method: 'POST', credentials: 'include' });
-                const data = await res.json();
-                if (!data.success) { showToast('Retry failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
-                showToast('Job re-queued.', 'success', 2600);
-                const label = selectedQueueTile?.label || key;
-                selectedQueueTile = null; // force selectQueueTile to re-open with a fresh fetch, not toggle-close
-                selectQueueTile(group, key, label);
-            } catch (err) {
-                showToast('Retry request failed.', 'error', 4200);
-            }
+        async function bulkRetryExpandedBullmq() {
+            if (!selectedQueueTile) return;
+            const { group, key, label } = selectedQueueTile;
+            const targets = lastFetchedExpandedBullmqJobs.filter((j) => selectedExpandedIds.has(j.id) && j.state === 'failed');
+            if (!targets.length) return;
+            await Promise.all(targets.map((j) => fetch(`/api/admin/operations/queue-jobs/${encodeURIComponent(group)}/${encodeURIComponent(key)}/${encodeURIComponent(j.id)}/retry`, { method: 'POST', credentials: 'include' })));
+            showToast(`Re-queued ${targets.length} job(s).`, 'success', 2600);
+            selectedExpandedIds.clear();
+            selectedQueueTile = null; // force selectQueueTile to re-open with a fresh fetch, not toggle-close
+            selectQueueTile(group, key, label);
         }
 
-        async function removeBullmqJob(group, key, jobId) {
-            if (!confirm('Remove this job? This cannot be undone.')) return;
-            try {
-                const res = await fetch(`/api/admin/operations/queue-jobs/${encodeURIComponent(group)}/${encodeURIComponent(key)}/${encodeURIComponent(jobId)}/remove`, { method: 'POST', credentials: 'include' });
-                const data = await res.json();
-                if (!data.success) { showToast('Remove failed: ' + (data.error || 'Unknown error'), 'error', 4200); return; }
-                showToast('Job removed.', 'success', 2400);
-                const label = selectedQueueTile?.label || key;
-                selectedQueueTile = null; // force selectQueueTile to treat this as a fresh open, not a toggle-close
-                selectQueueTile(group, key, label);
-            } catch (err) {
-                showToast('Remove request failed.', 'error', 4200);
-            }
+        async function bulkRemoveExpandedBullmq() {
+            if (!selectedQueueTile) return;
+            const { group, key, label } = selectedQueueTile;
+            const ids = Array.from(selectedExpandedIds);
+            if (!ids.length) return;
+            if (!confirm(`Remove ${ids.length} job(s)? This cannot be undone.`)) return;
+            await Promise.all(ids.map((id) => fetch(`/api/admin/operations/queue-jobs/${encodeURIComponent(group)}/${encodeURIComponent(key)}/${encodeURIComponent(id)}/remove`, { method: 'POST', credentials: 'include' })));
+            showToast(`Removed ${ids.length} job(s).`, 'success', 2400);
+            selectedExpandedIds.clear();
+            selectedQueueTile = null; // force selectQueueTile to re-open with a fresh fetch, not toggle-close
+            selectQueueTile(group, key, label);
         }
 
         // =====================================================================
