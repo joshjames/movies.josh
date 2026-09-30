@@ -154,6 +154,46 @@
             background: rgba(15, 23, 42, 0.94);
         }
 
+        /* Skip back/forward 10s - flank the vertical center of the video,
+           same glass-overlay look as the other floating buttons. */
+        .skip-overlay-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 20;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #f1f5f9;
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            cursor: pointer;
+            font-size: 1.15rem;
+            line-height: 1;
+            transition: all 0.2s ease;
+            opacity: 0.3;
+        }
+
+        .skip-overlay-btn .skip-label {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .skip-overlay-btn:hover, .skip-overlay-btn:active {
+            opacity: 1;
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        .skip-back-btn { right: calc(50% + 40px); }
+        .skip-forward-btn { left: calc(50% + 40px); }
+
         .player-info-drawer {
             position: absolute;
             top: 0;
@@ -381,6 +421,8 @@
         <a href="/" class="back-overlay-btn" id="backBtn">⏮ Back to Show</a>
         <button class="next-overlay-btn hide-controls" id="nextBtn">Next Episode ⏭</button>
         <button class="info-overlay-btn hide-controls" id="infoBtn" type="button">ℹ Info</button>
+        <button class="skip-overlay-btn skip-back-btn hide-controls" id="skipBackBtn" type="button" aria-label="Rewind 10 seconds">⟲<span class="skip-label">10</span></button>
+        <button class="skip-overlay-btn skip-forward-btn hide-controls" id="skipForwardBtn" type="button" aria-label="Forward 10 seconds">⟳<span class="skip-label">10</span></button>
 
         <div class="quality-badge" id="qualityTag">DETECTING...</div>
         <video id="cinemaVideo" class="video-js vjs-big-play-centered" autoplay playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
@@ -429,6 +471,8 @@
         const backBtn = document.getElementById('backBtn');
         const nextBtn = document.getElementById('nextBtn');
         const infoBtn = document.getElementById('infoBtn');
+        const skipBackBtn = document.getElementById('skipBackBtn');
+        const skipForwardBtn = document.getElementById('skipForwardBtn');
         const playerInfoDrawer = document.getElementById('playerInfoDrawer');
         const playerInfoClose = document.getElementById('playerInfoClose');
         const stage = document.getElementById('stage');
@@ -651,10 +695,15 @@
             playsinline: true,
             fluid: false,
             controlBar: {
+                // 'skipBackward'/'skipForward' used to be listed here, but
+                // Video.js has no built-in component by that name (that's
+                // the videojs-skip-buttons plugin, never vendored) - it
+                // silently drops unrecognized entries, so this never
+                // actually rendered anything. Real skip-10s controls are the
+                // skipBackBtn/skipForwardBtn overlay buttons instead (same
+                // floating-glass pattern as back/next/info), wired below.
                 children: [
                     'playToggle',
-                    'skipBackward',
-                    'skipForward',
                     'volumePanel',
                     'currentTimeDisplay',
                     'timeDivider',
@@ -1199,6 +1248,15 @@
             }
         });
 
+        function skipBySeconds(deltaSeconds) {
+            const duration = player.duration();
+            const target = player.currentTime() + deltaSeconds;
+            player.currentTime(Number.isFinite(duration) ? Math.min(Math.max(0, target), duration) : Math.max(0, target));
+        }
+
+        skipBackBtn.addEventListener('click', () => skipBySeconds(-10));
+        skipForwardBtn.addEventListener('click', () => skipBySeconds(10));
+
         // Autoplay continuous sequence tracking logic
         player.on('ended', () => {
             // No-op if the FINISHED_PERCENT threshold in the timeupdate
@@ -1222,6 +1280,8 @@
             backBtn.classList.remove('hide-controls');
             nextBtn.classList.remove('hide-controls');
             if (infoBtn) infoBtn.classList.remove('hide-controls');
+            skipBackBtn.classList.remove('hide-controls');
+            skipForwardBtn.classList.remove('hide-controls');
             qualityTag.classList.remove('hide-controls');
         });
         player.on('userinactive', () => {
@@ -1230,6 +1290,8 @@
             backBtn.classList.add('hide-controls');
             nextBtn.classList.add('hide-controls');
             if (infoBtn) infoBtn.classList.add('hide-controls');
+            skipBackBtn.classList.add('hide-controls');
+            skipForwardBtn.classList.add('hide-controls');
             qualityTag.classList.add('hide-controls');
         });
 
@@ -1238,6 +1300,16 @@
             if (e.code === 'Space') {
                 e.preventDefault();
                 if (player.paused()) player.play(); else player.pause();
+            }
+            // Left/Right arrows: skip back/forward 10s, same as the overlay buttons -
+            // standard convention across most web video players.
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                skipBySeconds(-10);
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                skipBySeconds(10);
             }
             // Added quick keyboard hotkey alternative: 'N' steps to next track profile
             if (e.key.toLowerCase() === 'n') {

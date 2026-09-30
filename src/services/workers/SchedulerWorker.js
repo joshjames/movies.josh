@@ -60,7 +60,18 @@ const SYNC_LEGS = [
     { label: 'movies', src: '/app/storage/movies', dest: '/home/epic/movies', excludeVideo: true },
     { label: 'series', src: '/app/storage/series', dest: '/data/blockchain/media/Series', excludeVideo: true },
     { label: 'catalog-metadata', src: '/app/catalog-metadata', dest: '/home/epic/movie-streamer/metadata', excludeVideo: false },
-    { label: 'user-profiles', src: '/app/metadata', dest: '/home/epic/movie-streamer-data', excludeVideo: false },
+    // Was 'user-profiles', syncing the whole /app/metadata tree (including
+    // users/) with --delete. That broke the first time any satellite ever
+    // created its own local user (a normal signup/playback write, handled
+    // locally by whichever region serves it): that account doesn't exist on
+    // primary, so --delete tried to remove it every 30s, failed on
+    // permission, and silently blocked this ENTIRE leg (home_feed.json,
+    // recently-added row, every other user's profile too) for days.
+    // Catalog files under /app/metadata (home_feed.json, publicdata/) are
+    // still primary-authoritative one-way-with-delete; users/ is excluded
+    // here and gets its own bidirectional, delete-free sync below instead -
+    // see runUserProfilePull/Push.
+    { label: 'metadata-catalog', src: '/app/metadata', dest: '/home/epic/movie-streamer-data', excludeVideo: false, excludePaths: ['/users/'] },
     { label: 'archive', src: '/app/archive', dest: '/home/epic/tobedel', excludeVideo: false },
     { label: 'subliminal-config', src: '/root/.config/subliminal', dest: '/home/epic/.config/subliminal', excludeVideo: false }
 ];
@@ -82,6 +93,7 @@ function runRsyncLeg(target, leg) {
             '--delete',
             '-e', `ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new`,
             ...(leg.excludeVideo ? VIDEO_EXCLUDE_ARGS : []),
+            ...((leg.excludePaths || []).flatMap((p) => ['--exclude', p])),
             `${leg.src}/`,
             `${target.sshTarget}:${leg.dest}/`
         ];
@@ -91,6 +103,49 @@ function runRsyncLeg(target, leg) {
                 resolve({ target: target.name, leg: leg.label, success: false, error: (stderr || '').trim() || err.message });
             } else {
                 resolve({ target: target.name, leg: leg.label, success: true });
+            }
+        });
+    });
+}
+
+// Per-user profile data (config.json/history.json/playback.json under
+// users/<email>/) needs real two-way sync, not mirror-with-delete: a
+// satellite-created account (same as any other non-admin action, handled
+// locally by whichever region serves it) must become a full account
+// everywhere, not get treated as a stray file to reconcile away.
+//
+// No --delete in either direction, and -u ("skip a destination file that's
+// already newer") is the merge rule: whichever side wrote a given file most
+// recently wins. Primary acts as the hub - pull from every satellite first
+// (processMetadataMirrorJob does this before the push loop), then push
+// primary's now-merged users/ tree back out to every satellite, so an
+// account created on Sydney reaches any OTHER satellite too within the same
+// cycle, without satellites ever syncing directly with each other.
+//
+// Deliberately out of scope: account closure/deletion. Removing a user's
+// files needs a real, deliberate action - never something inferred from
+// "this file is merely absent on one side," which is exactly the bug this
+// replaces.
+const USERS_SRC = '/app/metadata/users';
+const USERS_DEST = '/home/epic/movie-streamer-data/users';
+
+function runUserProfileSync(target, direction) {
+    return new Promise((resolve) => {
+        const remote = `${target.sshTarget}:${USERS_DEST}/`;
+        const local = `${USERS_SRC}/`;
+        const [from, to] = direction === 'pull' ? [remote, local] : [local, remote];
+        const args = [
+            '-az', '--no-owner', '--no-group', '-u',
+            '-e', `ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new`,
+            from,
+            to
+        ];
+
+        execFile('rsync', args, { timeout: 120000 }, (err, _stdout, stderr) => {
+            if (err) {
+                resolve({ target: target.name, leg: `users-${direction}`, success: false, error: (stderr || '').trim() || err.message });
+            } else {
+                resolve({ target: target.name, leg: `users-${direction}`, success: true });
             }
         });
     });
@@ -145,6 +200,19 @@ async function processMetadataMirrorJob() {
     const targets = parseSatelliteTargets();
     const results = [];
 
+    // Pass 1: pull every satellite's local-only user data into primary
+    // FIRST, before any push - so an account created on satellite A is
+    // already part of primary's users/ tree by the time satellite B (or any
+    // other satellite) gets pushed to later in this same cycle, regardless
+    // of target order.
+    for (const target of targets) {
+        const pullResult = await runUserProfileSync(target, 'pull');
+        results.push(pullResult);
+        if (!pullResult.success) {
+            logger.warn(`[Scheduler] metadata-mirror leg 'users-pull' -> ${target.name} failed: ${pullResult.error}`);
+        }
+    }
+
     for (const target of targets) {
         // Sequential per target/leg - keeps concurrent rsync/ssh processes
         // bounded, and matches the original cron script's own behavior of
@@ -155,6 +223,12 @@ async function processMetadataMirrorJob() {
             if (!result.success) {
                 logger.warn(`[Scheduler] metadata-mirror leg '${leg.label}' -> ${target.name} failed: ${result.error}`);
             }
+        }
+
+        const pushResult = await runUserProfileSync(target, 'push');
+        results.push(pushResult);
+        if (!pushResult.success) {
+            logger.warn(`[Scheduler] metadata-mirror leg 'users-push' -> ${target.name} failed: ${pushResult.error}`);
         }
     }
 
