@@ -5,7 +5,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const logger = require('../logger');
 const { isSubtitleRelatedToVideo } = require('../SubtitleFileMatching');
 
@@ -23,8 +23,20 @@ const { walkVideoSources, walkWebProfiles } = require('../MediaFileWalker');
 
 function probeMediaStreams(filePath) {
     try {
-        const command = `ffprobe -v error -show_entries stream=index,codec_type,codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default,forced -of json "${filePath}"`;
-        const output = JSON.parse(execSync(command).toString());
+        // execFileSync - not execSync - because it never involves a shell:
+        // each array entry is passed to ffprobe as a literal argv value, so a
+        // filename containing shell metacharacters ($, `, ;, etc) can't be
+        // misinterpreted. A real title ("...$pringfield...") hit exactly
+        // this: execSync ran the old string-built command through `sh -c`,
+        // which expanded "$pringfield" as an (undefined, so empty) shell
+        // variable, silently truncating the path and breaking every ffmpeg/
+        // ffprobe call against that file.
+        const output = JSON.parse(execFileSync('ffprobe', [
+            '-v', 'error',
+            '-show_entries', 'stream=index,codec_type,codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default,forced',
+            '-of', 'json',
+            filePath
+        ]).toString());
         return Array.isArray(output.streams) ? output.streams : [];
     } catch (err) {
         logger.error(`ffprobe stream scan crash on ${path.basename(filePath)}: ${err.message}`);
@@ -96,18 +108,16 @@ function remuxToWebContainer(inputPath, outputPath) {
     logger.debug(`⚡ Running Fast Container Remux Pass [Stream Copy] -> ${path.basename(outputPath)}`);
     const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
     // -c copy strips encoding load entirely; +faststart relocates moov atom for immediate web playback
-    const ffmpegCmd = [
-        'ffmpeg',
+    execFileSync('ffmpeg', [
         '-threads', '4',
-        '-i', `"${inputPath}"`,
+        '-i', inputPath,
         ...mapArgs,
         '-c:v', 'copy',
         '-c:a', 'copy',
         ...dispositionArgs,
         '-movflags', '+faststart',
-        '-y', `"${outputPath}"`
-    ].join(' ');
-    execSync(ffmpegCmd, { stdio: 'pipe' });
+        '-y', outputPath
+    ], { stdio: 'pipe' });
 }
 
 /**
@@ -116,10 +126,9 @@ function remuxToWebContainer(inputPath, outputPath) {
 function generate1080pProfile(inputPath, outputPath) {
     logger.debug(`🎬 Running 1080p Core Optimization Line -> ${path.basename(outputPath)}`);
     const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
-    const ffmpegCmd = [
-        'ffmpeg',
+    execFileSync('ffmpeg', [
         '-threads', '6',
-        '-i', `"${inputPath}"`,
+        '-i', inputPath,
         ...mapArgs,
         '-c:v', 'libx264',
         '-preset', 'medium',
@@ -129,9 +138,8 @@ function generate1080pProfile(inputPath, outputPath) {
         '-ac', '2',
         ...dispositionArgs,
         '-movflags', '+faststart',
-        '-y', `"${outputPath}"`
-    ].join(' ');
-    execSync(ffmpegCmd, { stdio: 'pipe' });
+        '-y', outputPath
+    ], { stdio: 'pipe' });
 }
 
 /**
@@ -141,12 +149,11 @@ function generate720pProfile(inputPath, outputPath) {
     logger.debug(`⏳ Running 720p Mid-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // Added a maxrate cap of 2.5M and a matching buffer size to prevent bloated encodes
     const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
-    const ffmpegCmd = [
-        'ffmpeg',
+    execFileSync('ffmpeg', [
         '-threads', '4',
-        '-i', `"${inputPath}"`,
+        '-i', inputPath,
         ...mapArgs,
-        '-vf', '"scale=-2:720:sws_flags=lanczos"',
+        '-vf', 'scale=-2:720:sws_flags=lanczos',
         '-c:v', 'libx264',
         '-preset', 'medium',
         '-crf', '25',
@@ -157,9 +164,8 @@ function generate720pProfile(inputPath, outputPath) {
         '-ac', '2',
         ...dispositionArgs,
         '-movflags', '+faststart',
-        '-y', `"${outputPath}"`
-    ].join(' ');
-    execSync(ffmpegCmd, { stdio: 'pipe' });
+        '-y', outputPath
+    ], { stdio: 'pipe' });
 }
 
 /**
@@ -169,12 +175,11 @@ function generate480pProfile(inputPath, outputPath) {
     logger.debug(`📱 Running 480p Low-Bandwidth Rendering Engine -> ${path.basename(outputPath)}`);
     // Added a maxrate cap of 1.2M
     const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
-    const ffmpegCmd = [
-        'ffmpeg',
+    execFileSync('ffmpeg', [
         '-threads', '4',
-        '-i', `"${inputPath}"`,
+        '-i', inputPath,
         ...mapArgs,
-        '-vf', '"scale=-2:480:sws_flags=lanczos"',
+        '-vf', 'scale=-2:480:sws_flags=lanczos',
         '-c:v', 'libx264',
         '-preset', 'fast',
         '-crf', '27',
@@ -185,9 +190,8 @@ function generate480pProfile(inputPath, outputPath) {
         '-ac', '2',
         ...dispositionArgs,
         '-movflags', '+faststart',
-        '-y', `"${outputPath}"`
-    ].join(' ');
-    execSync(ffmpegCmd, { stdio: 'pipe' });
+        '-y', outputPath
+    ], { stdio: 'pipe' });
 }
 
 function inspectMediaStreams(filePath) {
@@ -235,10 +239,9 @@ function inspectMediaStreams(filePath) {
 function remuxWithAudioFix(inputPath, outputPath) {
     logger.debug(`🔊 Running Audio-Only Fix Pass [Video Copy + AAC Downmix] -> ${path.basename(outputPath)}`);
     const { mapArgs, dispositionArgs } = buildAudioMapArgs(inputPath);
-    const ffmpegCmd = [
-        'ffmpeg',
+    execFileSync('ffmpeg', [
         '-threads', '4',
-        '-i', `"${inputPath}"`,
+        '-i', inputPath,
         ...mapArgs,
         '-c:v', 'copy',
         '-c:a', 'aac',
@@ -246,9 +249,8 @@ function remuxWithAudioFix(inputPath, outputPath) {
         '-b:a', '160k',
         ...dispositionArgs,
         '-movflags', '+faststart',
-        '-y', `"${outputPath}"`
-    ].join(' ');
-    execSync(ffmpegCmd, { stdio: 'pipe' });
+        '-y', outputPath
+    ], { stdio: 'pipe' });
 }
 
 // =========================================================================
@@ -260,8 +262,12 @@ function remuxWithAudioFix(inputPath, outputPath) {
 // =========================================================================
 function probeSubtitleStreams(filePath) {
     try {
-        const command = `ffprobe -v error -show_entries stream=index,codec_type,codec_name:stream_tags=language,title:stream_disposition=default,forced,hearing_impaired -of json "${filePath}"`;
-        const output = JSON.parse(execSync(command).toString());
+        const output = JSON.parse(execFileSync('ffprobe', [
+            '-v', 'error',
+            '-show_entries', 'stream=index,codec_type,codec_name:stream_tags=language,title:stream_disposition=default,forced,hearing_impaired',
+            '-of', 'json',
+            filePath
+        ]).toString());
         return Array.isArray(output.streams) ? output.streams.filter(s => s.codec_type === 'subtitle') : [];
     } catch (err) {
         logger.error(`ffprobe subtitle scan crash on ${path.basename(filePath)}: ${err.message}`);
@@ -287,7 +293,7 @@ function normalizeSubtitleLangToken(value = '') {
 function exportSubtitleStreamToPath(videoPath, streamIndex, outPathBase) {
     const outSrt = `${outPathBase}.srt`;
     try {
-        execSync(`ffmpeg -y -i "${videoPath}" -map 0:${streamIndex} -c:s srt "${outSrt}"`, { stdio: 'pipe' });
+        execFileSync('ffmpeg', ['-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'srt', outSrt], { stdio: 'pipe' });
         if (fs.existsSync(outSrt)) return { path: outSrt, format: 'srt' };
     } catch (_err) {
         // fall through to a webvtt attempt below
@@ -295,7 +301,7 @@ function exportSubtitleStreamToPath(videoPath, streamIndex, outPathBase) {
 
     const outVtt = `${outPathBase}.vtt`;
     try {
-        execSync(`ffmpeg -y -i "${videoPath}" -map 0:${streamIndex} -c:s webvtt "${outVtt}"`, { stdio: 'pipe' });
+        execFileSync('ffmpeg', ['-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'webvtt', outVtt], { stdio: 'pipe' });
         if (fs.existsSync(outVtt)) return { path: outVtt, format: 'vtt' };
     } catch (_err) {
         // this subtitle stream just isn't extractable (e.g. bitmap-based PGS)

@@ -503,24 +503,42 @@ function matchesRuleWindow(candidate, rule) {
 function isRuleDue(rule, nowMs = Date.now()) {
     if (!rule.enabled) return false;
 
-    const airDay = normalizeDayToken(rule.airDay || '');
-    if (airDay) {
-        const today = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(nowMs).getDay()];
-        if (today !== airDay) return false;
-    }
-
     const state = rule.state || {};
 
-    // Stale/missing air-date info takes priority over everything else below -
-    // let processRule refresh it (cheap: it's gated to AIR_DATE_REFRESH_INTERVAL_MS
-    // internally too, this is just what makes that refresh actually happen).
+    // Stale/missing air-date info takes priority over EVERYTHING below,
+    // including the airDay gate further down - a rule that's never been
+    // checked (state.airDateCheckedAt is null, e.g. right after creation)
+    // must always get its first real check on the very next tick,
+    // regardless of what day it is. Without this ordering, a rule created
+    // on any day other than its airDay deadlocks forever: it needs this
+    // first check to go discover the real air date, but that first check
+    // itself was being blocked by airDay - confirmed live (the-simpsons
+    // rule, created Thursday with airDay 'sun', sat with a fully-null
+    // state and never ran once before the next Sunday).
     const airDateCheckedAtMs = state.airDateCheckedAt ? Date.parse(state.airDateCheckedAt) : 0;
     if (!airDateCheckedAtMs || (nowMs - airDateCheckedAtMs) >= AIR_DATE_REFRESH_INTERVAL_MS) {
         return true;
     }
 
     const nextKnownAirDateMs = state.nextKnownAirDate ? Date.parse(state.nextKnownAirDate) : NaN;
-    if (Number.isFinite(nextKnownAirDateMs) && nextKnownAirDateMs > nowMs) {
+    const hasConfirmedAirDate = Number.isFinite(nextKnownAirDateMs);
+
+    // airDay is only a cheap "we don't know anything yet" fallback guess -
+    // once a real air date is confirmed, computeAcquisitionTier below is
+    // what actually paces checks (tight right after the air date, backing
+    // off over time), and it already runs every tick regardless of
+    // weekday. Gating on airDay unconditionally would mean a torrent that
+    // shows up a day or two after the broadcast day - the normal case,
+    // not an edge case - gets missed for a full week every time.
+    if (!hasConfirmedAirDate) {
+        const airDay = normalizeDayToken(rule.airDay || '');
+        if (airDay) {
+            const today = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(nowMs).getDay()];
+            if (today !== airDay) return false;
+        }
+    }
+
+    if (hasConfirmedAirDate && nextKnownAirDateMs > nowMs) {
         return false; // known air date hasn't arrived yet - nothing to check
     }
 
