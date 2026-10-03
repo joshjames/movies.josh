@@ -21,9 +21,12 @@
 
         .season-pill-row {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
-            overflow-x: auto;
-            padding: 2px 2px 8px 2px;
+            max-height: 140px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 2px 4px 8px 2px;
             scrollbar-width: thin;
         }
         .season-pill {
