@@ -481,7 +481,16 @@ function computeAcquisitionTier(nextKnownAirDateIso, nowMs, defaultCheckInterval
 
     const hoursSinceAirDate = (nowMs - airDateMs) / (1000 * 60 * 60);
     if (hoursSinceAirDate < 0) {
-        return { tier: 'not-yet', useEztv: false, useQbitSearch: false, checkIntervalMinutes: null };
+        // "Not yet aired" per the metadata's own listed date - but that date
+        // can simply be wrong/stale for a very recent episode of a
+        // long-running show. Confirmed live: The Simpsons S38E02 was listed
+        // as airing in 2 days while a real release already existed on EZTV.
+        // EZTV is safe to check anyway - same reasoning as the
+        // no-confirmed-date case above (exact season/episode match only, no
+        // fuzzy scoring) - it simply won't find anything until a real
+        // release exists. qBit fuzzy search stays off here; same
+        // false-positive risk as before.
+        return { tier: 'not-yet', useEztv: true, useQbitSearch: false, checkIntervalMinutes: TIER1_CHECK_MINUTES };
     }
     if (hoursSinceAirDate < TIER1_HOURS) {
         return { tier: 'tier1', useEztv: true, useQbitSearch: false, checkIntervalMinutes: TIER1_CHECK_MINUTES };
@@ -538,13 +547,13 @@ function isRuleDue(rule, nowMs = Date.now()) {
         }
     }
 
-    if (hasConfirmedAirDate && nextKnownAirDateMs > nowMs) {
-        return false; // known air date hasn't arrived yet - nothing to check
-    }
-
+    // Deliberately no "air date hasn't arrived yet -> skip" early return
+    // here - computeAcquisitionTier's 'not-yet' tier now carries its own
+    // useEztv/checkIntervalMinutes (a safe, exact-match-only EZTV check can
+    // still catch an early release before the listed air date), so it's
+    // paced by the same cycle logic below instead of being hard-blocked.
     const defaultCycleMinutes = Math.max(5, Number(rule.checkCycleMinutes || DEFAULT_CHECK_CYCLE_MINUTES));
     const tier = computeAcquisitionTier(state.nextKnownAirDate, nowMs, defaultCycleMinutes);
-    if (tier.tier === 'not-yet') return false;
 
     const cycleMs = Math.max(5, Number(tier.checkIntervalMinutes || defaultCycleMinutes)) * 60 * 1000;
     const lastRunMs = state.lastRunAt ? Date.parse(state.lastRunAt) : 0;
@@ -735,10 +744,13 @@ async function processRule(ruleInput, options = {}) {
     const tier = computeAcquisitionTier(state.nextKnownAirDate, nowMs, defaultCycleMinutes);
     state.lastTier = tier.tier;
 
-    // Known air date hasn't arrived yet - nothing productive to do. Still
-    // save the refreshed air-date state above so isRuleDue() has it for next
-    // time, but skip the EZTV/qBittorrent network calls entirely.
-    if (tier.tier === 'not-yet') {
+    // Only skip the network calls entirely when this tier genuinely offers
+    // no safe way to check (useEztv false) - 'not-yet' itself no longer
+    // implies that: a safe, exact-match-only EZTV check can still catch a
+    // release that shows up before the metadata's own listed air date
+    // (confirmed live: The Simpsons S38E02). Still save the refreshed
+    // air-date state above either way, so isRuleDue() has it for next time.
+    if (tier.tier === 'not-yet' && !tier.useEztv) {
         state.lastRunAt = nowIso;
         state.nextRunAt = state.nextKnownAirDate;
         state.lastError = null;

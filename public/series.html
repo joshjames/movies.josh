@@ -16,8 +16,38 @@
         .show-meta { color: #94a3b8; font-size: 0.9rem; margin-bottom: 12px; }
         .show-plot { color: #cbd5e1; font-size: 0.95rem; line-height: 1.5; }
         .content-browser { flex-grow: 1; background: #1e293b; padding: 24px; border-radius: 12px; border: 1px solid #334155; }
-        .selector-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 16px; }
+        .selector-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 16px; }
         select { background: #0f172a; color: white; border: 1px solid #475569; padding: 10px 16px; border-radius: 6px; font-size: 0.95rem; outline: none; cursor: pointer; }
+
+        .season-pill-row {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 2px 2px 8px 2px;
+            scrollbar-width: thin;
+        }
+        .season-pill {
+            flex-shrink: 0;
+            background: #0f172a;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .season-pill:hover { border-color: #475569; color: #f8fafc; }
+        .season-pill.active { background: #2563eb; border-color: #2563eb; color: white; }
+        .season-pill.unavailable {
+            opacity: 0.4;
+            cursor: not-allowed;
+            border-style: dashed;
+        }
+        .season-pill.unavailable:hover { border-color: #334155; color: #cbd5e1; }
+        .episode-row.last-watched { outline: 2px solid #2563eb; outline-offset: 2px; }
         .episode-list { display: flex; flex-direction: column; gap: 8px; }
         .episode-row { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
         .ep-info { display: flex; flex-direction: column; gap: 4px; }
@@ -148,12 +178,9 @@
             <div class="content-browser">
                 <div class="selector-row">
                     <h3 style="margin:0; color:#3b82f6;">Episodes</h3>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <button type="button" onclick="openEpisodeManager()" style="background:#0ea5e9;">Episode Manager</button>
-                        <select id="season-select" onchange="loadSeasonEpisodes(this.value)">
-                        </select>
-                    </div>
+                    <button type="button" onclick="openEpisodeManager()" style="background:#0ea5e9;">Episode Manager</button>
                 </div>
+                <div class="season-pill-row" id="season-pill-row"></div>
 
                 <div class="episode-list" id="episode-list">
                 </div>
@@ -195,6 +222,8 @@
         let episodeManagerIsAdmin = false;
         let isInMyShows = false;
         let watchedEpisodeKeys = {};
+        let currentSeason = null;
+        let lastWatchedInfo = null; // { season, episode, inProgress } or null
 
         async function loadWatchedEpisodes() {
             try {
@@ -204,6 +233,17 @@
                 if (data.success && data.episodes) watchedEpisodeKeys = data.episodes;
             } catch (_err) {
                 // Best-effort - the episode list just won't show watched badges if this fails.
+            }
+        }
+
+        async function loadLastWatchedEpisode(cleanFolder) {
+            try {
+                const res = await fetch(`/api/profile/last-watched-episode?showId=${encodeURIComponent(showId)}&showFolder=${encodeURIComponent(cleanFolder)}`, { credentials: 'include' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.success) lastWatchedInfo = data.lastWatched || null;
+            } catch (_err) {
+                // Best-effort - a first-time viewer (or a failed fetch) just falls back to the latest season.
             }
         }
 
@@ -238,24 +278,33 @@
 
                 await hydrateMyShowsState();
                 await loadWatchedEpisodes();
+                await loadLastWatchedEpisode(cleanFolder);
 
                 acknowledgeSubscriptionBadge().catch(() => {
                     // Ignore auth/network failures; this endpoint is best-effort.
                 });
 
                 const seasonsAvailable = Object.keys(serverShowData.seasons).sort((a,b) => a - b);
-                const seasonSelect = document.getElementById('season-select');
-                
+
                 if (seasonsAvailable.length === 0) {
                     document.getElementById('episode-list').innerHTML = `<div style="color:#64748b;text-align:center;padding:40px;">No processed track files found on disk structures.</div>`;
                     return;
                 }
 
-                seasonSelect.innerHTML = seasonsAvailable.map(s => 
-                    `<option value="${s}">Season ${s}</option>`
-                ).join('');
+                renderSeasonPills(seasonsAvailable);
 
-                loadSeasonEpisodes(seasonsAvailable[0]);
+                // Default season priority: an in-progress/last-watched episode's
+                // season wins (continue where you left off) - otherwise the
+                // latest season that actually has anything available wins
+                // (a first-time viewer lands on what's newest, not Season 1) -
+                // otherwise just the highest season number tracked at all.
+                let defaultSeason = String(lastWatchedInfo?.season ?? '');
+                if (!defaultSeason || !serverShowData.seasons[defaultSeason]) {
+                    const withContent = seasonsAvailable.filter((s) => seasonHasAvailableEpisodes(s));
+                    defaultSeason = withContent.length ? withContent[withContent.length - 1] : seasonsAvailable[seasonsAvailable.length - 1];
+                }
+
+                loadSeasonEpisodes(defaultSeason);
             } catch (err) {
                 console.error("Failed executing structural pipeline initialization:", err);
                 document.getElementById('show-title').innerText = "Failed Loading Show Metadata.";
@@ -342,9 +391,8 @@
                 isInMyShows = true;
                 updateMyShowsButton();
                 document.getElementById('my-shows-status').textContent = `${serverShowData?.title || 'Show'} added to My Shows. Future unreleased episodes will auto-queue from your subscription rule path.`;
-                const seasonSelect = document.getElementById('season-select');
-                if (seasonSelect && seasonSelect.value) {
-                    loadSeasonEpisodes(seasonSelect.value);
+                if (currentSeason) {
+                    loadSeasonEpisodes(currentSeason);
                 }
             } catch (err) {
                 document.getElementById('my-shows-status').textContent = `Add to My Shows failed: ${err.message}`;
@@ -640,9 +688,44 @@
             }
         }
 
+        function seasonHasAvailableEpisodes(seasonNum) {
+            const season = serverShowData?.seasons?.[seasonNum];
+            const episodes = season ? season.episodes : [];
+            return episodes.some((ep) => ep.available);
+        }
+
+        function renderSeasonPills(seasonsAvailable) {
+            const row = document.getElementById('season-pill-row');
+            if (!row) return;
+            row.innerHTML = seasonsAvailable.map((s) => {
+                const hasContent = seasonHasAvailableEpisodes(s);
+                return `<button type="button" class="season-pill${hasContent ? '' : ' unavailable'}" data-season="${s}" title="${hasContent ? '' : 'No episodes available for this season yet'}">Season ${s}</button>`;
+            }).join('');
+
+            row.querySelectorAll('.season-pill').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    if (btn.classList.contains('unavailable')) return;
+                    loadSeasonEpisodes(btn.dataset.season);
+                });
+            });
+        }
+
+        function updateActiveSeasonPill(seasonNum) {
+            const row = document.getElementById('season-pill-row');
+            if (!row) return;
+            row.querySelectorAll('.season-pill').forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.season === String(seasonNum));
+            });
+            const activePill = row.querySelector('.season-pill.active');
+            if (activePill) activePill.scrollIntoView({ block: 'nearest', inline: 'center' });
+        }
+
         function loadSeasonEpisodes(seasonNum) {
             const container = document.getElementById('episode-list');
             if (!serverShowData || !serverShowData.seasons) return;
+
+            currentSeason = String(seasonNum);
+            updateActiveSeasonPill(currentSeason);
 
             const targetSeason = serverShowData.seasons[seasonNum];
             const episodes = targetSeason ? targetSeason.episodes : [];
@@ -657,8 +740,11 @@
                 if (ep.available) {
                     const isWatched = Boolean(watchedEpisodeKeys[`S${seasonNum}E${ep.episodeNumber}`]);
                     const watchedBadge = isWatched ? '<span class="watched-badge">✓ Watched</span>' : '';
+                    const isLastWatched = lastWatchedInfo
+                        && Number(lastWatchedInfo.season) === Number(seasonNum)
+                        && Number(lastWatchedInfo.episode) === Number(ep.episodeNumber);
                     return `
-                        <div class="episode-row${isWatched ? ' watched' : ''}" style="border-left: 4px solid ${isWatched ? '#475569' : '#22c55e'};">
+                        <div class="episode-row${isWatched ? ' watched' : ''}${isLastWatched ? ' last-watched' : ''}" style="border-left: 4px solid ${isWatched ? '#475569' : '#22c55e'};" ${isLastWatched ? 'id="last-watched-episode-row"' : ''}>
                             <div class="ep-info">
                                 <span class="ep-title">${ep.episodeNumber}. ${ep.title} ${watchedBadge}</span>
                                 <span class="ep-meta">Released: ${ep.released} • Rating: ⭐ ${ep.imdbRating}</span>
@@ -695,6 +781,9 @@
                     `;
                 }
             }).join('');
+
+            const lastWatchedRow = document.getElementById('last-watched-episode-row');
+            if (lastWatchedRow) lastWatchedRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
 
         async function fetchMissingEpisode(seasonNumber, episodeNumber) {

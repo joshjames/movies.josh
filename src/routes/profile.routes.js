@@ -164,6 +164,30 @@ router.get('/watched-episodes', async (req, res) => {
     }
 });
 
+// GET: /api/profile/last-watched-episode?showId=series/<folder>&showFolder=<folder>
+// Which season/episode the series viewer should default to on load - an
+// in-progress episode if one exists, else the last fully-watched one, else
+// null (first-time viewer - caller falls back to the latest season).
+router.get('/last-watched-episode', async (req, res) => {
+    try {
+        const username = (req.cookies?.user_profile || '').toLowerCase().trim();
+        const showId = String(req.query.showId || '').trim();
+        const showFolder = String(req.query.showFolder || '').trim();
+
+        if (!username) {
+            return res.status(401).json({ success: false, error: 'Unauthorized: No active user profile found.' });
+        }
+        if (!showId) {
+            return res.status(400).json({ success: false, error: 'Missing showId.' });
+        }
+
+        const lastWatched = await ProfileService.getLastWatchedEpisodeForShow(username, showId, showFolder);
+        return res.json({ success: true, lastWatched });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET: /api/profile/watch-later
 router.get('/watch-later', async (req, res) => {
     try {

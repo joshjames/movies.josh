@@ -503,6 +503,47 @@ const ProfileService = {
         return episodes;
     },
 
+    // Where the series viewer should default to on load: an in-progress
+    // episode (mediaId "<folder>-S<season>E<episode>" in playback.json)
+    // wins over a finished one - "continue watching" is a stronger signal
+    // of where the user wants to land than the last fully-watched episode -
+    // and either beats the series viewer's own old behavior of always
+    // reopening on season 1. Returns null for a first-time viewer (caller
+    // then falls back to the latest season with any content).
+    async getLastWatchedEpisodeForShow(username, showId, showFolder = '') {
+        const cleanShowId = String(showId || '').trim();
+        if (!cleanShowId) return null;
+
+        const cleanFolder = String(showFolder || '').trim();
+        if (cleanFolder) {
+            const playback = await this.getPlaybackState(username);
+            const prefix = `${cleanFolder}-S`;
+            let best = null;
+            for (const [mediaId, entry] of Object.entries(playback || {})) {
+                if (!mediaId.startsWith(prefix)) continue;
+                const match = mediaId.match(/-S(\d+)E(\d+)$/);
+                if (!match) continue;
+                const updatedAt = Number(entry?.updatedAt || 0);
+                if (!best || updatedAt > best.updatedAt) {
+                    best = { season: parseInt(match[1], 10), episode: parseInt(match[2], 10), updatedAt, inProgress: true };
+                }
+            }
+            if (best) return best;
+        }
+
+        const watched = await this.readData(username, 'watched', {});
+        let best = null;
+        for (const record of Object.values(watched || {})) {
+            if (!record || record.id !== cleanShowId) continue;
+            if (!Number.isFinite(record.season) || !Number.isFinite(record.episode)) continue;
+            const updatedAt = Date.parse(record.lastWatchedAt || '') || 0;
+            if (!best || updatedAt > best.updatedAt) {
+                best = { season: record.season, episode: record.episode, updatedAt, inProgress: false };
+            }
+        }
+        return best;
+    },
+
     async getWatchHistory(username, options = {}) {
         const limit = Math.max(1, Math.min(parseInt(options.limit, 10) || 200, 1000));
         const playback = await this.getPlaybackState(username);
