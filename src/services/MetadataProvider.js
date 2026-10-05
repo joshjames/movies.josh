@@ -442,8 +442,44 @@ async function fetchSeasonEpisodesWithFallback({ imdbId = '', title = '', season
     }
 }
 
+// OMDb doesn't carry trailer links at all - TMDb's /movie|tv/{id}/videos is
+// the only source already wired into this app for them. Same /find/{imdb_id}
+// lookup as resolveTmdbFromImdb, but videos needs the media type + id alone,
+// not a second full details fetch.
+async function fetchTmdbTrailerUrl(imdbId) {
+    if (!hasTmdbCredentials()) return null;
+    const normalizedImdb = String(imdbId || '').trim();
+    if (!normalizedImdb) return null;
+
+    try {
+        const found = await tmdbGet(`/find/${encodeURIComponent(normalizedImdb)}`, {
+            external_source: 'imdb_id',
+            language: 'en-US'
+        });
+
+        const movieResult = Array.isArray(found?.movie_results) ? found.movie_results[0] : null;
+        const tvResult = Array.isArray(found?.tv_results) ? found.tv_results[0] : null;
+        const target = movieResult
+            ? { id: movieResult.id, mediaType: 'movie' }
+            : (tvResult ? { id: tvResult.id, mediaType: 'tv' } : null);
+        if (!target) return null;
+
+        const videos = await tmdbGet(`/${target.mediaType}/${target.id}/videos`, { language: 'en-US' });
+        const results = Array.isArray(videos?.results) ? videos.results : [];
+        const trailers = results.filter((v) => v?.site === 'YouTube' && v?.type === 'Trailer');
+        // Official trailers first (studio-released, not a fan edit/reaction
+        // video that happens to be tagged "Trailer"), else whatever's first.
+        const best = trailers.find((v) => v.official) || trailers[0] || null;
+        return best ? `https://www.youtube.com/watch?v=${best.key}` : null;
+    } catch (err) {
+        logger.warn(`⚠️ [MetadataProvider] TMDb trailer lookup failed: ${err.message}`);
+        return null;
+    }
+}
+
 module.exports = {
     fetchMetadataWithFallback,
     fetchSeasonEpisodesWithFallback,
+    fetchTmdbTrailerUrl,
     canUseOmdb
 };

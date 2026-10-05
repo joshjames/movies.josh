@@ -123,6 +123,11 @@ app.post('/process', async (req, res) => {
         const omdbRatings = Array.isArray(data.Ratings) ? data.Ratings : [];
         const rottenTomatoesScore = findRatingValue(omdbRatings, 'Rotten Tomatoes');
         const imdbLink = data.imdbID ? `https://www.imdb.com/title/${data.imdbID}/` : '';
+        // OMDb has no trailer data at all - TMDb's /videos endpoint is the
+        // only source for this. Best-effort: fetchTmdbTrailerUrl already
+        // swallows its own errors and returns null, so a lookup failure
+        // just leaves the trailer link blank rather than failing METADATA.
+        const trailerUrl = await metadataProvider.fetchTmdbTrailerUrl(data.imdbID).catch(() => null);
         let basePatchData = {
             imdbId: data.imdbID,
             title: data.Title,
@@ -153,7 +158,7 @@ app.post('/process', async (req, res) => {
             links: {
                 imdb: imdbLink,
                 rottenTomatoes: '',
-                trailer: ''
+                trailer: trailerUrl || ''
             },
             runtime: data.Runtime || 'N/A',
             contentType: targetType,
