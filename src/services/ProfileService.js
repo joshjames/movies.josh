@@ -727,11 +727,77 @@ const ProfileService = {
         const roster = await readRoster();
 
         const account = roster[cleanName];
-        if (!account || account.password !== password) {
+        if (!account) {
+            return { success: false, error: "Invalid email or password credentials." };
+        }
+        // Google-only accounts have no password at all (never invented one -
+        // see registerGoogleUser) - a clearer message here beats the generic
+        // "invalid credentials", which would otherwise look like a typo'd
+        // password rather than "this account doesn't have one."
+        if (account.password == null) {
+            return { success: false, error: "This account signs in with Google. Use the Google button instead." };
+        }
+        if (account.password !== password) {
             return { success: false, error: "Invalid email or password credentials." };
         }
 
         return { success: true, userKey: cleanName };
+    },
+
+    // Google ID-token sign-in already did our email verification for us (its
+    // email_verified claim) - skip the verification-link/email flow entirely
+    // (isVerified: true immediately) and skip inventing a password this
+    // account would never actually use (password: null, authProvider:
+    // 'google' - see authenticateUser's guard against logging in with one).
+    async registerGoogleUser(email, displayName = '') {
+        return await withDistributedLock('profile:roster', async () => {
+            const cleanEmail = normalizeIdentity(email);
+            const cleanName = cleanEmail;
+            const cleanDisplayName = String(displayName || '').trim() || defaultDisplayNameFromEmail(cleanEmail);
+            const roster = await readRoster();
+            const now = Date.now();
+            const nowIso = new Date(now).toISOString();
+            const trialDays = resolvePositiveInt(process.env.SUBSCRIPTION_TRIAL_DAYS, 7);
+            const trialEndsAt = new Date(now + trialDays * 24 * 60 * 60 * 1000).toISOString();
+
+            if (roster[cleanName]) {
+                return { success: false, error: "Account already exists for this email.", existing: true };
+            }
+
+            roster[cleanName] = {
+                password: null,
+                authProvider: 'google',
+                email: cleanEmail,
+                displayName: cleanDisplayName,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            const defaultConfigs = {
+                username: cleanDisplayName,
+                displayName: cleanDisplayName,
+                name: cleanDisplayName,
+                email: cleanEmail,
+                loginKey: cleanName,
+                isVerified: true,
+                avatar: 'avatar_001.png',
+                signupDate: nowIso,
+                trialDays,
+                trialEndsAt,
+                freeAccessActive: trialDays > 0,
+                gracePeriodDays: resolvePositiveInt(process.env.SUBSCRIPTION_GRACE_DAYS, 3),
+                gracePeriodEndsAt: null,
+                preferences: { autoplay: true, UITheme: "dark" }
+            };
+
+            await writeRoster(roster);
+            await this.writeData(cleanName, 'config', defaultConfigs);
+            await this.writeData(cleanName, 'history', { logins: [], lastLogin: null });
+            await this.writeData(cleanName, 'playback', {});
+
+            logger.info(`👤 [USER PROVISIONING] Created new Google-authenticated profile for: ${cleanName}`);
+            return { success: true, userKey: cleanName };
+        }, { ttlMs: 10000, waitMs: 8000 });
     },
 
     async setPassword(userKey, nextPassword) {

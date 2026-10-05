@@ -3,6 +3,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { OAuth2Client } = require('google-auth-library');
 
 // 📂 REAL SERVICE IMPORTS (Fixed depth from src/routes to src/services)
 const ProfileService = require('../services/ProfileService');
@@ -10,6 +11,13 @@ const MailerService = require('../services/MailerService');
 const TurnstileService = require('../services/TurnstileService');
 const logger = require('../services/logger');
 const { getSessionCookieOptions, getClearCookieOptions } = require('../utils/cookieOptions');
+
+const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+// Only needs the client ID as the verifier - the secret is for the
+// authorization-code flow (exchanging a code for tokens), which this app
+// doesn't use. Sign-in with Google hands the frontend an already-signed ID
+// token directly; verifyIdToken just checks Google's own signature on it.
+const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 function resolveRequestIp(req) {
     return req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -41,6 +49,85 @@ router.get('/turnstile-config', (req, res) => {
         enabled,
         siteKey
     });
+});
+
+router.get('/google-config', (req, res) => {
+    return res.json({
+        success: true,
+        enabled: Boolean(googleOAuthClient),
+        clientId: GOOGLE_CLIENT_ID || null
+    });
+});
+
+// POST: /api/auth/google - "Sign in with Google" (also doubles as signup:
+// an unrecognized email just gets a new account on the spot, same one
+// button either way, matching how Google's own button behaves elsewhere).
+// Body: { credential } - the signed ID token Google's identity script hands
+// the frontend directly; nothing server-to-server, no redirect dance, no
+// client secret involved - verifyIdToken just checks Google's signature on
+// a token the frontend already has.
+router.post('/google', async (req, res) => {
+    if (!googleOAuthClient) {
+        return res.status(503).json({ success: false, error: 'Google sign-in is not configured on this server.' });
+    }
+
+    const credential = String(req.body?.credential || '').trim();
+    if (!credential) {
+        return res.status(400).json({ success: false, error: 'Missing Google credential.' });
+    }
+
+    const ipAddress = resolveRequestIp(req);
+
+    let payload;
+    try {
+        const ticket = await googleOAuthClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
+        payload = ticket.getPayload();
+    } catch (err) {
+        logger.warn(`[GOOGLE AUTH] Token verification failed from ${ipAddress}: ${err.message}`);
+        return res.status(401).json({ success: false, error: 'Invalid or expired Google sign-in token.' });
+    }
+
+    const cleanEmail = String(payload?.email || '').toLowerCase().trim();
+    if (!cleanEmail || payload?.email_verified !== true) {
+        return res.status(400).json({ success: false, error: 'Google did not provide a verified email address.' });
+    }
+    const displayName = String(payload?.name || '').trim();
+
+    try {
+        let cleanName = await ProfileService.resolveUserKey(cleanEmail);
+
+        if (!cleanName) {
+            const created = await ProfileService.registerGoogleUser(cleanEmail, displayName);
+            if (!created.success) {
+                logger.warn(`[GOOGLE AUTH] Account creation failed for "${cleanEmail}" from ${ipAddress}: ${created.error}`);
+                return res.status(400).json(created);
+            }
+            cleanName = created.userKey;
+        }
+
+        const userConfig = await ProfileService.readData(cleanName, 'config', null);
+        if (userConfig && (userConfig.accountDisabled === true || userConfig.accountArchived === true)) {
+            logger.warn(`[GOOGLE AUTH] Blocked for "${cleanName}" from ${ipAddress}: account disabled/archived.`);
+            return res.status(403).json({
+                success: false,
+                error: 'This account is disabled. Please contact support if you believe this is a mistake.'
+            });
+        }
+
+        await ProfileService.updateLoginHistory(cleanName, ipAddress);
+        res.cookie('user_profile', cleanName, getSessionCookieOptions(req));
+        return res.json({
+            success: true,
+            profile: {
+                userKey: cleanName,
+                email: userConfig?.email || cleanEmail,
+                displayName: userConfig?.displayName || userConfig?.name || displayName || cleanName
+            }
+        });
+    } catch (err) {
+        logger.error(`[GOOGLE AUTH] Error for "${cleanEmail}" from ${ipAddress}: ${err.message}`);
+        return res.status(500).json({ success: false, error: 'Google sign-in failed on our end. Please try again in a moment.' });
+    }
 });
 
 // POST: /api/auth/register

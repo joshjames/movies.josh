@@ -3990,6 +3990,13 @@ router.post('/refetch-metadata', async (req, res) => {
         // Ensure both camelCase and snake_case variations are stored identically
         const finalImdbId = data.imdbID || imdbId || '';
         const cleanTitle = data.Title || folder.replace(/[-_.]/g, ' ');
+        // This route rebuilds metadata independently of the pipeline's own
+        // METADATA stage (MetadataWorker.js's /process) - it never touched
+        // `links` at all before, so a "refresh/refetch" from the admin panel
+        // silently kept whatever (usually blank) trailer link already existed
+        // forever, no matter how many times you ran it. OMDb has no trailer
+        // data of its own; TMDb's /videos endpoint is the only source.
+        const trailerUrl = await metadataProvider.fetchTmdbTrailerUrl(finalImdbId).catch(() => null);
 
         // Construct baseline flat map fields securely
         const normalizedMetadata = {
@@ -4004,7 +4011,12 @@ router.post('/refetch-metadata', async (req, res) => {
             imdbId: finalImdbId,
             imdb_id: finalImdbId, // ✨ Map snake_case to preserve frontend input bindings
             plot: data.Plot || '',
-            contentType: contentType
+            contentType: contentType,
+            links: {
+                imdb: finalImdbId ? `https://www.imdb.com/title/${finalImdbId}/` : (existingMeta?.links?.imdb || ''),
+                rottenTomatoes: existingMeta?.links?.rottenTomatoes || '',
+                trailer: trailerUrl || existingMeta?.links?.trailer || ''
+            }
         };
 
         // 🎯 THE FIX: Keep nested structure perfectly mirrored so UI views and background processes are completely unified

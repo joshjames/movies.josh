@@ -159,6 +159,24 @@
             color: #94a3b8;
         }
 
+        .divider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 18px 0 14px;
+            color: #64748b;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .divider-row::before, .divider-row::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(148, 163, 184, 0.25);
+        }
+        .google-signin-container { display: flex; justify-content: center; }
+
         .toggle-link {
             color: #38bdf8;
             text-decoration: none;
@@ -274,6 +292,9 @@
 
             <button type="submit" class="submit-btn" id="submitBtn">Login</button>
         </form>
+
+        <div class="divider-row" id="googleDividerRow" style="display:none;">or</div>
+        <div class="google-signin-container" id="googleSignInContainer" style="display:none;"></div>
 
         <div class="toggle-box">
             <span id="toggleText">New to Anymovie?</span>
@@ -437,6 +458,7 @@
 
             updateModeUI();
             initializeTurnstile();
+            initGoogleSignIn();
         });
 
         function resolveTurnstileWaiters(token) {
@@ -522,6 +544,68 @@
                 'expired-callback': onTurnstileExpired,
                 'error-callback': onTurnstileError
             });
+        }
+
+        // One button covers both sign-in and sign-up - an unrecognized email
+        // just gets a new account on the spot server-side, so there's
+        // nothing mode-specific to wire up here beyond showing/hiding it.
+        async function initGoogleSignIn() {
+            try {
+                const response = await fetch('/api/auth/google-config', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.success || !data.enabled || !data.clientId) return;
+
+                await loadGoogleIdentityScript();
+
+                google.accounts.id.initialize({
+                    client_id: data.clientId,
+                    callback: handleGoogleCredentialResponse
+                });
+
+                document.getElementById('googleDividerRow').style.display = 'flex';
+                const container = document.getElementById('googleSignInContainer');
+                container.style.display = 'flex';
+                google.accounts.id.renderButton(container, { theme: 'filled_black', size: 'large', width: 320, text: 'continue_with' });
+            } catch (err) {
+                console.error('[google-auth] init failed:', err);
+                // Best-effort - the password form still works fine without this.
+            }
+        }
+
+        function loadGoogleIdentityScript() {
+            return new Promise((resolve, reject) => {
+                if (window.google?.accounts?.id) return resolve();
+                const script = document.createElement('script');
+                script.src = 'https://accounts.google.com/gsi/client';
+                script.async = true;
+                script.defer = true;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('google_script_failed'));
+                document.head.appendChild(script);
+            });
+        }
+
+        async function handleGoogleCredentialResponse(response) {
+            try {
+                const res = await fetch('/api/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ credential: response.credential })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) {
+                    showAlert(data.error || 'Google sign-in failed.', 'error');
+                    return;
+                }
+                window.location.replace('/');
+            } catch (err) {
+                console.error('[google-auth] sign-in request failed:', err);
+                showAlert('Network error - could not reach the server. Please check your connection and try again.', 'error');
+            }
         }
 
         async function initializeTurnstile() {
