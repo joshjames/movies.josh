@@ -384,6 +384,7 @@ const torrentSearchRouter = require('./src/routes/torrentsearch.routes');
 const profileRouter = require('./src/routes/profile.routes');
 const subtitleRouter = require('./src/routes/subtitle.routes');
 const accountRouter = require('./src/routes/account.routes');
+const acquisitionStatusRouter = require('./src/routes/acquisitionStatus.routes');
 
 
 
@@ -396,6 +397,7 @@ app.use('/api/torrent', torrentRouter);
 app.use('/api/torrentsearch', torrentSearchRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api', subtitleRouter);
+app.use('/api/acquisition-status', acquisitionStatusRouter);
 
 app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: "Requested core API coordinate map not found." });

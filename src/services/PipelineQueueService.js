@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const redis = require('redis');
 const logger = require('./logger');
+const AcquisitionStatusService = require('./AcquisitionStatusService');
 
 const DEFAULT_REDIS_HOST = process.env.REDIS_HOST || 'redis';
 const DEFAULT_REDIS_PORT = process.env.REDIS_PORT || '6379';
@@ -186,6 +187,7 @@ async function createJob(input = {}) {
   if (redisConnected && redisClient) {
     await syncJobToRedis(job);
   }
+  await AcquisitionStatusService.reportJobState(job);
   return job;
 }
 
@@ -231,6 +233,7 @@ async function updateJob(job, patch = {}) {
   if (redisConnected && redisClient) {
     await syncJobToRedis(next);
   }
+  await AcquisitionStatusService.reportJobState(next);
   return next;
 }
 
