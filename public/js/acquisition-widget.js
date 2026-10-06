@@ -31,9 +31,37 @@
     };
 
     let items = [];
-    let lastKnownStage = new Map(); // jobId -> uiStage, for change-triggered toasts only
     let pollTimer = null;
     let homeMode = false;
+    const STAGE_MEMORY_KEY = 'acq-widget-last-stage';
+
+    // jobId -> uiStage, for change-triggered toasts only - persisted to
+    // sessionStorage (not just an in-memory Map) because a plain page
+    // navigation is a full reload of this script: without this, every page
+    // load would see every active job as "first time ever", so a stage
+    // change that happens to land while the user is mid-navigation (the
+    // entire point of this being a cross-page widget) would never toast.
+    // sessionStorage specifically (not localStorage) because this is only
+    // meant to suppress a duplicate toast within one browsing session, not
+    // remember state forever.
+    function loadStageMemory() {
+        try {
+            return new Map(Object.entries(JSON.parse(sessionStorage.getItem(STAGE_MEMORY_KEY) || '{}')));
+        } catch (_err) {
+            return new Map();
+        }
+    }
+
+    function saveStageMemory(map) {
+        try {
+            sessionStorage.setItem(STAGE_MEMORY_KEY, JSON.stringify(Object.fromEntries(map)));
+        } catch (_err) {
+            // Private-mode/storage-disabled - toasts just won't survive a
+            // navigation in that case, same as before this fix existed.
+        }
+    }
+
+    let lastKnownStage = loadStageMemory();
 
     function injectStyles() {
         if (document.getElementById('acq-widget-styles')) return;
@@ -41,7 +69,14 @@
         style.id = 'acq-widget-styles';
         style.textContent = `
             .acq-float-btn {
-                position: fixed; top: 16px; right: 16px; width: 48px; height: 48px;
+                position: fixed; top: 16px; right: 16px;
+                /* width/min/max all pinned the same - some pages define a
+                   generic "button { min-width: 100px }" rule (browse.html),
+                   and min-width always wins over a smaller width regardless
+                   of selector specificity (they're not competing on the
+                   same property), which was stretching this into an oval. */
+                width: 48px; min-width: 48px; max-width: 48px;
+                height: 48px; min-height: 48px; max-height: 48px;
                 border-radius: 50%; border: 2px solid #1e293b; background: #0f172a;
                 cursor: pointer; z-index: 9000; display: none; align-items: center;
                 justify-content: center; padding: 3px; box-shadow: 0 4px 10px rgba(0,0,0,0.4);
@@ -332,6 +367,8 @@
         Array.from(lastKnownStage.keys()).forEach((jobId) => {
             if (!nextIds.has(jobId)) lastKnownStage.delete(jobId);
         });
+
+        saveStageMemory(lastKnownStage);
     }
 
     async function poll() {
