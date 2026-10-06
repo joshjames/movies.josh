@@ -55,13 +55,6 @@
             transform: scale(1.05);
         }
 
-        .left-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            min-width: 0;
-        }
-
         .right-actions {
             display: flex;
             align-items: center;
@@ -244,24 +237,6 @@
             background: #1d4ed8;
         }
 
-        .admin-mini-btn {
-            display: none;
-            width: 34px;
-            height: 34px;
-            border-radius: 999px;
-            text-decoration: none;
-            align-items: center;
-            justify-content: center;
-            background: #7e22ce;
-            border: 1px solid #9333ea;
-            color: #ffffff;
-            font-size: 0.95rem;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
-        }
-
-        .admin-mini-btn:hover {
-            background: #9333ea;
-        }
 
         .avatar-wrap {
             position: relative;
@@ -1005,10 +980,6 @@
                 gap: 10px;
             }
 
-            .left-actions {
-                display: none;
-            }
-
             .right-actions {
                 grid-area: right;
                 min-width: 0;
@@ -1137,10 +1108,6 @@
         <div class="header-content">
            
 
-            <div class="left-actions">
-                <a href="/admin.html" id="admin-action-btn" class="admin-mini-btn" aria-label="Admin Desk" title="Admin Desk">🛠️</a>
-            </div>
-
             <div class="logo-wrapper" onclick="window.location.href='/';">
     <svg viewBox="0 0 500 135" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -1183,7 +1150,6 @@
             </div>
 
             <div class="right-actions">
-                <button type="button" class="install-app-btn" id="install-app-btn">Install App</button>
                 <a href="/browse.html" class="browse-nav-btn">🔍 Browse Catalog</a>
                 <div class="avatar-wrap">
                     <button type="button" class="avatar-btn" id="avatar-btn" aria-label="Open account menu">
@@ -1194,6 +1160,7 @@
                         <div class="avatar-menu-header" id="avatar-menu-user">Signed in</div>
                         <a href="/queue.html" class="avatar-item">Queue Manager</a>
                         <a href="/account.html" class="avatar-item">Account</a>
+                        <a href="/admin.html" id="admin-menu-item" class="avatar-item" style="display:none;">🛠️ Admin Desk</a>
                         <a href="/api/auth/logout" class="avatar-item">Logout</a>
                         <div class="avatar-menu-divider"></div>
                         <section class="notify-panel" id="notify-panel">
@@ -1596,9 +1563,9 @@
                     
                     // 🛡️ IDENTITY GATING: Expose admin configurations explicitly for 'josh'
                     if (cleanUsername === 'josh' || cleanUsername.startsWith('josh@') || data.config?.isAdmin === true) {
-                        const adminBtn = document.getElementById('admin-action-btn');
-                        if (adminBtn) {
-                            adminBtn.style.display = 'inline-flex';
+                        const adminMenuItem = document.getElementById('admin-menu-item');
+                        if (adminMenuItem) {
+                            adminMenuItem.style.display = 'block';
                         }
                     }
                 }
