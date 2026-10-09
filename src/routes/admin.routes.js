@@ -924,8 +924,18 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
             }
         }
 
+        let localSize = null;
+        if (localPath) {
+            try {
+                localSize = fs.statSync(path.join(folderPath, localPath)).size;
+            } catch (_err) {
+                localSize = null;
+            }
+        }
+        const sizeMismatch = cloudExists && localSize != null && cloudSize != null && localSize !== cloudSize;
+
         let nextStatus = block.status;
-        if (cloudExists) {
+        if (cloudExists && !sizeMismatch) {
             nextStatus = 'synced';
         } else if (localPath) {
             nextStatus = 'pending';
@@ -954,7 +964,10 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
             status: nextBlock.status,
             localPath: nextBlock.localPath,
             remoteKey: nextBlock.remoteKey,
-            cloudExists
+            cloudExists,
+            cloudSize,
+            localSize,
+            sizeMismatch
         });
     }
 
