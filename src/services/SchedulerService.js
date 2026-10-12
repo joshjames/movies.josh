@@ -98,6 +98,29 @@ async function ensurePublicRowsSchedule() {
     await ensureRepeatableJob(PUBLIC_ROWS_QUEUE_NAME, PUBLIC_ROWS_JOB_ID, PUBLIC_ROWS_INTERVAL_MS, 'build-rows');
 }
 
+// Bulk B2->R2 migration (2026-10-12 storage migration - see
+// CloudStorageService.js and /home/epic/.claude/plans/peppy-dancing-yao.md).
+// Two jobs: a slow "build" pass that walks the library for anything not yet
+// provider:'r2' and tops up a small persistent queue file, and a fast
+// "sweep" pass that pops a few items off it per tick - that batch size +
+// interval IS the rate limit, deliberately conservative given the B2
+// network incident this migration is a response to.
+const R2_MIGRATION_BUILD_QUEUE_NAME = 'r2-migration-build';
+const R2_MIGRATION_BUILD_JOB_ID = 'r2-migration-build-repeatable';
+const R2_MIGRATION_BUILD_INTERVAL_MS = Math.max(60 * 60 * 1000, parseInt(process.env.R2_MIGRATION_BUILD_INTERVAL_MS, 10) || 24 * 60 * 60 * 1000);
+
+async function ensureR2MigrationBuildSchedule() {
+    await ensureRepeatableJob(R2_MIGRATION_BUILD_QUEUE_NAME, R2_MIGRATION_BUILD_JOB_ID, R2_MIGRATION_BUILD_INTERVAL_MS, 'build-queue');
+}
+
+const R2_MIGRATION_SWEEP_QUEUE_NAME = 'r2-migration-sweep';
+const R2_MIGRATION_SWEEP_JOB_ID = 'r2-migration-sweep-repeatable';
+const R2_MIGRATION_SWEEP_INTERVAL_MS = Math.max(10 * 1000, parseInt(process.env.R2_MIGRATION_SWEEP_INTERVAL_MS, 10) || 30 * 1000);
+
+async function ensureR2MigrationSweepSchedule() {
+    await ensureRepeatableJob(R2_MIGRATION_SWEEP_QUEUE_NAME, R2_MIGRATION_SWEEP_JOB_ID, R2_MIGRATION_SWEEP_INTERVAL_MS, 'sweep');
+}
+
 module.exports = {
     METADATA_MIRROR_QUEUE_NAME,
     METADATA_MIRROR_INTERVAL_MS,
@@ -111,5 +134,11 @@ module.exports = {
     PIPELINE_TICK_QUEUE_NAME,
     ensurePipelineTickSchedule,
     PUBLIC_ROWS_QUEUE_NAME,
-    ensurePublicRowsSchedule
+    ensurePublicRowsSchedule,
+    R2_MIGRATION_BUILD_QUEUE_NAME,
+    R2_MIGRATION_BUILD_INTERVAL_MS,
+    ensureR2MigrationBuildSchedule,
+    R2_MIGRATION_SWEEP_QUEUE_NAME,
+    R2_MIGRATION_SWEEP_INTERVAL_MS,
+    ensureR2MigrationSweepSchedule
 };

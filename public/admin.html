@@ -2328,7 +2328,7 @@
                 }
 
                 const profileSummary = Object.entries((data.storage && data.storage.files) || {})
-                    .map(([profile, block]) => `${profile}:${block && block.status ? block.status : 'unknown'}`)
+                    .map(([profile, block]) => `${profile}:${block && block.status ? block.status : 'unknown'}${block && block.provider ? ` (${block.provider})` : ''}`)
                     .join(' | ');
 
                 showToast(

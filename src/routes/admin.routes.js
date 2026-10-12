@@ -43,6 +43,7 @@ const { getLibrary, connectDb } = require('../services/db'); // 🚨 NEW FIX: Im
 // 🚨 NEW FIX: Require your unified pipeline background engine scanner
 const LibraryScanner = require('../services/LibraryScanner');
 const CdnSyncService = require('../services/CdnSyncService');
+const CloudStorageService = require('../services/CloudStorageService');
 const CdnAssetService = require('../services/CdnAssetService'); 
 const { buildHomeFeed, buildRecentFeed, saveHomeFeed, saveRecentFeed, loadHomeFeedWithFallback } = require('../services/HomeFeedService');
 const { buildDefaultWorkerEndpoints, processToHealthUrl } = require('../services/WorkerEndpoints');
@@ -886,6 +887,9 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
 
     const storage = baseRepair.storage;
     const files = storage.files || {};
+    // Legacy B2 path only (used for pre-migration-key rekeying below) -
+    // R2-native entries never need this, their keys are canonical from
+    // creation. CloudStorageService owns the per-provider client/bucket now.
     const bucket = storage.bucket || process.env.B2_BUCKET || process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
     const s3Client = getArchiveS3Client();
     let changed = Boolean(baseRepair.changed);
@@ -897,22 +901,33 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
         const localPath = detectLocalProfilePath(folderPath, profile, block.localPath || '');
         let remoteKey = cleanRemoteKey(block.remoteKey || '');
 
+        // This is a low-frequency maintenance path (unlike playback's hot
+        // cache-aside), so rather than trust a possibly-stale `provider`
+        // field blindly, check the declared provider first and fall back to
+        // the other one if that misses - whichever actually has the object
+        // wins, and `provider` gets corrected to match reality below.
+        let provider = block.provider === CloudStorageService.PROVIDER.R2 ? CloudStorageService.PROVIDER.R2 : CloudStorageService.PROVIDER.B2;
         let cloudExists = false;
         let cloudSize = null;
         if (remoteKey) {
-            try {
-                const headResult = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: remoteKey }));
-                cloudExists = true;
-                cloudSize = headResult.ContentLength;
-            } catch (_err) {
-                cloudExists = false;
+            cloudSize = await CloudStorageService.headObjectSize(provider, remoteKey);
+            cloudExists = cloudSize != null;
+            if (!cloudExists) {
+                const otherProvider = provider === CloudStorageService.PROVIDER.R2 ? CloudStorageService.PROVIDER.B2 : CloudStorageService.PROVIDER.R2;
+                const otherSize = await CloudStorageService.headObjectSize(otherProvider, remoteKey);
+                if (otherSize != null) {
+                    provider = otherProvider;
+                    cloudSize = otherSize;
+                    cloudExists = true;
+                }
             }
         }
 
-        // Movies only for now - series keys are per-episode
-        // (series/<imdbId>/season.NN/sNNeNN/profile.mp4) and need their own
-        // migration path rather than this flat movies/<id>/profile.mp4 shape.
-        if (cloudExists && hasValidImdbId && normalizedType === 'movie'
+        // Movies only for now, B2-legacy-key-rekeying only - series keys are
+        // per-episode (series/<imdbId>/season.NN/sNNeNN/profile.mp4) need
+        // their own migration path, and R2-native entries already use
+        // canonical imdb-based keys by construction.
+        if (cloudExists && hasValidImdbId && normalizedType === 'movie' && provider === CloudStorageService.PROVIDER.B2
             && (profile === '1080p' || profile === '720p' || profile === '480p')) {
             const canonicalKey = `${base}/${imdbId}/${profile}.mp4`;
             const migratedKey = await migrateRemoteKeyToImdbIfNeeded(s3Client, bucket, {
@@ -947,13 +962,15 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
             ...block,
             status: nextStatus,
             localPath: localPath || null,
-            remoteKey: remoteKey || null
+            remoteKey: remoteKey || null,
+            provider: cloudExists ? provider : (block.provider || null)
         };
 
         if (
             nextBlock.status !== block.status ||
             String(nextBlock.localPath || '') !== String(block.localPath || '') ||
-            String(nextBlock.remoteKey || '') !== String(block.remoteKey || '')
+            String(nextBlock.remoteKey || '') !== String(block.remoteKey || '') ||
+            String(nextBlock.provider || '') !== String(block.provider || '')
         ) {
             files[profile] = nextBlock;
             changed = true;
@@ -964,6 +981,7 @@ async function verifyAndRepairStorageProfiles(metadata = {}, folderPath = '', co
             status: nextBlock.status,
             localPath: nextBlock.localPath,
             remoteKey: nextBlock.remoteKey,
+            provider: nextBlock.provider,
             cloudExists,
             cloudSize,
             localSize,

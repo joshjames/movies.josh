@@ -180,7 +180,8 @@ function planSeriesUploads(folderPath, folderName, imdbId) {
             const existingRemoteKey = existingStorage?.files?.[profile]?.remoteKey;
 
             if (existingRemoteKey) {
-                claimedSynced.push({ season, episode, profile, remoteKey: existingRemoteKey, localPath: localPath || null });
+                const existingProvider = existingStorage?.files?.[profile]?.provider || null;
+                claimedSynced.push({ season, episode, profile, remoteKey: existingRemoteKey, provider: existingProvider, localPath: localPath || null });
                 continue;
             }
             if (!localPath) continue; // nothing local for this profile yet (needs transcode first) - legitimately not ready, not an error

@@ -3,9 +3,6 @@
 
 const express = require('express');
 const axios = require('axios');
-const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
-const { Upload } = require('@aws-sdk/lib-storage');
-const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const path = require('path');
 const fs = require('fs');
 const logger = require('../logger');
@@ -14,44 +11,28 @@ require('dotenv').config({ path: path.join(__dirname, '../../../.env'), quiet: t
 const app = express();
 app.use(express.json());
 
-const BUCKET_NAME = process.env.CLOUD_BUCKET_NAME || 'joshflixmedia';
 // File-discovery/upload-planning logic now lives in the shared
 // MediaFileWalker.js - see TranscoderWorker.js's own require for the
 // matching rationale.
 const { planSeriesUploads } = require('../MediaFileWalker');
 
-const s3Client = new S3Client({
-    endpoint: process.env.CLOUD_ENDPOINT || 'https://s3.us-west-004.backblazeb2.com',
-    credentials: {
-        accessKeyId: process.env.BBkeyID,
-        secretAccessKey: process.env.BBapplicationKey
-    },
-    region: process.env.CLOUD_REGION || 'us-west-004',
-    maxAttempts: 3,
-    // No timeout was configured before - a stalled TCP connection (e.g. a
-    // transient network blip mid-upload) would hang forever with zero CPU
-    // usage instead of failing and letting the caller/retry logic take over.
-    requestHandler: new NodeHttpHandler({
-        connectionTimeout: 10_000,
-        requestTimeout: 5 * 60 * 1000
-    })
-});
+// New uploads go to R2 only (2026-10-12 migration - see CloudStorageService.js
+// and /home/epic/.claude/plans/peppy-dancing-yao.md). B2 verification stays
+// available for legacy/not-yet-migrated entries.
+const CloudStorageService = require('../CloudStorageService');
+const { PROVIDER } = CloudStorageService;
 
 // Confirmed root cause of a real incident (2026-09-27, Scott Pilgrim Takes
 // Off episode 7): a profile's manifest entry can carry a remoteKey without
-// the object actually existing in B2 (e.g. a write ordering race, or an
-// upload that got interrupted after the manifest update but before the
+// the object actually existing in the cloud (e.g. a write ordering race, or
+// an upload that got interrupted after the manifest update but before the
 // stream fully flushed). Everywhere that used to trust "remoteKey is set"
-// as proof of being synced now verifies it against B2 directly instead -
-// this is the one stage whose failure mode is silent data loss, so it's
-// worth the extra round trip other stages don't need.
-async function verifyRemoteObjectExists(key) {
-    try {
-        await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
-        return true;
-    } catch (_err) {
-        return false;
-    }
+// as proof of being synced now verifies it directly instead - this is the
+// one stage whose failure mode is silent data loss, so it's worth the extra
+// round trip other stages don't need. Checks whichever provider the entry
+// claims (default B2 for pre-migration entries with no provider field).
+async function verifyRemoteObjectExists(key, provider = PROVIDER.B2) {
+    return CloudStorageService.objectExists(provider, key);
 }
 
 // =========================================================================
@@ -103,7 +84,7 @@ async function uploadOneEpisodeProfile({ seriesJsonPath, folderName, directoryId
                 location: 'remote',
                 files: {
                     ...existingFiles,
-                    [profile]: { status: 'synced', localPath: path.basename(localPath), remoteKey }
+                    [profile]: { status: 'synced', localPath: path.basename(localPath), remoteKey, provider: PROVIDER.R2 }
                 }
             }
         };
@@ -121,8 +102,8 @@ async function uploadOneEpisodeProfile({ seriesJsonPath, folderName, directoryId
 // actually in B2, and nothing ever asked B2 to confirm it. Throws (rather
 // than swallowing) if the object is genuinely missing and there's no local
 // source left to re-upload from - matching every other stage's honesty fix.
-async function verifyOneEpisodeProfile({ season, episode, profile, localPath, remoteKey }) {
-    const exists = await verifyRemoteObjectExists(remoteKey);
+async function verifyOneEpisodeProfile({ season, episode, profile, localPath, remoteKey, provider }) {
+    const exists = await verifyRemoteObjectExists(remoteKey, provider || PROVIDER.B2);
     if (exists) {
         return { season, episode, profile, remoteKey, verified: true };
     }
@@ -133,7 +114,7 @@ async function verifyOneEpisodeProfile({ season, episode, profile, localPath, re
     if (localPath && fs.existsSync(localPath)) {
         logger.info(`🚑 [Series Cloud Sync Verify] Local source still present - re-uploading S${season}E${episode} [${profile}].`);
         await uploadLargeFileStream(localPath, remoteKey, profile);
-        return { season, episode, profile, remoteKey, reuploaded: true };
+        return { season, episode, profile, remoteKey, provider: PROVIDER.R2, reuploaded: true };
     }
 
     throw new Error(`${msg} Local source file is also missing - this episode needs to be re-transcoded before it can sync.`);
@@ -281,7 +262,8 @@ app.post('/process', async (req, res) => {
                 patchData.storage.files[profile] = {
                     status: 'synced',
                     localPath: path.basename(localVideoPath),
-                    remoteKey
+                    remoteKey,
+                    provider: PROVIDER.R2
                 };
                 hasProcessedAny = true;
             } else {
@@ -333,7 +315,7 @@ app.post('/process', async (req, res) => {
             const fileBlock = metadata.storage.files?.[profile];
             if (!fileBlock || fileBlock.status !== 'synced' || !fileBlock.remoteKey) continue;
 
-            const exists = await verifyRemoteObjectExists(fileBlock.remoteKey);
+            const exists = await verifyRemoteObjectExists(fileBlock.remoteKey, fileBlock.provider || PROVIDER.B2);
             if (exists) continue;
 
             const msg = `Profile ${profile} for ${folderName}: manifest claims synced (${fileBlock.remoteKey}) but the object is missing from B2.`;
@@ -344,6 +326,9 @@ app.post('/process', async (req, res) => {
                 try {
                     logger.info(`🚑 [Cloud Sync Verify] Local source still present - re-uploading [${profile}] for ${folderName}.`);
                     await uploadLargeFileStream(localVideoPath, fileBlock.remoteKey, profile);
+                    // Re-upload always lands on R2 (see uploadLargeFileStream below) -
+                    // mark it so, even though the key/status were already correct.
+                    metadata.storage.files[profile] = { ...fileBlock, provider: PROVIDER.R2 };
                 } catch (err) {
                     errors.push(`${msg} Re-upload attempt also failed: ${err.message}`);
                     metadata.storage.files[profile] = { ...fileBlock, status: 'pending' };
@@ -385,28 +370,17 @@ app.post('/process', async (req, res) => {
 
 // =========================================================================
 // 📦 HIGH-RELIABILITY MULTIPART S3 STREAM CHUNKER
+// New uploads go to R2 only (2026-10-12 migration) - see
+// CloudStorageService.js for the client/Upload tuning (same queueSize:4,
+// 5MiB parts this always used).
 // =========================================================================
 async function uploadLargeFileStream(localPath, remoteKey, profile) {
-    const fileStream = fs.createReadStream(localPath);
-    
-    const uploadWorker = new Upload({
-        client: s3Client,
-        params: {
-            Bucket: BUCKET_NAME,
-            Key: remoteKey,
-            Body: fileStream,
-            ContentType: 'video/mp4'
-        },
-        queueSize: 4,
-        partSize: 1024 * 1024 * 5
+    await CloudStorageService.uploadStream(PROVIDER.R2, remoteKey, localPath, {
+        onProgress: (p) => {
+            const mbSent = (p.loaded / (1024 * 1024)).toFixed(2);
+            logger.debug(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
+        }
     });
-
-    uploadWorker.on('httpUploadProgress', (p) => {
-        const mbSent = (p.loaded / (1024 * 1024)).toFixed(2);
-        logger.debug(`⏳ [Sync Chunk Tracking] [${profile}] Progressed: ${mbSent} MB`);
-    });
-
-    await uploadWorker.done(); 
 }
 
 const PORT = process.env.CLOUD_SYNC_WORKER_PORT || 5004;

@@ -36,6 +36,7 @@ const {
 } = require('../services/StoragePathResolver');
 
 const MediaService = require('../services/MediaService');
+const MetadataRegistry = require('../services/MetadataRegistry');
 const { normalizeSubtitleToken, isSubtitleRelatedToVideo } = require('../services/SubtitleFileMatching');
 const { getAllJobs } = require('../services/PipelineQueueService');
 const YtsCatalogService = require('../services/YtsCatalogService');
@@ -1611,8 +1612,37 @@ async function resolveEpisodeCloudPlaybackUrl(showFolder, seasonNumber, episodeN
     const storage = findEpisodeStorage(showFolder, seasonNumber, episodeNumber);
     if (!storage || storage.location !== 'remote') return null;
 
+    const showPath = resolveSeriesFolderPath(showFolder, { mustExist: true });
+    const seriesJsonPath = showPath ? path.join(showPath, 'series.json') : null;
+
+    // Same patch shape CloudSyncWorker.js's uploadOneEpisodeProfile already
+    // writes after a real upload - just adding provider:'r2' once a lazy
+    // replication copy is verified complete.
+    const onProfileReplicated = (profile) => () => {
+        if (!seriesJsonPath) return;
+        return MetadataRegistry.mergeAndCommit(seriesJsonPath, showFolder, async (structure) => {
+            const next = { ...structure, seasons: { ...structure.seasons } };
+            const seasonEntry = next.seasons[seasonNumber];
+            if (!seasonEntry) return next;
+
+            const episodes = [...(seasonEntry.episodes || [])];
+            const idx = episodes.findIndex((e) => Number(e.episodeNumber) === Number(episodeNumber));
+            if (idx === -1) return next;
+
+            const existingFiles = episodes[idx].storage?.files || {};
+            if (!existingFiles[profile]) return next;
+
+            episodes[idx] = {
+                ...episodes[idx],
+                storage: { ...episodes[idx].storage, files: { ...existingFiles, [profile]: { ...existingFiles[profile], provider: 'r2' } } }
+            };
+            next.seasons[seasonNumber] = { ...seasonEntry, episodes };
+            return next;
+        });
+    };
+
     for (const profile of ['1080p', '720p', '480p']) {
-        const url = await MediaService.getPlaybackUrl({ storage }, profile, null);
+        const url = await MediaService.getPlaybackUrl({ storage }, profile, null, onProfileReplicated(profile));
         if (url) return url;
     }
     return null;
@@ -1623,7 +1653,8 @@ function isAllowedRemoteStreamUrl(inputUrl) {
         const parsed = new URL(String(inputUrl || ''));
         if (parsed.protocol !== 'https:') return false;
         const host = String(parsed.hostname || '').toLowerCase();
-        return host.endsWith('.backblazeb2.com') || host === 's3.us-west-004.backblazeb2.com';
+        return host.endsWith('.backblazeb2.com') || host === 's3.us-west-004.backblazeb2.com'
+            || host.endsWith('.r2.cloudflarestorage.com');
     } catch (_err) {
         return false;
     }
@@ -3303,20 +3334,31 @@ router.get('/movies/:id', async (req, res) => {
                 streamPayload.localFallback1080p = local1080 ? `/movie-assets/${movieId}/${local1080}` : null;
                 streamPayload.localFallback720p = local720 ? `/movie-assets/${movieId}/${local720}` : null;
                 streamPayload.localFallback480p = local480 ? `/movie-assets/${movieId}/${local480}` : null;
+                const onProfileReplicated = (profile) => () => MetadataRegistry.mergeAndCommit(metaFilePath, movieId, (current) => {
+                    const next = { ...current, storage: { ...current.storage, files: { ...current.storage?.files } } };
+                    if (next.storage.files[profile]) {
+                        next.storage.files[profile] = { ...next.storage.files[profile], provider: 'r2' };
+                    }
+                    return next;
+                });
+
                 streamPayload.file1080p = await MediaService.getPlaybackUrl(
                     metaData,
                     '1080p',
-                    null
+                    null,
+                    onProfileReplicated('1080p')
                 );
                 streamPayload.file720p = await MediaService.getPlaybackUrl(
                     metaData,
                     '720p',
-                    null
+                    null,
+                    onProfileReplicated('720p')
                 );
                 streamPayload.file480p = await MediaService.getPlaybackUrl(
                     metaData,
                     '480p',
-                    null
+                    null,
+                    onProfileReplicated('480p')
                 );
 
                 attachDetails(metaData);

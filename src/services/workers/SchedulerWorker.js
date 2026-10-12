@@ -20,11 +20,57 @@ const {
     IMDB_REFRESH_QUEUE_NAME,
     ensureImdbRefreshSchedule,
     PUBLIC_ROWS_QUEUE_NAME,
-    ensurePublicRowsSchedule
+    ensurePublicRowsSchedule,
+    R2_MIGRATION_BUILD_QUEUE_NAME,
+    ensureR2MigrationBuildSchedule,
+    R2_MIGRATION_SWEEP_QUEUE_NAME,
+    ensureR2MigrationSweepSchedule
 } = require('../SchedulerService');
 const SeriesAutoGetService = require('../SeriesAutoGetService');
 const PublicRowBuilderService = require('../PublicRowBuilderService');
+const R2MigrationQueue = require('../R2MigrationQueue');
+const CloudStorageService = require('../CloudStorageService');
+const MetadataRegistry = require('../MetadataRegistry');
 const logger = require('../logger');
+
+const R2_MIGRATION_SWEEP_BATCH_SIZE = Math.max(1, parseInt(process.env.R2_MIGRATION_BATCH_SIZE, 10) || 4);
+
+// Same patch shape CloudSyncWorker.js's upload paths already write - just
+// adding provider:'r2' once a bulk-sweep copy is verified complete. Movie
+// and series items share one function since R2MigrationQueue.js's item
+// shape already distinguishes them (seasonNumber/episodeNumber present only
+// for series).
+async function markItemReplicated(item) {
+    if (item.contentType === 'series') {
+        await MetadataRegistry.mergeAndCommit(item.metaFilePath, item.folderName, async (structure) => {
+            const next = { ...structure, seasons: { ...structure.seasons } };
+            const seasonEntry = next.seasons[item.seasonNumber];
+            if (!seasonEntry) return next;
+
+            const episodes = [...(seasonEntry.episodes || [])];
+            const idx = episodes.findIndex((e) => Number(e.episodeNumber) === Number(item.episodeNumber));
+            if (idx === -1) return next;
+
+            const existingFiles = episodes[idx].storage?.files || {};
+            if (!existingFiles[item.profile]) return next;
+
+            episodes[idx] = {
+                ...episodes[idx],
+                storage: { ...episodes[idx].storage, files: { ...existingFiles, [item.profile]: { ...existingFiles[item.profile], provider: 'r2' } } }
+            };
+            next.seasons[item.seasonNumber] = { ...seasonEntry, episodes };
+            return next;
+        });
+    } else {
+        await MetadataRegistry.mergeAndCommit(item.metaFilePath, item.folderName, (current) => {
+            const next = { ...current, storage: { ...current.storage, files: { ...current.storage?.files } } };
+            if (next.storage.files[item.profile]) {
+                next.storage.files[item.profile] = { ...next.storage.files[item.profile], provider: 'r2' };
+            }
+            return next;
+        });
+    }
+}
 
 const SSH_KEY_PATH = process.env.SCHEDULER_SYNC_SSH_KEY || '/app/.ssh/id_ed25519_scheduler_sync';
 
@@ -245,6 +291,8 @@ async function main() {
     await ensureTvAutoGetSchedule();
     await ensureImdbRefreshSchedule();
     await ensurePublicRowsSchedule();
+    await ensureR2MigrationBuildSchedule();
+    await ensureR2MigrationSweepSchedule();
 
     const metadataMirrorWorker = new Worker(
         METADATA_MIRROR_QUEUE_NAME,
@@ -327,7 +375,66 @@ async function main() {
         logger.error(`[Scheduler] public-rows-refresh job ${job?.id} failed: ${err.message}`);
     });
 
-    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror, tv-auto-get, imdb-refresh, and public-rows-refresh queues active.');
+    // Bulk B2->R2 migration, slow build half - walks the library for
+    // anything not yet provider:'r2' and tops up the persisted queue file.
+    // See R2MigrationQueue.js.
+    const r2MigrationBuildWorker = new Worker(
+        R2_MIGRATION_BUILD_QUEUE_NAME,
+        async (job) => {
+            logger.info(`[Scheduler] Running r2-migration-build job ${job.id}...`);
+            return R2MigrationQueue.buildQueue();
+        },
+        { connection: getSchedulerRedisConnection(), concurrency: 1 }
+    );
+
+    r2MigrationBuildWorker.on('completed', (job, result) => {
+        logger.info(`[Scheduler] r2-migration-build job ${job.id} completed - appended=${result.appended}, totalPending=${result.totalPending}.`);
+    });
+    r2MigrationBuildWorker.on('failed', (job, err) => {
+        logger.error(`[Scheduler] r2-migration-build job ${job?.id} failed: ${err.message}`);
+    });
+
+    // Bulk B2->R2 migration, fast sweep half - pops a few items per tick and
+    // replicates them via the same CloudStorageService.triggerLazyReplication
+    // playback uses on a cache miss, just awaited/sequential here so batch
+    // size + interval act as the rate limit (deliberately conservative given
+    // the B2 network incident this migration responds to).
+    const r2MigrationSweepWorker = new Worker(
+        R2_MIGRATION_SWEEP_QUEUE_NAME,
+        async (job) => {
+            const batch = R2MigrationQueue.popBatch(R2_MIGRATION_SWEEP_BATCH_SIZE);
+            let replicated = 0;
+            let failed = 0;
+
+            for (const item of batch) {
+                try {
+                    if (await CloudStorageService.objectExists(CloudStorageService.PROVIDER.R2, item.key)) {
+                        await markItemReplicated(item);
+                        replicated += 1;
+                        continue;
+                    }
+                    await CloudStorageService.triggerLazyReplication(item.key, { onReplicated: () => markItemReplicated(item) });
+                    replicated += 1;
+                } catch (err) {
+                    logger.warn(`[Scheduler] r2-migration-sweep: failed to replicate ${item.key}: ${err.message}`);
+                    R2MigrationQueue.putBack(item);
+                    failed += 1;
+                }
+            }
+
+            if (batch.length) {
+                logger.debug(`[Scheduler] r2-migration-sweep job ${job.id}: replicated=${replicated} failed=${failed} of ${batch.length}.`);
+            }
+            return { replicated, failed, batchSize: batch.length };
+        },
+        { connection: getSchedulerRedisConnection(), concurrency: 1 }
+    );
+
+    r2MigrationSweepWorker.on('failed', (job, err) => {
+        logger.error(`[Scheduler] r2-migration-sweep job ${job?.id} failed: ${err.message}`);
+    });
+
+    logger.info('[Scheduler] SchedulerWorker started - metadata-mirror, tv-auto-get, imdb-refresh, public-rows-refresh, and r2-migration queues active.');
 }
 
 main().catch((err) => {

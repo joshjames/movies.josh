@@ -1,11 +1,15 @@
 // src/services/MediaService.js
-// Cloud storage abstraction layer handling secure Backblaze B2 presigned URLs via native S3 bindings.
+// Cloud storage abstraction layer - presigns playback URLs against whichever
+// provider a profile's storage.files[profile].provider says (R2 - the
+// primary backend since 2026-10-12 - or absent/legacy B2), falling back to
+// B2 and triggering a background lazy replication to R2 on a miss. See
+// CloudStorageService.js and /home/epic/.claude/plans/peppy-dancing-yao.md.
 
-const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const path = require('path');
 const fs = require('fs').promises;
 const logger = require('./logger');
+const CloudStorageService = require('./CloudStorageService');
+const { PROVIDER } = CloudStorageService;
 
 function normalizeAbsoluteUrl(input) {
     const raw = String(input || '').trim();
@@ -44,18 +48,6 @@ function buildSiteAbsoluteUrl(siteUrl, localPath) {
     return `${siteRoot}/${normalizedPath}`;
 }
 
-// Backblaze B2 configuration context
-const B2_ENDPOINT = `https://s3.us-west-004.backblazeb2.com`;
-
-const s3Client = new S3Client({
-    endpoint: B2_ENDPOINT,
-    credentials: {
-        accessKeyId: process.env.BBkeyID,
-        secretAccessKey: process.env.BBapplicationKey
-    },
-    region: 'us-west-004' 
-});
-
 function resolvePlaybackUrlCandidate(metadata, resolutionProfile, localFallbackPath) {
     const storage = metadata?.storage;
     const fileMeta = storage?.files?.[resolutionProfile];
@@ -88,7 +80,12 @@ const MediaService = {
      * Resolve a secure, executable playback URL contextually based on file locality states.
      * Handles local fallback cleanly if files aren't uploaded or if credentials fail.
      */
-    async getPlaybackUrl(metadata, resolutionProfile, localFallbackPath) {
+    // onReplicated: optional async callback invoked only after a verified
+    // successful lazy B2->R2 copy - lets the movie/episode call site (which
+    // knows its own metadata.json/series.json patch shape) mark
+    // provider:'r2' once it's actually true, without this module needing to
+    // know either shape itself.
+    async getPlaybackUrl(metadata, resolutionProfile, localFallbackPath, onReplicated) {
         const directCandidate = resolvePlaybackUrlCandidate(metadata, resolutionProfile, localFallbackPath);
         if (directCandidate && directCandidate !== localFallbackPath) {
             return directCandidate;
@@ -105,26 +102,34 @@ const MediaService = {
             return localFallbackPath;
         }
 
-        try {
-            // 🧹 SANITIZE THE KEY: Remove duplicate forward slashes completely
-            let cleanKey = fileMeta.remoteKey.replace(/\/+/g, '/');
-            
-            // If it accidentally picked up a leading slash (e.g. "/movies/..."), strip it out
-            if (cleanKey.startsWith('/')) {
-                cleanKey = cleanKey.substring(1);
+        const cleanKey = fileMeta.remoteKey.replace(/\/+/g, '/').replace(/^\//, '');
+        const isR2Native = fileMeta.provider === PROVIDER.R2;
+
+        if (isR2Native) {
+            try {
+                // Note: presigning is a local crypto operation - it can't
+                // detect a genuinely-missing R2 object (that only surfaces to
+                // the browser later, out of band). This catch only covers a
+                // malformed key/client error, not real existence drift - an
+                // intentional trade-off, since checking existence here would
+                // mean a HEAD round trip on every single R2-native playback.
+                return await CloudStorageService.getPresignedUrl(PROVIDER.R2, cleanKey);
+            } catch (err) {
+                logger.warn(`[CloudStorage] R2 presign failed for ${cleanKey}, falling back to B2: ${err.message}`);
             }
+        }
 
-            const command = new GetObjectCommand({
-                Bucket: storage.bucket || 'joshflixmedia',
-                Key: cleanKey
-            });
+        try {
+            const presignedUrl = await CloudStorageService.getPresignedUrl(PROVIDER.B2, cleanKey);
 
-            // Stream connections keep the URL alive for 7200 seconds (2 Hours)
-            const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 7200 });
+            // Return the B2 URL immediately - never block the response on
+            // replication - then fire the copy in the background.
+            CloudStorageService.triggerLazyReplication(cleanKey, { onReplicated });
+
             return presignedUrl;
         } catch (err) {
-            logger.error(`[B2 ENGINE ERROR] Presigned translation failed for ${fileMeta.remoteKey}: ${err.message}`);
-            return localFallbackPath; 
+            logger.error(`[CloudStorage] Presigned translation failed for ${fileMeta.remoteKey}: ${err.message}`);
+            return localFallbackPath;
         }
     }
 };
