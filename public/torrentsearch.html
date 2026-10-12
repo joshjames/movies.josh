@@ -944,7 +944,11 @@
                 ? ` | imdb=${queueMeta.queueContext.imdbId || 'n/a'} | season=${queueMeta.queueContext.season || '-'} | episode=${queueMeta.queueContext.episode || '-'}`
                 : ' | metadata=off';
             const modeText = state.replacementMode ? 'replaced original queue item' : 'queued into acquisition pipeline';
-            setStatus(`Queued selected result (${modeText}) (${queueMeta.category}).${metaSummary}`, 'good');
+            if (responsePayload.warning) {
+                setStatus(`Queued, but: ${responsePayload.warning}`, 'bad');
+            } else {
+                setStatus(`Queued selected result (${modeText}) (${queueMeta.category}).${metaSummary}`, 'good');
+            }
         }
 
         function showCandidateJson(index) {

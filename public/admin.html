@@ -758,7 +758,10 @@
                     throw new Error(data.error || 'Alternate source enqueue failed.');
                 }
 
-                showToast(data.message || 'Alternate source queued.', 'success', 3400);
+                showToast(data.message || 'Alternate source queued.', data.warning ? 'error' : 'success', 3400);
+                if (data.warning) {
+                    showToast(data.warning, 'error', 6000);
+                }
                 await loadAdminQueueItems();
             } catch (err) {
                 showToast(err.message || 'Alternate source enqueue failed.', 'error', 4200);

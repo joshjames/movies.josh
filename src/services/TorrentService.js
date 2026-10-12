@@ -628,6 +628,34 @@ class TorrentService {
         }
     }
 
+    // qBittorrent's /torrents/pause and /torrents/delete both return HTTP 200
+    // even when the given hash matches nothing currently loaded - they never
+    // 404 on an unknown hash. So a 200 from either only proves the request
+    // was well-formed, not that a torrent was actually removed (e.g. a stale
+    // or mismatched hash silently no-ops). This checks real presence via
+    // /torrents/info?hashes=, the one qBittorrent call that genuinely
+    // reflects what's loaded, so callers can tell a verified removal from a
+    // no-op one instead of trusting the pause/delete response alone.
+    async isTorrentStillPresent(hash) {
+        const cleanHash = normalizeHash(hash);
+        if (!cleanHash) return false;
+        try {
+            const response = await axios.get(
+                `${QBIT_BASE_URL}/torrents/info?hashes=${encodeURIComponent(cleanHash)}`,
+                { timeout: 3000 }
+            );
+            return Array.isArray(response.data) && response.data.length > 0;
+        } catch (_err) {
+            // Can't confirm either way - treat as "still present" so the
+            // caller doesn't falsely report a verified removal.
+            return true;
+        }
+    }
+
+    deriveMagnetHash(magnetUrl) {
+        return extractInfoHashFromMagnet(magnetUrl);
+    }
+
     async startSearch({ query, category = 'all', plugins = 'enabled' } = {}) {
         const cleanQuery = String(query || '').trim();
         if (!cleanQuery) {

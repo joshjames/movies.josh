@@ -2448,8 +2448,16 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
         }
     });
 
+    let oldTorrentWarning = null;
     if (replaceExisting) {
-        const hash = String(job.payload?.torrentHash || '').trim();
+        // job.payload.torrentHash is usually set at creation time, but falls
+        // back to re-deriving straight from the stored magnet in case it was
+        // ever missed (e.g. a crash between addMagnet and the job write that
+        // records it) - see deriveMagnetHash.
+        const hash = String(job.payload?.torrentHash || '').trim()
+            || TorrentService.deriveMagnetHash(job.payload?.magnetUrl || '')
+            || '';
+
         if (hash) {
             const paused = await TorrentService.pauseTorrentByHash(hash);
             if (!paused.success) {
@@ -2459,6 +2467,17 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
             if (!removed.success) {
                 logger.warn(`[Queue API] Could not remove old torrent during alternate source swap for ${job.id}: ${removed.error}`);
             }
+            // qBittorrent's pause/delete both return 200 even on a no-op
+            // (unknown/stale hash never 404s), so a success response from
+            // either call above doesn't actually prove the old torrent is
+            // gone - verify real presence before claiming "replaced".
+            const stillPresent = await TorrentService.isTorrentStillPresent(hash);
+            if (stillPresent) {
+                oldTorrentWarning = `The original torrent (hash ${hash}) could not be confirmed removed from qBittorrent - it may still be downloading alongside the replacement. Check qBittorrent and remove it manually if so.`;
+                logger.warn(`[Queue API] Old torrent ${hash} still present in qBittorrent after replace for job ${job.id}.`);
+            }
+        } else {
+            oldTorrentWarning = 'No torrent hash was recorded for the original item, so it could not be removed from qBittorrent automatically - check qBittorrent for a leftover download.';
         }
         await removeJob(job.id);
     } else {
@@ -2473,8 +2492,9 @@ async function enqueueAlternateSourceReplacement(req, res, { requireAdmin = fals
     return res.json({
         success: true,
         message: replaceExisting
-            ? 'Alternate source queued and original item replaced.'
+            ? (oldTorrentWarning ? 'Alternate source queued, but the original item may not have been removed.' : 'Alternate source queued and original item replaced.')
             : 'Alternate source queued alongside current item.',
+        warning: oldTorrentWarning,
         replacementJob
     });
 }

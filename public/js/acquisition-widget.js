@@ -83,22 +83,42 @@
             }
             .acq-float-btn.show { display: flex; }
             .acq-pie {
-                width: 100%; height: 100%; border-radius: 50%;
-                background: conic-gradient(#3b82f6 var(--acq-pct, 0%), #1e293b 0);
+                position: relative; width: 100%; height: 100%; border-radius: 50%;
                 display: flex; align-items: center; justify-content: center;
             }
-            .acq-pie.acq-error { background: conic-gradient(#ef4444 100%, #1e293b 0); }
-            .acq-pie.acq-manual { background: conic-gradient(#f59e0b 100%, #1e293b 0); }
-            .acq-pie::after { content: ''; width: 68%; height: 68%; border-radius: 50%; background: #0f172a; }
+            .acq-pie::after { content: ''; position: absolute; inset: 0; margin: auto; width: 68%; height: 68%; border-radius: 50%; background: #0f172a; }
+            .acq-slice {
+                position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%;
+                /* Each slice is a conic-gradient wedge clipped to its own 1/8 of
+                   the circle via a rotation + a transparent mask on the rest -
+                   simplest cross-browser way to get 8 independent "pizza slice"
+                   segments without SVG. */
+                --slice-size: 45deg;
+                background: conic-gradient(
+                    from calc(var(--slice-index) * 45deg),
+                    var(--slice-color, #e2e8f0) 0deg var(--slice-size),
+                    transparent var(--slice-size) 360deg
+                );
+            }
+            .acq-slice.acq-filled { --slice-color: #22c55e; }
+            .acq-slice.acq-empty { --slice-color: #e2e8f0; opacity: 0.35; }
+            .acq-slice.acq-active { animation: acq-slice-blink 1.1s ease-in-out infinite; }
+            @keyframes acq-slice-blink {
+                0%   { --slice-color: #e2e8f0; }
+                50%  { --slice-color: #f59e0b; }
+                100% { --slice-color: #22c55e; }
+            }
+            .acq-pie.acq-error .acq-slice { --slice-color: #ef4444 !important; opacity: 1; animation: none; }
+            .acq-pie.acq-manual .acq-slice { --slice-color: #f59e0b !important; opacity: 1; animation: none; }
             .acq-avatar-overlay {
                 /* .avatar-btn has overflow:hidden (it clips the avatar image
                    to a circle) - inset:0 keeps this within those bounds
                    instead of being clipped itself. */
                 position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
-                background: conic-gradient(rgba(59,130,246,0.85) var(--acq-pct, 0%), transparent 0);
             }
-            .acq-avatar-overlay.acq-error { background: conic-gradient(rgba(239,68,68,0.85) 100%, transparent 0); }
-            .acq-avatar-overlay.acq-manual { background: conic-gradient(rgba(245,158,11,0.85) 100%, transparent 0); }
+            .acq-avatar-overlay .acq-slice { position: absolute; inset: 0; }
+            .acq-avatar-overlay.acq-error .acq-slice { --slice-color: #ef4444 !important; opacity: 1; animation: none; }
+            .acq-avatar-overlay.acq-manual .acq-slice { --slice-color: #f59e0b !important; opacity: 1; animation: none; }
             .acq-dropdown {
                 position: fixed; top: 70px; right: 16px; width: min(340px, calc(100vw - 32px));
                 max-height: 60vh; overflow-y: auto; background: #0f172a; border: 1px solid #334155;
@@ -122,9 +142,17 @@
             .acq-item.acq-error .acq-item-bar-fill { background: #ef4444; }
             .acq-item.acq-manual .acq-item-bar-fill { background: #f59e0b; }
             .acq-item-close {
-                position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 50%;
+                position: absolute; top: 6px; right: 6px;
+                /* Pinned min/max alongside width/height - some pages (e.g.
+                   browse.html) define a page-wide "button { min-width: 100px }"
+                   rule, and min-width always wins over a smaller width
+                   regardless of selector specificity, which stretches an
+                   unpinned round button into an oval. */
+                width: 18px; min-width: 18px; max-width: 18px;
+                height: 18px; min-height: 18px; max-height: 18px;
+                border-radius: 50%;
                 border: none; background: #334155; color: #cbd5e1; font-size: 11px; line-height: 1;
-                cursor: pointer; display: flex; align-items: center; justify-content: center;
+                cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
             }
             .acq-item-close:hover { background: #475569; }
             .acq-empty { color: #64748b; font-size: 0.78rem; text-align: center; padding: 6px 0; }
@@ -134,8 +162,9 @@
                 display: flex; flex-direction: column; gap: 8px; pointer-events: none;
             }
             .acq-toast {
-                background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px;
-                font-size: 0.82rem; color: #e2e8f0; box-shadow: 0 6px 16px rgba(0,0,0,0.4); max-width: 300px;
+                background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px 20px;
+                font-size: 1rem; font-weight: 500; color: #e2e8f0; box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+                width: min(380px, calc(100vw - 32px));
             }
             .acq-toast.success { border-color: #16a34a; }
             .acq-toast.error { border-color: #dc2626; }
@@ -165,6 +194,27 @@
         return '';
     }
 
+    const SLICE_COUNT = 8;
+
+    // Renders the pie as 8 pizza-slice segments instead of one smooth
+    // conic-gradient sweep: completed slices solid green, the slice
+    // currently filling blinks white -> orange -> green (a power-meter
+    // "working" look), remaining slices dim white. Error/manual states are
+    // handled separately in CSS (every slice forced to one solid color).
+    function renderPieSlices(container, entry) {
+        const pct = entry ? stagePercent(entry) : 0;
+        const done = pct >= 100;
+        const filledCount = done ? SLICE_COUNT : Math.floor((pct / 100) * SLICE_COUNT);
+        let html = '';
+        for (let i = 0; i < SLICE_COUNT; i++) {
+            let cls = 'acq-empty';
+            if (i < filledCount) cls = 'acq-filled';
+            else if (i === filledCount && !done) cls = 'acq-active';
+            html += `<div class="acq-slice ${cls}" style="--slice-index:${i};"></div>`;
+        }
+        container.innerHTML = html;
+    }
+
     function showAcqToast(message, level) {
         let stack = document.getElementById('acq-toast-stack');
         if (!stack) {
@@ -177,7 +227,7 @@
         toast.className = `acq-toast ${level || 'info'}`;
         toast.textContent = message;
         stack.appendChild(toast);
-        setTimeout(() => toast.remove(), 5000);
+        setTimeout(() => toast.remove(), 9000);
     }
 
     function escapeHtml(value) {
@@ -316,7 +366,7 @@
             const top = overallPie();
             overlay.style.display = top ? 'block' : 'none';
             overlay.className = `acq-avatar-overlay ${top ? stageClass(top) : ''}`.trim();
-            if (top) overlay.style.setProperty('--acq-pct', `${stagePercent(top)}%`);
+            if (top) renderPieSlices(overlay, top);
 
             section.style.display = items.length ? 'block' : 'none';
             renderItemsInto(list);
@@ -330,7 +380,7 @@
             btn.classList.toggle('show', Boolean(top));
             if (top) {
                 pie.className = `acq-pie ${stageClass(top)}`.trim();
-                pie.style.setProperty('--acq-pct', `${stagePercent(top)}%`);
+                renderPieSlices(pie, top);
             }
             renderItemsInto(list);
 
