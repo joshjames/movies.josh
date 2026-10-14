@@ -2140,7 +2140,14 @@ async function buildTvSeasonBrowser(imdbId) {
     if (!metadata) return null;
 
     const totalSeasons = Number.isFinite(parseInt(metadata.totalSeasons, 10)) ? parseInt(metadata.totalSeasons, 10) : null;
-    const maxProbeSeasons = totalSeasons && totalSeasons > 0 ? totalSeasons : 25;
+    // OMDb's own totalSeasons can lag real life for a currently-airing show
+    // (confirmed 2026-10-14: OMDb reported 51 for Saturday Night Live days
+    // after season 52 had already started airing and TMDb already had it) -
+    // so it's a starting point, not a hard ceiling. Always leave room to
+    // probe a few seasons past it; the empty-streak check below (now
+    // unconditional, not just for the "OMDb reported nothing at all" case)
+    // is what actually stops the loop once real empty seasons are hit.
+    const maxProbeSeasons = (totalSeasons && totalSeasons > 0 ? totalSeasons : 25) + 3;
     const showTitle = String(metadata.Title || fallbackTitle || '').trim();
     const seasons = [];
     let emptyStreak = 0;
@@ -2154,7 +2161,7 @@ async function buildTvSeasonBrowser(imdbId) {
         });
 
         if (!Array.isArray(episodes) || episodes.length === 0) {
-            if (!totalSeasons && seasons.length > 0) {
+            if (seasons.length > 0) {
                 emptyStreak += 1;
                 if (emptyStreak >= 2) break;
             }
