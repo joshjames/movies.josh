@@ -211,7 +211,18 @@ function resolveTorrentDownloadPath(torrent) {
             if (!fs.existsSync(candidate)) continue;
             const stat = fs.lstatSync(candidate);
             if (stat.isDirectory()) return candidate;
-            if (stat.isFile()) return path.dirname(candidate);
+            // A single-file torrent (qBittorrent doesn't create a subfolder
+            // for these) lands as a loose file directly in a shared category
+            // save path (e.g. the whole Series root) - collapsing to
+            // path.dirname() here used to return that shared root itself,
+            // which IngestSanitizerWorker.js's protected-root guard then
+            // refused to touch outright (confirmed live, 2026-10-20: South
+            // Park/visionquest single-episode releases silently lost this
+            // way). Returning the file path itself instead lets the ingest
+            // worker's own single-file staging logic (resolveInputFolderContext
+            // + the isSingleFileInput branch, which already existed for
+            // exactly this case) actually run.
+            if (stat.isFile()) return candidate;
         } catch (_err) {
             // Ignore bad filesystem candidates and keep trying the next one.
         }
@@ -598,8 +609,19 @@ async function enqueueCompletedTorrent(torrent) {
     // the actual on-disk folder name, recoverable from content_path's
     // parent, was the real, full, untruncated one).
     const rawPathLooksLikeFile = rawPath ? /\.(mkv|mp4|avi|mov|wmv|m4v|ts|webm)$/i.test(rawPath) : false;
+    // The "parent directory name is the real folder name" trick below only
+    // holds when the file actually has its own per-release subfolder. A
+    // single-file torrent with no subfolder (qBittorrent's "don't create
+    // subfolder for torrents with only one file" behavior - confirmed live,
+    // 2026-10-20, for loose EZTV single-episode releases) lands directly in
+    // the shared category save_path, so its dirname is just that shared
+    // root - using its basename here would silently produce "Series"/"movies"
+    // as the "show name" instead of falling through to torrent.name.
+    const rawPathParentDir = rawPathLooksLikeFile ? path.dirname(rawPath) : null;
+    const rawPathHasOwnSubfolder = rawPathParentDir
+        && rawPathParentDir !== String(torrent.save_path || '').replace(/\/+$/, '');
     const resolvedFolderName =
-        (rawPathLooksLikeFile ? path.basename(path.dirname(rawPath)) : null) ||
+        (rawPathHasOwnSubfolder ? path.basename(rawPathParentDir) : null) ||
         torrent.name ||
         (rawPath ? path.basename(rawPath) : null);
     const torrentQueueContext = normalizeQueueContext(
