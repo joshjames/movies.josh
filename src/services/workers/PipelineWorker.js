@@ -42,7 +42,8 @@ const {
     STAGE_QUEUE_NAMES,
     ITEM_QUEUE_NAMES,
     FAN_OUT_PARENT_JOB_NAME,
-    getFlowProducer
+    getFlowProducer,
+    STAGE_ORDER
 } = require('../PipelineQueues');
 const { walkVideoSources, planSeriesUploads } = require('../MediaFileWalker');
 
@@ -1483,7 +1484,25 @@ async function reconcileQueueStartupState() {
 
             const waitingLike = ['WAITING_DOWNLOAD', 'PAUSED_DOWNLOAD'].includes(String(job?.status || '').toUpperCase());
             const failedWithoutPath = String(job?.status || '').toUpperCase() === 'FAILED' && !hasUsableJobPath(job);
-            const queuedWithoutPath = String(job?.status || '').toUpperCase() === 'QUEUED' && !hasUsableJobPath(job);
+
+            // "Not linked to a live torrent" is meaningless once a job is past
+            // INGEST - the torrent has normally long since finished and been
+            // removed from qBittorrent by then, same as any healthy job. This
+            // check only means something for a job still waiting on its
+            // download. Confirmed root cause of a real incident (2026-10-31):
+            // several movies that were genuinely mid-pipeline (INGEST/METADATA
+            // already done) got silently deleted here on an ordinary deploy
+            // restart, because hasUsableJobPath() trusts a payload.cleanPath/
+            // rawPath snapshot that can lag behind the job's real current
+            // folder - a false "orphaned" read, not an actual orphan. BullMQ's
+            // own per-stage queues already own retry/resume for anything past
+            // INGEST; this legacy torrent-liveness check has no business
+            // touching those jobs at all.
+            const stepIndex = STAGE_ORDER.indexOf(String(job?.currentStep || '').toUpperCase());
+            const stillAtOrBeforeIngest = stepIndex === -1 || stepIndex <= STAGE_ORDER.indexOf('INGEST');
+            const queuedWithoutPath = String(job?.status || '').toUpperCase() === 'QUEUED'
+                && stillAtOrBeforeIngest
+                && !hasUsableJobPath(job);
 
             if (linkedToLiveTorrent) continue;
 
